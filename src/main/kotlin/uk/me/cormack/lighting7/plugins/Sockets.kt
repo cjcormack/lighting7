@@ -12,7 +12,10 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.close
 import kotlinx.serialization.json.Json
 import io.ktor.server.plugins.origin
-import uk.me.cormack.lighting7.auth.resolveSessionUser
+import kotlinx.coroutines.flow.flow
+import uk.me.cormack.lighting7.auth.Caller
+import uk.me.cormack.lighting7.auth.resolveCaller
+import uk.me.cormack.lighting7.cloud.protocol.ErrorCode
 import uk.me.cormack.lighting7.mcp.isRemote
 import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.state.BootPhase
@@ -72,9 +75,15 @@ fun Application.configureSockets(state: State) {
             // Auth check first: a browser cannot read a 401 on the upgrade response, but it
             // can read a close code — so accept the upgrade, then close 4401 immediately.
             // Bootstrap-open (zero users) admits everyone, mirroring the REST gate.
-            val wsUser = call.resolveSessionUser(state)
+            val caller = call.resolveCaller(state)
+            val wsUser = (caller as? Caller.SignedIn)?.user
             if (state.authService.hasAnyUser && wsUser == null) {
-                close(CloseReason(4401, "unauthenticated"))
+                val reason = when (caller) {
+                    is Caller.Unlinked -> ErrorCode.CLOUD_ACCOUNT_NOT_LINKED
+                    is Caller.Refused -> caller.code
+                    else -> "unauthenticated"
+                }
+                close(CloseReason(4401, reason))
                 return@webSocket
             }
 
@@ -101,6 +110,11 @@ fun Application.configureSockets(state: State) {
                         close(CloseReason(4401, "session revoked"))
                     }
                 }
+            }
+            // A remote session through the cloud ends on its own terms (revoked, lapsed, switched off,
+            // its user's credentials moved): its socket closes the moment it does.
+            (caller as? Caller.SignedIn)?.bearer?.session?.let { remote ->
+                scope.subscribe(flow { emit(remote.ended.await()) }) { close(CloseReason(4401, "session ended")) }
             }
 
             // Machine-scoped change broadcasts (accounts, install row). Registered here, in the

@@ -21,6 +21,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import uk.me.cormack.lighting7.models.DaoCloudConnections
 import uk.me.cormack.lighting7.models.DaoCloudIdentityLinks
+import uk.me.cormack.lighting7.models.DaoCloudRemoteSessions
 import uk.me.cormack.lighting7.models.DaoPasswordResetToken
 import uk.me.cormack.lighting7.models.DaoPasswordResetTokens
 import uk.me.cormack.lighting7.models.DaoUser
@@ -308,7 +309,7 @@ class AuthService(
      */
     val revocations: SharedFlow<String> = _revocations.asSharedFlow()
 
-    private val credentialRevocationListeners = java.util.concurrent.CopyOnWriteArrayList<(Int) -> Unit>()
+    private val credentialRevocationListeners = java.util.concurrent.CopyOnWriteArrayList<(Int, String?) -> Unit>()
 
     /**
      * Called **synchronously** with a userId whenever that account's credentials move in a way
@@ -319,11 +320,20 @@ class AuthService(
      * token alive on the internet after the account was disabled.
      */
     fun addCredentialRevocationListener(listener: (Int) -> Unit) {
+        credentialRevocationListeners += { userId, _ -> listener(userId) }
+    }
+
+    /**
+     * [addCredentialRevocationListener], also told the session token hash the revocation spares, if any: the caller's own,
+     * for "sign out everywhere else" and a password change. Remote sessions through the cloud key on
+     * it (`cloud/RemoteSessions.kt`), since one of them can be the caller.
+     */
+    fun addSessionRevocationListener(listener: (userId: Int, exceptTokenHash: String?) -> Unit) {
         credentialRevocationListeners += listener
     }
 
-    private fun notifyCredentialsRevoked(userId: Int) {
-        credentialRevocationListeners.forEach { it(userId) }
+    private fun notifyCredentialsRevoked(userId: Int, exceptTokenHash: String? = null) {
+        credentialRevocationListeners.forEach { it(userId, exceptTokenHash) }
     }
 
     private val _userChanges = MutableSharedFlow<Int>(replay = 0, extraBufferCapacity = 64)
@@ -576,6 +586,9 @@ class AuthService(
             DaoCloudConnections.update({ DaoCloudConnections.adoptedBy eq userId }) {
                 it[adoptedBy] = null
             }
+            DaoCloudRemoteSessions.update({ DaoCloudRemoteSessions.user eq userId }) {
+                it[user] = null
+            }
             dao.delete()
             UserMutation.Done(Unit)
         }
@@ -762,7 +775,7 @@ class AuthService(
         // exchangeable QR on a screen would defeat the one button someone presses when they
         // think they have been compromised.
         cancelOutstandingDeviceLogins(userId, clock())
-        notifyCredentialsRevoked(userId)
+        notifyCredentialsRevoked(userId, exceptTokenHash)
         val doomed = sessions.values.filter { it.userId == userId && it.tokenHash != exceptTokenHash }
         if (doomed.isEmpty()) return
         val now = clock()

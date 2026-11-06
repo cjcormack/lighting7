@@ -88,7 +88,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
 | [`FU-AUTH-ATTRIBUTION`](#fu-auth-attribution) | Trigger | Auth | two accounts co-author, or any `formatVersion` bump |
-| [`FU-AUTH-AUDIT-LOG`](#fu-auth-audit-log) | Trigger | Auth | a security question nobody can answer |
+| [`FU-AUTH-AUDIT-LOG`](#fu-auth-audit-log) | Trigger | Auth | a security question nobody can answer (remote slice done: `cloud_remote_sessions`; the LAN slice remains) |
 | [`FU-AUTH-WS-PER-MESSAGE`](#fu-auth-ws-per-message) | Trigger | Auth | an admin-only operation gains a WS command |
 | [`FU-AUTH-OPERATOR-LOCKDOWN`](#fu-auth-operator-lockdown) | Trigger | Auth | an operator changes something they shouldn't have |
 | [`FU-AUTH-TLS-COOKIES`](#fu-auth-tls-cookies) | Trigger | Auth | the desk leaves a trusted LAN |
@@ -1818,6 +1818,10 @@ with the minting admin's name, and sessions record `created_via` so a QR sign-in
 distinguishable from a password one. **Device-login codes went the other way** — they live in
 memory, so a mint and a redemption leave nothing after a restart. The one auth event that hands
 out a session is the one with no durable trace at all, which is a decent argument for this item.
+
+**Its remote slice is done** (cloud-p1 plan D5, session 2): every remote session through Lighting7 Cloud
+gets a `cloud_remote_sessions` row at its open and its end, with the cloud account, the local user, the
+path and why it ended, kept a year. What is left is the LAN's: cookie sign-ins, resets and user changes.
 
 The write sites already exist and are all inside `AuthService`, the only class touching the auth
 tables — so this is a table, a `record(...)` call per mutation, and a read surface. Settle two

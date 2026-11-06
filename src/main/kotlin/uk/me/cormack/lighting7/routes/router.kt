@@ -60,6 +60,8 @@ fun Application.configureRouting(state: State) {
                     // Every write below runs under its caller's origin (undo plan §3.2).
                     installHistoryOrigin(state)
                     routeApiRestAuth(state)
+                    // A remote session's own refresh and end (cloud-p1 plan D5), open to an unlinked one.
+                    routeApiRestCloudSession(state)
                     routeApiRestStatus(state)
                     routeApiRestProjects(state)
                     routeApiRestLightsFixtures(state)
@@ -130,6 +132,9 @@ private fun isWarmupExempt(path: String): Boolean =
         // you may want to reach from outside to fix.
         path.startsWith("/api/rest/install/") ||
         path.startsWith("/api/rest/auth/") ||
+        // A remote session's refresh and end read nothing off the show, and must not lapse while it loads.
+        path == "/api/rest/cloud/session" ||
+        path == "/api/rest/cloud/session/token" ||
         path.startsWith("/api/rest/oauth/") ||
         path.startsWith("/api/rest/cloud-sync/") ||
         // Nothing under /update touches the show — and a desk whose show *failed* to boot is

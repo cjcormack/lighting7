@@ -150,6 +150,7 @@ class State(val config: ApplicationConfig) {
             config = uk.me.cormack.lighting7.cloud.CloudConfig.from(config),
             credentialStore = { credentialStore },
             userChanges = authService.userChanges,
+            authService = authService,
         )
     }
 

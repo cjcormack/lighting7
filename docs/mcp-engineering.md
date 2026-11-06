@@ -115,7 +115,9 @@ tab then reads *Online · https://<domain>* and shows `https://<domain>/mcp` wit
 - **API**: `GET` / `PUT /api/rest/install/tunnel` (`routes/installTunnel.kt`), admin only. Every
   `PUT` field is optional; an empty `authtoken` or `domain` clears it, and clearing either turns
   remote access off. Turning it on is refused (`REMOTE_ACCESS_INVALID`) with no desk accounts, no
-  domain or no token.
+  domain or no token. The `PUT` is refused on the public listener, 403 `CLOUD_SETTINGS_LOCAL_ONLY`:
+  it holds the scripts, effects and commands switches, which limit what a remote caller may do, so no
+  remote caller may change them (cloud-p1 plan D6).
 - **No plan warning.** ngrok's free plan (1 GB and 20,000 requests a month, a one-time browser
   interstitial) is not pre-empted (Chris, 2026-09-26): we react only if a quota problem is seen.
 

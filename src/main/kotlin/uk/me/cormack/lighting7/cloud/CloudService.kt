@@ -17,13 +17,20 @@ import kotlinx.coroutines.launch
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.auth.AuthService
+import uk.me.cormack.lighting7.cloud.protocol.Capability
 import uk.me.cormack.lighting7.cloud.protocol.MAX_FRAME_BYTES
+import uk.me.cormack.lighting7.cloud.protocol.Message
+import uk.me.cormack.lighting7.mcp.originOf
 import uk.me.cormack.lighting7.models.CloudConnectionState
+import uk.me.cormack.lighting7.models.DaoCloudConnections
 import uk.me.cormack.lighting7.models.DaoCloudIdentityLinks
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoUsers
+import uk.me.cormack.lighting7.models.nowUtc
 import uk.me.cormack.lighting7.models.toIsoUtc
 import uk.me.cormack.lighting7.sync.auth.CredentialStore
 import java.security.PrivateKey
@@ -51,10 +58,11 @@ class CloudService(
     val config: CloudConfig,
     credentialStore: () -> CredentialStore,
     private val userChanges: Flow<Int>? = null,
-    private val clock: () -> Instant = Instant::now,
+    private val clock: () -> Instant = ::nowUtc,
     installUuid: () -> String = { transaction(database) { DaoInstall.all().first().uuid.toString() } },
     apiFactory: (baseUrl: String) -> CloudApi = { CloudApi(it) },
     private val deskIdentity: () -> DeskIdentity = { DeskIdentity.read(database) },
+    authService: AuthService? = null,
 ) {
     private val logger = LoggerFactory.getLogger(CloudService::class.java)
 
@@ -105,6 +113,57 @@ class CloudService(
     private val unexpectedMessages = OnceLog()
 
     val keys = InstallKeyStore(credentialStore, installUuid)
+
+    /** The keys the cloud signs desk access tokens with (D3). */
+    val jwks = JwksCache()
+
+    /** What may come through the cloud, as the row says (D6); read per bearer request, so in memory. */
+    @Volatile var switches: RemoteSwitches = RemoteSwitches()
+        private set
+
+    /** Who tokens are for, while adopted through the configured and enabled cloud. */
+    @Volatile private var trust: CloudTrust? = null
+
+    /**
+     * The origin the cloud serves this install's remote sessions from, from the last `welcome` that
+     * named a usable one (D4): the Origin check allows it on a bearer request. Memory only.
+     */
+    @Volatile var remoteOrigin: String? = null
+        private set
+
+    /** Whether a sidecar runs; session 3's broker sets it. Without one, `remote.no-sidecar` is announced. */
+    @Volatile var sidecarRunning: Boolean = false
+        set(value) {
+            field = value
+            liveConnection?.refreshCapabilities()
+        }
+
+    @Volatile private var liveConnection: ChannelConnection? = null
+
+    /** The remote sessions the broker opened, and the bearer check on the public listener (D4, D5). */
+    val remoteSessions = RemoteSessions(database, authService, trust = { trust }, keys = { jwks.keys }, clock = clock)
+
+    private val channelHandler = object : ChannelHandler {
+        override fun capabilities(): List<String> = this@CloudService.capabilities()
+
+        override fun online(connection: ChannelConnection) {
+            liveConnection = connection
+            // A switch moved between the hello's list and this: say so now.
+            connection.refreshCapabilities()
+        }
+
+        override fun offline(connection: ChannelConnection) {
+            if (liveConnection === connection) liveConnection = null
+        }
+
+        override fun welcomed(welcome: Message.Welcome) {
+            welcome.remoteOrigin?.let { remoteOrigin = usableOrigin(it) ?: remoteOrigin }
+        }
+
+        override fun jwks(jwks: Message.Jwks) = this@CloudService.jwks.update(jwks)
+
+        override fun revoke(revoke: Message.Revoke) = remoteSessions.revoke(revoke)
+    }
 
     private val adoption = CloudAdoptionService(
         database = database,
@@ -166,6 +225,7 @@ class CloudService(
         runCatching {
             val row = adoption.row()
             reconcileChannel(row)
+            reconcileRemote(row)
             snapshot(row)
         }
             .onSuccess { _state.value = it }
@@ -215,6 +275,7 @@ class CloudService(
                     handshakeTimeout = handshakeTimeout,
                     unexpected = unexpectedMessages,
                     noteThread = { onChannelWork?.invoke() },
+                    handler = channelHandler,
                 ).connect(onOnline)
             },
         )
@@ -229,6 +290,58 @@ class CloudService(
                 publishChannel(generation, ChannelStatus(CloudConnectionStatus.OFF, lastError = CloudErrorDto(CloudErrorCodes.DISCONNECTED, "The connection to the cloud stopped: ${e.message}")))
             }
         }
+    }
+
+    /**
+     * Follow the row's switches and the adoption into memory (D6): a desk no longer adopted, or with
+     * *Remote sessions* turned off, ends every session; a change of what is announced is announced.
+     * Must hold [publishLock].
+     */
+    private fun reconcileRemote(row: CloudConnectionRow?) {
+        val adopted = row?.takeIf {
+            config.enabled && it.state == CloudConnectionState.ADOPTED && it.baseUrl == config.baseUrl &&
+                it.installId != null && it.orgId != null
+        }
+        switches = adopted?.let { RemoteSwitches(it.remoteAccess, it.mcpAccess, it.approveSessions) } ?: RemoteSwitches()
+        val next = adopted?.let { CloudTrust(it.installId!!, it.orgId!!, it.remoteAccess) }
+        val previous = trust
+        trust = next
+        when {
+            next == null -> {
+                if (previous != null) jwks.clear()
+                remoteSessions.endAll(RemoteSessionEnd.UNADOPTED)
+                remoteOrigin = null
+            }
+            previous != null && previous.installId != next.installId -> remoteSessions.endAll(RemoteSessionEnd.UNADOPTED)
+            !next.remoteAccess -> remoteSessions.endAll(RemoteSessionEnd.REMOTE_ACCESS_OFF)
+        }
+        liveConnection?.refreshCapabilities()
+    }
+
+    /** What the desk announces (D6): the state entries for each door's switch and the sidecar. */
+    fun capabilities(): List<String> = buildList {
+        val now = switches
+        if (!now.remoteAccess) add(Capability.REMOTE_OFF)
+        if (!now.mcpAccess) add(Capability.MCP_OFF)
+        if (!sidecarRunning) add(Capability.REMOTE_NO_SIDECAR)
+    }
+
+    /**
+     * Set what may come through the cloud (D6). Only the desk's own listener's admin route calls this:
+     * no message from the cloud writes these. Null leaves a switch as it is.
+     */
+    fun setSwitches(remoteAccess: Boolean? = null, mcpAccess: Boolean? = null, approveSessions: Boolean? = null) {
+        val updated = transaction(database) {
+            DaoCloudConnections.update({ DaoCloudConnections.state eq CloudConnectionState.ADOPTED }) {
+                remoteAccess?.let { v -> it[DaoCloudConnections.remoteAccess] = v }
+                mcpAccess?.let { v -> it[DaoCloudConnections.mcpAccess] = v }
+                approveSessions?.let { v -> it[DaoCloudConnections.approveSessions] = v }
+            }
+        }
+        if (updated == 0) {
+            throw CloudException(io.ktor.http.HttpStatusCode.Conflict, CloudErrorCodes.NOT_ADOPTED, "This desk isn't adopted.")
+        }
+        refresh()
     }
 
     /** Must hold [publishLock]. */
@@ -301,6 +414,7 @@ class CloudService(
     }
 
     fun close() {
+        remoteSessions.close()
         scope.cancel()
         if (apiDelegate.isInitialized()) runCatching { apiDelegate.value.close() }
         if (wsClientDelegate.isInitialized()) runCatching { wsClientDelegate.value.close() }
@@ -309,6 +423,13 @@ class CloudService(
 
     companion object {
         private const val THREADS = 2
+
+        /** [text] as an origin the Origin check can compare, if it is an https one (or http to this machine) and nothing more. */
+        internal fun usableOrigin(text: String): String? {
+            val origin = originOf(text)?.lowercase() ?: return null
+            if (origin != text.trimEnd('/').lowercase()) return null
+            return origin.takeIf { CloudConfig.checkBaseUrl(it) is BaseUrlCheck.Ok }
+        }
 
         /** WebSocket pings, so a cloud that vanished without closing is noticed within a ping and its timeout. */
         private val PING_INTERVAL = 25.seconds

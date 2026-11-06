@@ -39,6 +39,7 @@ data class CloudConnectionRow(
     val state: CloudConnectionState,
     val baseUrl: String,
     val installId: String?,
+    val orgId: String?,
     val orgName: String?,
     val fingerprint: String,
     val adoptedAt: Instant?,
@@ -49,6 +50,9 @@ data class CloudConnectionRow(
     val verificationUriComplete: String?,
     val pollIntervalS: Int?,
     val adoptionExpiresAt: Instant?,
+    val remoteAccess: Boolean = false,
+    val mcpAccess: Boolean = false,
+    val approveSessions: Boolean = false,
 )
 
 /** What the desk keeps in memory only, beside the row (D11: no write per poll, heartbeat or reconnect). */
@@ -91,6 +95,7 @@ internal class CloudAdoptionService(
                 state = it[DaoCloudConnections.state],
                 baseUrl = it[DaoCloudConnections.baseUrl],
                 installId = it[DaoCloudConnections.installId],
+                orgId = it[DaoCloudConnections.orgId],
                 orgName = it[DaoCloudConnections.orgName],
                 fingerprint = it[DaoCloudConnections.fingerprint],
                 adoptedAt = it[DaoCloudConnections.adoptedAt],
@@ -101,6 +106,9 @@ internal class CloudAdoptionService(
                 verificationUriComplete = it[DaoCloudConnections.verificationUriComplete],
                 pollIntervalS = it[DaoCloudConnections.pollIntervalS],
                 adoptionExpiresAt = it[DaoCloudConnections.adoptionExpiresAt],
+                remoteAccess = it[DaoCloudConnections.remoteAccess],
+                mcpAccess = it[DaoCloudConnections.mcpAccess],
+                approveSessions = it[DaoCloudConnections.approveSessions],
             )
         }
     }

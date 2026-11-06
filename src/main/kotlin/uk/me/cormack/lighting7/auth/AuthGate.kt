@@ -6,6 +6,10 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.*
+import uk.me.cormack.lighting7.cloud.BearerCheck
+import uk.me.cormack.lighting7.cloud.RemoteSessions
+import uk.me.cormack.lighting7.cloud.protocol.ErrorCode
+import uk.me.cormack.lighting7.mcp.isRemote
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.routes.ErrorResponse
 import uk.me.cormack.lighting7.routes.transparentChild
@@ -24,13 +28,66 @@ val ApplicationCall.authenticatedUserOrNull: AuthenticatedUser?
 val ApplicationCall.authenticatedUser: AuthenticatedUser
     get() = authenticatedUserOrNull ?: throw AuthenticationException("Not signed in")
 
+/** Who a request is: what [resolveCaller] answers. */
+sealed interface Caller {
+    /** A cookie session, or a remote session through the cloud linked to a local user ([bearer]). */
+    data class SignedIn(val user: AuthenticatedUser, val bearer: BearerCheck.Linked? = null) : Caller
+
+    /** A remote session whose cloud account links to no local user (cloud-p1 plan D4, D12). */
+    data class Unlinked(val bearer: BearerCheck.Unlinked) : Caller
+
+    /** A bearer token the desk refused, with why. */
+    data class Refused(val status: HttpStatusCode, val code: String, val message: String) : Caller
+
+    data object Anonymous : Caller
+}
+
+private val CallerKey = AttributeKey<Caller>("lighting7.caller")
+
 /**
- * Resolve the session cookie to its user, or null. The single definition of "who is
- * calling" — used by the gate, the WS upgrade in `plugins/Sockets.kt`, and the exempt
- * `auth/status` route (which the gate deliberately skips).
+ * Who is calling: the single definition, used by the gate, the WS upgrade in `plugins/Sockets.kt`
+ * and the exempt `auth/status` route (which the gate deliberately skips). Resolved once per call.
+ *
+ * On the public listener a request carrying `Authorization: Bearer` is judged as a remote session
+ * through the cloud and only that way (cloud-p1 plan D4): [RemoteSessions.authenticate], which also
+ * demands the sidecar's `Lighting7-Link` secret. Everywhere else, and without a bearer, the session
+ * cookie.
  */
-fun ApplicationCall.resolveSessionUser(state: State): AuthenticatedUser? =
-    request.cookies[SESSION_COOKIE]?.let { state.authService.lookupSession(it) }
+fun ApplicationCall.resolveCaller(state: State): Caller = attributes.computeIfAbsent(CallerKey) {
+    val bearer = if (isRemote) bearerToken() else null
+    if (bearer != null) {
+        when (val check = state.cloud.remoteSessions.authenticate(bearer, request.headers[RemoteSessions.LINK_HEADER])) {
+            is BearerCheck.Linked -> Caller.SignedIn(check.user, check)
+            is BearerCheck.Unlinked -> Caller.Unlinked(check)
+            is BearerCheck.Refused -> Caller.Refused(check.status, check.code, check.message)
+        }
+    } else {
+        request.cookies[SESSION_COOKIE]?.let { state.authService.lookupSession(it) }?.let { Caller.SignedIn(it) } ?: Caller.Anonymous
+    }
+}
+
+/** The remote session behind this call, linked or not, if it came through the cloud. */
+fun ApplicationCall.remoteSessionOrNull(state: State): BearerCheck? = when (val caller = resolveCaller(state)) {
+    is Caller.SignedIn -> caller.bearer
+    is Caller.Unlinked -> caller.bearer
+    else -> null
+}
+
+private fun ApplicationCall.bearerToken(): String? {
+    val header = request.headers[HttpHeaders.Authorization] ?: return null
+    val space = header.indexOf(' ')
+    if (space < 0 || !header.substring(0, space).equals("Bearer", ignoreCase = true)) return null
+    return header.substring(space + 1).trim().ifEmpty { null }
+}
+
+/** What an unlinked remote session may reach besides the exempt paths (D4): linking, and its own refresh and end. */
+private fun isOpenToUnlinked(path: String): Boolean =
+    path == "/api/rest/cloud/link/prove" || path == "/api/rest/cloud/session/token" || path == "/api/rest/cloud/session"
+
+/** The refusal an unlinked session gets, naming the two ways to link (FR-ID-3). */
+const val NOT_LINKED_MESSAGE: String =
+    "Your Lighting7 Cloud account isn't linked to an account on this desk. Ask an admin to invite it from Users, " +
+        "or sign in once with your desk username and password to link it."
 
 /**
  * 403 unless the caller is an ADMIN. A **missing** user attribute passes: the gate
@@ -63,13 +120,21 @@ fun Route.installAuthGate(state: State) {
         val path = routingNormalisedPath(call.request.path())
         if (isAuthExempt(path, call.request.httpMethod)) return@intercept
 
-        val user = call.resolveSessionUser(state)
-        if (user == null) {
-            call.respond(HttpStatusCode.Unauthorized, ErrorResponse("Not signed in", "unauthenticated"))
-            finish()
-            return@intercept
+        when (val caller = call.resolveCaller(state)) {
+            is Caller.SignedIn -> call.attributes.put(AuthenticatedUserKey, caller.user)
+            is Caller.Unlinked -> if (!isOpenToUnlinked(path)) {
+                call.respond(HttpStatusCode.Forbidden, ErrorResponse(NOT_LINKED_MESSAGE, ErrorCode.CLOUD_ACCOUNT_NOT_LINKED))
+                finish()
+            }
+            is Caller.Refused -> {
+                call.respond(caller.status, ErrorResponse(caller.message, caller.code))
+                finish()
+            }
+            Caller.Anonymous -> {
+                call.respond(HttpStatusCode.Unauthorized, ErrorResponse("Not signed in", "unauthenticated"))
+                finish()
+            }
         }
-        call.attributes.put(AuthenticatedUserKey, user)
     }
 }
 

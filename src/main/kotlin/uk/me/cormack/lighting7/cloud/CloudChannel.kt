@@ -11,8 +11,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelChildren
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -70,6 +68,28 @@ internal data class ChannelStatus(
     val lastError: CloudErrorDto? = null,
     val lastOnlineAt: Instant? = null,
 )
+
+/**
+ * What a connection asks of the desk, and tells it, while online (cloud-p1 plan D3, D5, D6). Each call
+ * runs on the channel's thread and must not block on anything the cloud controls.
+ */
+internal interface ChannelHandler {
+    /** What `hello` and `capabilities` announce now. */
+    fun capabilities(): List<String> = emptyList()
+
+    /** [connection] is online, its `hello` queued, or [connection] has gone offline. */
+    fun online(connection: ChannelConnection) {}
+
+    fun offline(connection: ChannelConnection) {}
+
+    fun welcomed(welcome: Message.Welcome) {}
+
+    fun jwks(jwks: Message.Jwks) {}
+
+    fun revoke(revoke: Message.Revoke) {}
+
+    object None : ChannelHandler
+}
 
 /** How one connection ended. */
 internal sealed interface ChannelEnd {
@@ -180,10 +200,43 @@ internal class ChannelConnection(
     private val unexpected: OnceLog,
     /** Called on every step of the connection's work, on the thread it runs on (the safety test's hook). */
     private val noteThread: () -> Unit = {},
+    private val handler: ChannelHandler = ChannelHandler.None,
 ) {
     private val logger = LoggerFactory.getLogger(CloudChannel::class.java)
 
     private class UpgradeTimeout : Exception()
+
+    /** Held from reading the capabilities to queueing them, so `hello` and each `capabilities` go out in order. */
+    private val capabilityLock = Any()
+    private var outbox: ChannelOutbox? = null
+    private var announced: List<String> = emptyList()
+
+    /**
+     * Queue [message] behind any earlier one, never displacing it (D16). False when the connection is
+     * not online or the queue has no room, logged: the cloud's request then times out.
+     */
+    fun send(message: Message, replyTo: String? = null): Boolean {
+        val queued = synchronized(capabilityLock) { outbox }?.offerReliable(encode(message, replyTo)) ?: return false
+        if (!queued) logger.warn("Dropping '{}' to the cloud: {}", message.type, refusalOf(message, replyTo))
+        return queued
+    }
+
+    /** Tell the cloud the capabilities if they differ from what it was last told on this connection. */
+    fun refreshCapabilities() {
+        synchronized(capabilityLock) {
+            val box = outbox ?: return
+            val now = handler.capabilities()
+            if (now == announced) return
+            announced = now
+            if (!box.offerReliable(encode(Message.Capabilities(now)))) logger.warn("Dropping 'capabilities' to the cloud: the send queue is full")
+        }
+    }
+
+    private fun refusalOf(message: Message, replyTo: String?): String =
+        if (ChannelOutbox.utf8Size(encode(message, replyTo)) > MAX_FRAME_BYTES) "it is over the frame limit" else "the send queue is full"
+
+    private fun encode(message: Message, replyTo: String? = null): String =
+        Envelope(id = UUID.randomUUID().toString(), body = message, replyTo = replyTo).encode()
 
     suspend fun connect(onOnline: () -> Unit): ChannelEnd {
         noteThread()
@@ -237,6 +290,7 @@ internal class ChannelConnection(
         }
         onOnline()
         logger.info("Online to Lighting7 Cloud as {} ({})", target.installId, clip(welcome.orgName))
+        handler.welcomed(welcome)
         return online(session, welcome)
     }
 
@@ -249,49 +303,47 @@ internal class ChannelConnection(
         }
     }
 
-    /** Online: send `hello` and the heartbeat through a bounded queue, and read until the connection ends. */
+    /** Online: send `hello`, the heartbeat and whatever else is queued through [ChannelOutbox], and read until the connection ends. */
     private suspend fun online(session: DefaultClientWebSocketSession, welcome: Message.Welcome): ChannelEnd = coroutineScope {
         val heartbeat = welcome.heartbeatS.coerceIn(MIN_HEARTBEAT_S, MAX_HEARTBEAT_S).seconds
-        // Drops the oldest, so a cloud that stops reading costs a stale heartbeat, never a blocked sender.
-        val outbound = Channel<Message>(OUTBOUND_CAPACITY, BufferOverflow.DROP_OLDEST)
-        outbound.trySend(
-            Message.Hello(
-                protocol = PROTOCOL_VERSION,
-                deskVersion = BuildInfo.current.version,
-                platform = DeskPlatform.current,
-                deskInstallUuid = identity.installUuid,
-                friendlyName = identity.friendlyName,
-            ),
-        )
+        val box = ChannelOutbox(heartbeat) { text -> session.send(Frame.Text(text)) }
+        synchronized(capabilityLock) {
+            announced = handler.capabilities()
+            box.offerReliable(
+                encode(
+                    Message.Hello(
+                        protocol = PROTOCOL_VERSION,
+                        deskVersion = BuildInfo.current.version,
+                        platform = DeskPlatform.current,
+                        deskInstallUuid = identity.installUuid,
+                        friendlyName = identity.friendlyName,
+                        capabilities = announced,
+                    ),
+                ),
+            )
+            outbox = box
+        }
+        handler.online(this@ChannelConnection)
         launch {
-            for (message in outbound) {
-                noteThread()
-                // A frame that finds no room in the socket's buffers for three heartbeats ends the connection.
-                val sent = try {
-                    withTimeoutOrNull(heartbeat * STALL_HEARTBEATS) { session.sendEnvelope(message) } != null
-                } catch (e: CancellationException) {
-                    currentCoroutineContext().ensureActive()
-                    return@launch
-                } catch (e: Exception) {
-                    return@launch
-                }
-                if (!sent) {
-                    logger.warn("The cloud stopped taking frames; reconnecting")
-                    session.cancel()
-                    return@launch
-                }
+            if (box.run(noteThread) == ChannelOutbox.Stop.STALLED) {
+                logger.warn("The cloud stopped taking frames; reconnecting")
+                session.cancel()
             }
         }
         launch {
             while (true) {
                 delay(heartbeat)
                 noteThread()
-                outbound.trySend(Message.Health(uptimeS = uptimeS(), deskVersion = BuildInfo.current.version))
+                box.offerHealth(encode(Message.Health(uptimeS = uptimeS(), deskVersion = BuildInfo.current.version)))
             }
         }
-        val end = read(session)
-        coroutineContext.cancelChildren()
-        end
+        try {
+            read(session)
+        } finally {
+            synchronized(capabilityLock) { outbox = null }
+            handler.offline(this@ChannelConnection)
+            coroutineContext.cancelChildren()
+        }
     }
 
     private suspend fun read(session: DefaultClientWebSocketSession): ChannelEnd {
@@ -307,6 +359,8 @@ internal class ChannelConnection(
                     is Message.Error -> unexpected.once("error:${clip(body.code)}") {
                         logger.warn("The cloud reported an error: {}: {}", clip(body.code), clip(body.message))
                     }
+                    is Message.Jwks -> handler.jwks(body)
+                    is Message.Revoke -> handler.revoke(body)
                     else -> ignore(inbound.envelope)
                 }
             }
@@ -345,7 +399,7 @@ internal class ChannelConnection(
     }
 
     private suspend fun DefaultClientWebSocketSession.sendEnvelope(message: Message) {
-        send(Frame.Text(Envelope(id = UUID.randomUUID().toString(), body = message).encode()))
+        send(Frame.Text(encode(message)))
     }
 
     /** Close 4000 and report it. */
@@ -391,8 +445,6 @@ internal class ChannelConnection(
     companion object {
         const val MIN_HEARTBEAT_S = 1
         const val MAX_HEARTBEAT_S = 300
-        const val OUTBOUND_CAPACITY = 16
-        const val STALL_HEARTBEATS = 3
 
         /** RFC 6455 §5.5: a control frame's payload is at most 125 bytes, two of them the code. */
         private const val MAX_CLOSE_REASON_BYTES = 123

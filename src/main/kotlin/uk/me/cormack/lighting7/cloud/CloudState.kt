@@ -65,6 +65,20 @@ data class CloudAdoptedDto(
 data class CloudErrorDto(val code: String, val message: String)
 
 /**
+ * What may come through the cloud (cloud-p1 plan D6, D13), all off at adoption. `GET` and `PUT
+ * /install/cloud/remote` answer it; only the desk's own listener may change it.
+ */
+@Serializable
+data class RemoteSwitches(
+    /** *Remote sessions*: the desk's SPA through the sidecar. */
+    val remoteAccess: Boolean = false,
+    /** *Claude (MCP)*: MCP calls relayed over the control channel. */
+    val mcpAccess: Boolean = false,
+    /** Each new remote session waits for an admin at the desk. */
+    val approveSessions: Boolean = false,
+)
+
+/**
  * The control channel's status: [OFF] while the desk is not adopted or the cloud is off on it,
  * [RETRYING] between connections, with `retryAt` the next attempt.
  */
@@ -86,6 +100,9 @@ object CloudErrorCodes {
     const val NOT_ADOPTED = "CLOUD_NOT_ADOPTED"
     const val UNREACHABLE = "CLOUD_UNREACHABLE"
     const val REFUSED = "CLOUD_REFUSED"
+
+    /** A setting that limits what comes through the cloud, changed from the public listener (cloud-p1 plan D6). */
+    const val SETTINGS_LOCAL_ONLY = "CLOUD_SETTINGS_LOCAL_ONLY"
 
     /** `lastError` codes: never a REST refusal. */
     const val POLL_FAILED = "CLOUD_POLL_FAILED"

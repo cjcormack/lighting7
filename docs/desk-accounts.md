@@ -394,8 +394,20 @@ loopback, which the peer check would otherwise take as the LAN. See `docs/mcp-en
 Adopting the desk into a Lighting7 Cloud organisation (Install settings → Cloud,
 `docs/cloud-engineering.md`) needs a desk account, and links the admin who started it to the cloud
 account that approved it: one `cloud_identity_links` row, the cloud account's id and email, deleted
-with the desk account. Nothing reads a link for authorisation yet (the cloud's P1 does), and the link
-gives the cloud no way in: adoption only starts from the desk's own listener, never over remote access.
+with the desk account. Adoption only starts from the desk's own listener, never over remote access.
+
+**What a link authorises** (cloud-p1 plan D4, D5). A remote session through the cloud acts as the local
+user its cloud account is linked to, and only that way: no desk role ever follows from a role in the
+cloud. The link and the user are fixed when the session opens; the user's role, and whether they are
+disabled, are read on every request, so a demotion counts at once. A session whose account has no link
+is *unlinked*: it can see its own status and link itself, and nothing else (`CLOUD_ACCOUNT_NOT_LINKED`).
+Everything that ends a cookie session ends a remote one too: disabling or deleting the user, a password
+set or reset, *sign out everywhere*. So does removing the link, unadopting, or *Remote sessions* turned
+off. The session's requests get the public listener's whole hardening, and every switch that limits what
+comes through the cloud — *Remote sessions*, *Claude (MCP)* and Remote access's scripts, effects and
+commands — is changed only on the desk itself (`CLOUD_SETTINGS_LOCAL_ONLY`), since a compromised cloud
+could mint a token for a linked admin. Each remote session leaves a `cloud_remote_sessions` row: who,
+as which user, when, and why it ended (`docs/cloud-engineering.md` §"Remote sessions").
 
 ## Cloud sync and support copies
 

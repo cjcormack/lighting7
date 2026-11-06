@@ -63,4 +63,6 @@ val ALL_TABLES: List<Table> = listOf(
     DaoShowGroupOrders,
     // This desk's adoption by Lighting7 Cloud and its cloud account links (cloud-p0 plan D7), after DaoUsers.
     DaoCloudConnections, DaoCloudIdentityLinks,
+    // The audit of remote sessions through the cloud (cloud-p1 plan D5), after DaoUsers.
+    DaoCloudRemoteSessions,
 )

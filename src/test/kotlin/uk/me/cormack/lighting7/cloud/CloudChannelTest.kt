@@ -18,6 +18,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.Timeout
 import uk.me.cormack.lighting7.cloud.protocol.AuthFailure
+import uk.me.cormack.lighting7.cloud.protocol.Capability
 import uk.me.cormack.lighting7.cloud.protocol.CloseCode
 import uk.me.cormack.lighting7.cloud.protocol.InstallKeys
 import uk.me.cormack.lighting7.cloud.protocol.MAX_FRAME_BYTES
@@ -132,7 +133,11 @@ class CloudChannelTest {
         assertEquals(install.friendlyName, hello.friendlyName)
         assertEquals(DeskPlatform.current, hello.platform)
         assertEquals(BuildInfo.current.version, hello.deskVersion)
-        assertEquals(emptyList(), hello.capabilities)
+        assertEquals(
+            listOf(Capability.REMOTE_OFF, Capability.MCP_OFF, Capability.REMOTE_NO_SIDECAR),
+            hello.capabilities,
+            "a desk with both switches off and no sidecar says so",
+        )
         val health = sent.filterIsInstance<Message.Health>().first()
         assertEquals(BuildInfo.current.version, health.deskVersion)
 

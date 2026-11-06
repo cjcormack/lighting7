@@ -30,7 +30,10 @@ import uk.me.cormack.lighting7.auth.UserRecord
 import uk.me.cormack.lighting7.auth.authenticatedUser
 import uk.me.cormack.lighting7.auth.authenticatedUserOrNull
 import uk.me.cormack.lighting7.auth.buildDeviceLoginUrls
-import uk.me.cormack.lighting7.auth.resolveSessionUser
+import uk.me.cormack.lighting7.auth.Caller
+import uk.me.cormack.lighting7.auth.remoteSessionOrNull
+import uk.me.cormack.lighting7.auth.resolveCaller
+import uk.me.cormack.lighting7.cloud.RemoteSessionEnd
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.state.State
 import java.net.InetAddress
@@ -46,14 +49,23 @@ internal fun Route.routeApiRestAuth(state: State) {
     get<AuthStatusResource> {
         // Exempt path: the gate never resolves the cookie here, so do it ourselves —
         // a logged-in caller must see `authenticated: true`, not the login screen.
-        val user = call.authenticatedUserOrNull ?: call.resolveSessionUser(state)
-        call.respond(
-            AuthStatusDto(
-                setupRequired = !state.authService.hasAnyUser,
-                authenticated = user != null,
-                user = user?.toDto(),
-            ),
-        )
+        val caller = call.authenticatedUserOrNull?.let { Caller.SignedIn(it) } ?: call.resolveCaller(state)
+        when (caller) {
+            is Caller.Refused -> call.respond(caller.status, ErrorResponse(caller.message, caller.code))
+            is Caller.Unlinked -> call.respond(
+                AuthStatusDto(setupRequired = false, authenticated = false, unlinked = true, email = caller.bearer.session.email),
+            )
+            else -> {
+                val user = (caller as? Caller.SignedIn)?.user
+                call.respond(
+                    AuthStatusDto(
+                        setupRequired = !state.authService.hasAnyUser,
+                        authenticated = user != null,
+                        user = user?.toDto(),
+                    ),
+                )
+            }
+        }
     }
 
     post<AuthSetupResource> {
@@ -106,6 +118,7 @@ internal fun Route.routeApiRestAuth(state: State) {
         // In bootstrap-open mode there is no session to log out of: `authenticatedUser`
         // throws and the caller gets 401. Deliberate, not an oversight.
         call.authenticatedUser
+        call.remoteSessionOrNull(state)?.sessionOrNull?.let { state.cloud.remoteSessions.end(it.sid, RemoteSessionEnd.ENDED) }
         call.request.cookies[SESSION_COOKIE]?.let { state.authService.logout(it) }
         call.clearSessionCookie()
         call.respond(HttpStatusCode.NoContent)
@@ -471,6 +484,10 @@ data class AuthStatusDto(
     val setupRequired: Boolean,
     val authenticated: Boolean,
     val user: AuthUserDto? = null,
+    /** A remote session through the cloud whose account links to no user here (cloud-p1 plan D4). */
+    val unlinked: Boolean = false,
+    /** That account's email, for an [unlinked] session. */
+    val email: String? = null,
 )
 
 @Serializable
