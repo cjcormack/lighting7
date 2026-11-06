@@ -3807,6 +3807,18 @@ Three surface rules, each pinned by its test:
   dnd-kit's `disabled` rather than by unmounting it (`StackDetail` learned that one); the grip
   stops its own `pointerdown` propagating, or starting a drag would also start a marquee.
 
+  **A drag from a selected row moves the selection** (show-view-fixes plan D22–D24): `rowDrag.group`
+  is asked once as the drag starts for the rows that travel with it, and the cue sheet and the
+  Timeline answer with `dragGroupOf(selectedRows, id)` — the row selection on the Table, the
+  selected cells' rows on the Timeline — when the dragged row is one of them, else the row alone.
+  The new order is `sheetModel.ts`'s `moveRows(rowIds, group, activeId, overId)`: the group together
+  in row order, before the row dropped on moving up and after it moving down, gaps closed, a drop on
+  the group nothing; still one `reorder`, and the selection stays on the moved rows, whose entry ids a
+  reorder keeps. While a group moves its other rows dim in place, the dragged row's grip carries
+  **+n** and a line marks the landing; the gap stays one row high, dnd-kit's list strategy moving rows
+  for the active one only. A single-row drag draws none of it and sets no state; a host that passes no
+  `group` (the Stack table, the applied tables) only ever drags one row.
+
   **A sortable row is positioned with `top`, never the virtualiser's `translateY`.** dnd-kit
   measures droppables with transforms discounted, so rows positioned only by a transform all measure
   at the container's origin: every centre-distance ties, `closestCenter`'s stable sort returns the

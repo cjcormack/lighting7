@@ -9,6 +9,8 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { ArrowDown, ArrowUp, GripVertical, Pencil } from 'lucide-react'
@@ -23,7 +25,7 @@ import { useCellMarquee } from './useCellMarquee'
 import type { CellSelection } from './useCellSelection'
 import { useRevealCell } from './revealCell'
 import type { CellOpenRequest } from './useCellEditorRequests'
-import { batchLabelOf, takesValue, type SheetCellProps, type SheetColumn, type SheetColumnGroup, type SheetRow } from './sheetModel'
+import { batchLabelOf, moveRows, takesValue, type SheetCellProps, type SheetColumn, type SheetColumnGroup, type SheetRow } from './sheetModel'
 
 /** Every row of every sheet is 36px, the DMX sheet's 56 — see `rowHeight`. */
 export const SHEET_ROW_HEIGHT = 36
@@ -47,6 +49,8 @@ export interface SheetDragHandle {
   listeners: Record<string, unknown>
   attributes: Record<string, unknown>
   isDragging: boolean
+  /** While dragging, how many other rows travel with this one (`rowDrag.group`) — its **+n**. */
+  carrying?: number
 }
 
 export interface SheetTableProps<Row extends SheetRow, C extends string> {
@@ -119,6 +123,13 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
     onReorder: (ids: RowId[]) => void
     /** False pins a row in place: no grip, no drag, and no drop onto it. */
     canDrag?: (row: Row) => boolean
+    /**
+     * The rows that travel with [activeId] when it is dragged, itself included — asked once, as the
+     * drag starts. Absent, or answering one row, is the single-row drag. The group lands together,
+     * in row order, where the dragged row would (`moveRows`); its other rows dim while it moves, the
+     * dragged row carries **+n** and a line marks the landing.
+     */
+    group?: (activeId: RowId) => readonly RowId[]
   }
   cellSelection: CellSelection<C>
   onRowMarquee?: (ids: RowId[]) => void
@@ -289,19 +300,45 @@ export function SheetTable<Row extends SheetRow, C extends string>({
   )
   useRevealCell(scrollRef, rowIds, scrollToIndexAuto, revealCell, onRevealedCell)
   const onReorder = rowDrag?.onReorder
+  const groupOf = useStableCallback(rowDrag?.group)
+  // The group is taken as the drag starts and held in a ref for the drop; state only for a group
+  // of several, so a single-row drag sets no state.
+  const dragGroupRef = useRef<readonly RowId[]>([])
+  const [groupDragState, setGroupDrag] = useState<GroupDrag | null>(null)
+  // A drag the surface turned off mid-way (the lock) leaves nothing dimmed behind it.
+  const groupDrag = rowDrag?.enabled ? groupDragState : null
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      const activeId = String(event.active.id)
+      const group = groupOf(activeId) ?? [activeId]
+      dragGroupRef.current = group
+      setGroupDrag(group.length > 1 ? { activeId, group: new Set(group), overId: null } : null)
+    },
+    [groupOf],
+  )
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const overId = event.over == null ? null : String(event.over.id)
+    setGroupDrag((prev) => (prev == null || prev.overId === overId ? prev : { ...prev, overId }))
+  }, [])
+  const endDrag = useCallback(() => {
+    dragGroupRef.current = []
+    setGroupDrag(null)
+  }, [])
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event
-      if (!over || active.id === over.id || !onReorder) return
-      const from = rowIds.indexOf(String(active.id))
-      const to = rowIds.indexOf(String(over.id))
-      if (from < 0 || to < 0) return
-      const next = [...rowIds]
-      next.splice(to, 0, ...next.splice(from, 1))
-      onReorder(next)
+      const group = dragGroupRef.current
+      endDrag()
+      if (!over || !onReorder) return
+      const next = moveRows(rowIds, group, String(active.id), String(over.id))
+      if (next != null) onReorder(next)
     },
-    [onReorder, rowIds],
+    [endDrag, onReorder, rowIds],
   )
+  const dropEdgeOf = (id: RowId): 'top' | 'bottom' | null => {
+    if (groupDrag == null || groupDrag.overId !== id || groupDrag.group.has(id)) return null
+    return rowIds.indexOf(id) > rowIds.indexOf(groupDrag.activeId) ? 'bottom' : 'top'
+  }
 
   return (
     // Always the fill arm: the sheet owns the remaining height of a full-height column
@@ -398,7 +435,10 @@ export function SheetTable<Row extends SheetRow, C extends string>({
             enabled={rowDrag != null}
             sensors={sensors}
             rowIds={rowIds}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
+            onDragCancel={endDrag}
           >
           <div
             className="select-none touch-manipulation [-webkit-touch-callout:none]"
@@ -467,6 +507,9 @@ export function SheetTable<Row extends SheetRow, C extends string>({
                   height={rowHeight}
                   disabled={!rowDrag.enabled}
                   pinned={rowDrag.canDrag?.(row) === false}
+                  carrying={groupDrag?.activeId === row.id ? groupDrag.group.size - 1 : 0}
+                  dimmed={groupDrag != null && groupDrag.activeId !== row.id && groupDrag.group.has(row.id)}
+                  dropEdge={dropEdgeOf(row.id)}
                   render={view}
                 />
               ) : (
@@ -521,6 +564,13 @@ export function SheetTable<Row extends SheetRow, C extends string>({
       )}
     </div>
   )
+}
+
+/** A drag of several rows (`rowDrag.group`): who is dragged, who travels with it, where it is over. */
+interface GroupDrag {
+  activeId: RowId
+  group: ReadonlySet<RowId>
+  overId: RowId | null
 }
 
 interface HeaderBand<C extends string> {
@@ -579,18 +629,31 @@ function SheetRowsDnd({
   enabled,
   sensors,
   rowIds,
+  onDragStart,
+  onDragOver,
   onDragEnd,
+  onDragCancel,
   children,
 }: {
   enabled: boolean
   sensors: ReturnType<typeof useSensors>
   rowIds: readonly RowId[]
+  onDragStart: (event: DragStartEvent) => void
+  onDragOver: (event: DragOverEvent) => void
   onDragEnd: (event: DragEndEvent) => void
+  onDragCancel: () => void
   children: React.ReactNode
 }) {
   if (!enabled) return <>{children}</>
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+      onDragCancel={onDragCancel}
+    >
       {/* Every row id, not just the virtualised window: a drag that scrolls past the window's edge
           still has to land somewhere dnd-kit knows about. */}
       <SortableContext items={rowIds as string[]} strategy={verticalListSortingStrategy}>
@@ -614,6 +677,9 @@ function SortableVirtualRow({
   height,
   disabled,
   pinned,
+  carrying,
+  dimmed,
+  dropEdge,
   render,
 }: {
   id: RowId
@@ -621,6 +687,9 @@ function SortableVirtualRow({
   height: number
   disabled: boolean
   pinned: boolean
+  carrying: number
+  dimmed: boolean
+  dropEdge: 'top' | 'bottom' | null
   render: (handle?: SheetDragHandle) => React.ReactNode
 }) {
   const { setNodeRef, setActivatorNodeRef, listeners, attributes, transform, transition, isDragging } =
@@ -641,8 +710,9 @@ function SortableVirtualRow({
         top: `${start}px`,
         transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
         transition,
-        opacity: isDragging ? 0.85 : undefined,
+        opacity: isDragging ? 0.85 : dimmed ? 0.35 : undefined,
       }}
+      data-drag-dimmed={dimmed || undefined}
     >
       {/* No handle while the drag is off: a grip that cannot be dragged is worse than no grip, and
           `disabled` on the sortable is what makes the drag genuinely impossible rather than merely
@@ -655,7 +725,15 @@ function SortableVirtualRow({
               listeners: (listeners ?? {}) as Record<string, unknown>,
               attributes: attributes as unknown as Record<string, unknown>,
               isDragging,
+              carrying,
             },
+      )}
+      {dropEdge && (
+        <div
+          aria-hidden="true"
+          data-drop-line={dropEdge}
+          className={cn('pointer-events-none absolute inset-x-0 z-20 h-0.5 bg-primary', dropEdge === 'top' ? 'top-0' : 'bottom-0')}
+        />
       )}
     </div>
   )
@@ -667,26 +745,38 @@ function SortableVirtualRow({
  *
  * `stopPropagation` on the press: the rows wrapper above is the marquee's `pointerdown` target, and
  * React bubbles a synthetic event whatever the DOM says, so without it starting a drag would also
- * start a rectangle.
+ * start a rectangle. While a group moves, the dragged row's grip carries its **+n**, centred on the
+ * first cell's right edge, clear of whatever the cell draws beside the grip (the cue sheet's pip).
  */
 function RowGrip({ handle }: { handle: SheetDragHandle }) {
+  const carrying = handle.carrying ?? 0
   return (
-    <button
-      type="button"
-      ref={handle.ref}
-      {...handle.attributes}
-      {...handle.listeners}
-      onPointerDown={(e) => {
-        e.stopPropagation()
-        ;(handle.listeners.onPointerDown as ((e: React.PointerEvent) => void) | undefined)?.(e)
-      }}
-      onClick={(e) => e.stopPropagation()}
-      aria-label="Reorder row"
-      title="Drag to reorder"
-      className="relative -ml-1 flex h-full w-4 shrink-0 cursor-grab touch-none items-center justify-center text-muted-foreground/50 hover:text-foreground active:cursor-grabbing"
-    >
-      <GripVertical className="size-3.5" />
-    </button>
+    <>
+      <button
+        type="button"
+        ref={handle.ref}
+        {...handle.attributes}
+        {...handle.listeners}
+        onPointerDown={(e) => {
+          e.stopPropagation()
+          ;(handle.listeners.onPointerDown as ((e: React.PointerEvent) => void) | undefined)?.(e)
+        }}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Reorder row"
+        title="Drag to reorder"
+        className="relative -ml-1 flex h-full w-4 shrink-0 cursor-grab touch-none items-center justify-center text-muted-foreground/50 hover:text-foreground active:cursor-grabbing"
+      >
+        <GripVertical className="size-3.5" />
+      </button>
+      {carrying > 0 && (
+        <span
+          data-drag-carrying
+          className="pointer-events-none absolute right-0 top-1/2 z-10 -translate-y-1/2 translate-x-1/2 rounded-full bg-primary px-1.5 font-mono text-[10px] leading-4 tabular-nums text-primary-foreground"
+        >
+          +{carrying}
+        </span>
+      )}
+    </>
   )
 }
 

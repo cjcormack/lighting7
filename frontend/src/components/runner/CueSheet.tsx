@@ -49,7 +49,7 @@ import type { SheetKeyRefusal } from '@/components/sheet/useSheetKeyboard'
 import { OptionCell, type SheetOption } from '@/components/sheet/cells/OptionCell'
 import { TextCell } from '@/components/sheet/cells/TextCell'
 import { PHONE_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
-import { listNames, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
+import { dragGroupOf, listNames, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
 import { isCueRow, type CueStack, type CueStackCueEntry, type CueStackCueRow } from '@/api/cueStacksApi'
 
 export type CueColumnKey = 'cueNumber' | 'name' | 'fade' | 'curve' | 'follow' | 'dark' | 'book' | 'layers' | 'fx' | 'scenery' | 'notes'
@@ -928,6 +928,7 @@ export function CueSheet({
                 enabled: !locked && darkFilter == null,
                 onReorder: (ids) =>
                   onReorder(ids.map((id) => Number(id.slice('entry:'.length))).filter(Number.isFinite)),
+                group: (id) => dragGroupOf(selectedRows, id),
               }
             : undefined
         }

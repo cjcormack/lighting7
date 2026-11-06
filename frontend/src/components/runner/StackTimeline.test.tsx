@@ -54,6 +54,18 @@ vi.mock('./CueActions', () => ({
     return <div data-testid="cue-actions" />
   },
 }))
+// The row drag's handlers, as the sheet hands them to dnd-kit, played into directly (`dragRow`).
+const dnd: { last?: Record<string, (event: unknown) => void> } = {}
+vi.mock('@dnd-kit/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@dnd-kit/core')>()
+  return {
+    ...actual,
+    DndContext: (props: React.ComponentProps<typeof actual.DndContext>) => {
+      dnd.last = props as unknown as Record<string, (event: unknown) => void>
+      return <actual.DndContext {...props} />
+    },
+  }
+})
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count, estimateSize }: { count: number; estimateSize: () => number }) => ({
     getTotalSize: () => count * estimateSize(),
@@ -404,6 +416,30 @@ describe('StackTimeline — the pip arms (show-view-fixes plan D13)', () => {
     expect(screen.getByTitle('On stage').tagName).toBe('SPAN')
     expect(screen.getByTitle('Next GO').tagName).toBe('SPAN')
     expect(screen.queryByRole('button', { name: /Arm Q[12] as/ })).toBeNull()
+  })
+})
+
+describe('StackTimeline — dragging a selection (show-view-fixes plan D22)', () => {
+  function dragRow(from: number, over: number) {
+    const active = { id: `entry:${from}` }
+    act(() => dnd.last!.onDragStart({ active }))
+    act(() => dnd.last!.onDragEnd({ active, over: { id: `entry:${over}` } }))
+  }
+
+  it('a drag from a row with selected cells moves every row the cells are in; another row moves alone', () => {
+    stubLayout()
+    const onReorder = vi.fn()
+    render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} onReorder={onReorder} />)
+    const target = cell(101, PALETTE).firstElementChild as HTMLElement
+    fireEvent.pointerDown(target, { button: 0, clientX: 400, clientY: 10 })
+    fireEvent.pointerMove(target, { button: 0, buttons: 1, clientX: 410, clientY: 36 + 26 })
+    fireEvent.pointerUp(target, { button: 0, clientX: 410, clientY: 36 + 26 })
+    fireEvent.click(target)
+
+    dragRow(102, 103)
+    expect(onReorder).toHaveBeenLastCalledWith([150, 103, 101, 102])
+    dragRow(103, 101)
+    expect(onReorder).toHaveBeenLastCalledWith([103, 101, 102, 150])
   })
 })
 
