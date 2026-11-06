@@ -23,8 +23,8 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * A stop sends the sidecar SIGTERM (on Windows, a kill), on which it ends its sessions and exits.
  *
- * Development only (session 3): [command] names a binary built by hand. It is not restarted when it
- * exits; session 5 bundles it and supervises it with backoff.
+ * It never restarts the sidecar itself: a launch that ends, by exiting or by being killed as hung,
+ * is reported to [onEnded], and [LinkProcess] decides when to start the next.
  */
 class LinkSidecar(
     private val command: List<String>,
@@ -35,8 +35,11 @@ class LinkSidecar(
     private val onMessage: (LinkOut) -> Unit,
     /** The sidecar serves ([LinkOut.Started] arrived), or has stopped serving; called once each way per launch. */
     private val onRunning: (Boolean) -> Unit,
+    /** A launch ended other than by [stop]: it exited, or was killed as hung. Called once per launch, on any thread. */
+    private val onEnded: () -> Unit = {},
+    private val launcher: (List<String>) -> Process = { ProcessBuilder(it).start() },
     private val stdinCapacity: Int = STDIN_LINES,
-) {
+) : SidecarLaunches {
     private val logger = LoggerFactory.getLogger(LinkSidecar::class.java)
 
     /** Guards [launch], [stopped] and each launch's [Launch.ended] and [Launch.serving]. */
@@ -50,7 +53,7 @@ class LinkSidecar(
     val launches = AtomicInteger()
 
     /** Whether the current launch has said it serves. */
-    val running: Boolean get() = synchronized(lock) { launch?.serving == true }
+    override val running: Boolean get() = synchronized(lock) { launch?.serving == true }
 
     private inner class Launch(val id: Int, val process: Process) {
         val stdin = ArrayBlockingQueue<String>(stdinCapacity)
@@ -59,31 +62,32 @@ class LinkSidecar(
         var serving = false
     }
 
-    /** Launch the sidecar, unless one runs or [stop] has been called. */
-    fun start() {
+    /** Launch the sidecar, unless one runs or [stop] has been called. False when the process could not be started. */
+    override fun start(): Boolean {
         val l = synchronized(lock) {
-            if (stopped || launch != null) return
+            if (stopped || launch != null) return true
             val process = try {
-                ProcessBuilder(command).start()
+                launcher(command)
             } catch (e: Exception) {
                 logger.warn("Couldn't start the sidecar {}: {}", command.firstOrNull(), e.message)
-                return
+                return false
             }
             Launch(generation.incrementAndGet(), process).also {
                 launch = it
                 launches.incrementAndGet()
             }
         }
-        logger.info("Started the sidecar (pid {})", l.process.pid())
+        logger.info("Started the sidecar {} (pid {})", command.first(), l.process.pid())
         val secret = newSecret()
         thread("link-stdin-${l.id}") { writeStdin(l, secret) }
         thread("link-stdout-${l.id}") { readStdout(l) }
         thread("link-stderr-${l.id}") { drainStderr(l) }
         scope.launch { consume(l) }
+        return true
     }
 
     /** Stop for good: the sidecar is asked to end its sessions and exit, and killed if it has not in 5 s. Never blocks. */
-    fun stop() {
+    override fun stop() {
         val l = synchronized(lock) {
             stopped = true
             launch
@@ -93,31 +97,32 @@ class LinkSidecar(
 
     /**
      * Queue [message] for the sidecar's stdin. False when no sidecar serves, or when the queue is full,
-     * after which the sidecar is restarted as hung.
+     * after which the sidecar is killed as hung and [onEnded] told.
      */
     fun send(message: LinkIn): Boolean {
         val l = synchronized(lock) { launch?.takeIf { it.serving && !it.ended } } ?: return false
         if (l.stdin.offer(message.encode())) return true
         logger.warn("The sidecar stopped reading its stdin; restarting it")
-        if (finish(l, kill = true)) start()
+        finish(l, kill = true)
         return false
     }
 
     /**
-     * End [l], once: its queues closed, [onRunning] told if it served, and the process stopped on a
-     * thread of its own, since a write blocked on its full stdin holds the pipe's lock. True for the
-     * call that ended it.
+     * End [l], once: its queues closed, [onRunning] told if it served, [onEnded] unless [stop] ended it,
+     * and the process stopped on a thread of its own, since a write blocked on its full stdin holds the
+     * pipe's lock. True for the call that ended it.
      */
     private fun finish(l: Launch, kill: Boolean): Boolean {
-        val wasServing = synchronized(lock) {
+        val (wasServing, byStop) = synchronized(lock) {
             if (l.ended) return false
             l.ended = true
             if (launch === l) launch = null
-            l.serving.also { l.serving = false }
+            (l.serving to stopped).also { l.serving = false }
         }
         l.stdin.clear()
         l.lines.close()
         if (wasServing) onRunning(false)
+        if (!byStop) onEnded()
         thread("link-stop-${l.id}") {
             if (kill) {
                 l.process.destroyForcibly()

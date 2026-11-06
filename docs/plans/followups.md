@@ -173,6 +173,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LICENCE-POM-DRIFT`](#fu-licence-pom-drift) | Ready | Dist | — |
 | [`FU-CLOUD-PROTOCOL-PUBLISH`](#fu-cloud-protocol-publish) | Trigger | Dist | a third party builds against the cloud protocol |
 | [`FU-CLOUD-DS-PRIMITIVES-ENTRY`](#fu-cloud-ds-primitives-entry) | Trigger | FE | the cloud's portal needs a desk primitive its alias cannot reach, or the alias breaks on a `desk.ref` move |
+| [`FU-CLOUD-LINK-SIGNING`](#fu-cloud-link-signing) | Blocked | Dist | the installers are code-signed |
 | [`FU-HISTORY-RESTAGE-COST`](#fu-history-restage-cost) | Trigger | Perf | a write on the desk visibly lags while several projects have show history |
 | [`FU-HISTORY-EMBEDDED-CHILD-IDS`](#fu-history-embedded-child-ids) | Trigger | History | something names an embedded child (a busk pad, a rig tile, a scenery row) by its integer id across an undo |
 | [`FU-HISTORY-MACHINE-LOCAL`](#fu-history-machine-local) | Trigger | History | a desk night asks for an undo of a machine-local setting (a universe's address) |
@@ -1983,6 +1984,21 @@ the alias when the cloud moves its pin.
 
 **Fix**: a second `build:ds` entry exporting only the primitives and their CSS, with nothing that
 imports the store or the socket, so the portal can take the build whole.
+
+### `FU-CLOUD-LINK-SIGNING`
+
+**Sign the sidecar with the installers** · Blocked · cloud-p1 session 5, 2026-11-06
+
+The installers carry `lighting7-link`, the remote-session sidecar, beside the jars (cloud-p1 plan D10).
+Neither the MSI nor the Mac pkg is code-signed today (`windows-build.yml` says so of the MSI), so the
+sidecar is not either: an unsigned executable is what SmartScreen and Gatekeeper already warn about for
+the installer as a whole.
+
+**Blocked on**: the installers being code-signed.
+
+**Fix**: sign `lighting7-link-*` with the same identity before `jpackage` stages them (`signtool` on
+Windows; `codesign` with the hardened runtime on the Mac, both architectures, then notarise the pkg),
+and have `stageJpackageInput`'s verifier fail an unsigned one on a release build.
 
 ### `FU-DIST-ICONS`
 

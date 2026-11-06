@@ -1094,7 +1094,7 @@ Machine-scoped, so registered in the pre-warm-up band and unaffected by project 
 | `installChanged` | — | Every socket |
 | `updateStateChanged` | `phase`, `availability`, `latestVersion?`, `downloadedBytes`, `totalBytes?` | Every socket |
 | `tunnel.state` | `state`: `status`, `url?`, `code?`, `message?`, `retrying`, `downloadedBytes?`, `totalBytes?` | Admin sockets only (and bootstrap-open ones), snapshot on connect |
-| `cloud.state` | `state`: `configured`, `enabled`, `adoption?`, `adopted?`, `connection`, `retryAt?`, `lastError?`, `lastOnlineAt?`, `notice?`, `noticeAt?`, `remote?` | Admin sockets only (and bootstrap-open ones), snapshot on connect; a pending adoption's code and links left out on the public listener |
+| `cloud.state` | `state`: `configured`, `enabled`, `adoption?`, `adopted?`, `connection`, `link?` (the sidecar's status, `OFF` when absent), `retryAt?`, `lastError?`, `lastOnlineAt?`, `notice?`, `noticeAt?`, `remote?` | Admin sockets only (and bootstrap-open ones), snapshot on connect; a pending adoption's code and links left out on the public listener |
 
 The account frames are payload-free **deliberately, not just by convention**: sockets are open to
 operators while `/api/rest/users` is admin-only, so a body here would leak exactly what that gate

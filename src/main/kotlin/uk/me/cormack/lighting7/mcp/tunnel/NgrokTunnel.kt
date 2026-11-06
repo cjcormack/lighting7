@@ -1,10 +1,5 @@
 package uk.me.cormack.lighting7.mcp.tunnel
 
-import com.sun.jna.Library
-import com.sun.jna.Memory
-import com.sun.jna.Native
-import com.sun.jna.Pointer
-import com.sun.jna.WString
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -16,6 +11,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.process.PidFile
+import uk.me.cormack.lighting7.process.WindowsJob
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
@@ -59,9 +56,9 @@ sealed interface TunnelState {
  * The agent must not outlive the desk: an orphan keeps holding the domain, and the next desk's
  * agent then fails to start its endpoint. Three layers: [stop] from the application's shutdown,
  * a JVM shutdown hook for the paths that skip it, and on Windows a Job Object with
- * KILL_ON_JOB_CLOSE so even a killed JVM takes the agent with it. On macOS and Linux a PID file
- * lets the next start kill an orphan — only if that PID is still running *our* agent binary,
- * never anything else (see CLAUDE.md on killing processes the desk didn't start).
+ * KILL_ON_JOB_CLOSE so even a killed JVM takes the agent with it ([WindowsJob]). On macOS and Linux
+ * a [PidFile] lets the next start kill an orphan — only if that PID is still running *our* agent
+ * binary, never anything else (see CLAUDE.md on killing processes the desk didn't start).
  */
 class NgrokTunnel(
     private val workDir: Path,
@@ -126,7 +123,7 @@ class NgrokTunnel(
         }
         if (!p.isAlive) {
             process = null
-            deletePidFile()
+            pidFile.delete()
         }
     }
 
@@ -161,8 +158,8 @@ class NgrokTunnel(
                 }
                 process = p
             }
-            writePidFile(p, spec.binary)
-            WindowsJob.assign(p)
+            pidFile.write(p, spec.binary)
+            WindowsJob.assign(p, "ngrok")
 
             val run = RunWatcher(spec.domain, gen)
             try {
@@ -175,7 +172,7 @@ class NgrokTunnel(
             runCatching { p.waitFor(5, TimeUnit.SECONDS) }
             if (!p.isAlive) {
                 synchronized(lock) { if (process === p) process = null }
-                deletePidFile()
+                pidFile.delete()
             }
             if (stopping) return
 
@@ -274,45 +271,13 @@ class NgrokTunnel(
         return file
     }
 
-    private val pidFile: Path get() = workDir.resolve("ngrok.pid")
-
-    private fun writePidFile(p: Process, binary: Path) {
-        runCatching {
-            Files.createDirectories(workDir)
-            Files.writeString(pidFile, "${p.pid()}\n${binary.toAbsolutePath().normalize()}\n")
-        }
-    }
-
-    private fun deletePidFile() {
-        runCatching { Files.deleteIfExists(pidFile) }
-    }
+    private val pidFile = PidFile(workDir.resolve("ngrok.pid"), "an ngrok agent")
 
     /**
      * Kill an agent a previous run of this desk left behind — only when the PID file's process is
      * alive *and* is running [binary]. A PID reused by anything else is left alone.
      */
-    internal fun sweepOrphan(binary: Path) {
-        val lines = runCatching { Files.readAllLines(pidFile) }.getOrNull() ?: return
-        val pid = lines.getOrNull(0)?.trim()?.toLongOrNull()
-        val recorded = lines.getOrNull(1)?.trim()
-        if (pid != null && recorded != null && pid != ProcessHandle.current().pid()) {
-            ProcessHandle.of(pid).ifPresent { handle ->
-                val command = handle.info().command().orElse(null)
-                if (handle.isAlive && command != null && sameFile(command, recorded) && sameFile(command, binary.toString())) {
-                    log.warn("Stopping an ngrok agent (pid {}) left running by a previous run of this desk", pid)
-                    handle.destroy()
-                    runCatching { handle.onExit().get(3, TimeUnit.SECONDS) }
-                        .onFailure { handle.destroyForcibly() }
-                }
-            }
-        }
-        deletePidFile()
-    }
-
-    private fun sameFile(a: String, b: String): Boolean {
-        fun canon(s: String) = runCatching { Path.of(s).toRealPath() }.getOrElse { Path.of(s).toAbsolutePath().normalize() }
-        return runCatching { canon(a) == canon(b) }.getOrDefault(false)
-    }
+    internal fun sweepOrphan(binary: Path) = pidFile.sweepOrphan(binary)
 
     companion object {
         private val log = LoggerFactory.getLogger(NgrokTunnel::class.java)
@@ -370,61 +335,5 @@ class NgrokTunnel(
             }
             return if (lead == null) detail else "$lead ($detail)"
         }
-    }
-
-    /**
-     * A Windows Job Object with KILL_ON_JOB_CLOSE, held open for the life of this JVM: when the
-     * desk's process dies — cleanly or not — Windows closes the handle and kills every process in
-     * the job. No-op elsewhere, and on any failure (the shutdown hook and PID sweep still apply).
-     */
-    private object WindowsJob {
-        private val isWindows = System.getProperty("os.name").orEmpty().startsWith("Windows")
-
-        @Suppress("FunctionName")
-        private interface Kernel32 : Library {
-            fun CreateJobObjectW(attributes: Pointer?, name: WString?): Pointer?
-            fun SetInformationJobObject(job: Pointer, infoClass: Int, info: Pointer, length: Int): Boolean
-            fun OpenProcess(access: Int, inherit: Boolean, pid: Int): Pointer?
-            fun AssignProcessToJobObject(job: Pointer, process: Pointer): Boolean
-            fun CloseHandle(handle: Pointer): Boolean
-        }
-
-        private val kernel32: Kernel32? by lazy {
-            if (!isWindows) null else runCatching { Native.load("kernel32", Kernel32::class.java) }.getOrNull()
-        }
-
-        private val job: Pointer? by lazy {
-            val k = kernel32 ?: return@lazy null
-            runCatching {
-                val handle = k.CreateJobObjectW(null, null) ?: return@runCatching null
-                // JOBOBJECT_EXTENDED_LIMIT_INFORMATION is 144 bytes on 64-bit Windows (the only
-                // Windows ngrok is pinned for); LimitFlags sits at offset 16 of its basic half.
-                val info = Memory(144).apply { clear() }
-                info.setInt(16, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
-                if (k.SetInformationJobObject(handle, JOB_OBJECT_EXTENDED_LIMIT_INFORMATION, info, 144)) handle else {
-                    k.CloseHandle(handle)
-                    null
-                }
-            }.getOrNull()
-        }
-
-        fun assign(process: Process) {
-            if (!isWindows) return
-            val k = kernel32 ?: return
-            val j = job ?: return
-            runCatching {
-                val h = k.OpenProcess(PROCESS_SET_QUOTA or PROCESS_TERMINATE, false, process.pid().toInt()) ?: return
-                try {
-                    if (!k.AssignProcessToJobObject(j, h)) log.warn("Couldn't put ngrok in the desk's job object")
-                } finally {
-                    k.CloseHandle(h)
-                }
-            }
-        }
-
-        private const val JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
-        private const val JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
-        private const val PROCESS_SET_QUOTA = 0x0100
-        private const val PROCESS_TERMINATE = 0x0001
     }
 }

@@ -23,6 +23,7 @@ show, and nothing here may slow one down (§"Show safety").
 | The cloud's token keys and the origin it serves remote sessions from | memory only (`JwksCache`, `CloudService.remoteOrigin`) | the last `jwks` and `welcome` heard, through any reconnect, until a newer one or a restart (P1 D3) |
 | Open remote sessions, and those ended or revoked | memory only (`RemoteSessions`) | until each ends, then until any token issued for it has expired |
 | The sidecar's launch, its link secret and the offers still to be answered | memory only (`LinkSidecar`, `RemoteSessions`, `RemoteBroker`) | one launch; a new secret each time it starts |
+| The running sidecar's PID, binary and start time | `<appDataDir>/link/lighting7-link.pid` (`process/PidFile.kt`) | while it runs, so the next start can stop one a killed desk left behind |
 | The audit of remote sessions | `cloud_remote_sessions` (`models/cloudRemoteSessions.kt`) | a row at a session's open and end, never between; a year |
 
 Every table is `SyncDisposition.MachineLocal` and never touches `ProjectExporter` or `ProjectImporter`
@@ -278,22 +279,52 @@ browser makes is one data channel, which the sidecar bridges to the public liste
 nothing: every request it forwards carries the session's token and the launch's secret, and the desk
 judges it as §"Remote sessions" says.
 
-**Building it.** Until P1's session 5 bundles it, it is built by hand and named in `local.conf`:
+**Building it.** Gradle builds it with a Go toolchain it downloads itself, as it does Node: the zip
+`golang.org/toolchain@v0.0.1-go<version>.<os>-<arch>` that `GOTOOLCHAIN` fetches, from the Go module
+proxy, checked against a SHA-256 pinned per host in `build.gradle.kts` (`goToolchainSha256`) and unpacked
+into `.gradle/go/`. The version is `link/go.mod`'s `go` line, which CI's *Link* job reads too; the build
+refuses to configure if the two disagree. `buildLink<Os><Arch>` builds one target into `build/link/`
+(`CGO_ENABLED=0`, `-trimpath`, `-ldflags=-s -w`, `GOTOOLCHAIN=local`), cacheable, and `buildLink` the ones
+`nativePayloadOs` ships:
 
-```bash
-cd link && go build ./cmd/lighting7-link    # Go as link/go.mod names it
-```
+| `nativePayloadOs` | Sidecars beside the jars |
+|---|---|
+| `windows` | `lighting7-link-windows-amd64.exe` |
+| `mac` | `lighting7-link-darwin-arm64`, `lighting7-link-darwin-amd64` |
+| `linux` | `lighting7-link-linux-amd64` |
+| `all` | all four |
 
-```hocon
-cloud { link.binary = "link/lighting7-link" }
-```
+They go into `jpackage-input` beside `lighting7.jar` and `launcher.jar`, never into the fat jar, since an
+executable cannot run from inside one. `stageJpackageInput`'s verifier fails a staged directory whose
+jar's natives and sidecars are not for the same OS, whose sidecar is missing, extra or not its target's
+format (ELF, Mach-O, PE, read from the header) and architecture, or not executable; its self-test,
+`verifyJpackageInputSelfTest`, runs in `check` against fixture headers. Measured from Linux: each binary
+is 10–11 MB, 4 MB deflated.
 
-The desk starts it while the control channel runs and the public listener has bound (`mcp.enabled` and
-a successful bind: `startPublicListener` calls `CloudService.publicListenerBound`), with that
-listener's address as `-target` and the desk's build as `-build`, and stops it with the channel. It is
-not restarted when it exits; session 5 supervises it. Without one running, `remote.no-sidecar` is
-announced and every offer is refused `SIDECAR_UNAVAILABLE`. From this session on the desk announces
-`remote.v1` whatever its state.
+**Which one runs** (`link/LinkBinary.kt`): `cloud.link.binary` when `local.conf` names one, else
+`-Dlighting7.link`, which `./gradlew run` and `./gradlew test` pass naming the host's build, else the
+installer's beside `lighting7.jar`, named for this machine (`lighting7-link-<goos>-<goarch>`, `.exe` on
+Windows). None of them, and no sidecar runs.
+
+**When it runs.** The desk starts it while the control channel runs, *Remote sessions* is on and the
+public listener has bound (`mcp.enabled` and a successful bind: `startPublicListener` calls
+`CloudService.publicListenerBound`), with that listener's address as `-target` and the desk's build as
+`-build`, and stops it when any of those ends: the channel stopping, the desk unadopted, the switch off.
+Without one serving, `remote.no-sidecar` is announced, set as it stops and cleared as it starts, and
+every offer is refused `SIDECAR_UNAVAILABLE`; the desk announces `remote.v1` whatever its state.
+`cloud.state`'s `link` says where it is: `OFF`, `STARTING`, `RUNNING` (it said `started`) or
+`RESTARTING`.
+
+**Supervision** (`link/LinkProcess.kt`, P1 D11), ngrok's moved: a launch that ends, by exiting, crashing
+or being killed as hung, is followed by the next after 1 s, doubling to 30 s, and the backoff resets once
+a launch has served for 60 s. The sidecar must not outlive the desk, so each launch is put in the desk's
+Windows Job Object with kill-on-close (`process/WindowsJob.kt`), a shutdown hook stops it, and each
+launch records itself in a PID file (`process/PidFile.kt`), deleted at its exit only while it still names
+that launch. `CloudService.start` sweeps the file once per desk run, before anything can launch and under
+no lock, so a sidecar a killed desk left running is stopped: only while that PID is alive, still running
+the same binary and, where the platform reports it, started at the recorded time, so a reused PID is left
+alone. It also exits by itself when its stdin ends, as it does when the JVM dies.
+`process/` is shared with ngrok's agent until P1's session 9 deletes the tunnel.
 
 **The stdio protocol.** The launch's link secret is the first line on stdin, then one JSON object per
 line each way (`link/LinkMessages.kt`, `link/internal/sidecar/stdio.go`). `link/testdata/stdio.json`
@@ -332,8 +363,8 @@ stderr are read on threads of their own (`link-stdout-N`, `link-stderr-N`), in l
 waiting (and through the pipe, the sidecar) while the cloud's threads catch up, which yield every 64
 lines; a line that is no message is ignored. stderr goes to the log, at most 50 lines in 10 s, then a
 count of those not logged. stdin is written by `link-stdin-N` from a queue of 256 lines that never drops
-one: when it is full the sidecar has stopped reading, so it is killed and started again, with a new
-secret, which ends its sessions. A stop never waits: a thread of its own sends the sidecar SIGTERM (on
+one: when it is full the sidecar has stopped reading, so it is killed, which ends its sessions, and the
+supervisor starts the next, with a new secret. A stop never waits: a thread of its own sends the sidecar SIGTERM (on
 Windows, a kill), on which it ends its sessions and exits, and kills it if it has not gone in 5 s. A
 launch ends once, whichever of a stop, a restart or its exit comes first, and a restart after a stop
 starts nothing.
@@ -418,7 +449,8 @@ project. Its shape:
 
 `{configured, enabled, adoption?: {userCode, verificationUri, verificationUriComplete, expiresAt,
 fingerprint}, adopted?: {installId, orgName, adoptedAt, adoptedBy, linkedEmail, fingerprint},
-connection, retryAt?, lastError?: {code, message}, lastOnlineAt?, notice?, noticeAt?, remote}`
+connection, link?, retryAt?, lastError?: {code, message}, lastOnlineAt?, notice?, noticeAt?, remote}`,
+`link` the sidecar's `OFF | STARTING | RUNNING | RESTARTING` (§"The sidecar"), `OFF` when absent
 
 On the public listener the pending adoption's `userCode` and both verification URIs are left out, from
 the REST answers and the frame alike (`CloudStateDto.forRemote`): whoever holds the code can approve the
@@ -491,6 +523,9 @@ does the show run exactly as before with the cloud down, hung or hostile? The ru
 `CloudOutageOutputTimingTest` is the rules' proof (NFR-SAFE-1): a fade's Art-Net frames, timed with no
 connector, then with the cloud connected, stopping reading, dropping the connection and refusing every
 reconnect, each run held to the baseline's frame count, end, p99 and longest frame gap, each plus a margin.
+`LinkSidecarSafetyTest` holds the sidecar to the same (NFR-SAFE-2): the real one running, killed mid-fade
+and stopped with SIGSTOP mid-fade until its stdin queue fills, then a stand-in flooding its stdout and one
+flooding its stderr. Both read `testsupport/FadeTiming.kt`.
 
 ## Tests
 
@@ -509,7 +544,9 @@ channel against the fake; `CloudChannelBackoffTest` the reconnect loop on a virt
 bearer requests and sockets on the public listener through every refusal and every way a session ends;
 `ChannelOutboxTest` the two send queues on virtual time. `RemoteBrokerTest` drives offers from the fake
 through `FakeSidecar`, a stand-in sidecar run as a process of its own that speaks the stdio protocol and
-hangs, dies or floods its stdout or stderr on request; `LinkMessagesTest` reads the stdio fixture.
+hangs, dies or floods its stdout or stderr on request; `LinkMessagesTest` reads the stdio fixture;
+`LinkProcessTest` the supervisor's backoff on a virtual clock and the orphan sweep; `LinkBinaryTest` which
+binary runs.
 
 The sidecar's own tests (`cd link && go test ./...`, CI's *Link* job) run a pion peer as the browser
 against it and a test server as the desk, through the framing and `ctl` fixtures, both 100 MB streams,
