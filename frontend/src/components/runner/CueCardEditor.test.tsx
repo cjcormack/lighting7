@@ -45,15 +45,24 @@ vi.mock('@/store/cueStacks', () => ({
   useCueStackMoveInDarkQuery: (_arg: unknown, opts?: { selectFromResult?: (r: { data: undefined }) => unknown }) =>
     opts?.selectFromResult ? opts.selectFromResult({ data: undefined }) : { data: undefined },
 }))
-vi.mock('@/components/cues/CueRowParts', () => ({
-  CueStatePip: () => <div data-testid="pip" />,
-  CueTargetChip: () => <div />,
-  useExpandedCue: () => ({
-    cueData: { id: 1, name: 'Q1', adHocFx: [], triggers: [], layers: [] },
-    targets: [],
-    isFetching: false,
-  }),
-}))
+vi.mock('@/components/cues/CueRowParts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/cues/CueRowParts')>()
+  return {
+    // The real pip, inside a box the row-body tests click.
+    CueStatePip: (props: React.ComponentProps<typeof actual.CueStatePip>) => (
+      <div data-testid="pip">
+        <actual.CueStatePip {...props} />
+      </div>
+    ),
+    cueArmLabel: actual.cueArmLabel,
+    CueTargetChip: () => <div />,
+    useExpandedCue: () => ({
+      cueData: { id: 1, name: 'Q1', adHocFx: [], triggers: [], layers: [] },
+      targets: [],
+      isFetching: false,
+    }),
+  }
+})
 vi.mock('@/hooks/useCueFade', () => ({
   useCueFade: () => ({ fadeProgress: null, fadeRemainMs: null }),
 }))
@@ -149,6 +158,36 @@ describe('CueCardEditor', () => {
 
     expect(onToggleExpanded).toHaveBeenCalledTimes(1)
     expect(onSetStandby).not.toHaveBeenCalled()
+  })
+
+  it.each([false, true])('locked %s: the grey pip arms the cue and does not expand it', (locked) => {
+    const { onToggleExpanded, onSetStandby } = draw({ locked })
+    const pip = screen.getByRole('button', { name: 'Arm Q1 as the next GO' })
+    fireEvent.click(pip)
+    expect(onSetStandby).toHaveBeenCalledTimes(1)
+    expect(onToggleExpanded).not.toHaveBeenCalled()
+  })
+
+  it('the live and next pips are read-outs', () => {
+    draw({ isActive: true })
+    expect(screen.getByTitle('On stage').tagName).toBe('SPAN')
+    expect(screen.queryByRole('button', { name: /as the next GO/ })).toBeNull()
+    cleanup()
+    draw({ isStandby: true })
+    expect(screen.getByTitle('Next GO').tagName).toBe('SPAN')
+    expect(screen.queryByRole('button', { name: /as the next GO/ })).toBeNull()
+  })
+
+  it('unlocked, the grip has its own slot before the pip, so the pip stays visible; locked, there is no grip', () => {
+    const { container } = draw({ locked: false })
+    const grip = container.querySelector('[data-cue-card-grip]')!
+    expect(grip).not.toBeNull()
+    expect(grip.nextElementSibling).toBe(screen.getByTestId('pip'))
+    expect(grip.contains(screen.getByTestId('pip'))).toBe(false)
+    expect(screen.getByTestId('pip').className).not.toContain('opacity-0')
+    cleanup()
+    const locked = draw({ locked: true })
+    expect(locked.container.querySelector('[data-cue-card-grip]')).toBeNull()
   })
 
   it('reports the open state to assistive tech', () => {

@@ -41,6 +41,9 @@ describe('RenumberCuesButton', () => {
     fireEvent.click(screen.getByRole('button', { name: /Renumber/ }))
     const first = screen.getByLabelText('First') as HTMLInputElement
     expect(first.value).toBe('4')
+    // Focused and selected, so typing replaces the suggestion.
+    expect(document.activeElement).toBe(first)
+    expect([first.selectionStart, first.selectionEnd]).toEqual([0, 1])
     fireEvent.change(first, { target: { value: '20' } })
     fireEvent.change(screen.getByLabelText('Step'), { target: { value: '5' } })
     expect(screen.getByText('Q20, Q25')).toBeInTheDocument()

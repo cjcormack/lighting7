@@ -20,11 +20,12 @@ import { cueSceneryLines } from '@/lib/scenery'
 import { useStageElementListQuery } from '@/store/stageElements'
 import { CueSceneryEditor } from '@/components/scenery/CueSceneryEditor'
 import { TRACKED_HATCH_CLASS } from '@/components/scenery/trackedHatch'
-import { AUTO_CUE_NUMBER_CLASS, canonicalCueNumber, cueNumberColumnChars, cueNumberProblem } from '@/lib/cueNumber'
+import { AUTO_CUE_NUMBER_CLASS, canonicalCueNumber, cueNumberColumnChars } from '@/lib/cueNumber'
 import { useCueNumberPlacement } from '@/components/cues/CueNumberPlacement'
-import { RenumberCuesButton } from './RenumberCuesButton'
+import { RenumberCuesButton, renumberStartOf, useRenumberCues } from './RenumberCuesButton'
+import { CueNumberCell, isRenumberCommit } from './CueNumberCell'
 import { TruncateStart } from '@/components/TruncateStart'
-import { CueStatePip } from '@/components/cues/CueRowParts'
+import { CueStatePip, cueArmLabel } from '@/components/cues/CueRowParts'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
 import { SpreadPanel, type SpreadPlan } from '@/components/editor/SpreadPanel'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
@@ -48,10 +49,10 @@ import type { SheetKeyRefusal } from '@/components/sheet/useSheetKeyboard'
 import { OptionCell, type SheetOption } from '@/components/sheet/cells/OptionCell'
 import { TextCell } from '@/components/sheet/cells/TextCell'
 import { PHONE_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
-import { firstColumnCellProps, listNames, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
+import { listNames, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
 import { isCueRow, type CueStack, type CueStackCueEntry, type CueStackCueRow } from '@/api/cueStacksApi'
 
-export type CueColumnKey = 'name' | 'fade' | 'curve' | 'follow' | 'dark' | 'book' | 'layers' | 'fx' | 'scenery' | 'notes'
+export type CueColumnKey = 'cueNumber' | 'name' | 'fade' | 'curve' | 'follow' | 'dark' | 'book' | 'layers' | 'fx' | 'scenery' | 'notes'
 
 /**
  * One row of the stack's list — an **entry**: a cue, or a marker drawn as a divider. Keyed by the
@@ -129,9 +130,16 @@ export interface CueSheetProps {
 
 /**
  * The cue sheet — one row per cue, a marker as a divider row, on the sheet kit
- * (CLAUDE.md §Sheet kit). Name · Fade · Curve · Follow · Notes are cells; the cue number keeps its
- * inline edit on the Cue column; Book is a read-out that opens the Prompt Book, and Layers · FX
- * select their row and open the bottom pane on that tab. Live row green, next row blue, as the cards.
+ * (CLAUDE.md §Sheet kit). The first column is the **row head** — the kit's grip, the pip, the played
+ * mark — and selects the row. Cue # · Name · Fade · Curve · Follow · Notes are cells; Book is a
+ * read-out that opens the Prompt Book, and Layers · FX select their row and open the bottom pane on
+ * that tab. Live row green, next row blue, as the cards.
+ *
+ * **Cue # is a cell of its own kind.** One cell is the number field, written on the entry with
+ * `placement: 'ASK'`, so a number out of order asks where it goes; several are one renumber of those
+ * cues in stack order, whole numbers only (`CueNumberCell`); Clear returns each to auto.
+ *
+ * **The pip arms** a cue that is neither live nor next as the next GO, locked or not.
  *
  * **The bottom pane** (`CueEditorPane`) is drawn while this window's *Editor* toggle is on: the cue
  * editor for the one selected cue row, else a blank state at the same height, so a selection never
@@ -140,7 +148,7 @@ export interface CueSheetProps {
  * **The lock is this sheet's read-only scope**, the way Output scope is the programmer's. Locked,
  * every value cell is inert — `pointer-events-none` on the wrapper, `disabled` on the trigger,
  * the keyboard refused through the permission, Set · Clear · Spread disabled with the reason — the
- * marquee still works, and a click on the Cue column arms the cue as next, exactly as a card
+ * marquee still works, and a click on the row head arms the cue as next, exactly as a card
  * click does. Unlocked, cells edit under the amber wash the chrome above already wears. GO, BACK,
  * Space and ⌫ are untouched: `useTransportKeys` is the page's, enabled exactly while locked as it
  * always was, and `canOperate` is never handed `locked` (CLAUDE.md §The show-editing lock).
@@ -269,8 +277,80 @@ export function CueSheet({
   )
   const completedSet = useMemo(() => new Set(completedCueIds), [completedCueIds])
 
+  const { renumber } = useRenumberCues(projectId, stack.id)
+  // Wide enough for the widest number, so a decimal is never clipped down to its tail ("….5"
+  // cannot be told from Q3.5).
+  const numberColumnWidth = useMemo(
+    () => cueSheetNumberColumnWidth(cueNumberColumnChars(stack.cues.filter(isCueRow).map((c) => c.cueNumber))),
+    [stack.cues],
+  )
+
   const columns = useMemo<SheetColumn<CueSheetRow, CueColumnKey>[]>(
     () => [
+      {
+        key: 'cueNumber',
+        label: 'Cue #',
+        kind: 'cueNumber',
+        width: numberColumnWidth,
+        // The entry's own number; an auto number is the position's, so there is nothing typed to edit.
+        value: (row) => (cueOf(row).cueNumberAuto ? '' : (cueOf(row).cueNumber ?? '')),
+        cell: (row, props) => {
+          const cue = cueOf(row)
+          return (
+            <CueNumberCell
+              {...(props as React.ComponentProps<typeof CueNumberCell>)}
+              defaultStart={(rows) => {
+                const first = rows[0] as CueSheetRow | undefined
+                return renumberStartOf(first != null && isCueRow(first.entry) ? first.entry.cueNumber : null)
+              }}
+              face={
+                // `inline-block`: left inline, `TruncateStart`'s blocks made the line box 59px tall for a
+                // 20px number, and as the row's tallest min-content that became the track.
+                <span
+                  className={cn(
+                    'mx-1.5 inline-block min-w-0 max-w-full font-mono text-sm',
+                    cue.cueNumberAuto ? AUTO_CUE_NUMBER_CLASS : 'font-semibold',
+                  )}
+                  title={cue.cueNumberAuto ? 'Auto-numbered from position — edit to set an explicit cue number' : 'Cue number'}
+                >
+                  <TruncateStart text={cue.cueNumber ? `Q${cue.cueNumber}` : '—'} />
+                </span>
+              }
+            />
+          )
+        },
+        write: (batch, value) => {
+          if (isRenumberCommit(value)) {
+            void renumber(
+              batch.map((row) => row.entry.entryId),
+              value.renumber.start,
+              value.renumber.step,
+            )
+            return true
+          }
+          if (typeof value !== 'string' || batch.length !== 1) return false
+          const row = batch[0]
+          const cue = cueOf(row)
+          const blank = value.trim() === ''
+          const number = blank ? null : canonicalCueNumber(value)
+          if (!blank && number == null) return false
+          if (number === (cue.cueNumberAuto ? null : (cue.cueNumber ?? null))) return true
+          writeNumber((placement) =>
+            patchEntryMutation({
+              projectId,
+              stackId: stack.id,
+              entryId: row.entry.entryId,
+              cueId: cue.id,
+              cueNumber: number,
+              placement,
+            }).unwrap(),
+          )
+          return true
+        },
+        clear: (batch) => {
+          for (const row of batch) if (!cueOf(row).cueNumberAuto && cueOf(row).cueNumber != null) patchEntry(cueOf(row), { cueNumber: null })
+        },
+      },
       {
         key: 'name',
         label: 'Name',
@@ -581,7 +661,7 @@ export function CueSheet({
         },
       },
     ],
-    [activeEntryId, darkByEntry, darkNow, elementsByUuid, locationByCue, locked, onOpenBook, onRequestUnlock, patch, patchEntry, placesByCue, projectId, standbyEntryId, tracksScenery],
+    [activeEntryId, darkByEntry, darkNow, elementsByUuid, locationByCue, locked, numberColumnWidth, onOpenBook, onRequestUnlock, patch, patchEntry, patchEntryMutation, placesByCue, projectId, renumber, stack.id, standbyEntryId, tracksScenery, writeNumber],
   )
 
   const copy = useCallback(
@@ -691,7 +771,7 @@ export function CueSheet({
     scrollTo(id)
   }, [openedEntryId, rows, scrollTo, setRows])
 
-  /** Arming is what a click on the Cue column means while locked — the cards' body-click rule. */
+  /** Arming is what a click on the row head means while locked — the cards' body-click rule. */
   const onRowClick = useCallback(
     (id: string, e: React.MouseEvent) => {
       if (locked && onSetStandby) {
@@ -704,7 +784,7 @@ export function CueSheet({
     [activeEntryId, locked, onSetStandby, rows, sheet.tableProps],
   )
 
-  const armable = locked && onSetStandby && selectedRows.length === 1 && selectedRows[0].entry.entryId !== activeEntryId
+  const armable = onSetStandby != null && selectedRows.length === 1 && selectedRows[0].entry.entryId !== activeEntryId
   /** The selected cue rows, in row order — what the action set acts on; a marker is no cue. */
   const actionRows = useMemo<CueActionRow[]>(
     () =>
@@ -718,12 +798,6 @@ export function CueSheet({
           stackId: stack.id,
         })),
     [selectedRows, stack.id],
-  )
-  // Wide enough for the widest number beside the grip and the pip, so a decimal is never clipped
-  // down to its tail ("….5" cannot be told from Q3.5).
-  const cueColumnWidth = useMemo(
-    () => cueSheetCueColumnWidth(cueNumberColumnChars(stack.cues.filter(isCueRow).map((c) => c.cueNumber))),
-    [stack.cues],
   )
   const renumberRows = useMemo(
     () => actionRows.flatMap((r) => (r.entryId != null ? [{ entryId: r.entryId, cueNumber: r.cueNumber }] : [])),
@@ -752,7 +826,7 @@ export function CueSheet({
             }
           />
         )}
-        {locked && onSetStandby && (
+        {onSetStandby && (
           <Button
             variant="outline"
             size="sm"
@@ -857,7 +931,7 @@ export function CueSheet({
               }
             : undefined
         }
-        minWidth={`${100 + columns.reduce((n, c) => n + trackFloor(c.width), 0)}px`}
+        minWidth={`${trackFloor(ROW_HEAD_WIDTH) + columns.reduce((n, c) => n + trackFloor(c.width), 0)}px`}
         // Asked of every row, dividers included — a marker is never live or next.
         rowClass={(row) =>
           !isCueRow(row.entry)
@@ -870,7 +944,7 @@ export function CueSheet({
         }
         firstColumn={{
           label: 'Cue',
-          width: cueColumnWidth,
+          width: ROW_HEAD_WIDTH,
           render: (row) => {
             const active = row.entry.entryId === activeEntryId
             const standby = row.entry.entryId === standbyEntryId && !active
@@ -880,75 +954,15 @@ export function CueSheet({
                 data-cue-row={cueOf(row).id}
                 data-entry-row={row.entry.entryId}
               >
-                <CueStatePip isActive={active} isStandby={standby} />
+                <CueStatePip
+                  isActive={active}
+                  isStandby={standby}
+                  onArm={onSetStandby ? () => onSetStandby(cueOf(row).id, row.entry.entryId) : undefined}
+                  label={cueArmLabel(cueOf(row))}
+                />
                 {completedSet.has(cueOf(row).id) && !active && (
                   <span className="sr-only">Played</span>
                 )}
-                {/* **A double click opens it, in the same popover as every value cell on this
-                    sheet.** It was a single click, which had to swallow the press so the row
-                    underneath did not select — so the Cue column was the one column where a click
-                    meant something different. Now the single click selects the row and the second
-                    gesture edits, which is the grid's rule everywhere else.
-
-                    **Locked, it is plain text, not a disabled trigger.** A click on the number
-                    while locked arms the cue, by bubbling to the column — and a browser dispatches
-                    no click at all for a press inside a disabled button, so a disabled editor would
-                    have made the number the one dead spot in the column. The face is
-                    `inline-block` in both arms: left inline, `TruncateStart`'s blocks made the line
-                    box 59px tall for a 20px number, and as the row's tallest min-content that
-                    became the track. */}
-                <span
-                  className={cn(
-                    'min-w-0 flex-1 font-mono text-sm',
-                    cueOf(row).cueNumberAuto ? AUTO_CUE_NUMBER_CLASS : 'font-semibold',
-                  )}
-                >
-                  {locked ? (
-                    <span className="inline-block max-w-full px-0.5" title="Cue number">
-                      <TruncateStart text={cueOf(row).cueNumber ? `Q${cueOf(row).cueNumber}` : '—'} />
-                    </span>
-                  ) : (
-                    <TextCell
-                      {...firstColumnCellProps<string>({
-                        noun: 'cue',
-                        value: cueOf(row).cueNumber ?? '',
-                        label: 'Cue number',
-                        onCommit: (next) => {
-                          const blank = next.trim() === ''
-                          const number = blank ? null : canonicalCueNumber(next)
-                          // `validate` refuses a number that is not one; never let it clear the entry.
-                          if ((!blank && number == null) || number === (cueOf(row).cueNumber ?? null)) return
-                          writeNumber((placement) =>
-                            patchEntryMutation({
-                              projectId,
-                              stackId: stack.id,
-                              entryId: row.entry.entryId,
-                              cueId: cueOf(row).id,
-                              cueNumber: number,
-                              placement,
-                            }).unwrap(),
-                          )
-                        },
-                      })}
-                      mono
-                      allowEmpty
-                      placeholder="14.5"
-                      validate={cueNumberProblem}
-                      face={
-                        <span
-                          className="inline-block max-w-full px-0.5"
-                          title={
-                            cueOf(row).cueNumberAuto
-                              ? 'Auto-numbered from position — double-click to set an explicit cue number'
-                              : 'Double-click to edit the cue number'
-                          }
-                        >
-                          <TruncateStart text={cueOf(row).cueNumber ? `Q${cueOf(row).cueNumber}` : '—'} />
-                        </span>
-                      }
-                    />
-                  )}
-                </span>
               </span>
             )
           },
@@ -1019,11 +1033,14 @@ function trackFloor(width: string): number {
   return m ? Number(m[1]) : 96
 }
 
+/** The row head's track: the grip, the pip and the padding. */
+const ROW_HEAD_WIDTH = '64px'
+
 /**
- * The cue sheet's Cue column for a widest number of `chars` characters (the `Q` included): the grip,
- * the pip, the gaps and the padding (80px) beside the mono number (8.5px a character at text-sm), never narrower
- * than the 100px the column always had.
+ * The Cue # column for a widest number of `chars` characters (the `Q` included): the mono number
+ * (8.5px a character at text-sm) beside the cell's margins and marks gutter (36px), never narrower
+ * than 76px.
  */
-export function cueSheetCueColumnWidth(chars: number): string {
-  return `${Math.max(100, Math.ceil(80 + chars * 8.5))}px`
+export function cueSheetNumberColumnWidth(chars: number): string {
+  return `${Math.max(76, Math.ceil(36 + chars * 8.5))}px`
 }

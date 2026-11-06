@@ -139,7 +139,7 @@ since the write takes it over). Every door that writes a number to a cue in a st
   `CUE_NUMBER_OUT_OF_ORDER` `{error, code, number, previous?, next?}` (the neighbours it reads out of
   order against); in order, it is `HERE`. The client then asks the operator — *Move to its place* or
   *Keep it here* (`frontend/src/components/cues/CueNumberPlacement.tsx`) — and sends again. Every
-  number field in the UI sends `ASK` first: the cue sheet's Cue column, the cue editor's header, the
+  number field in the UI sends `ASK` first: the cue sheet's Cue # column, the cue editor's header, the
   card, the Prompt Book's rail and card, and Record's *Cue #* (the Prompt Book's create-a-cue sheet places
   by page order and only checks the number). The error toast leaves that code to its caller (`SILENT_CODES`).
 
@@ -152,7 +152,8 @@ passes, so the named entries may trade numbers, and an auto number in the way gi
 one's does; one an unnamed entry holds explicitly is 409 `CUE_NUMBER_TAKEN`, naming each. 400
 `CUE_NUMBER_INVALID` for no entries, a marker or another stack's entry, a start below 0, a step below
 1, or a last number past 9999. The cue sheet's selection bar draws it as *Renumber…*
-(`RenumberCuesButton`), starting from the first selected cue's whole number.
+(`RenumberCuesButton`), and so do several of its Cue # cells set at once, through one `RenumberForm`,
+starting from the first selected cue's whole number or the digit typed at the grid.
 
 | Class | Rule | Examples | Behaviour |
 |-------|------|----------|-----------|

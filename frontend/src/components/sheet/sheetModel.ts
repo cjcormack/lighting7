@@ -66,7 +66,7 @@ const noop = () => {}
 
 /**
  * The props for a kit cell mounted **outside the marquee** — the first column's own editor: the
- * patch list's fixture name, the cue sheet's cue number.
+ * patch list's fixture name, a library sheet's record name.
  *
  * The first column is the row axis, so it is never in a cell selection: no batch to spread over, no
  * keyboard seed, no Set to anchor at, and `onBeginEdit` does nothing — a single click on the

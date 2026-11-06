@@ -35,6 +35,7 @@ vi.mock('@/store/speedMasters', () => ({ useSpeedMasterListQuery: () => ({ data:
 vi.mock('@/store/errorToastMiddleware', () => ({ ignoreReportedError: () => {} }))
 vi.mock('@/components/cues/CueRowParts', () => ({
   CueStatePip: () => <div data-testid="pip" />,
+  cueArmLabel: () => '',
   CueTargetChip: () => <div />,
   useExpandedCue: () => ({ cueData: current, targets: [], isFetching: false }),
 }))
