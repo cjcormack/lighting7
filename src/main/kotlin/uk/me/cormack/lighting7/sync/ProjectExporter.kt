@@ -114,6 +114,7 @@ import uk.me.cormack.lighting7.routes.heldAutoNumbers
  * /formatVersion.json
  * /project.json                  -- v24: `kind`, and a show's pin (`venueUuid`, `venueVersion`, `venueRepo`);
  *                                    a standalone show's origin (`detachedFromVenueUuid`, `detachedFromVersion`)
+ *                                    and `inProduction`, omitted while true
  * /installs.json                  -- empty in Phase 1; Phase 2 populates
  * /showHides/{uuid}.json           -- v24: a show's hides of its venue's records
  * /showOverrides/{uuid}.json       -- v24 (session 5): a show's facet overrides of venue patches
@@ -328,6 +329,7 @@ class ProjectExporter(private val state: State) {
                         // A standalone show's origin (venue-attach plan D1), both or neither.
                         detachedFromVenueUuid = origin?.first?.toString(),
                         detachedFromVersion = origin?.second,
+                        inProduction = project.inProduction,
                     ),
                 )
             },

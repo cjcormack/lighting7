@@ -6737,11 +6737,21 @@ provider (a test drawing the set alone) the set draws them itself.
 #### The show-editing lock
 
 **`/show` is the runner and the editor, separated by a lock rather than a route.** `useEditLock`
-derives it:
+derives it, through `editLockRule` (show-view-fixes plan D18):
 
 ```
-locked = !canEdit || (isShowActive && lockRequested)
+guarded = canEdit && isShowActive && inProduction
+locked  = !canEdit || (guarded && lockRequested)
+lockRelevant = guarded; unlockedWarning = guarded && !locked
 ```
+
+`inProduction` is a show setting (`ProjectDetail.inProduction`, Settings › General's *In production*
+switch; synced with the show, every show from before it on, a new show off), read from the current
+project by `useInProduction`, unknown reading as on. A show being built or teched turns it off and stays
+editable while a stack runs: no lock, no amber, and in the lock control's place a quiet *Not in
+production* link to Settings (`NotInProductionLabel`, from the hook's `notInProduction`). The hosts —
+Show, the Prompt Book, the Cues table, the busk Show tab — take `locked`, `lockRelevant` and
+`unlockedWarning` from the hook and compute none of them; `useHistoryMove` asks `editLockRule` too.
 
 Six things about it are load-bearing:
 
@@ -6756,8 +6766,9 @@ Six things about it are load-bearing:
 - **`lockRequested` lives in a Redux slice** (`store/editLockSlice.ts`), shared with the Prompt Book,
   because "I am in a fix-it session" is one fact about the operator and one GO should end it
   everywhere. It is **never persisted**: a running show always opens locked. The re-arm effect
-  therefore fires on the stopped→running *transition* and not on mount, or navigating between the two
-  surfaces would re-lock and the sharing would be pointless — `useEditLock.test.tsx` pins that.
+  therefore fires on the *transition* into `guarded` — a show starting, or a running show put into
+  production (D19) — and not on mount, or navigating between the two surfaces would re-lock and the
+  sharing would be pointless — `useEditLock.test.tsx` pins both.
 - **Dragging is disabled through dnd-kit's own `disabled`**, per sortable, never by unmounting the
   `DndContext` — `useSortable` needs that ancestor, so removing it breaks every row. The drag and
   inline-edit affordances are **hidden rather than greyed out**: a row of disabled destructive
@@ -6777,8 +6788,8 @@ Six things about it are load-bearing:
   row's cue number, name and fade are live text fields, and in an editing surface Space is a space.
   That handler took the *union* of the two it replaced — a focused button must not fire GO as well as
   activating itself, which is a double advance the old Run handler allowed.
-- **Unlocked-while-running washes the header amber** — `ShowHeader`'s `unlockedWarning`, on both lock
-  surfaces. The signal is for the *unlocked* state, not the locked one: locked is the quiet default,
+- **Unlocked-while-guarded washes the header amber** — `ShowHeader`'s `unlockedWarning`, on both lock
+  surfaces, from the hook. The signal is for the *unlocked* state, not the locked one: locked is the quiet default,
   and believing you are locked when you are not is how a show gets edited by accident. A stopped show
   is simply editable, so there is nothing to warn about and no wash. The border is always present and
   transparent, so colouring it cannot shift the layout as the lock flips. The Prompt Book's toolbar

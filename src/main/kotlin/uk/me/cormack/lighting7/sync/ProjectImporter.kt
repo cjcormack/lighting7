@@ -557,6 +557,7 @@ class ProjectImporter(private val state: State) {
                 val origin = originOf(projectJson, targetKind, pin)
                 detachedFromVenueUuid = origin?.first
                 detachedFromVersion = origin?.second
+                inProduction = projectJson.inProduction
             }
 
             val clashes = populateProject(sourceDir, project, format.formatVersion, projectJson.fxLibrary)
@@ -709,6 +710,7 @@ class ProjectImporter(private val state: State) {
             val origin = originOf(projectJson, project.kind, pin)
             project.detachedFromVenueUuid = origin?.first
             project.detachedFromVersion = origin?.second
+            project.inProduction = projectJson.inProduction
 
             val clashes = populateProject(sourceDir, project, format.formatVersion, projectJson.fxLibrary)
 
@@ -882,6 +884,7 @@ class ProjectImporter(private val state: State) {
         project.stageWidthM = json.stageWidthM
         project.stageDepthM = json.stageDepthM
         project.stageHeightM = json.stageHeightM
+        project.inProduction = json.inProduction
     }
 
     private fun findEntry(project: DaoProject, uuid: UUID): DaoCueStackEntry? =

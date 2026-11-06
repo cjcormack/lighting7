@@ -1,6 +1,7 @@
 import { restApi } from "./restApi"
 import { lightingApi } from "../api/lightingApi"
 import { store } from "./index"
+import { lockRequested } from "./editLockSlice"
 import {
   ProjectSummary,
   ProjectDetail,
@@ -112,6 +113,17 @@ export const projectsApi = restApi.injectEndpoints({
           method: 'PUT',
           body,
         }),
+        // Putting a show into production re-arms the lock (show-view-fixes plan D19). The lock hosts
+        // see the transition only while mounted, and the switch is on Settings, where none is.
+        async onQueryStarted({ inProduction }, { dispatch, queryFulfilled }) {
+          if (inProduction !== true) return
+          try {
+            await queryFulfilled
+            dispatch(lockRequested())
+          } catch {
+            // Refused: nothing changed, so nothing to re-arm.
+          }
+        },
         invalidatesTags: (_result, _error, { id }) => [
           'ProjectList',
           { type: 'Project', id },

@@ -53,6 +53,8 @@ export interface ProjectSummary {
   safeBlackout?: boolean;
   /** Where a standalone show was detached from; absent for any other project and from an older desk. */
   detachedFrom?: DetachedFrom | null;
+  /** Whether a running show locks its editing views. Absent from an older desk, which reads as in production. */
+  inProduction?: boolean;
 }
 
 /**
@@ -90,6 +92,8 @@ export interface ProjectDetail {
   venue?: ProjectVenue | null;
   /** Where a standalone show was detached from; absent for any other project and from an older desk. */
   detachedFrom?: DetachedFrom | null;
+  /** Whether a running show locks its editing views. Absent from an older desk, which reads as in production. */
+  inProduction?: boolean;
 }
 
 // For creating a new project
@@ -102,6 +106,8 @@ export interface CreateProjectRequest {
   venueId?: number;
   /** A Preset seating block of that version, copied in as the show's own stalls (venue plan D6). */
   seatingPresetUuid?: string;
+  /** A new show starts not in production unless this says so; refused on a venue. */
+  inProduction?: boolean;
 }
 
 // For updating a project
@@ -111,6 +117,8 @@ export interface UpdateProjectRequest {
   stageWidthM?: number | null;
   stageDepthM?: number | null;
   stageHeightM?: number | null;
+  /** Refused on a venue, which has no lock. */
+  inProduction?: boolean;
 }
 
 // Script summary for project config dropdowns

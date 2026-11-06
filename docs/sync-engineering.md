@@ -59,7 +59,8 @@ formatVersion.json
 project.json                   # v24+: `kind` (absent = SHOW), and a show's pin — `venueUuid`,
                                # `venueVersion`, `venueRepo` (a hint); see §"Version 24"; a
                                # standalone show's origin — `detachedFromVenueUuid`,
-                               # `detachedFromVersion` — where it was detached from (no version)
+                               # `detachedFromVersion` — where it was detached from (no version);
+                               # `inProduction`, omitted while true (no version)
 installs.json                  # populated with the local install's identity (Phase 2)
 showHides/{uuid}.json          # v24+: a show on a venue's hides of venue records (recordKind,
                                # recordUuid)
@@ -1003,6 +1004,16 @@ pin, as one value, since Detach writes both in one transaction. The venue uuid n
 the archive, so `ExportUuidRemapper` leaves it alone and a clone keeps it. An importer that finds only
 one of the two, or a uuid that does not parse, reads no origin rather than failing: the origin only
 steers an attach's matching.
+
+**A show's *In production* travels too** (show-view-fixes plan D16): `project.json`'s `inProduction`,
+whether a running show locks its editing views. True is the default and is omitted, so a show in
+production writes the same bytes as before the field and an older archive, which never says it, reads
+as in production; only a show switched off writes `inProduction: false`. A new optional field, so no
+`formatVersion` bump: an older reader ignores it (`ignoreUnknownKeys`). It merges three-way beside the
+pin (`mergeProjectPin`): where only this desk changed it since the merge base this desk's value wins,
+since a desk that turned it on for a performance must not lose the lock to another desk's older
+commit; otherwise the remote's stands. A clone keeps it, and an undo of the project's fields puts it
+back with them.
 
 **What a loaded show does with a missing snapshot.** Every way in refuses one, and a venue a show
 pins refuses delete, so it takes a hand-edited database. Then `RigScope` still answers the show's own

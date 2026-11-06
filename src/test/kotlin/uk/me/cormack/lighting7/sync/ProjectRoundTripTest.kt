@@ -191,6 +191,32 @@ class ProjectRoundTripTest {
         }
     }
 
+    /** *In production* (show-view-fixes plan D16) travels in `project.json` while off, and only then. */
+    @Test
+    fun `a show not in production exports it and imports it back`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        val text = Files.readString(exportDirA.resolve("project.json"))
+        assertFalse(canonicalDecode(ProjectJson.serializer(), text).inProduction, text)
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) { assertFalse(DaoProject[imported.projectId].inProduction) }
+    }
+
+    @Test
+    fun `a show in production writes no key, and an archive without one reads as in production`() {
+        val projectId = seedRichProject(state)
+        transaction(state.database) { DaoProject[projectId].inProduction = true }
+        ProjectExporter(state).export(projectId, exportDirA)
+        val text = Files.readString(exportDirA.resolve("project.json"))
+        assertFalse(text.contains("inProduction"), "the default is omitted: $text")
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) { assertTrue(DaoProject[imported.projectId].inProduction) }
+    }
+
     @Test
     fun `a show on a venue exports no origin`() {
         val onVenue = seedShowOnVenue(state)

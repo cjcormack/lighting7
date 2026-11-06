@@ -22,6 +22,7 @@ import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -260,6 +261,65 @@ class RemoteSyncEngineTest {
             DaoProject.findById(projectId)!!.cueStacks.map { it.name }.toSet()
         }
         assertTrue("Local Stack" in stackNames, "Auto-merge should preserve local-only records")
+    }
+
+    /** A commit on the remote from another clone, written by [edit] over the remote's tree. */
+    private fun strangerCommit(edit: (Path) -> Unit) {
+        val strangerWorkdir = Files.createTempDirectory("lighting7-stranger-")
+        try {
+            JGitClient.init(strangerWorkdir).use { repo ->
+                JGitClient.setRemote(repo, "origin", bareRepo.toUri().toString())
+                JGitClient.fetch(repo, "origin", "main", GitCredentials("", ""))
+                val originSha = repo.resolve("refs/remotes/origin/main")!!.name
+                Git(repo).branchCreate().setName("main").setStartPoint(originSha).setForce(true).call()
+                JGitClient.resetHard(repo, originSha)
+                edit(strangerWorkdir)
+                JGitClient.stageAll(repo)
+                JGitClient.commit(repo, "Stranger", "stranger@example.com", "from-stranger")
+                JGitClient.push(repo, "origin", "main", GitCredentials("", ""), force = true)
+            }
+        } finally {
+            runCatching { strangerWorkdir.toFile().deleteRecursively() }
+        }
+    }
+
+    private fun addLocalStack(projectId: Int, name: String) = transaction(state.database) {
+        DaoCueStack.new {
+            this.project = DaoProject.findById(projectId)!!
+            this.name = name
+        }
+    }
+
+    /** *In production* merges three-way beside the pin (show-view-fixes plan D16): this desk's change stands. */
+    @Test
+    fun `an auto-merge keeps this desk's In production over a remote that did not change it`() {
+        val projectId = seedMinimalProject(state)
+        configureSync(projectId, bareRepo.toUri().toString())
+        runSync(projectId)
+
+        strangerCommit { Files.writeString(it.resolve("stranger.txt"), "hi\n") }
+        transaction(state.database) { DaoProject.findById(projectId)!!.inProduction = false }
+        addLocalStack(projectId, "Local Stack")
+
+        assertEquals(SyncOutcome.MERGED, runSync(projectId).outcome)
+        transaction(state.database) { assertFalse(DaoProject.findById(projectId)!!.inProduction) }
+    }
+
+    @Test
+    fun `an auto-merge takes the remote's In production where this desk did not change it`() {
+        val projectId = seedMinimalProject(state)
+        configureSync(projectId, bareRepo.toUri().toString())
+        runSync(projectId)
+
+        strangerCommit { dir ->
+            val path = dir.resolve("project.json")
+            val json = canonicalDecode(ProjectJson.serializer(), Files.readString(path))
+            Files.writeString(path, canonicalEncode(ProjectJson.serializer(), json.copy(inProduction = false)))
+        }
+        addLocalStack(projectId, "Local Stack")
+
+        assertEquals(SyncOutcome.MERGED, runSync(projectId).outcome)
+        transaction(state.database) { assertFalse(DaoProject.findById(projectId)!!.inProduction) }
     }
 
     @Test

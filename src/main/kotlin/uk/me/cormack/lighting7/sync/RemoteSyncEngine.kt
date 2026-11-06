@@ -464,15 +464,19 @@ class RemoteSyncEngine(
     }
 
     /**
-     * Merge a show's pin (`project.json`'s `venueUuid`, `venueVersion`, `venueRepo`, v24) three-way
-     * into the merged tree at [tree], which holds the remote's `project.json`, with its origin
-     * (`detachedFromVenueUuid`, `detachedFromVersion`), which Detach writes as it clears the pin, so
-     * the two move as one: where only this desk's pin moved since the merge base, it is written over
-     * the remote's. Where only the remote's moved,
-     * or both did, the remote's stands — as the rest of `project.json` (name, description, stage size)
-     * always has; nothing arbitrates two desks re-pinning one show apart (an Update only moves a pin
-     * forward, on one desk). No merge base
-     * (unrelated histories) reads as a base with no pin.
+     * Merge two parts of `project.json` three-way into the merged tree at [tree], which holds the
+     * remote's: each where only this desk's moved since the merge base is written over the remote's,
+     * and where only the remote's moved, or both did, the remote's stands — as the rest of
+     * `project.json` (name, description, stage size) always has.
+     *
+     * - A show's pin (`venueUuid`, `venueVersion`, `venueRepo`, v24) with its origin
+     *   (`detachedFromVenueUuid`, `detachedFromVersion`), which Detach writes as it clears the pin, so
+     *   the two move as one. Nothing arbitrates two desks re-pinning one show apart (an Update only
+     *   moves a pin forward, on one desk).
+     * - *In production* (show-view-fixes plan D16), a safety setting: a desk that just turned it on
+     *   for a performance must not have the lock taken away by another desk's older commit.
+     *
+     * No merge base (unrelated histories) reads as a base with no pin, in production.
      */
     private fun mergeProjectPin(repo: Repository, tree: Path, localSha: String, remoteSha: String) {
         fun at(ref: String?): ProjectJson? = ref
@@ -483,20 +487,26 @@ class RemoteSyncEngine(
         val path = tree.resolve("project.json")
         if (!Files.exists(path)) return
         val remote = runCatching { canonicalDecode(ProjectJson.serializer(), Files.readString(path)) }.getOrNull() ?: return
-        if (local.pin() == remote.pin()) return
-        val basePin = at(JGitClient.mergeBase(repo, localSha, remoteSha))?.pin() ?: listOf(null, null, null, null, null)
-        if (local.pin() == basePin || remote.pin() != basePin) return
-        Files.writeString(
-            path,
-            canonicalEncode(
-                ProjectJson.serializer(),
-                remote.copy(
-                    venueUuid = local.venueUuid, venueVersion = local.venueVersion, venueRepo = local.venueRepo,
-                    detachedFromVenueUuid = local.detachedFromVenueUuid, detachedFromVersion = local.detachedFromVersion,
-                ),
-            ),
-        )
-        logger.info("Auto-merge kept this desk's venue pin ({} v{}) over the remote's", local.venueUuid, local.venueVersion)
+        if (local.pin() == remote.pin() && local.inProduction == remote.inProduction) return
+        val base = at(JGitClient.mergeBase(repo, localSha, remoteSha))
+        fun <T> onlyLocalMoved(of: ProjectJson.() -> T, absent: T): Boolean {
+            val was = base?.of() ?: absent
+            return local.of() != remote.of() && local.of() != was && remote.of() == was
+        }
+
+        var merged = remote
+        if (onlyLocalMoved({ pin() }, listOf(null, null, null, null, null))) {
+            merged = merged.copy(
+                venueUuid = local.venueUuid, venueVersion = local.venueVersion, venueRepo = local.venueRepo,
+                detachedFromVenueUuid = local.detachedFromVenueUuid, detachedFromVersion = local.detachedFromVersion,
+            )
+            logger.info("Auto-merge kept this desk's venue pin ({} v{}) over the remote's", local.venueUuid, local.venueVersion)
+        }
+        if (onlyLocalMoved({ inProduction }, true)) {
+            merged = merged.copy(inProduction = local.inProduction)
+            logger.info("Auto-merge kept this desk's In production ({}) over the remote's", local.inProduction)
+        }
+        if (merged != remote) Files.writeString(path, canonicalEncode(ProjectJson.serializer(), merged))
     }
 
     /**
@@ -720,7 +730,8 @@ class RemoteSyncEngine(
 
         // v24: a show's pin lives in project.json, which is not a record, so the overlay above
         // never touches it and the remote's would win — undoing a pin this desk set (an Extract
-        // on a show that already synced) and taking its rig with it. Merge the pin three-way.
+        // on a show that already synced) and taking its rig with it. Merge the pin three-way, and
+        // In production with it.
         mergeProjectPin(repo, workingTreePath, localSha, remoteSha)
         spellOutRemotePingPong(workingTreePath, outcomes, localSnapshots, remoteSnapshots)
         stampFormatVersion(workingTreePath)

@@ -1,4 +1,5 @@
 import { Lock, LockOpen } from 'lucide-react'
+import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -69,5 +70,21 @@ export function ShowLockControl({
         {locked ? 'Locked' : 'Editing'}
       </Button>
     </div>
+  )
+}
+
+/**
+ * What sits in the lock control's place while a show that is not in production runs (show-view-fixes
+ * plan D20): quiet and uncoloured, since nothing is wrong, and a link to the setting that would lock it.
+ */
+export function NotInProductionLabel({ projectId }: { projectId: number }) {
+  return (
+    <Link
+      to={`/projects/${projectId}/settings`}
+      title="This show stays editable while it runs. Turn on In production in Settings › General to lock it."
+      className="whitespace-nowrap rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:underline"
+    >
+      Not in production
+    </Link>
   )
 }

@@ -86,6 +86,7 @@ class ProjectManager(
                     name = "Default"
                     description = null
                     isCurrent = true
+                    inProduction = false
                 }
         }
 
