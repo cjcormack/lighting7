@@ -151,8 +151,8 @@ interface CueActionsProps {
  * - **Load** Includes and stays; its title says whether that is live or blind. **Record…** opens the
  *   Record sheet on the cue. In the ⋯ menu, **Update stage…** follows it while the one cue is edited
  *   since GO (§4.4), opening its confirm. **Duplicate** is `POST /cues/{id}/duplicate`, the copy appended to the
- *   end of its stack (D12) and opened — loose without one, and never opened from the table, which
- *   lists it; over several rows, each in row order. **Remove from stack**
+ *   end of its stack (D12), with its entry's follow, and opened — loose without one, and never opened
+ *   from the table, which lists it; over several rows, each in row order. **Remove from stack**
  *   deletes the entry and keeps the cue. **Delete…** is the D8 confirm, one for all the rows.
  *   **⋯** holds *Add to stack…*, *Move to stack…* — the entry whole, number, follow and anchor with
  *   it — and *Copy link*.
@@ -243,7 +243,7 @@ export function CueActions({
     const copies = []
     for (const row of rows) {
       try {
-        copies.push(await duplicateCue({ projectId, cueId: row.cueId, stackId: row.stackId }).unwrap())
+        copies.push(await duplicateCue({ projectId, cueId: row.cueId, stackId: row.stackId, entryId: row.entryId }).unwrap())
       } catch {
         // Reported by errorToastMiddleware; the rest of the batch stops here.
         break

@@ -409,7 +409,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
     }
 
     // POST /{projectId}/cues/{cueId}/duplicate - A copy of the cue in this project, appended to the
-    // end of `stackId`'s list, or loose without one (show-cue-editing plan D12)
+    // end of `stackId`'s list with `entryId`'s follow, or loose without one (show-cue-editing plan
+    // D12, show-view-fixes plan D1)
     post<DuplicateCueResource> { resource ->
         withCurrentProject(
             state,
@@ -428,9 +429,20 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     if (stack.type == CueStackType.SEPARATOR.name) return@transaction null to "Cannot add cues to a separator"
                     stack
                 }
+                val from = if (stack == null) null else request.entryId?.let { id ->
+                    DaoCueStackEntry.findById(id)
+                        ?.takeIf { it.cueId == source.id.value && it.stack.project.id == project.id }
+                        ?: return@transaction null to "Cue stack entry not found"
+                }
                 val copy = CueCopier(project, project).copyCue(source, "${source.name} (copy)".take(DUPLICATE_NAME_MAX))
                 // At the end, unnumbered, so it takes the next auto number and nothing else moves.
-                val entry = stack?.let { placeCueInStack(it, copy) }
+                val entry = stack?.let {
+                    placeCueInStack(
+                        it, copy,
+                        autoAdvance = from?.autoAdvance ?: false,
+                        autoAdvanceDelay = from?.autoAdvanceDelay,
+                    )
+                }
                 if (stack != null) priorities = stackEntryPriorities(stack)
                 DuplicateCueResponse(
                     cueId = copy.id.value,
@@ -732,9 +744,12 @@ data class CueEntryPlaceDto(
 )
 
 
-/** The stack whose list the copy is appended to; absent makes it loose. */
+/**
+ * The stack whose list the copy is appended to; absent makes it loose. [entryId] is the place
+ * duplicated from, whose follow the copy's entry takes; ignored for a loose copy.
+ */
 @Serializable
-data class DuplicateCueRequest(val stackId: Int? = null)
+data class DuplicateCueRequest(val stackId: Int? = null, val entryId: Int? = null)
 
 /** The copy, and its place when it has one — what the client opens. */
 @Serializable

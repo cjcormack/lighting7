@@ -67,11 +67,19 @@ class CueDuplicateAndMoveRoutesTest : RouteIntegrationTest() {
     private suspend fun HttpClient.stackRows(stackId: Int): List<CueStackCueEntry> =
         get("$base/cue-stacks/$stackId").body<CueStackDetails>().cues
 
-    private suspend fun HttpClient.duplicate(cueId: Int, stackId: Int?): HttpResponse =
+    private suspend fun HttpClient.duplicate(cueId: Int, stackId: Int?, entryId: Int? = null): HttpResponse =
         post("$base/cues/$cueId/duplicate") {
             contentType(ContentType.Application.Json)
-            setBody(DuplicateCueRequest(stackId))
+            setBody(DuplicateCueRequest(stackId, entryId))
         }
+
+    private suspend fun HttpClient.setFollow(stackId: Int, entryId: Int, delayMs: Long) {
+        val status = patch("$base/cue-stacks/$stackId/entries/$entryId") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"autoAdvance":true,"autoAdvanceDelayMs":$delayMs}""")
+        }.status
+        assertEquals(HttpStatusCode.OK, status)
+    }
 
     private suspend fun HttpClient.move(stackId: Int, entryId: Int, to: Int): HttpResponse =
         post("$base/cue-stacks/$stackId/entries/$entryId/move") {
@@ -168,6 +176,55 @@ class CueDuplicateAndMoveRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.BadRequest, client.duplicate(one, separator).status)
         assertEquals(HttpStatusCode.BadRequest, client.duplicate(one, 9_999).status)
         assertEquals(HttpStatusCode.NotFound, client.duplicate(9_999, a).status)
+    }
+
+    @Test
+    fun `duplicate carries the follow of the entry it was made from`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val a = stack("A", 0)
+        val b = stack("B", 1)
+        val one = cue("One")
+        client.addCue(a, one)
+        val from = client.stackRows(a).single().entryId
+        client.setFollow(a, from, delayMs = 2_000)
+
+        val copy = client.duplicate(one, a, entryId = from).body<DuplicateCueResponse>()
+        val placed = client.stackRows(a).single { it.entryId == copy.entryId }
+        assertTrue(placed.autoAdvance)
+        assertEquals(2_000L, placed.autoAdvanceDelayMs)
+
+        val elsewhere = client.duplicate(one, b, entryId = from).body<DuplicateCueResponse>()
+        val inB = client.stackRows(b).single()
+        assertEquals(elsewhere.entryId, inB.entryId)
+        assertTrue(inB.autoAdvance, "the follow goes with the copy into another stack")
+        assertEquals(2_000L, inB.autoAdvanceDelayMs)
+
+        val plain = client.duplicate(one, a).body<DuplicateCueResponse>()
+        val unfollowed = client.stackRows(a).single { it.entryId == plain.entryId }
+        assertEquals(false, unfollowed.autoAdvance, "no entry, no follow")
+        assertNull(unfollowed.autoAdvanceDelayMs)
+    }
+
+    @Test
+    fun `duplicate refuses an entry that does not place the cue`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val a = stack("A", 0)
+        val (one, two) = listOf(cue("One"), cue("Two"))
+        client.addCue(a, one); client.addCue(a, two)
+        val twoEntry = client.stackRows(a).single { it.id == two }.entryId
+        val cuesBefore = transaction(state.database) { DaoCue.all().count() }
+
+        val response = client.duplicate(one, a, entryId = twoEntry)
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertEquals(HttpStatusCode.BadRequest, client.duplicate(one, a, entryId = 9_999).status)
+        assertEquals(cuesBefore, transaction(state.database) { DaoCue.all().count() }, "nothing copied")
+        assertEquals(listOf(one, two), client.stackRows(a).map { it.id })
+
+        val loose = client.duplicate(one, null, entryId = twoEntry)
+        assertEquals(HttpStatusCode.Created, loose.status, "a loose copy ignores the entry")
+        assertNull(loose.body<DuplicateCueResponse>().entryId)
     }
 
     @Test

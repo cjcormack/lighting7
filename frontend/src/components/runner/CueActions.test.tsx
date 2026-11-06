@@ -118,14 +118,21 @@ describe('CueActions', () => {
     }
   })
 
-  it('duplicates each row in row order, to the end of its stack', async () => {
+  it('duplicates each row in row order, to the end of its stack, naming the entry it came from', async () => {
     draw({ host: 'bar', rows: ROWS })
     fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
     await waitFor(() => expect(duplicateCue).toHaveBeenCalledTimes(2))
     expect(duplicateCue.mock.calls.map(([arg]) => arg)).toEqual([
-      { projectId: 1, cueId: 1, stackId: 7 },
-      { projectId: 1, cueId: 2, stackId: 7 },
+      { projectId: 1, cueId: 1, stackId: 7, entryId: 101 },
+      { projectId: 1, cueId: 2, stackId: 7, entryId: 102 },
     ])
+  })
+
+  it('duplicates a cue with no single place with no entry', async () => {
+    draw({ host: 'table', rows: [{ cueId: 3, name: 'Shared', cueNumber: null, entryId: null, stackId: null, placeCount: 2 }] })
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+    await waitFor(() => expect(duplicateCue).toHaveBeenCalledTimes(1))
+    expect(duplicateCue.mock.calls[0][0]).toEqual({ projectId: 1, cueId: 3, stackId: null, entryId: null })
   })
 
   it('opens one copy on the Timeline from the Timeline, and on the stack’s sticky view elsewhere', async () => {

@@ -241,9 +241,9 @@ describe('the cue action set over several rows', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
     await waitFor(() => expect(duplicateCue).toHaveBeenCalledTimes(3))
     expect(duplicateCue.mock.calls.map(([arg]) => arg)).toEqual([
-      { projectId: 1, cueId: 1, stackId: 7 },
-      { projectId: 1, cueId: 2, stackId: null },
-      { projectId: 1, cueId: 3, stackId: null },
+      { projectId: 1, cueId: 1, stackId: 7, entryId: 101 },
+      { projectId: 1, cueId: 2, stackId: null, entryId: null },
+      { projectId: 1, cueId: 3, stackId: null, entryId: null },
     ])
     // The table lists the copies itself.
     expect(where()).toBe('/projects/1/cues')
