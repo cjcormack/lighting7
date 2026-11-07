@@ -105,7 +105,7 @@ class CueFxSpellingUpdateTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a wall-clock FX stored on Seconds is not rewritten`() = testApplication {
+    fun `a wall-clock FX stored on Natural is not rewritten`() = testApplication {
         mountTestApp(state)
         seedQuad()
         val client = jsonClient()
@@ -113,7 +113,22 @@ class CueFxSpellingUpdateTest : RouteIntegrationTest() {
             pulse(TargetRef.Fixture.TYPE, "hex-1").copy(fxType = "CandleFlicker", seconds = true),
         )
         val stored = storedFx(cueId)
-        assertEquals(true, stored.single().seconds)
+        assertEquals(null, stored.single().ownBpm, "the old Seconds on a wall-clock FX is Natural")
+        assertEquals(null, stored.single().rateSpeedMasterUuid)
+
+        client.include(cueId)
+        assertEquals(0, client.update().fxWritten)
+        assertEquals(stored, storedFx(cueId))
+    }
+
+    @Test
+    fun `a beat FX stored on Own tempo is not rewritten`() = testApplication {
+        mountTestApp(state)
+        seedQuad()
+        val client = jsonClient()
+        val cueId = client.createCue(pulse(TargetRef.Fixture.TYPE, "hex-1").copy(ownBpm = 96.0))
+        val stored = storedFx(cueId)
+        assertEquals(96.0, stored.single().ownBpm)
 
         client.include(cueId)
         assertEquals(0, client.update().fxWritten)

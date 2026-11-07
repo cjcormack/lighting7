@@ -269,19 +269,20 @@ describe('FxEditor', () => {
     })
   })
 
-  it('Revert onto Seconds sends seconds alone and draws no master — so it is no longer dirty', () => {
-    render(<FxEditor effect={makeActiveFx({ fxType: 'Pulse', attribute: 'dimmer', cycle: 2, timingSource: 'WALL_CLOCK', seconds: true })} onDone={() => {}} onStop={() => {}} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Timing: Seconds' }))
+  it('Revert onto Own tempo sends the tempo alone and draws no master — so it is no longer dirty', () => {
+    render(<FxEditor effect={makeActiveFx({ fxType: 'Pulse', attribute: 'dimmer', cycle: 2, timingSource: 'WALL_CLOCK', ownBpm: 96 })} onDone={() => {}} onStop={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Timing: Own 96' }))
     fireEvent.click(screen.getByRole('radio', { name: 'M1 · Main' }))
-    expect(lastFrame()).toMatchObject({ seconds: false, speedMasterUuid: 'master-1' })
+    expect(lastFrame()).toMatchObject({ cycle: 2, speedMasterUuid: 'master-1' })
+    expect(lastFrame()).not.toHaveProperty('ownBpm')
     updateFx.mockClear()
 
     const revert = screen.getByRole('button', { name: 'Revert' })
     fireEvent.click(revert)
     expect(updateFx).toHaveBeenCalledTimes(1)
-    expect(lastFrame()).toMatchObject({ seconds: true, cycle: 2 })
+    expect(lastFrame()).toMatchObject({ ownBpm: 96, cycle: 2 })
     expect(lastFrame()).not.toHaveProperty('speedMasterUuid')
-    expect(screen.getByRole('button', { name: 'Timing: Seconds' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Timing: Own 96' })).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Revert' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -610,7 +611,8 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
     pick('Same cycle as')
     expect(updateFx).toHaveBeenCalledTimes(1)
     // Master 1 is named by its uuid: the frame's absent master means "keep".
-    expect(lastFrame()).toMatchObject({ cycle: 8, seconds: false, speedMasterUuid: 'master-1' })
+    expect(lastFrame()).toMatchObject({ cycle: 8, speedMasterUuid: 'master-1' })
+    expect(lastFrame()).not.toHaveProperty('ownBpm')
 
     updateFx.mockClear()
     pick('Same spread as')
@@ -629,15 +631,15 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
     expect(updateFx).not.toHaveBeenCalled()
   })
 
-  it('offers no cycle from an FX on a master of the other clock, but one on Seconds onto either', () => {
+  it('offers no cycle from a wall-clock FX, but one from a beat FX on its own tempo with that tempo', () => {
     const wall = makeActiveFx({ id: 51, fxType: 'Flicker', timingSource: 'WALL_CLOCK', rateSpeedMasterUuid: 'master-1', cycle: 3 })
-    // A beat FX on Seconds reports the wall clock as the loop it runs on; its library entry is the beat's.
-    const onSeconds = makeActiveFx({ id: 52, fxType: 'Pulse', timingSource: 'WALL_CLOCK', seconds: true, cycle: 2.5 })
+    // A beat FX on Own tempo reports the wall clock as the loop it runs on; its library entry is the beat's.
+    const onOwn = makeActiveFx({ id: 52, fxType: 'Pulse', timingSource: 'WALL_CLOCK', ownBpm: 96, cycle: 2.5 })
     inspector(
       linkOf({
         others: [
           { effect: wall, name: 'Flicker', wallClock: true },
-          { effect: onSeconds, name: 'Pulse on Seconds', wallClock: false },
+          { effect: onOwn, name: 'Pulse on Own tempo', wallClock: false },
         ],
       }).link,
     )
@@ -645,8 +647,8 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Same cycle as…' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
     expect(screen.getByRole('menuitem', { name: /Flicker/ }).getAttribute('aria-disabled')).toBe('true')
     updateFx.mockClear()
-    fireEvent.click(screen.getByRole('menuitem', { name: /Pulse on Seconds/ }))
-    expect(lastFrame()).toMatchObject({ cycle: 2.5, seconds: true })
+    fireEvent.click(screen.getByRole('menuitem', { name: /Pulse on Own tempo/ }))
+    expect(lastFrame()).toMatchObject({ cycle: 2.5, ownBpm: 96 })
   })
 
   it('offers no spread from an FX on one head, which has none to copy', () => {

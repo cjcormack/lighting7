@@ -1041,7 +1041,11 @@ class ProgrammerLayerStack(
             newRegistrationId = fresh.registrationId,
             newTimingSource = fresh.registrationTimingSource,
             replaceMasters = FxEngine.MasterAssignment(fresh.speedMasterUuid, fresh.rateSpeedMasterUuid),
-            newSeconds = fresh.onSeconds,
+            newClock = when {
+                fresh.ownBpm != null -> FxClockMove.OntoOwnTempo(fresh.ownBpm!!)
+                fresh.onNatural -> FxClockMove.OntoNatural
+                else -> FxClockMove.OntoMaster
+            },
             // Size, direction and runs are the palette's too (effects plan D2, D5, D9).
             newAmount = fresh.dynamics.amount,
             newDirection = fresh.dynamics.direction,

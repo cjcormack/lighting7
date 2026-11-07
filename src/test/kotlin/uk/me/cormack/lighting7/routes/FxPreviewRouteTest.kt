@@ -378,6 +378,26 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `an Own tempo FX at 96 is sampled on its own tempo, and its clock says so`() {
+        seedHexes(1)
+        val own = draft("fxType" to "Wave", "attribute" to "dimmer", "cycle" to 4.0, "ownBpm" to 96.0)
+        val cycles = preview(FxPreviewRequest(targets = fixture("hex-0"), fx = listOf(FxPreviewEntry(draft = own))))
+        assertEquals(2500.0 / 48, cycles.window.sampleMs, 1e-9, "one bar at 96 BPM is 2.5 s, 48 samples a cycle")
+        assertEquals(5.0, cycles.window.seconds, 1e-9, "two cycles")
+        val clockAnswer = cycles.clock.single()
+        assertEquals(96.0, clockAnswer.ownBpm)
+        assertEquals(625.0, clockAnswer.msPerBeat)
+        assertEquals(false, clockAnswer.seconds)
+        assertEquals(96.0, cycles.fx.single().ownBpm)
+        assertEquals(null, cycles.fx.single().speedMasterUuid)
+
+        val beats = preview(FxPreviewRequest(targets = fixture("hex-0"), fx = listOf(FxPreviewEntry(draft = own)), window = FxPreviewWindow(beats = 4.0)))
+        val sampleBeats = beats.window.sampleMs / 625.0
+        assertTrue(beats.window.beats >= 4.0 && beats.window.beats < 4.0 + sampleBeats, "4 beats of its own tempo, not ${beats.window.beats}")
+        assertTrue(beats.window.seconds >= 2.5, "four beats at 96 is 2.5 s, not master 1's 2 s")
+    }
+
+    @Test
     fun `a split-off copy answers its carried offset and no ladder`() {
         seedHexes(4)
         val local = running(sine(group("quad"), programmerOwned = true))

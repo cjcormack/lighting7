@@ -56,7 +56,9 @@ import {
   NOTIONAL_HEADS,
   SPEED_STEPS,
   getCycleLabel,
+  ownTempoLabel,
 } from './fxConstants'
+import { OWN_BPM_MAX, OWN_BPM_MIN, bpmLabel, clampOwnBpm, isWallClock } from '@/lib/fxTiming'
 import {
   blendForLevelMode,
   centreFlip,
@@ -162,7 +164,7 @@ export interface FxTypeSwap {
 
 /**
  * The editor's fields over one draft, in four questions and Advanced (fx-settings plan D9):
- * **Timing**, one strip of chips — Cycle, the master or Seconds, Direction, Runs; **the FX's own
+ * **Timing**, one strip of chips — Cycle, the master, Own tempo or Natural, Direction, Runs; **the FX's own
  * section**, named for what it holds (*Levels*, *Colours*, *Path*, *Steps*, *Flicker*, a script
  * FX's *Parameters*), its header's FX name the type switcher ([swap]), `detail` parameters folded
  * under *More*; **Across the heads** (D10), where there are heads; **Mix**, Amount
@@ -359,7 +361,7 @@ export function FxFields({
           draft={draft}
           entry={entry}
           headCount={scope.headCount}
-          inSeconds={draft.seconds || (entry.timingSource ?? timingSource) === 'WALL_CLOCK'}
+          inSeconds={isWallClock(draft, entry.timingSource ?? timingSource)}
           readOnly={readOnly}
           set={set}
           fromPreview={layout === 'inspector'}
@@ -571,13 +573,13 @@ const CHIP_CLASS =
 
 /**
  * Timing, one strip (fx-settings plan D9): **Cycle** as a chip opening its eight steps, a typed
- * field and *Same cycle as…*; the **master** or *Seconds* ([TimingChip]); **Direction**, three
- * glyphs; **Runs** as a chip opening ×1 to ×4 and a count.
+ * field and *Same cycle as…*; the **master**, *Own tempo* or *Natural* ([TimingChip]); **Direction**,
+ * three glyphs; **Runs** as a chip opening ×1 to ×4 and a count.
  *
- * Moving a beat effect between a master and Seconds keeps its cycle: the division is converted at
- * the master's live tempo (4 beats at 120 BPM is 2 s), so the light does not jump. A wall-clock
- * effect's number is seconds either way and is left alone. The chip names a concrete master — a
- * pick of M1 sends master 1's uuid, which the desk treats as the default (`SpeedMasterSelect`'s rule).
+ * Moving a beat effect from a master onto Own tempo keeps its speed: the tempo starts at the
+ * master's live one, the cycle in beats unchanged (fx-speed plan D3). The chip names a concrete
+ * master — a pick of M1 sends master 1's uuid, which the desk treats as the default
+ * (`SpeedMasterSelect`'s rule).
  */
 function TimingStrip({
   timingSource,
@@ -594,9 +596,9 @@ function TimingStrip({
 }) {
   const { data: masters } = useSpeedMasterLiveQuery(undefined)
   const listable = (masters ?? []).filter((m) => m.uuid != null)
-  const wallClock = (entry.timingSource ?? timingSource) === 'WALL_CLOCK'
-  // A draft built by hand may leave the flag out for a wall-clock effect's Seconds; read it as D7 does.
-  const seconds = draft.seconds || (wallClock && draft.rateSpeedMasterUuid == null)
+  const wallClock = isWallClock(draft, entry.timingSource ?? timingSource)
+  // A draft built by hand may leave the flag out for a wall-clock effect's Natural.
+  const natural = wallClock && (draft.natural || draft.rateSpeedMasterUuid == null)
   const masterUuid = wallClock ? draft.rateSpeedMasterUuid : draft.speedMasterUuid
   const bpmOf = (uuid: string | null) =>
     (uuid != null ? listable.find((m) => m.uuid === uuid) : listable.find((m) => m.index === 1))?.bpm ?? 0
@@ -604,13 +606,15 @@ function TimingStrip({
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <Lights mark="cycle" className="flex items-center gap-1.5">
-        <CycleChip draft={draft} wallClock={wallClock} seconds={seconds} master1={listable.find((m) => m.index === 1)?.uuid ?? null} readOnly={readOnly} set={set} />
+        <CycleChip draft={draft} wallClock={wallClock} natural={natural} master1={listable.find((m) => m.index === 1)?.uuid ?? null} readOnly={readOnly} set={set} />
         <TimingChip
           wallClock={wallClock}
-          seconds={seconds}
+          ownBpm={wallClock ? null : draft.ownBpm}
+          natural={natural}
           value={masterUuid}
           readOnly={readOnly}
-          onChange={(uuid) => set(timingChoicePatch({ ...draft, seconds }, wallClock, uuid, bpmOf), true)}
+          onChange={(uuid) => set(timingChoicePatch(draft, wallClock, uuid, bpmOf), true)}
+          onOwnBpm={(bpm) => set({ ownBpm: bpm, speedMasterUuid: null, rateSpeedMasterUuid: null }, true)}
         />
       </Lights>
       <ToggleGroup
@@ -669,28 +673,27 @@ function ChipMenu({ title, trigger, children }: { title: string; trigger: ReactE
 /**
  * Cycle as a chip — `1 bar ▾`, `2 s ▾` (fx-settings plan D9). It opens a beat effect's eight steps
  * ([SPEED_STEPS], the one spelling every chip reads), with any other division typed after them and
- * lit while the cycle is none of the eight; on Seconds or the wall clock the cycle in seconds,
- * typed; and *Same cycle as…* where the FX editor has other FX to copy from.
+ * lit while the cycle is none of the eight — on a master or its own tempo alike; on the wall clock
+ * the cycle in seconds, typed; and *Same cycle as…* where the FX editor has other FX to copy from.
  */
 function CycleChip({
   draft,
   wallClock,
-  seconds,
+  natural,
   master1,
   readOnly,
   set,
 }: {
   draft: FxDraft
   wallClock: boolean
-  seconds: boolean
+  natural: boolean
   master1: string | null
   readOnly: boolean
   set: (patch: Partial<FxDraft>, release?: boolean) => void
 }) {
   const link = useFxGraphLink()
-  const inSeconds = seconds || wallClock
   const pressed = SPEED_STEPS.find((o) => Math.abs(o.value - draft.cycle) < 0.001)
-  const label = inSeconds ? `${Math.round(draft.cycle * 100) / 100} s` : getCycleLabel(draft.cycle)
+  const label = wallClock ? `${Math.round(draft.cycle * 100) / 100} s` : getCycleLabel(draft.cycle)
   return (
     <ChipMenu
       title="Cycle"
@@ -709,9 +712,9 @@ function CycleChip({
             label="Same cycle as"
             others={link.others}
             readOnly={readOnly}
-            // A cycle in seconds copies onto either clock; one on a master only onto the same clock.
+            // A cycle copies only onto an FX that reads it in the same unit.
             refuse={(source) =>
-              !draftOf(source.effect).seconds && source.wallClock !== wallClock
+              source.wallClock !== wallClock
                 ? `${wallClock ? 'This FX runs on the wall clock' : 'This FX runs on the beat'}, and that one does not`
                 : null
             }
@@ -719,7 +722,7 @@ function CycleChip({
           />
         )}
       </div>
-      {inSeconds ? (
+      {wallClock ? (
         <div className="flex items-center gap-2">
           <SheetField
             label="Cycle seconds"
@@ -732,7 +735,7 @@ function CycleChip({
             onEnter={(n) => n > 0 && set({ cycle: n })}
           />
           <EditorReadout>
-            {seconds ? 'seconds a cycle · follows no master' : 'seconds a cycle at 120 BPM, scaled by the master'}
+            {natural ? 'seconds a cycle · Natural, 120 BPM' : 'seconds a cycle at 120 BPM, scaled by the master'}
           </EditorReadout>
         </div>
       ) : (
@@ -770,7 +773,10 @@ function CycleChip({
                 onEnter={(n) => n > 0 && set({ cycle: n })}
               />
             </TypedCell>
-            <EditorReadout>{pressed ? 'beats a cycle' : `${getCycleLabel(draft.cycle)} a cycle`}</EditorReadout>
+            <EditorReadout>
+              {pressed ? 'beats a cycle' : `${getCycleLabel(draft.cycle)} a cycle`}
+              {draft.ownBpm != null && ` · ${ownTempoLabel(draft.ownBpm)}`}
+            </EditorReadout>
           </div>
         </>
       )}
@@ -788,15 +794,19 @@ function TypedCell({ lit, children }: { lit: boolean; children: ReactNode }) {
 }
 
 /**
- * *Same cycle as…* (FX editor plan D13): [from]'s cycle and what it follows — Seconds, or its master
- * — written once. Each patch names the timing and the master fields, as the timing chip's does, so
- * Revert can put them back; master 1 is named by its uuid, since the frame's absent field keeps.
+ * *Same cycle as…* (FX editor plan D13): [from]'s cycle and what it follows — its master, its Own
+ * tempo or Natural — written once. Each patch names the timing and the master fields, as the timing
+ * chip's does, so Revert can put them back; master 1 is named by its uuid, since the frame's absent
+ * field keeps.
  */
 function cyclePatchFrom(from: FxDraft, wallClock: boolean, master1: string | null): Partial<FxDraft> {
-  if (from.seconds) return { cycle: from.cycle, seconds: true, speedMasterUuid: null, rateSpeedMasterUuid: null }
-  return wallClock
-    ? { cycle: from.cycle, seconds: false, rateSpeedMasterUuid: from.rateSpeedMasterUuid }
-    : { cycle: from.cycle, seconds: false, speedMasterUuid: from.speedMasterUuid ?? master1 }
+  if (wallClock) {
+    return from.natural || from.rateSpeedMasterUuid == null
+      ? { cycle: from.cycle, natural: true, rateSpeedMasterUuid: null }
+      : { cycle: from.cycle, natural: false, rateSpeedMasterUuid: from.rateSpeedMasterUuid }
+  }
+  if (from.ownBpm != null) return { cycle: from.cycle, ownBpm: from.ownBpm, speedMasterUuid: null, rateSpeedMasterUuid: null }
+  return { cycle: from.cycle, ownBpm: null, speedMasterUuid: from.speedMasterUuid ?? master1 }
 }
 
 /** The run counts Runs offers before its typed count. */
@@ -868,49 +878,57 @@ function RunsChip({
   )
 }
 
-/** The chip menu's value for *Seconds*. Never on the wire — the wire says `seconds`. */
-const SECONDS_VALUE = '__seconds__'
+/** The chip menu's value for *Own tempo* or *Natural*. Never on the wire, which says `ownBpm` or `natural`. */
+const FREE_VALUE = '__free__'
 
 /**
- * The timing as a chip — `M2 · 96`, `Rate M2 · 96` on a wall-clock effect, or `Seconds` (D7). It
- * opens *Seconds* and then every master: one question for every effect, where a wall-clock
- * effect's master is its rate master.
+ * The timing as a chip — `M2 · 96`, `Rate M2 · 96` on a wall-clock effect, `Own 96` on a beat
+ * effect's own tempo, `Natural` on a wall-clock one with no rate master (fx-speed plan D3, D4). It
+ * opens Own tempo or Natural and then every master: one question for every effect, where a
+ * wall-clock effect's master is its rate master. On Own tempo it carries the tempo's BPM field.
  */
 function TimingChip({
   wallClock,
-  seconds,
+  ownBpm,
+  natural,
   value,
   readOnly,
   onChange,
+  onOwnBpm,
 }: {
   wallClock: boolean
-  seconds: boolean
+  ownBpm: number | null
+  natural: boolean
   value: string | null
   readOnly: boolean
   onChange: (uuid: string | null) => void
+  onOwnBpm: (bpm: number) => void
 }) {
   const { data: masters } = useSpeedMasterLiveQuery(undefined)
   const listable = (masters ?? []).filter((m) => m.uuid != null)
+  const free = wallClock ? natural : ownBpm != null
   // A beat effect's null master is master 1. A stored master the bank does not hold (not loaded
   // yet, or a uuid a sync left dangling) runs on master 1 — the desk's `SpeedMasterBank.slotFor`.
-  const current = seconds
+  const current = free
     ? undefined
     : (value != null ? listable.find((m) => m.uuid === value) : undefined) ?? listable.find((m) => m.index === 1)
-  const label = seconds ? 'Seconds' : current ? `M${current.index} · ${Math.round(current.bpm)}` : 'M1'
+  const freeWord = wallClock ? 'Natural' : 'Own tempo'
+  const label = free
+    ? ownBpm != null ? ownTempoLabel(ownBpm) : 'Natural'
+    : current ? `M${current.index} · ${Math.round(current.bpm)}` : 'M1'
   return (
     <ChipMenu
       title="Timing"
       trigger={
         <button
           type="button"
-          // Disabled until the bank has loaded too: a move onto or off Seconds converts the division
-          // at the master's tempo, and with no tempo to read it would keep the number and change the
-          // speed.
-          disabled={readOnly || listable.length === 0}
-          aria-label={`Timing: ${wallClock && !seconds ? 'rate ' : ''}${label}`}
+          // Disabled until the bank has loaded too: onto Own tempo starts at the master's tempo, and
+          // with no tempo to read it would change the speed.
+          disabled={readOnly || (listable.length === 0 && !free)}
+          aria-label={`Timing: ${wallClock && !free ? 'rate ' : ''}${label}`}
           className={CHIP_CLASS}
         >
-          {wallClock && !seconds && <span className="font-sans">Rate</span>}
+          {wallClock && !free && <span className="font-sans">Rate</span>}
           {label}
           <ChevronDown className="size-3 text-muted-foreground" />
         </button>
@@ -920,23 +938,38 @@ function TimingChip({
       <ToggleGroup
         type="single"
         size="sm"
-        value={seconds ? SECONDS_VALUE : (current?.uuid ?? '')}
+        value={free ? FREE_VALUE : (current?.uuid ?? '')}
         disabled={readOnly}
-        onValueChange={(v) => v && onChange(v === SECONDS_VALUE ? null : v)}
+        onValueChange={(v) => v && onChange(v === FREE_VALUE ? null : v)}
         aria-label="Timing"
         className="flex h-auto w-full flex-col items-stretch gap-px"
       >
-        <ToggleGroupItem value={SECONDS_VALUE} aria-label="Seconds" className="h-8 justify-start px-2 text-xs">
-          Seconds
-          <span className="ml-auto pl-3 text-muted-foreground">its own cycle, no master</span>
+        <ToggleGroupItem value={FREE_VALUE} aria-label={freeWord} className="h-8 justify-start px-2 text-xs">
+          {freeWord}
+          <span className="ml-auto pl-3 text-muted-foreground">{wallClock ? '120 BPM, no master' : 'its own tempo, no master'}</span>
         </ToggleGroupItem>
         {listable.map((m) => (
           <ToggleGroupItem key={m.uuid} value={m.uuid!} aria-label={`M${m.index} · ${m.name}`} className="h-8 justify-start px-2 text-xs">
             M{m.index} · {m.name}
-            <span className="ml-auto pl-3 tabular-nums text-muted-foreground">{Math.round(m.bpm * 10) / 10} bpm</span>
+            <span className="ml-auto pl-3 tabular-nums text-muted-foreground">{bpmLabel(m.bpm)} bpm</span>
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
+      {ownBpm != null && (
+        <div className="flex items-center gap-2">
+          <SheetField
+            label="Own tempo"
+            unit="bpm"
+            value={ownBpm}
+            min={OWN_BPM_MIN}
+            max={OWN_BPM_MAX}
+            step={1}
+            disabled={readOnly}
+            onEnter={(n) => n > 0 && onOwnBpm(clampOwnBpm(n))}
+          />
+          <EditorReadout>this FX alone</EditorReadout>
+        </div>
+      )}
     </ChipMenu>
   )
 }
@@ -969,7 +1002,7 @@ function AcrossHeads({
   draft: FxDraft
   entry: FxLibraryEntry
   headCount: number | undefined
-  /** The cycle is seconds — on *Seconds*, or a wall-clock FX — so the readout says seconds, not beats. */
+  /** The cycle is seconds — a wall-clock FX — so the readout says seconds, not beats. */
   inSeconds: boolean
   readOnly: boolean
   set: (patch: Partial<FxDraft>, release?: boolean) => void

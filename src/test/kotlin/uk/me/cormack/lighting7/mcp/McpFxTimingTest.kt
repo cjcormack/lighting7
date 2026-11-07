@@ -33,11 +33,11 @@ class McpFxTimingTest : RouteIntegrationTest() {
     private fun call(name: String, arguments: String): ToolExecutionResult =
         runBlocking { tools.executeTool(name, Json.parseToJsonElement(arguments).jsonObject) }
 
-    private data class StoredFx(val cycle: Double, val speedMasterUuid: String?, val seconds: Boolean)
+    private data class StoredFx(val cycle: Double, val speedMasterUuid: String?, val ownBpm: Double?)
 
     private fun storedFx(look: String): StoredFx = transaction(state.database) {
         val effect = DaoLook.find { DaoLooks.name eq look }.single().effects.single()
-        StoredFx(effect.cycle, effect.speedMasterUuid?.toString(), effect.seconds)
+        StoredFx(effect.cycle, effect.speedMasterUuid?.toString(), effect.ownBpm)
     }
 
     private fun effect(type: String, category: String, extra: String = "") =
@@ -51,12 +51,12 @@ class McpFxTimingTest : RouteIntegrationTest() {
 
         val cycle = call("create_look", """{"name":"Cycle","fx":[${effect("ColourCycle", "colour")}]}""")
         assertTrue(cycle.success, cycle.result)
-        assertEquals(StoredFx(CycleLength.ONE_BAR, colourMaster, false), storedFx("Cycle"))
+        assertEquals(StoredFx(CycleLength.ONE_BAR, colourMaster, null), storedFx("Cycle"))
 
         // No master is tagged intensity, so an intensity effect stays on master 1 — null, as everywhere.
         val pulse = call("create_look", """{"name":"Pulse","fx":[${effect("Wave", "intensity")}]}""")
         assertTrue(pulse.success, pulse.result)
-        assertEquals(StoredFx(CycleLength.ONE_BAR, null, false), storedFx("Pulse"))
+        assertEquals(StoredFx(CycleLength.ONE_BAR, null, null), storedFx("Pulse"))
     }
 
     @Test
@@ -67,7 +67,7 @@ class McpFxTimingTest : RouteIntegrationTest() {
 
         val zoom = call("create_look", """{"name":"Zoom","fx":[${effect("Wave", "intensity", ""","attribute":"zoom"""")}]}""")
         assertTrue(zoom.success, zoom.result)
-        assertEquals(StoredFx(CycleLength.ONE_BAR, beamMaster, false), storedFx("Zoom"))
+        assertEquals(StoredFx(CycleLength.ONE_BAR, beamMaster, null), storedFx("Zoom"))
     }
 
     @Test
@@ -120,25 +120,48 @@ class McpFxTimingTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `an effect on Seconds follows no master, and asking for both is refused`() {
+    fun `an effect on Own tempo follows no master, and asking for both is refused`() {
         createSpeedMaster(state, state.projectManager.currentProject, CreateSpeedMasterRequest(name = "Dim", family = "intensity"))
 
+        val breathe = call(
+            "create_look",
+            """{"name":"Breathe","fx":[${effect("Wave", "intensity", ""","cycle":4,"ownBpm":30""")}]}""",
+        )
+        assertTrue(breathe.success, breathe.result)
+        assertEquals(
+            StoredFx(4.0, null, 30.0), storedFx("Breathe"),
+            "the usage stamp is for an effect on a master, not one on Own tempo",
+        )
+
+        val master = state.show.fxEngine.speedMasters.masterStates().first().uuid.toString()
+        val both = call(
+            "create_look",
+            """{"name":"Both","fx":[${effect("Wave", "intensity", ""","ownBpm":96,"speedMasterUuid":"$master"""")}]}""",
+        )
+        assertFalse(both.success, "Own tempo beside a master is two answers to one question")
+        assertTrue(both.description.contains("ownBpm") || both.result.contains("ownBpm"), both.toString())
+
+        val flicker = call(
+            "create_look",
+            """{"name":"Wall","fx":[${effect("FluorescentFlicker", "intensity", ""","ownBpm":96""")}]}""",
+        )
+        assertFalse(flicker.success, "a wall-clock effect has no Own tempo")
+    }
+
+    @Test
+    fun `the old seconds is read as Own tempo 120 at twice the cycle`() {
         val breathe = call(
             "create_look",
             """{"name":"Breathe","fx":[${effect("Wave", "intensity", ""","cycle":12,"seconds":true""")}]}""",
         )
         assertTrue(breathe.success, breathe.result)
-        val stored = storedFx("Breathe")
-        assertTrue(stored.seconds)
-        assertEquals(12.0, stored.cycle)
-        assertNull(stored.speedMasterUuid, "the usage stamp is for an effect on a master, not one on Seconds")
+        assertEquals(StoredFx(24.0, null, 120.0), storedFx("Breathe"))
 
         val master = state.show.fxEngine.speedMasters.masterStates().first().uuid.toString()
         val both = call(
             "create_look",
             """{"name":"Both","fx":[${effect("Wave", "intensity", ""","seconds":true,"speedMasterUuid":"$master"""")}]}""",
         )
-        assertFalse(both.success, "Seconds beside a master is two answers to one question")
-        assertTrue(both.description.contains("seconds") || both.result.contains("seconds"), both.toString())
+        assertFalse(both.success)
     }
 }

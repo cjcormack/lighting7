@@ -262,7 +262,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 48`, `minReader = 48`. Rules for future
+Current writer emits `formatVersion = 49`, `minReader = 49`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -449,6 +449,22 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 49 — Own tempo
+
+*Seconds* became **Own tempo** (fx-speed plan D3, D5; `docs/fx-engineering.md` §"Own tempo"): a beat
+FX that follows no master keeps its `cycle` in beats and runs at a tempo of its own. `LookFxJson`,
+`PaletteFxJson` and `CueAdHocFxJson` gain `ownBpm` (20–300, omitted when null) and no longer write
+`seconds`, which stays in the DTOs **read only** (on `StoredFxFields`, so the importer reads it on all
+three): a beat FX's `seconds` imports as Own tempo 120 at twice its cycle — exactly the output it had —
+and a wall-clock FX's as Natural, told apart by name — a built-in or one of the archive's FX
+definitions on the wall clock, compared as the registry resolves a name — as database step 12 tells
+them (`ProjectImporter.importedClock`, `LegacyNames.Context.wallClock`); such a row imports with no master, as step 12 writes
+it (a row already on Own tempo keeps its masters verbatim, as before, and the spawn ignores them beside it). `SUPPORTED_FORMAT_VERSION = 49`, `MIN_SUPPORTED_FORMAT_VERSION` stays 5, and
+**`minReader` moves to 49** with the writer: a v48 reader would run an Own tempo FX on master 1, at
+the master's tempo, and write `ownBpm` away on its next push. `RichProjectFixture` stores an Own tempo
+of 96.5 on every shape. A project with no FX on Seconds or Own tempo exports byte-for-byte as at v48
+(only `formatVersion.json` says 49).
 
 ### Version 48 — Numeric cue numbers
 
@@ -844,7 +860,7 @@ on every stored shape. A project that uses none exports byte-for-byte as at v29 
 
 ### Version 29 — Seconds
 
-An FX may run on *Seconds* (venue-visit plan D7, S15; `docs/fx-engineering.md` §"Seconds"): its
+An FX may run on *Seconds* (venue-visit plan D7, S15; replaced by Own tempo at v49, above): its
 own cycle, with no speed master. `LookFxJson`, `PaletteFxJson` and `CueAdHocFxJson` gain
 `seconds` (default false, so omitted), and a beat FX's `beatDivision` is then its cycle in
 **seconds**. `SUPPORTED_FORMAT_VERSION = 29`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5** — the field

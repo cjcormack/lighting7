@@ -328,7 +328,7 @@ internal fun loadPaletteSnapshot(database: Database, paletteUuid: UUID): Palette
                     parameters = fx.parameters,
                     speedMasterUuid = fx.speedMasterUuid,
                     rateSpeedMasterUuid = fx.rateSpeedMasterUuid,
-                    seconds = fx.seconds,
+                    ownBpm = fx.ownBpm,
                     amount = fx.amount,
                     direction = fx.direction,
                     runs = fx.runs,

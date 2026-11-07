@@ -788,7 +788,7 @@ const RowView = React.memo(function RowView({
   const fxDivision =
     paletteFx == null
       ? null
-      : fxSpeedLabel(paletteFx.cycle, paletteFx.timingSource, paletteFx.seconds)
+      : fxSpeedLabel(paletteFx.cycle, paletteFx.timingSource, paletteFx.ownBpm)
   const cellByCol = useMemo(() => new Map(cells.map((cell) => [cell.col, cell])), [cells])
   // Every fixture this row covers — a group row's members, a fixture row's own key. The same
   // expansion the cells were resolved through, so "is this row in the layer's targets?" and "what

@@ -7,6 +7,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.KSerializer
+import uk.me.cormack.lighting7.fx.BUILT_IN_WALL_CLOCK_FX
+import uk.me.cormack.lighting7.fx.SECONDS_OWN_BPM
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.state.PaletteLayerConversion
@@ -183,6 +185,38 @@ fun liftRowMoveInDark(archive: Path) {
         if ((cue["uuid"] as? JsonPrimitive)?.content !in flagged) return@forEach
         Files.writeString(file, canonicalEncode(JsonElement.serializer(), JsonObject(cue + ("moveInDarkMode" to JsonPrimitive("EARLY")))))
     }
+}
+
+/**
+ * [archive], an archive below v49 in today's field names, as the importer stores it (fx-speed plan
+ * D5): every stored FX on `seconds` loses the flag and its masters, a beat one taking Own tempo 120 at
+ * twice its cycle and a wall-clock one ([BUILT_IN_WALL_CLOCK_FX]) staying as it is, which is Natural.
+ */
+fun secondsAsOwnTempo(archive: Path) {
+    fun rewrite(fx: JsonObject): JsonObject {
+        if ((fx["seconds"] as? JsonPrimitive)?.contentOrNull != "true") return fx
+        val rest = JsonObject(fx - "seconds" - "speedMasterUuid" - "rateSpeedMasterUuid")
+        if ((fx["fxType"] as JsonPrimitive).content in BUILT_IN_WALL_CLOCK_FX) return rest
+        val cycle = (fx.getValue("cycle") as JsonPrimitive).content.toDouble()
+        return JsonObject(rest + ("cycle" to JsonPrimitive(cycle * 2)) + ("ownBpm" to JsonPrimitive(SECONDS_OWN_BPM)))
+    }
+    fun each(folder: String, change: (JsonObject) -> JsonObject) {
+        val dir = archive.resolve(folder)
+        if (!Files.isDirectory(dir)) return
+        Files.list(dir).use { it.toList() }.filter { it.toString().endsWith(".json") }.forEach { file ->
+            val record = canonicalJson.parseToJsonElement(Files.readString(file)) as JsonObject
+            Files.writeString(file, canonicalEncode(JsonElement.serializer(), change(record)))
+        }
+    }
+    each("looks") { look ->
+        val fx = look["fx"] as? JsonArray ?: return@each look
+        JsonObject(look + ("fx" to JsonArray(fx.map { rewrite(it as JsonObject) })))
+    }
+    each("palettes") { palette ->
+        val fx = palette["fx"] as? JsonObject ?: return@each palette
+        JsonObject(palette + ("fx" to rewrite(fx)))
+    }
+    each("cueAdHocFx", ::rewrite)
 }
 
 /**

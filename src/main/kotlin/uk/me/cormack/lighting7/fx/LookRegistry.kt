@@ -74,8 +74,8 @@ data class StoredFx(
     val parameters: Map<String, String>,
     val speedMasterUuid: UUID?,
     val rateSpeedMasterUuid: UUID?,
-    /** D7's *Seconds* for a beat effect; see [uk.me.cormack.lighting7.models.LookFxSpec.seconds]. */
-    val seconds: Boolean = false,
+    /** A beat effect's Own tempo (fx-speed plan D3); see [uk.me.cormack.lighting7.models.LookFxSpec.ownBpm]. */
+    val ownBpm: Double? = null,
     /** Amount (effects plan D2); see [uk.me.cormack.lighting7.models.LookFxSpec.amount]. */
     val amount: Double = 1.0,
     /** Direction (D5) by name; see [uk.me.cormack.lighting7.models.LookFxSpec.direction]. */
@@ -424,7 +424,7 @@ private fun DaoLookFxEntity.toStoredFx(): StoredFx =
         parameters = parameters,
         speedMasterUuid = speedMasterUuid,
         rateSpeedMasterUuid = rateSpeedMasterUuid,
-        seconds = seconds,
+        ownBpm = ownBpm,
         amount = amount,
         direction = direction,
         runs = runs,
@@ -460,7 +460,7 @@ internal fun StoredFx.toFxSpec() = uk.me.cormack.lighting7.models.LookFxSpec(
     parameters = parameters,
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
-    seconds = seconds,
+    ownBpm = ownBpm,
     amount = amount,
     direction = direction,
     runs = runs,

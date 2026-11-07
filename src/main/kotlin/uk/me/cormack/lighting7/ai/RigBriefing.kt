@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.ai
 import uk.me.cormack.lighting7.fx.CHOICE_TYPE
 import uk.me.cormack.lighting7.fx.CycleLength
 import uk.me.cormack.lighting7.fx.FxDirection
+import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxTargetRef
 import uk.me.cormack.lighting7.fx.ParameterInfo
@@ -248,9 +249,10 @@ class RigBriefing(private val state: State) {
             sb.appendLine("Active FX: ${activeFx.size}")
             for (effect in activeFx.take(20)) {
                 sb.appendLine("  - ${effect.fxTypeId} on ${briefingTargetOf(effect)}.${effect.target.attribute}" +
-                        // On Seconds (venue-visit plan D7) the division is a cycle in seconds, not beats.
-                        (if (effect.onSeconds) " (seconds=" else " (beat=") +
-                        "${effect.timing.cycle}, blend=${effect.blendMode}" +
+                        // A wall-clock FX's cycle is seconds; a beat FX's beats, of its master or its Own tempo.
+                        (if (effect.registrationTimingSource == TimingSource.WALL_CLOCK) " (seconds=" else " (beat=") +
+                        "${effect.timing.cycle}" + (effect.ownBpm?.let { ", ownBpm=$it" } ?: "") +
+                        ", blend=${effect.blendMode}" +
                         effect.dynamics.let { dyn ->
                             // Effects plan D2, D5, D9 — said only where not the default.
                             (if (dyn.amount != 1.0) ", amount=${dyn.amount}" else "") +
@@ -435,7 +437,7 @@ class RigBriefing(private val state: State) {
         sb.appendLine("- A cycle is a length in beats: 0.125, 0.25, 0.5, 1.0 (one beat), 2.0, 4.0 (one bar), 8.0 (two bars). A new FX is one bar unless asked otherwise, or unless the library names its own default.")
         sb.appendLine("- **Amount, direction and runs**: every FX takes `amount` (0–1, how much of it reaches the stage over what is underneath — 0.5 sits halfway; a movement FX's radius halves about the position underneath), `direction` (`FORWARD`, `BACKWARD` or `BOUNCE`) and `runs` (stop after that many cycles — a flash on cue is 1; omit for forever).")
         sb.appendLine("- **The spread's shape**: an FX over several heads also takes `spread` (0–2, how much of the cycle the heads cover over the order; 0.5 is a tighter ripple), `wings` (mirrored wings, not with CENTRE_OUT or CENTRE_IN, which are two wings already), `segments` (neighbouring heads moving as one) and `parts` (the spread repeating every N heads; 0 is off). These shape a spreading `order` only — send one, since an omitted order is UNIFIED and every head runs in step. An FX that steps (Colour Cycle, Palette Steps, Slot Steps) also takes `spreadUnit: STEP`, which makes `spread` the number of its own steps each head starts after the one before, so a chase stays on its steps whatever the head count; one that names neither spread nor unit starts one step behind.")
-        sb.appendLine("- **Seconds**: an FX may run on its own cycle instead of following a master — `seconds: true`, with `cycle` the cycle in seconds and no `speedMasterUuid`. Use it for a slow breathe or drift that must not change speed when the tempo does.")
+        sb.appendLine("- **Own tempo**: a beat FX may run on a tempo of its own instead of following a master — `ownBpm` (20–300), with `cycle` still in beats of that tempo and no `speedMasterUuid`. Use it for a slow breathe or drift that must not change speed when the masters do: one bar at `ownBpm: 60` is a four-second cycle. A wall-clock FX (Candle Flicker, Fluorescent Flicker) takes no Own tempo; its `cycle` is seconds, on Natural unless it names a `rateSpeedMasterUuid`. The old `seconds: true` still reads, as `ownBpm: 120` at twice the cycle.")
         sb.appendLine("- Blend modes: OVERRIDE (replace), ADDITIVE (add), MULTIPLY, MAX, MIN")
         sb.appendLine("- Orders: NORMAL (sequential chase), UNIFIED (all same), CENTRE_OUT, CENTRE_IN (from both ends to the centre), PING_PONG, REVERSE, RANDOM, POSITIONAL")
         sb.appendLine("- Colour format: hex '#FF0000', names 'red', extended '#ff0000;w128;a64;uv200', or a palette reference 'pal:{uuid}'.")

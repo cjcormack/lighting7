@@ -761,6 +761,8 @@ object LegacyNames {
         val absentPingPongIsOn: Boolean,
         /** The FX were written before [SIBLINGS_FORMAT_VERSION]: [absorbFx]'s `writtenBefore`. */
         val writtenBeforeSiblings: Boolean = true,
+        /** The wall-clock FX types a row may name, as the importer reads an old `seconds` by (fx-speed plan D5). */
+        val wallClock: Set<String> = uk.me.cormack.lighting7.fx.wallClockFxTypes(),
     )
 
     /**

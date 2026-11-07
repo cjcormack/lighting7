@@ -152,7 +152,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     this.name = name
                     this.notes = request.notes
                 }
-                writeLookChildren(look, request.rows, request.fx, created = true)
+                writeLookChildren(look, request.rows, request.fx.map { it.withStoredClock(state.show.fxRegistry) }, created = true)
                 look.toDetailsDto(state)
             }
             if (result == null) {
@@ -215,7 +215,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                 rows?.let { validateLookRows(it) }?.let { return@transaction LookWriteOutcome.Invalid(it) }
                 effects?.let { validateLookFx(it, state.show.fxRegistry) }?.let { return@transaction LookWriteOutcome.Invalid(it) }
 
-                if (hasRows || hasFx) writeLookChildren(look, rows, effects)
+                if (hasRows || hasFx) writeLookChildren(look, rows, effects?.map { it.withStoredClock(state.show.fxRegistry) })
 
                 LookWriteOutcome.Written(look.toDetailsDto(state), look.uuid, hasRows || hasFx)
             }
@@ -320,7 +320,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                         parameters = effect.parameters
                         speedMasterUuid = effect.speedMasterUuid
                         rateSpeedMasterUuid = effect.rateSpeedMasterUuid
-                        seconds = effect.seconds
+                        ownBpm = effect.ownBpm
                         amount = effect.amount
                         direction = effect.direction
                         runs = effect.runs
@@ -919,6 +919,7 @@ internal fun validateLookFx(effects: List<LookFxDto>, registry: FxRegistry): Str
                 fxSteps = registry.steps(effect.fxType),
             ),
             registry.fxWriteProblem(effect.fxType, effect.parameters, effect.family),
+            registry.clockProblem(effect.fxType, effect.ownBpm),
         ).map { "fx[$index]: $it" }
     }
     return problems.takeIf { it.isNotEmpty() }?.joinToString("; ")
@@ -1057,10 +1058,10 @@ private fun DaoLookFxEntity.take(effect: LookFxDto) {
     elementFilter = effect.elementFilter
     timing = storedTiming(effect.timing)
     parameters = effect.parameters
-    // Seconds follows no master (D7), so a row on Seconds keeps none beside it.
-    speedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.speedMasterUuid)
-    rateSpeedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
-    seconds = effect.seconds
+    // Own tempo follows no master (fx-speed plan D3), so a row on it keeps none beside it.
+    speedMasterUuid = if (effect.ownBpm != null) null else speedMasterUuidOrNull(effect.speedMasterUuid)
+    rateSpeedMasterUuid = if (effect.ownBpm != null) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
+    ownBpm = effect.ownBpm
     amount = effect.amount
     direction = FxSpecCoercion.Names.canonicalDirection(effect.direction)
     runs = effect.runs
@@ -1222,7 +1223,7 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
                     parameters = it.parameters,
                     speedMasterUuid = it.speedMasterUuid?.toString(),
                     rateSpeedMasterUuid = it.rateSpeedMasterUuid?.toString(),
-                    seconds = it.seconds,
+                    ownBpm = it.ownBpm,
                     amount = it.amount,
                     direction = it.direction,
                     runs = it.runs,

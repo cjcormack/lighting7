@@ -487,7 +487,7 @@ class FxFadeTest : RouteIntegrationTest() {
         fixture: String,
         run: UUID?,
         division: Double = 1.0,
-        seconds: Boolean = false,
+        ownBpm: Double? = null,
         runs: Int? = null,
         sort: Int = 0,
         order: String = "NORMAL",
@@ -500,7 +500,7 @@ class FxFadeTest : RouteIntegrationTest() {
             cycle = division; blendMode = "OVERRIDE"; this.order = order
             parameters = PULSE_WAVE
             this.wings = wings
-            this.seconds = seconds
+            this.ownBpm = ownBpm
             this.runs = runs
             sortOrder = sort
             runUuid = run
@@ -560,12 +560,12 @@ class FxFadeTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a run moving onto Seconds restarts its phase`() = testApplication {
+    fun `a run moving onto Own tempo restarts its phase`() = testApplication {
         mountTestApp(state)
         jsonClient().seedLooks()
         val run = UUID.randomUUID()
         val q1 = cue("Q1", null).also { adHoc(it, "hex-1", run) }
-        val q2 = cue("Q2", 3000).also { adHoc(it, "hex-1", run, division = 2.0, seconds = true) }
+        val q2 = cue("Q2", 3000).also { adHoc(it, "hex-1", run, division = 4.0, ownBpm = 120.0) }
         val (s, _) = runStack(q1, q2)
         val id = one(q1).id
 
@@ -573,7 +573,7 @@ class FxFadeTest : RouteIntegrationTest() {
 
         val running = one(q2)
         assertEquals(id, running.id, "edited in place")
-        assertTrue(running.onSeconds)
+        assertTrue(running.onOwnTempo)
         assertEquals(TimingSource.WALL_CLOCK, running.timingSource, "on the wall-clock loop")
         assertTrue(running.accumulatedScaledMs < 1000.0, "near the top of its 2 s cycle: ${running.accumulatedScaledMs}")
     }

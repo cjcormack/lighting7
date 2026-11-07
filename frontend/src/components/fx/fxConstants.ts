@@ -1,6 +1,7 @@
 import { Sun, Palette, Move, Aperture, SlidersHorizontal, ListOrdered, type LucideIcon } from 'lucide-react'
 import { ORDER_LABELS, ORDER_OPTIONS, orderLabel } from '@/lib/orderLabels'
 import type { ElementMode } from '@/api/groupsApi'
+import { bpmLabel } from '@/lib/fxTiming'
 
 /**
  * The heads an FX palette is drawn on with nothing to count (FX editor plan D15): its head ladder
@@ -142,9 +143,10 @@ export function getOrderLabel(order: string): string {
 }
 
 /**
- * An effect's speed as a label, with its **unit resolved** — beats a cycle for an effect that
- * follows a master, seconds for one on *Seconds* (venue-visit plan D7): a beat effect with
- * [seconds] set, or any `WALL_CLOCK` effect, whose division is seconds already.
+ * An effect's speed as a label, with its **unit resolved** — beats a cycle for a beat effect, seconds
+ * for a `WALL_CLOCK` one; a beat effect on its own tempo ([ownBpm], fx-speed plan D3) says it after
+ * its beats, `1 bar · Own 96`. A running effect on Own tempo reports `WALL_CLOCK`, the loop it runs
+ * on, and [ownBpm] is what says its cycle is still beats.
  *
  * `cycle` carries both readings on one field, and they are a tempo apart: `2` is two beats
  * or two seconds, and only the timing says which. Everything that renders a speed away from the
@@ -152,18 +154,24 @@ export function getOrderLabel(order: string): string {
  * themselves) goes through this, so no surface has to re-derive the rule and none can get it half
  * right.
  *
- * **Null when the timing source is unknown**, and callers should then say nothing about the speed.
- * That happens for a template whose stored `fxType` no longer resolves in the registry — an
- * import from a desk carrying script-registered effects this one does not have. A confident
- * "2 bars" for a two-second cycle is worse than an absent clause.
+ * **Null when the timing source is unknown** and the effect has no Own tempo, and callers should
+ * then say nothing about the speed. That happens for a palette whose stored `fxType` no longer
+ * resolves in the registry — an import from a desk carrying script-registered effects this one does
+ * not have. A confident "2 bars" for a two-second cycle is worse than an absent clause.
  */
 export function fxSpeedLabel(
   cycle: number,
   timingSource: string | null | undefined,
-  seconds = false,
+  ownBpm: number | null = null,
 ): string | null {
+  if (ownBpm != null) return `${getCycleLabel(cycle)} · ${ownTempoLabel(ownBpm)}`
   if (timingSource == null) return null
-  return seconds || timingSource === 'WALL_CLOCK' ? secondsLabel(cycle) : getCycleLabel(cycle)
+  return timingSource === 'WALL_CLOCK' ? secondsLabel(cycle) : getCycleLabel(cycle)
+}
+
+/** An Own tempo as a chip says it — `Own 96`. */
+export function ownTempoLabel(bpm: number): string {
+  return `Own ${bpmLabel(bpm)}`
 }
 
 /** A cycle in seconds — `4 s`, `0.5 s`. */

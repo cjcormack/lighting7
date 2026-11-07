@@ -1451,6 +1451,10 @@ class State(val config: ApplicationConfig) {
         // changes. After step 10. `CueNumberMigration.kt`.
         CueNumberMigration.runIfNeeded(ds, database, dbPath)
 
+        // fx-speed plan step 12: every stored FX on Seconds onto Own tempo, or Natural, and the column
+        // dropped, backed up first when one moves. After step 11. `OwnTempoMigration.kt`.
+        OwnTempoMigration.runIfNeeded(ds, database, dbPath)
+
         databaseInitWindow = startedAt to java.time.Instant.now()
         return database
     }

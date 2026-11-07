@@ -210,7 +210,10 @@ internal object FxSpawner {
         )
         val timingSource = registration?.timingSource ?: TimingSource.BEAT
 
-        return FxInstance(effect, fxTarget, timing, blendMode).apply {
+        // A wall-clock row that says an Own tempo runs on Natural at the seconds it meant ([storedClock]).
+        val (ownBpm, cycle) = storedClock(timingSource, fxSpec.ownBpm, timing.cycle)
+        val clockedTiming = if (cycle == timing.cycle) timing else timing.copy(cycle = cycle)
+        return FxInstance(effect, fxTarget, clockedTiming, blendMode).apply {
             // The *canonical* id, not `fxSpec.fxType`: the registry resolves aliases, so two
             // stored specs can name one registration and must compare equal. See
             // [FxInstance.registrationId].
@@ -235,11 +238,11 @@ internal object FxSpawner {
                 ?: speedMasterUuidOrNull(fxSpec.speedMasterUuid)
             rateSpeedMasterUuid = overrideRateSpeedMasterUuid
                 ?: speedMasterUuidOrNull(fxSpec.rateSpeedMasterUuid)
-            // D7, after the masters: an effect on Seconds runs its own cycle — a beat effect on the
-            // wall-clock loop — so a layer's master override does not reach it. A wall-clock row that
-            // merely has no rate master (every row before S15) keeps the rule it always had: a
-            // layer's rate override still scales it.
-            applyTimingChoice(timingSource, fxSpec.seconds)
+            // After the masters: a beat effect on Own tempo runs on the wall-clock loop at its own tempo,
+            // so a layer's master override does not reach it (fx-speed plan D3). A wall-clock row with
+            // no rate master — Natural — keeps the rule it always had: a layer's rate override still
+            // scales it.
+            applyTimingChoice(timingSource, ownBpm)
         }
     }
 

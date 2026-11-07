@@ -1121,7 +1121,7 @@ class FxEngine(
                 startedAtMs = effect.startedAtMs
                 startedAtBeat = effect.startedAtBeat
                 timingSource = effect.timingSource
-                seconds = effect.seconds
+                ownBpm = effect.ownBpm
                 speedMasterUuid = effect.speedMasterUuid
                 rateSpeedMasterUuid = effect.rateSpeedMasterUuid
                 splitMember = SplitMember(head.groupSize, head.offset, head.context, stepFor(head))
@@ -1327,15 +1327,15 @@ class FxEngine(
          */
         replaceMasters: MasterAssignment? = null,
         /**
-         * Move the effect between *Seconds* and a master (venue-visit plan D7): true onto Seconds,
-         * false onto a master, null = keep. A beat effect moving either way changes loop, so this
-         * takes the swap path; see [applyTimingChoice] for what each state is. Leaving Seconds puts
-         * a beat effect on [newSpeedMasterUuid] (null → master 1) and a wall-clock effect on
-         * [newRateSpeedMasterUuid] — the route refuses a wall-clock move that names none, since a
-         * null rate master *is* Seconds. A type swap ([newTimingSource]) keeps the choice the
+         * Onto or off the effect's own clock (fx-speed plan D3, D4), null = keep: onto Own tempo (or a
+         * new tempo for one already on it, written in place, phase kept), onto Natural, or onto a
+         * master. A move changes loop or masters, so it takes the swap path; see [applyTimingChoice].
+         * Onto a master puts a beat effect on [newSpeedMasterUuid] (null → master 1) and a wall-clock
+         * effect on [newRateSpeedMasterUuid] — the route refuses a wall-clock move that names none,
+         * since a null rate master *is* Natural. A type swap ([newTimingSource]) keeps the choice the
          * instance had.
          */
-        newSeconds: Boolean? = null,
+        newClock: FxClockMove? = null,
         /** Amount (effects plan D2), 0.0–1.0; null = keep. A dynamics field: edited in place. */
         newAmount: Double? = null,
         /** Direction (D5); null = keep. A dynamics field. */
@@ -1365,7 +1365,7 @@ class FxEngine(
             newOrder = newOrder, newElementMode = newElementMode, newElementFilter = newElementFilter,
             newTimingMode = newTimingMode, newSpeedMasterUuid = newSpeedMasterUuid,
             newRateSpeedMasterUuid = newRateSpeedMasterUuid, newRegistrationId = newRegistrationId,
-            newTimingSource = newTimingSource, replaceMasters = replaceMasters, newSeconds = newSeconds,
+            newTimingSource = newTimingSource, replaceMasters = replaceMasters, newClock = newClock,
             newAmount = newAmount, newDirection = newDirection, newRuns = newRuns, clearRuns = clearRuns,
             newSpread = newSpread, newWings = newWings, newSegments = newSegments, newParts = newParts,
             newSpreadUnit = newSpreadUnit,
@@ -1387,7 +1387,8 @@ class FxEngine(
         val newRegistrationId: String? = null,
         val newTimingSource: TimingSource? = null,
         val replaceMasters: MasterAssignment? = null,
-        val newSeconds: Boolean? = null,
+        /** Onto or off an effect's own clock (fx-speed plan D3, D4); an Own tempo's new tempo. */
+        val newClock: FxClockMove? = null,
         val newAmount: Double? = null,
         val newDirection: FxDirection? = null,
         val newRuns: Int? = null,
@@ -1424,16 +1425,42 @@ class FxEngine(
         fun movesRuns(existing: FxInstance): Boolean =
             (clearRuns && existing.dynamics.runs != null) || (newRuns != null && newRuns != existing.dynamics.runs)
 
-        /** D7: a timing move or a type swap decides the loop and which masters can stand. */
-        fun timingMove(existing: FxInstance): Pair<TimingSource, Boolean>? =
-            if (newSeconds != null || newTimingSource != null) {
-                (newTimingSource ?: existing.registrationTimingSource) to (newSeconds ?: existing.onSeconds)
-            } else null
+        /**
+         * The clock [existing] runs on after this edit, when that is a move — a type swap, or onto or
+         * off Own tempo or Natural, each deciding the loop and which masters can stand — else null. A
+         * new tempo for an effect already on Own tempo is not a move: [updateFx] writes it in place.
+         */
+        fun timingMove(existing: FxInstance): ClockChoice? {
+            if (newClock == null && newTimingSource == null) return null
+            val kind = newTimingSource ?: existing.registrationTimingSource
+            val ownBpm = when (val clock = newClock) {
+                is FxClockMove.OntoOwnTempo -> clock.bpm
+                FxClockMove.OntoNatural, FxClockMove.OntoMaster -> null
+                null -> existing.ownBpm
+            }
+            // Free of any master, on either kind: an Own tempo or Natural carried across a type swap.
+            val free = ownBpm != null || newClock == FxClockMove.OntoNatural ||
+                (newClock == null && existing.onNatural)
+            val choice = ClockChoice(kind, if (kind == TimingSource.BEAT) ownBpm ?: (if (free) SECONDS_OWN_BPM else null) else null, free)
+            val unchanged = newTimingSource == null && when (newClock) {
+                is FxClockMove.OntoOwnTempo -> existing.onOwnTempo
+                FxClockMove.OntoNatural -> existing.onNatural
+                FxClockMove.OntoMaster -> !existing.onOwnTempo && !existing.onNatural
+                null -> true
+            }
+            return choice.takeUnless { unchanged }
+        }
 
         /** Whether this edit changes a field an instance holds immutably, so it is a swap. */
         fun swaps(existing: FxInstance): Boolean =
             newFx != null || newTiming != null || newBlendMode != null || timingMove(existing) != null
     }
+
+    /**
+     * Where an edit moves an effect's clock: [kind] its type runs on, [ownBpm] a beat effect's Own
+     * tempo, [free] whether it follows no master (Own tempo, or a wall-clock effect's Natural).
+     */
+    data class ClockChoice(val kind: TimingSource, val ownBpm: Double?, val free: Boolean)
 
     /** [updateFx], the edit as one [FxEdit]. */
     fun updateFx(fxId: Long, edit: FxEdit): FxInstance? {
@@ -1455,6 +1482,8 @@ class FxEngine(
             val updated = if (needsSwap) {
                 swapFor(existing, edit, existing.dynamicsRef, existing.envelopeCell)
             } else {
+                // A new Own tempo moves only the rate the accumulator advances at, so the phase is kept.
+                (edit.newClock as? FxClockMove.OntoOwnTempo)?.let { if (existing.onOwnTempo) existing.ownBpm = it.bpm }
                 edit.newSpeedMasterUuid?.let {
                     existing.speedMasterUuid = it
                     existing.speedMasterSlot = speedMasters.slotFor(it)
@@ -1520,7 +1549,7 @@ class FxEngine(
         return FxInstance(
             effect = edit.newFx ?: existing.effect,
             target = existing.target,
-            timing = edit.newTiming ?: existing.timing,
+            timing = edit.newTiming ?: timingMove?.let { existing.timing.across(existing, it) } ?: existing.timing,
             blendMode = edit.newBlendMode ?: existing.blendMode,
             // The dynamics (running state, phase offset, distribution, element
             // mode/filter, step timing) travel by this shared cell, not by copying —
@@ -1543,13 +1572,31 @@ class FxEngine(
                 rateMasterSlot = rateSlotFor(it)
             }
             edit.replaceMasters?.let { assignMasters(this, it) }
-            // After the masters: Seconds clears whichever master its kind cannot have, and the
+            // After the masters: an own clock clears whichever master its kind cannot have, and the
             // slots are bound again from what is left.
-            timingMove?.let { (registrationSource, seconds) ->
-                applyTimingChoice(registrationSource, seconds)
+            if (timingMove != null) {
+                applyTimingChoice(timingMove.kind, timingMove.ownBpm, natural = timingMove.free)
                 speedMasterSlot = speedMasters.slotFor(speedMasterUuid)
                 rateMasterSlot = rateSlotFor(rateSpeedMasterUuid)
+            } else {
+                (edit.newClock as? FxClockMove.OntoOwnTempo)?.let { if (onOwnTempo) ownBpm = it.bpm }
             }
+        }
+    }
+
+    /**
+     * This cycle across [move] of [existing], when the edit sends none: a type swap between an
+     * effect on Own tempo, whose cycle is beats at its tempo, and one on Natural, whose cycle is
+     * seconds, keeps the seconds a cycle takes (D5's rule, both ways). Any other move keeps the
+     * cycle as it is.
+     */
+    private fun FxTiming.across(existing: FxInstance, move: ClockChoice): FxTiming {
+        val fromOwn = existing.ownBpm
+        val toOwn = move.ownBpm
+        return when {
+            fromOwn != null && move.kind == TimingSource.WALL_CLOCK -> copy(cycle = cycle / ownTempoRate(fromOwn))
+            existing.onNatural && toOwn != null && move.kind == TimingSource.BEAT -> copy(cycle = cycle * ownTempoRate(toOwn))
+            else -> this
         }
     }
 
@@ -1578,7 +1625,7 @@ class FxEngine(
         layerFxUuid = config.layerFxUuid
         runUuid = config.runUuid
         timingSource = config.timingSource
-        seconds = config.seconds
+        ownBpm = config.ownBpm
         // A split-off copy's member: without it an edited copy loses its set's step cycle, sweep
         // and N-shot lag.
         splitMember = config.splitMember
@@ -2044,7 +2091,7 @@ class FxEngine(
         a.effect === b.effect && a.timing == b.timing && a.blendMode == b.blendMode &&
             a.dynamics == b.dynamics && a.priority == b.priority && a.registrationId == b.registrationId &&
             a.speedMasterUuid == b.speedMasterUuid && a.rateSpeedMasterUuid == b.rateSpeedMasterUuid &&
-            a.seconds == b.seconds && a.timingSource == b.timingSource && a.splitMember == b.splitMember
+            a.ownBpm == b.ownBpm && a.timingSource == b.timingSource && a.splitMember == b.splitMember
 
     /**
      * An instance with [config]'s settings and ownership and [running]'s place in its run, in the cells
@@ -2203,8 +2250,9 @@ class FxEngine(
             for (effect in effects) {
                 if (effect.timingSource != TimingSource.WALL_CLOCK) continue
                 val slot = effect.rateMasterSlot
-                val scale =
-                    if (slot == FxInstance.NO_RATE_MASTER || rateScales == null) 1.0
+                // An effect on Own tempo has no rate master: its own tempo is its rate.
+                val scale = effect.ownTempoScale
+                    ?: if (slot == FxInstance.NO_RATE_MASTER || rateScales == null) 1.0
                     else rateScales.getOrElse(slot) { 1.0 }
                 effect.advanceWallClock(advanceMs, scale)
             }

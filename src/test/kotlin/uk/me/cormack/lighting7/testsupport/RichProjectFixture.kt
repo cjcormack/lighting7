@@ -658,10 +658,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         // to be remapped for a clone to point at its own master.
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
-        // D7's Seconds (formatVersion 29), non-default so the round trip sees it. A row the desk
-        // writes never holds a master beside it; the masters stay here, dormant, only so the clone
-        // test's remap still has a reference to rewrite.
-        seconds = true
+        // Own tempo (fx-speed plan D3, formatVersion 49) at a non-default tempo, so the round trip sees
+        // it. A row the desk writes never holds a master beside it; the masters stay here, dormant, only
+        // so the clone test's remap still has a reference to rewrite.
+        ownBpm = 96.5
         // Size, direction and runs (effects plan session 1, formatVersion 30), non-default so the
         // round trip sees them.
         amount = 0.4
@@ -775,10 +775,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         parameters = mapOf("colours" to "pal:${colourPalette.uuid}", "depth" to "0.6")
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
-        // D7's Seconds (formatVersion 29), non-default so the round trip sees it. A row the desk
-        // writes never holds a master beside it; the masters stay here, dormant, only so the clone
-        // test's remap still has a reference to rewrite.
-        seconds = true
+        // Own tempo (fx-speed plan D3, formatVersion 49) at a non-default tempo, so the round trip sees
+        // it. A row the desk writes never holds a master beside it; the masters stay here, dormant, only
+        // so the clone test's remap still has a reference to rewrite.
+        ownBpm = 96.5
         // Size, direction and runs (effects plan session 1, formatVersion 30), non-default so the
         // round trip sees them.
         amount = 0.75
@@ -934,10 +934,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         sortOrder = 3
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
-        // D7's Seconds (formatVersion 29), non-default so the round trip sees it. A row the desk
-        // writes never holds a master beside it; the masters stay here, dormant, only so the clone
-        // test's remap still has a reference to rewrite.
-        seconds = true
+        // Own tempo (fx-speed plan D3, formatVersion 49) at a non-default tempo, so the round trip sees
+        // it. A row the desk writes never holds a master beside it; the masters stay here, dormant, only
+        // so the clone test's remap still has a reference to rewrite.
+        ownBpm = 96.5
         // Size, direction and runs (effects plan session 1, formatVersion 30), non-default so the
         // round trip sees them.
         amount = 0.6

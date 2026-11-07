@@ -98,9 +98,12 @@ function couldPaint(effect: ActiveFx, desk: LensDesk): boolean {
   return effect.cueStackId == null || desk.stackFxAmount(effect.cueStackId) > 0
 }
 
-/** The division as the chip says it: a fraction of a beat as its glyph alone (`½`), else the label. */
+/**
+ * The division as the chip says it: a fraction of a beat as its glyph alone (`½`), else the label —
+ * beats on a master or an Own tempo alike, which the chip does not name.
+ */
 export function lensDivision(effect: ActiveFx): string {
-  const label = fxSpeedLabel(effect.cycle, effect.timingSource, effect.seconds === true) ?? ''
+  const label = fxSpeedLabel(effect.cycle, effect.ownBpm != null ? 'BEAT' : effect.timingSource) ?? ''
   const fraction = /^([⅛¼½¾⅓⅔]) beat$/.exec(label)
   return fraction != null ? fraction[1] : label
 }

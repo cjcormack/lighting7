@@ -150,7 +150,7 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 sortOrder = effect.sortOrder
                 speedMasterUuid = master(effect.speedMasterUuid, by)
                 rateSpeedMasterUuid = master(effect.rateSpeedMasterUuid, by)
-                seconds = effect.seconds
+                ownBpm = effect.ownBpm
                 amount = effect.amount
                 direction = effect.direction
                 runs = effect.runs
@@ -252,7 +252,7 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 parameters = parameters(effect.parameters, by)
                 speedMasterUuid = master(effect.speedMasterUuid, by)
                 rateSpeedMasterUuid = master(effect.rateSpeedMasterUuid, by)
-                seconds = effect.seconds
+                ownBpm = effect.ownBpm
                 amount = effect.amount
                 direction = effect.direction
                 runs = effect.runs
@@ -322,7 +322,7 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 parameters = parameters(effect.parameters, by)
                 speedMasterUuid = master(effect.speedMasterUuid, by)
                 rateSpeedMasterUuid = master(effect.rateSpeedMasterUuid, by)
-                seconds = effect.seconds
+                ownBpm = effect.ownBpm
                 amount = effect.amount
                 direction = effect.direction
                 runs = effect.runs

@@ -34,6 +34,11 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v49: Own tempo (fx-speed plan D3, D5). `LookFxJson`, `PaletteFxJson` and `CueAdHocFxJson` gain
+    // `ownBpm` — a beat effect's own tempo, its cycle beats at it — and no longer write `seconds`,
+    // which the importer reads by D5: a beat effect onto Own tempo 120 at twice its cycle, a wall-clock
+    // one onto Natural. The writer and `minReader` move to **49**: a v48 reader would run an Own tempo
+    // effect on master 1. See `docs/sync-engineering.md` §"Version 49 — Own tempo".
     // v48: a cue entry's `cueNumber` is a number — 0 to 9999.9999, at most four decimal places, in its
     // canonical spelling — and an auto number a reader derives is a whole number, a decimal only where
     // none is free (`routes/cueNumbering.kt`). No field is new. The writer and `minReader` move to
@@ -373,9 +378,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 48,
+    val formatVersion: Int = 49,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 48,
+    val minReader: Int = 49,
 )
 
 /**
@@ -563,6 +568,8 @@ interface StoredFxFields {
     val runs: Int?
     val spread: Double
     val attribute: String?
+    val ownBpm: Double?
+    val seconds: Boolean
 }
 
 @Serializable
@@ -589,8 +596,13 @@ data class LookFxJson(
     /** Speed master uuid, remapped by ExportUuidRemapper like any uuid. */
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
-    /** D7's *Seconds* — the effect follows no master (formatVersion 29). Omitted when false. */
-    val seconds: Boolean = false,
+    /** A beat effect's Own tempo (fx-speed plan D3, formatVersion 49); null follows its master. */
+    override val ownBpm: Double? = null,
+    /**
+     * **Read only, never written since v49**: D7's *Seconds* (formatVersion 29), which the importer
+     * reads by D5 — a beat effect onto Own tempo 120 at twice its cycle, a wall-clock one onto Natural.
+     */
+    override val seconds: Boolean = false,
     /** Amount (effects plan D2, terminology plan D2), 0–1 (formatVersion 30). Omitted at 1. */
     val amount: Double = 1.0,
     /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */
@@ -682,8 +694,13 @@ data class PaletteFxJson(
     /** Speed master uuid, remapped by ExportUuidRemapper like any uuid. */
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
-    /** D7's *Seconds* — the effect follows no master (formatVersion 29). Omitted when false. */
-    val seconds: Boolean = false,
+    /** A beat effect's Own tempo (fx-speed plan D3, formatVersion 49); null follows its master. */
+    override val ownBpm: Double? = null,
+    /**
+     * **Read only, never written since v49**: D7's *Seconds* (formatVersion 29), which the importer
+     * reads by D5 — a beat effect onto Own tempo 120 at twice its cycle, a wall-clock one onto Natural.
+     */
+    override val seconds: Boolean = false,
     /** Amount (effects plan D2, terminology plan D2), 0–1 (formatVersion 30). Omitted at 1. */
     val amount: Double = 1.0,
     /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */
@@ -1091,8 +1108,13 @@ data class CueAdHocFxJson(
     val speedMasterUuid: String? = null,
     /** Wall-clock rate master (null → unscaled). */
     val rateSpeedMasterUuid: String? = null,
-    /** D7's *Seconds* — the effect follows no master (formatVersion 29). Omitted when false. */
-    val seconds: Boolean = false,
+    /** A beat effect's Own tempo (fx-speed plan D3, formatVersion 49); null follows its master. */
+    override val ownBpm: Double? = null,
+    /**
+     * **Read only, never written since v49**: D7's *Seconds* (formatVersion 29), which the importer
+     * reads by D5 — a beat effect onto Own tempo 120 at twice its cycle, a wall-clock one onto Natural.
+     */
+    override val seconds: Boolean = false,
     /** Amount (effects plan D2, terminology plan D2), 0–1 (formatVersion 30). Omitted at 1. */
     val amount: Double = 1.0,
     /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */

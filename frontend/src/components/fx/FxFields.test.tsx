@@ -8,8 +8,8 @@ import type { FxLibraryEntry } from '@/store/fixtureFx'
  * `FxFields` — the effect editor's fields, which the live `FxEditor` and `PaletteEditor`
  * (fixture-fx-sheets plan D16) both mount. These are the pins the deleted `EffectParameterForm`'s
  * suite held, re-made on the fields that replaced it: the timing-source gate (a wall-clock effect
- * types seconds and chips its **rate** master; a beat effect segments beats and chips its speed
- * master), an int's slider range from its declared default alone with the field reaching past it,
+ * types seconds and chips its **rate** master or Natural; a beat effect segments beats and chips its
+ * speed master or its Own tempo), an int's slider range from its declared default alone with the field reaching past it,
  * and a parameter's own sentence drawn under its control.
  */
 vi.mock('@/components/ui/slider', () => ({
@@ -89,7 +89,8 @@ const draft = (over: Partial<FxDraft> = {}): FxDraft => ({
   elementFilter: 'ALL',
   speedMasterUuid: null,
   rateSpeedMasterUuid: null,
-  seconds: false,
+  ownBpm: null,
+  natural: false,
   amount: 1,
   direction: 'FORWARD',
   runs: null,
@@ -157,12 +158,12 @@ function openCycle() {
 }
 
 describe('FxFields', () => {
-  it('gives a wall-clock effect with no rate master Seconds, and a beat effect beats and its speed master', () => {
+  it('gives a wall-clock effect with no rate master Natural, and a beat effect beats and its speed master', () => {
     fields(FLICKER, draft())
     openCycle()
     expect(screen.getByRole('spinbutton', { name: /Cycle seconds/ }).closest('div')).toBeTruthy()
     expect(screen.queryByRole('radiogroup', { name: 'Cycle' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Timing: Seconds' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Timing: Natural' })).toBeTruthy()
     cleanup()
     fields(PULSE, draft())
     openCycle()
@@ -171,17 +172,54 @@ describe('FxFields', () => {
     expect(screen.getByRole('button', { name: 'Timing: M1 · 120' })).toBeTruthy()
   })
 
-  it('types a beat effect on Seconds in seconds, with no master named', () => {
-    fields(PULSE, draft({ seconds: true, cycle: 10 }))
-    expect(screen.getByRole('button', { name: 'Cycle: 10 s' })).toBeTruthy()
+  it('reads a beat effect on its own tempo in beats, its chip naming the tempo, with no master named', () => {
+    fields(PULSE, draft({ ownBpm: 96, cycle: 4 }))
+    expect(screen.getByRole('button', { name: 'Cycle: 1 bar' })).toBeTruthy()
     openCycle()
-    expect(screen.getByRole('spinbutton', { name: /Cycle seconds/ })).toBeTruthy()
-    expect(screen.queryByRole('radiogroup', { name: 'Cycle' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Timing: Seconds' })).toBeTruthy()
-    expect(screen.getByText('seconds a cycle · follows no master')).toBeTruthy()
+    expect(screen.getByRole('radiogroup', { name: 'Cycle' })).toBeTruthy()
+    expect(screen.queryByRole('spinbutton', { name: /Cycle seconds/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Timing: Own 96' })).toBeTruthy()
   })
 
-  it('names a stored rate master the bank does not hold as M1, the master the desk runs it on — not Seconds', () => {
+  it('offers Own tempo on a beat effect, its BPM field sending the tempo alone', () => {
+    const { set } = fields(PULSE, draft({ ownBpm: 96 }))
+    fireEvent.click(screen.getByRole('button', { name: 'Timing: Own 96' }))
+    expect(screen.getByRole('radio', { name: 'Own tempo' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.queryByRole('radio', { name: 'Natural' })).toBeNull()
+    const bpm = screen.getByRole('spinbutton', { name: /Own tempo/ }) as HTMLInputElement
+    expect(bpm.value).toBe('96')
+    fireEvent.change(bpm, { target: { value: '140' } })
+    fireEvent.keyDown(bpm, { key: 'Enter' })
+    expect(set).toHaveBeenLastCalledWith({ ownBpm: 140, speedMasterUuid: null, rateSpeedMasterUuid: null }, true)
+  })
+
+  it('moves a beat effect from its master onto Own tempo at the tempo that master is running at', () => {
+    const { set } = fields(PULSE, draft({ speedMasterUuid: 'm2', cycle: 4 }))
+    fireEvent.click(screen.getByRole('button', { name: 'Timing: M2 · 60' }))
+    // On a master there is no tempo of its own to type.
+    expect(screen.queryByRole('spinbutton', { name: /Own tempo/ })).toBeNull()
+    fireEvent.click(screen.getByRole('radio', { name: 'Own tempo' }))
+    // The cycle stays in beats, so the speed is kept.
+    expect(set).toHaveBeenLastCalledWith({ ownBpm: 60, speedMasterUuid: null, rateSpeedMasterUuid: null }, true)
+  })
+
+  it('moves a beat effect off Own tempo onto a master by naming the master, the cycle kept', () => {
+    const { set } = fields(PULSE, draft({ ownBpm: 96, cycle: 4 }))
+    fireEvent.click(screen.getByRole('button', { name: 'Timing: Own 96' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'M1 · Main' }))
+    expect(set).toHaveBeenLastCalledWith({ ownBpm: null, speedMasterUuid: 'm1' }, true)
+  })
+
+  it('offers Natural on a wall-clock effect, which sends natural and no rate master', () => {
+    const { set } = fields(FLICKER, draft({ rateSpeedMasterUuid: 'm2' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Timing: rate M2 · 60' }))
+    expect(screen.queryByRole('radio', { name: 'Own tempo' })).toBeNull()
+    fireEvent.click(screen.getByRole('radio', { name: 'Natural' }))
+    expect(set).toHaveBeenLastCalledWith({ natural: true, rateSpeedMasterUuid: null }, true)
+    expect(screen.queryByRole('spinbutton', { name: /Own tempo/ })).toBeNull()
+  })
+
+  it('names a stored rate master the bank does not hold as M1, the master the desk runs it on — not Natural', () => {
     fields(FLICKER, draft({ rateSpeedMasterUuid: 'gone' }))
     expect(screen.getByRole('button', { name: 'Timing: rate M1 · 120' })).toBeTruthy()
   })

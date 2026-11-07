@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { useVisibleFixtureListQuery } from '@/store/fixtures'
 import { useMaster1Uuid, useSpeedMasterBpm, useSpeedMasterDisplay } from '@/store/speedMasters'
-import { isOnSeconds } from '@/lib/fxTiming'
+import { bpmLabel, isOnNatural } from '@/lib/fxTiming'
 import { NOTIONAL_HEADS, NOTIONAL_HEADS_WORD, fxSpeedLabel } from '@/components/fx/fxConstants'
 import { useWindowSelectionTargets } from '@/components/fx/selectionFxTarget'
 import { findFxEntry } from '@/components/busking/buskingTypes'
@@ -81,23 +81,23 @@ export function PaletteRunsOn({
         : (fixtures ?? []).filter((fixture) => attributesFor([{ type: 'fixture', fixture }]).has(beamAttribute)).length,
     [fixtures, family, beamAttribute],
   )
-  // Timed in seconds: a wall-clock effect, or a beat effect on Seconds (D7) — no master's tempo to quote.
-  const isWallClock = entry?.timingSource === 'WALL_CLOCK' || effect.seconds === true
-  const onSeconds = isOnSeconds(effect, entry?.timingSource)
+  // Timed in seconds: a wall-clock effect — no master's tempo to quote.
+  const isWallClock = entry?.timingSource === 'WALL_CLOCK' && effect.ownBpm == null
+  const natural = isOnNatural(effect, entry?.timingSource)
 
   // No entry means no timing source, and `fxSpeedLabel` answers null for exactly that — the
   // two readings of `cycle` are a tempo apart, so the number is dropped rather than guessed.
-  const division = entry == null ? null : fxSpeedLabel(effect.cycle, entry.timingSource ?? 'BEAT', effect.seconds)
+  const division = entry == null ? null : fxSpeedLabel(effect.cycle, entry.timingSource ?? 'BEAT')
   const speedLabel = division ?? (isWallClock ? 'One cycle' : 'One bar')
-  const masterLabel = isWallClock
-    ? onSeconds
-      ? 'Seconds — no master'
+  const tempoLabel = isWallClock
+    ? natural
+      ? 'Natural — no master'
       : rateDisplay
         ? `M${rateDisplay.index} · ${rateDisplay.name}`
         : 'M1'
-    : display
-      ? `M${display.index} · ${display.name}`
-      : 'M1'
+    : effect.ownBpm != null
+      ? `Own tempo · ${bpmLabel(effect.ownBpm)} bpm`
+      : `${display ? `M${display.index} · ${display.name}` : 'M1'} · ${bpm == null ? '—' : Math.round(bpm)} bpm`
 
   return (
     <div className="space-y-1.5">
@@ -119,7 +119,7 @@ export function PaletteRunsOn({
               {speedLabel}
             </span>
             <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-muted-foreground tabular-nums">
-              {isWallClock ? masterLabel : `${masterLabel} · ${bpm == null ? '—' : Math.round(bpm)} bpm`}
+              {tempoLabel}
             </span>
           </div>
         </div>

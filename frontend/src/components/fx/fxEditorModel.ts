@@ -1,6 +1,6 @@
 import type { FxDirection, Timing, UpdateFxRequest } from '@/api/fxApi'
 import type { ActiveFx, FxLibraryEntry, FxParamUnit, FxParameterDef, FxPreset } from '@/store/fixtureFx'
-import { beatsToSeconds, isOnSeconds, secondsToBeats, swappedTiming } from '@/lib/fxTiming'
+import { OWN_BPM_DEFAULT, clampOwnBpm, isOnNatural, swappedTiming } from '@/lib/fxTiming'
 import { MAX_SPREAD, isMirroredOrder, spreadOffsets, stepCountOf, type SpreadUnit } from '@/lib/spreadShape'
 import { fxAttributeFamily } from '@/lib/attributeFamily'
 import { compatibleFxFor } from '@/lib/fxTargetAttributes'
@@ -130,8 +130,7 @@ export function swappedDraft(
 ): FxDraft {
   const spec = startingSpec(to, { attribute })
   const startedOn = from != null ? startingSpec(from, { attribute }).blendMode : null
-  const unitOf = (entry: FxLibraryEntry | undefined) =>
-    draft.seconds || entry?.timingSource === 'WALL_CLOCK' ? 'seconds' : 'beats'
+  const unitOf = (entry: FxLibraryEntry | undefined) => (entry?.timingSource === 'WALL_CLOCK' ? 'seconds' : 'beats')
   const timing = swappedTiming(draft, from, to, unitOf(from) === unitOf(to))
   return {
     ...draft,
@@ -139,6 +138,10 @@ export function swappedDraft(
     blendMode: startedOn == null || draft.blendMode === startedOn ? spec.blendMode : draft.blendMode,
     cycle: timing.cycle,
     direction: timing.direction,
+    // An Own tempo is a beat FX's and Natural a wall-clock FX's; the desk drops the other on a swap.
+    ...(to.timingSource === 'WALL_CLOCK'
+      ? { ownBpm: null, natural: draft.ownBpm != null || draft.rateSpeedMasterUuid == null }
+      : { natural: false }),
     ...(draft.spreadUnit === 'STEP' && !to.stepsFrom ? { spreadUnit: 'CYCLE' as const, spread: keptCycleSpread(draft, from, heads) } : {}),
   }
 }
@@ -361,11 +364,12 @@ export interface FxDraft {
   /** Null → unscaled. */
   rateSpeedMasterUuid: string | null
   /**
-   * D7's *Seconds* (venue-visit plan S15): the effect follows no master. A beat effect's
-   * [cycle] is then seconds and both masters are null; a wall-clock effect's division is
-   * seconds either way, and its Seconds is a null [rateSpeedMasterUuid].
+   * A beat effect's own tempo (fx-speed plan D3), in place of a master: both masters are then null
+   * and [cycle] is still beats. Never on a wall-clock effect.
    */
-  seconds: boolean
+  ownBpm: number | null
+  /** A wall-clock effect on *Natural* (D4): no rate master, a fixed 120 BPM. */
+  natural: boolean
   /** Amount (effects plan D2), 0–1 — how much of the effect reaches the stage over what is underneath. */
   amount: number
   /** Direction (D5): which way each head runs its cycle. */
@@ -402,9 +406,8 @@ export function draftOf(effect: ActiveFx): FxDraft {
     elementFilter: effect.elementFilter ?? 'ALL',
     speedMasterUuid: effect.speedMasterUuid ?? null,
     rateSpeedMasterUuid: effect.rateSpeedMasterUuid ?? null,
-    // The desk reports D7's reading; a desk before S15 does not, and then a wall-clock effect with
-    // no rate master is the only Seconds there is.
-    seconds: isOnSeconds(effect, effect.timingSource),
+    ownBpm: effect.ownBpm ?? null,
+    natural: effect.natural ?? isOnNatural(effect, effect.timingSource),
     // Absent on the wire at their defaults (the desk's socket encodes no default), and from a desk
     // before effects plan session 1.
     amount: effect.amount ?? 1,
@@ -448,7 +451,8 @@ export type OptionalField =
   | 'elementFilter'
   | 'speedMasterUuid'
   | 'rateSpeedMasterUuid'
-  | 'seconds'
+  | 'ownBpm'
+  | 'natural'
   | 'amount'
   | 'direction'
   | 'runs'
@@ -465,7 +469,8 @@ export const OPTIONAL_FIELDS: readonly OptionalField[] = [
   'elementFilter',
   'speedMasterUuid',
   'rateSpeedMasterUuid',
-  'seconds',
+  'ownBpm',
+  'natural',
   'amount',
   'direction',
   'runs',
@@ -488,12 +493,12 @@ export const OPTIONAL_FIELDS: readonly OptionalField[] = [
  * holds. Once touched, a field rides every later write — Revert's included, which is how Revert
  * puts it back. A null speed master is spelled [nullMasterAs] — Revert passes master 1's uuid, which
  * the desk treats as the null default, because the frame's absent field means "keep"; a null rate
- * master is left absent, since *unscaled* is said by `seconds` (below).
+ * master is left absent, since *Natural* is said by `natural` (below).
  *
- * The timing (venue-visit plan D7) rides once touched too: `seconds: true` puts the effect on
- * Seconds and sends **no** master beside it — the desk refuses both — which is also how Revert puts
- * a wall-clock effect back to *unscaled* (`FU-FX-RATE-MASTER-CLEAR`, closed by S15); `seconds:
- * false` sends the master beside it.
+ * The timing (fx-speed plan D3, D4) rides once touched too: an `ownBpm` puts a beat effect on its
+ * own tempo and `natural: true` a wall-clock effect on Natural, each sending **no** master beside
+ * it — the desk refuses both — which is also how Revert puts them back; off either, the master is
+ * sent, which takes the effect off it.
  *
  * Amount, direction and runs (effects plan D2, D5, D9) ride once touched too, which keeps a frame to
  * a desk that predates them the shape it always was; a null count is said as `runForever`, since
@@ -508,7 +513,8 @@ export function updateRequestOf(
   nullMasterAs: string | null = null,
 ): UpdateFxRequest {
   const speedMasterUuid = draft.speedMasterUuid ?? nullMasterAs
-  const onSeconds = touched.has('seconds') && draft.seconds
+  const onOwn = touched.has('ownBpm') && draft.ownBpm != null
+  const onNatural = touched.has('natural') && draft.natural
   return {
     parameters: { ...draft.parameters },
     cycle: draft.cycle,
@@ -518,7 +524,8 @@ export function updateRequestOf(
     ...(touched.has('order') ? { order: draft.order } : {}),
     ...(touched.has('elementMode') ? { elementMode: draft.elementMode } : {}),
     ...(touched.has('elementFilter') ? { elementFilter: draft.elementFilter } : {}),
-    ...(touched.has('seconds') ? { seconds: draft.seconds } : {}),
+    ...(onOwn && draft.ownBpm != null ? { ownBpm: draft.ownBpm } : {}),
+    ...(onNatural ? { natural: true } : {}),
     ...(touched.has('amount') ? { amount: draft.amount } : {}),
     ...(touched.has('direction') ? { direction: draft.direction } : {}),
     ...(touched.has('runs') ? (draft.runs == null ? { runForever: true } : { runs: draft.runs }) : {}),
@@ -527,42 +534,42 @@ export function updateRequestOf(
     ...(touched.has('segments') ? { segments: draft.segments } : {}),
     ...(touched.has('parts') ? { parts: draft.parts } : {}),
     ...(touched.has('spreadUnit') ? { spreadUnit: draft.spreadUnit } : {}),
-    ...(!onSeconds && touched.has('speedMasterUuid') && speedMasterUuid != null ? { speedMasterUuid } : {}),
-    ...(!onSeconds && touched.has('rateSpeedMasterUuid') && draft.rateSpeedMasterUuid != null
+    ...(!onOwn && touched.has('speedMasterUuid') && speedMasterUuid != null ? { speedMasterUuid } : {}),
+    ...(touched.has('ownBpm') && draft.ownBpm == null && speedMasterUuid == null ? { seconds: false as const } : {}),
+    ...(!onNatural && touched.has('rateSpeedMasterUuid') && draft.rateSpeedMasterUuid != null
       ? { rateSpeedMasterUuid: draft.rateSpeedMasterUuid }
       : {}),
   }
 }
 
 /**
- * The draft patch for the timing chip's choice (venue-visit plan D7): [choice] null is *Seconds*,
- * else a master's uuid. Each patch names the timing **and** the master fields, so the editor marks
- * all of them set and Revert can put every one of them back.
+ * The draft patch for the timing chip's choice: [choice] null is *Own tempo* on a beat effect,
+ * *Natural* on a wall-clock one, else a master's uuid. Each patch names the timing **and** the master
+ * fields, so the editor marks all of them set and Revert can put every one of them back.
  *
- * Moving a **beat** effect between Seconds and a master keeps its speed — the division converted at
- * the master's tempo ([bpmOf], the live bank's; 4 beats at 120 BPM is 2 s). A wall-clock effect's
- * number is seconds either way, and its master is its rate master.
+ * Onto Own tempo keeps the speed (fx-speed plan D3): it starts at the tempo the effect's master is
+ * running at now ([bpmOf], the live bank's), the cycle in beats unchanged. Off it onto a master the
+ * cycle is kept too, so it runs at that master's tempo. A wall-clock effect's number is seconds
+ * either way, and its master is its rate master.
  */
 export function timingChoicePatch(
-  draft: Pick<FxDraft, 'cycle' | 'seconds' | 'speedMasterUuid' | 'rateSpeedMasterUuid'>,
+  draft: Pick<FxDraft, 'ownBpm' | 'speedMasterUuid'>,
   wallClock: boolean,
   choice: string | null,
   bpmOf: (uuid: string | null) => number,
 ): Partial<FxDraft> {
+  if (wallClock) {
+    return choice == null ? { natural: true, rateSpeedMasterUuid: null } : { natural: false, rateSpeedMasterUuid: choice }
+  }
   if (choice == null) {
+    const running = bpmOf(draft.speedMasterUuid)
     return {
-      seconds: true,
+      ownBpm: draft.ownBpm ?? (running > 0 ? clampOwnBpm(running) : OWN_BPM_DEFAULT),
       speedMasterUuid: null,
       rateSpeedMasterUuid: null,
-      ...(!wallClock && !draft.seconds ? { cycle: beatsToSeconds(draft.cycle, bpmOf(draft.speedMasterUuid)) } : {}),
     }
   }
-  if (wallClock) return { seconds: false, rateSpeedMasterUuid: choice }
-  return {
-    seconds: false,
-    speedMasterUuid: choice,
-    ...(draft.seconds ? { cycle: secondsToBeats(draft.cycle, bpmOf(choice)) } : {}),
-  }
+  return { ownBpm: null, speedMasterUuid: choice }
 }
 
 /**
@@ -771,8 +778,8 @@ export interface PaletteFxFields {
   phaseOffset?: number
   speedMasterUuid?: string | null
   rateSpeedMasterUuid?: string | null
-  /** D7's flag as stored — see `isOnSeconds`. */
-  seconds?: boolean
+  /** A beat effect's own tempo as stored; null beside a master. */
+  ownBpm?: number | null
   /** Amount, direction and runs as stored (effects plan D2, D5, D9); absent at their defaults. */
   amount?: number
   direction?: FxDirection
@@ -808,7 +815,8 @@ export function paletteDraftOf(effect: PaletteFxFields, timingSource?: string | 
     elementFilter: 'ALL',
     speedMasterUuid: effect.speedMasterUuid ?? null,
     rateSpeedMasterUuid: effect.rateSpeedMasterUuid ?? null,
-    seconds: isOnSeconds(effect, timingSource ?? effect.timingSource),
+    ownBpm: effect.ownBpm ?? null,
+    natural: isOnNatural(effect, timingSource ?? effect.timingSource),
     amount: effect.amount ?? 1,
     direction: effect.direction ?? 'FORWARD',
     runs: effect.runs ?? null,
@@ -843,11 +851,10 @@ export function withPaletteDraft<E extends PaletteFxFields>(
     ...(elementMode && (draft.elementMode !== STORED_ELEMENT_MODE || effect.elementMode != null)
       ? { elementMode: draft.elementMode }
       : {}),
-    // Seconds follows no master (D7), so a draft on Seconds stores none beside the flag.
-    speedMasterUuid: draft.seconds ? null : draft.speedMasterUuid,
-    rateSpeedMasterUuid: draft.seconds ? null : draft.rateSpeedMasterUuid,
-    // Written where it says something — a palette that never used Seconds stays as it was stored.
-    ...(draft.seconds || effect.seconds != null ? { seconds: draft.seconds } : {}),
+    // Own tempo and Natural follow no master, so a draft on either stores none.
+    speedMasterUuid: draft.ownBpm != null ? null : draft.speedMasterUuid,
+    rateSpeedMasterUuid: draft.ownBpm != null || draft.natural ? null : draft.rateSpeedMasterUuid,
+    ...(draft.ownBpm != null || effect.ownBpm != null ? { ownBpm: draft.ownBpm } : {}),
     // The same rule for amount, direction and runs: said where they are not the default, or where the
     // palette already said them — a palette that never used them saves as it was stored.
     ...(draft.amount !== 1 || effect.amount != null ? { amount: draft.amount } : {}),
@@ -876,7 +883,7 @@ export interface CueFxFields extends PaletteFxFields {
 }
 
 /**
- * A cue's stored effect as the editor's draft: [paletteDraftOf]'s reading — Seconds, amount,
+ * A cue's stored effect as the editor's draft: [paletteDraftOf]'s reading — Own tempo, amount,
  * direction, runs and the spread's shape as stored — with the target's three fields read too, each
  * absent at its default.
  */
@@ -958,7 +965,7 @@ export function differsFromPalette(
   if (elementMode && draft.elementMode !== (effect.elementMode ?? STORED_ELEMENT_MODE)) return true
   if ((draft.speedMasterUuid ?? master1Uuid) !== (effect.speedMasterUuid ?? master1Uuid)) return true
   if ((draft.rateSpeedMasterUuid ?? null) !== (effect.rateSpeedMasterUuid ?? null)) return true
-  if (draft.seconds !== isOnSeconds(effect, effect.timingSource)) return true
+  if (Math.abs((draft.ownBpm ?? 0) - (effect.ownBpm ?? 0)) > 1e-6) return true
   if (Math.abs(draft.amount - (effect.amount ?? 1)) > 1e-6) return true
   if (draft.direction !== (effect.direction ?? 'FORWARD')) return true
   if ((draft.runs ?? null) !== (effect.runs ?? null)) return true

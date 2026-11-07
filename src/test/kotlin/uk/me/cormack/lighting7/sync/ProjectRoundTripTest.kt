@@ -166,7 +166,7 @@ class ProjectRoundTripTest {
             if (!path.endsWith(".json")) continue
             for (name in old) assertTrue(name !in text, "$path says $name")
         }
-        assertEquals(FormatVersionJson(formatVersion = 48, minReader = 48), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+        assertEquals(FormatVersionJson(formatVersion = 49, minReader = 49), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
     }
 
     /**
@@ -270,12 +270,13 @@ class ProjectRoundTripTest {
     }
 
     /**
-     * D7's *Seconds* (formatVersion 29) travels on all three stored effect shapes — a Look's effect,
-     * a palette's effect and a cue's ad-hoc effect. Asserted on the export text for the reason the
-     * template test above gives: a field both sides dropped would still round-trip byte for byte.
+     * Own tempo (fx-speed plan D3, formatVersion 49) travels on all three stored effect shapes — a
+     * Look's effect, a palette's effect and a cue's ad-hoc effect — and `seconds` is never written.
+     * Asserted on the export text for the reason the template test above gives: a field both sides
+     * dropped would still round-trip byte for byte.
      */
     @Test
-    fun `effects on Seconds export the flag on every stored shape`() {
+    fun `effects on Own tempo export it on every stored shape`() {
         val projectId = seedRichProject(state)
         ProjectExporter(state).export(projectId, exportDirA)
 
@@ -287,18 +288,65 @@ class ProjectRoundTripTest {
 
         val lookFx = docs("looks", uk.me.cormack.lighting7.sync.dto.LookJson.serializer())
             .single { it.name == "warm-pulse" }.fx.single()
-        assertTrue(lookFx.seconds, "a Look's effect keeps Seconds")
+        assertEquals(96.5, lookFx.ownBpm, "a Look's effect keeps its Own tempo")
         val paletteFx = docs("palettes", PaletteJson.serializer()).single { it.name == "amber-breathe" }.fx!!
-        assertTrue(paletteFx.seconds, "a palette's effect keeps Seconds")
+        assertEquals(96.5, paletteFx.ownBpm, "a palette's effect keeps its Own tempo")
         val adHoc = openPulse(exportDirA)
-        assertTrue(adHoc.seconds, "a cue's ad-hoc effect keeps Seconds")
+        assertEquals(96.5, adHoc.ownBpm, "a cue's ad-hoc effect keeps its Own tempo")
+        Files.walk(exportDirA).use { stream ->
+            val written = stream.toList().filter { Files.isRegularFile(it) && it.toString().endsWith(".json") }
+            assertTrue(written.none { "\"seconds\"" in Files.readString(it) }, "Seconds is never written")
+        }
 
         val format = canonicalDecode(
             uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
             Files.readString(exportDirA.resolve("formatVersion.json")),
         )
-        assertTrue(format.formatVersion >= 29, "Seconds syncs from v29")
-        assertTrue(SUPPORTED_FORMAT_VERSION >= 29, "and this desk reads v29")
+        assertTrue(format.formatVersion >= 49, "Own tempo syncs from v49")
+        assertTrue(format.minReader >= 49, "and a v48 reader, which would run it on master 1, refuses it")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 49, "and this desk reads v49")
+    }
+
+    /** An archive written before v49 says `seconds`: a beat effect imports on Own tempo 120 at twice its cycle (D5). */
+    @Test
+    fun `an older archive's Seconds imports as Own tempo`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        val cycles = HashMap<String, Double>()
+        fun asSeconds(fx: kotlinx.serialization.json.JsonObject): kotlinx.serialization.json.JsonObject {
+            if ("ownBpm" !in fx) return fx
+            fx["uuid"]?.let { cycles[it.toString().trim('"')] = fx.getValue("cycle").toString().toDouble() }
+            return kotlinx.serialization.json.JsonObject(fx.filterKeys { it != "ownBpm" } + ("seconds" to kotlinx.serialization.json.JsonPrimitive(true)))
+        }
+        fun rewrite(folder: String, change: (kotlinx.serialization.json.JsonObject) -> kotlinx.serialization.json.JsonObject) =
+            Files.walk(exportDirA.resolve(folder)).use { stream ->
+                stream.toList().filter { Files.isRegularFile(it) && it.toString().endsWith(".json") }.forEach { file ->
+                    val json = kotlinx.serialization.json.Json.parseToJsonElement(Files.readString(file)) as kotlinx.serialization.json.JsonObject
+                    Files.writeString(file, change(json).toString())
+                }
+            }
+        rewrite("looks") { look ->
+            val fx = (look["fx"] as kotlinx.serialization.json.JsonArray).map { asSeconds(it as kotlinx.serialization.json.JsonObject) }
+            kotlinx.serialization.json.JsonObject(look + ("fx" to kotlinx.serialization.json.JsonArray(fx)))
+        }
+        rewrite("palettes") { palette ->
+            val fx = palette["fx"] as? kotlinx.serialization.json.JsonObject ?: return@rewrite palette
+            kotlinx.serialization.json.JsonObject(palette + ("fx" to asSeconds(fx)))
+        }
+        rewrite("cueAdHocFx") { asSeconds(it) }
+        assertEquals(3, cycles.size, "one effect on Own tempo in each home")
+        wipeDatabase()
+        ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) {
+            val stored = uk.me.cormack.lighting7.models.DaoLookFxEntity.all().map { Triple(it.uuid, it.cycle, it.ownBpm) } +
+                uk.me.cormack.lighting7.models.DaoPaletteFxEntity.all().map { Triple(it.uuid, it.cycle, it.ownBpm) } +
+                uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity.all().map { Triple(it.uuid, it.cycle, it.ownBpm) }
+            for ((uuid, cycle) in cycles) {
+                val (_, imported, ownBpm) = stored.single { it.first.toString() == uuid }
+                assertEquals(120.0, ownBpm, "$uuid onto Own tempo 120")
+                assertEquals(cycle * 2, imported, "$uuid at twice its cycle")
+            }
+        }
     }
 
     /**

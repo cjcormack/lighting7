@@ -599,8 +599,9 @@ class AiTools(private val state: State) {
                                 })
                             }
                             put("cycle", effect.timing.cycle)
-                            // D7: the division is seconds and no master is followed.
-                            if (effect.onSeconds) put("seconds", true)
+                            // Its own clock, followed by no master: a beat effect's Own tempo, or Natural.
+                            effect.ownBpm?.let { put("ownBpm", it) }
+                            if (effect.onNatural) put("natural", true)
                             // Effects plan D2, D5, D9 — each said only where it is not the default.
                             val dyn = effect.dynamics
                             if (dyn.amount != 1.0) put("amount", dyn.amount)
@@ -2229,7 +2230,7 @@ class AiTools(private val state: State) {
                 parameters = spec.parameters,
                 speedMasterUuid = spec.speedMasterUuid,
                 rateSpeedMasterUuid = spec.rateSpeedMasterUuid,
-                seconds = spec.seconds,
+                ownBpm = spec.ownBpm,
                 amount = spec.amount,
                 direction = spec.direction,
                 runs = spec.runs,
@@ -2306,7 +2307,7 @@ class AiTools(private val state: State) {
             parameters = obj["parameters"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
             speedMasterUuid = timing.speedMasterUuid,
             rateSpeedMasterUuid = timing.rateSpeedMasterUuid,
-            seconds = timing.seconds,
+            ownBpm = timing.ownBpm,
             amount = dynamics.amount,
             direction = dynamics.direction,
             runs = dynamics.runs,
@@ -2363,7 +2364,7 @@ class AiTools(private val state: State) {
             parameters = obj["parameters"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
             speedMasterUuid = timing.speedMasterUuid,
             rateSpeedMasterUuid = timing.rateSpeedMasterUuid,
-            seconds = timing.seconds,
+            ownBpm = timing.ownBpm,
             amount = dynamics.amount,
             direction = dynamics.direction,
             runs = dynamics.runs,
@@ -2484,34 +2485,48 @@ class AiTools(private val state: State) {
         val cycle: Double,
         val speedMasterUuid: String?,
         val rateSpeedMasterUuid: String?,
-        val seconds: Boolean,
+        /** A beat effect's Own tempo (fx-speed plan D3), or null. */
+        val ownBpm: Double?,
     )
 
     /**
-     * The timing fields of one effect out of a tool call (venue-visit plan D7, D16).
+     * The timing fields of one effect out of a tool call (venue-visit plan D16, fx-speed plan D3–D5).
      *
-     * *Seconds* beside a master is refused — two answers to one question. An omitted `cycle`
-     * is the FX's own default (one bar but where its frontmatter says otherwise), and a **beat** effect that names no master and is not on Seconds is stamped with
-     * the master whose `family` matches its family — the library's family for its type, else the
-     * call's — as the effect editor stamps a new effect. Null keeps meaning master 1 everywhere: the
-     * stamp is a uuid written at creation, never a rule resolved later. A wall-clock effect is left
-     * unscaled, its own Seconds, since "one bar" means nothing to an effect timed in seconds.
+     * An Own tempo beside a master is refused — two answers to one question — as is one on a
+     * wall-clock effect. The old `seconds` is read by D5: a beat effect onto Own tempo 120 at twice a
+     * `cycle` sent as seconds, else at the tempo of the master it would have followed with its cycle
+     * kept; a wall-clock effect onto Natural. An omitted `cycle` is the FX's own default (one bar but
+     * where its frontmatter says otherwise), and a **beat** effect that names no master and is not on
+     * Own tempo is stamped with the master whose `family` matches its family — the library's family
+     * for its type, else the call's — as the effect editor stamps a new effect. Null keeps meaning
+     * master 1 everywhere: the stamp is a uuid written at creation, never a rule resolved later. A
+     * wall-clock effect is left on Natural, since "one bar" means nothing to an effect timed in seconds.
      */
     private fun parseFxTiming(obj: JsonObject, at: String): ParsedFxTiming {
         val seconds = obj.present("seconds")?.let {
             it.jsonPrimitive.booleanOrNull ?: throw IllegalArgumentException("$at: 'seconds' must be a boolean")
         } ?: false
+        val ownBpm = obj.present("ownBpm")?.let {
+            (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.doubleOrNull
+                ?: throw IllegalArgumentException("$at: 'ownBpm' must be a number")
+        }
         val speed = checkedSpeedMasterUuid(obj["speedMasterUuid"])
         val rate = checkedSpeedMasterUuid(obj["rateSpeedMasterUuid"])
-        secondsTimingConflict(seconds, speed, rate)?.let { throw IllegalArgumentException("$at: $it") }
-        val cycle = if (obj.present("cycle") == null) {
-            registrationFor(obj)?.defaultCycle ?: CycleLength.ONE_BAR
-        } else {
-            obj.requiredDouble("cycle", at)
+        ownTempoTimingConflict(ownBpm, seconds, null, speed, rate)?.let { throw IllegalArgumentException("$at: $it") }
+        val kind = registrationFor(obj)?.timingSource ?: TimingSource.BEAT
+        val sent = if (obj.present("cycle") == null) null else obj.requiredDouble("cycle", at)
+        val familyMaster = familyMasterFor(obj)
+        val clock = try {
+            resolveRequestedClock(kind, ownBpm, seconds, null, sent) {
+                state.show.fxEngine.speedMasters.runningBpmOf(familyMaster?.let(java.util.UUID::fromString))
+            }
+        } catch (e: IllegalArgumentException) {
+            throw IllegalArgumentException("$at: ${e.message}")
         }
+        val cycle = clock.cycle ?: registrationFor(obj)?.defaultCycle ?: CycleLength.ONE_BAR
         if (cycle <= 0.0) throw IllegalArgumentException("$at: 'cycle' must be greater than 0")
-        val stamped = speed ?: if (seconds) null else familyMasterFor(obj)
-        return ParsedFxTiming(cycle, stamped, rate, seconds)
+        val stamped = speed ?: if (clock.ownBpm != null) null else familyMaster
+        return ParsedFxTiming(cycle, stamped, rate, clock.ownBpm)
     }
 
     /** The registration of the effect [obj] names, whose defaults fill what the call leaves out. */
@@ -2555,7 +2570,7 @@ class AiTools(private val state: State) {
                 parameters = spec.parameters,
                 speedMasterUuid = spec.speedMasterUuid,
                 rateSpeedMasterUuid = spec.rateSpeedMasterUuid,
-                seconds = spec.seconds,
+                ownBpm = spec.ownBpm,
                 amount = spec.amount,
                 direction = spec.direction,
                 runs = spec.runs,

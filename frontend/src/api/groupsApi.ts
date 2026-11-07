@@ -86,8 +86,10 @@ export interface ApplyFxRequest {
   speedMasterUuid?: string
   /** Wall-clock rate master, as the master's uuid (omitted → unscaled). */
   rateSpeedMasterUuid?: string
-  /** On *Seconds* (D7): the division is seconds, no master. Never beside a master. */
-  seconds?: boolean
+  /** A beat effect's own tempo, 20–300 BPM, in place of a master. Never beside a master. */
+  ownBpm?: number
+  /** A wall-clock effect on *Natural*: no rate master. */
+  natural?: boolean
   /** Amount (effects plan D2), 0–1; omitted → 1. */
   amount?: number
   /** Direction (D5); omitted → forward. */
@@ -132,8 +134,10 @@ export interface GroupActiveFx {
   speedMasterUuid?: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null
-  /** D7's reading: follows no master. */
-  seconds?: boolean
+  /** A beat effect's own tempo, when it follows no master. */
+  ownBpm?: number | null
+  /** A wall-clock effect with no rate master. */
+  natural?: boolean
   /** Amount (effects plan D2), 0–1; absent at 1. */
   amount?: number
   /** Direction (D5); absent when forward. */

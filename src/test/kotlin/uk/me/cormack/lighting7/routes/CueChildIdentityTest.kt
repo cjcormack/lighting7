@@ -197,7 +197,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val (warm, cool) = client.twoLooks()
-        val dynamics = pulse.copy(seconds = true, cycle = 2.0, amount = 0.5, direction = "BOUNCE", runs = 3)
+        val dynamics = pulse.copy(ownBpm = 96.0, cycle = 2.0, amount = 0.5, direction = "BOUNCE", runs = 3)
         val chase = pulse.copy(targetKey = "hex-2", fxType = "Flicker", sortOrder = 1)
         val created = client.createCue(
             NewCue(
@@ -235,7 +235,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         val details = response.body<CueDetails>()
         assertEquals(listOf(true, false), details.layers.map { it.enabled }, "the disabled layer is stored")
         val moved = details.adHocFx.single { it.fxType == "Wave" }
-        assertEquals(listOf(true, 0.5, "BOUNCE", 3), listOf(moved.seconds, moved.amount, moved.direction, moved.runs))
+        assertEquals(listOf(96.0, 0.5, "BOUNCE", 3), listOf(moved.ownBpm, moved.amount, moved.direction, moved.runs))
     }
 
     @Test

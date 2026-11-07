@@ -177,8 +177,16 @@ data class AddFxRequest(
      */
     val rateSpeedMasterUuid: String? = null,
     /**
-     * Run on *Seconds* (venue-visit plan D7): [cycle] is the cycle in seconds and the effect
-     * follows no master. Refused beside either master.
+     * Run a beat effect on its *Own tempo* (fx-speed plan D3), 20–300 BPM: it follows no master, its
+     * [cycle] of beats at this tempo. Refused beside either master, and on a wall-clock effect.
+     */
+    val ownBpm: Double? = null,
+    /** Run a wall-clock effect on *Natural* (D4), no rate master. Refused beside either master. */
+    val natural: Boolean = false,
+    /**
+     * The old *Seconds* (venue-visit plan D7), read by D5: a beat effect onto Own tempo — 120 at twice
+     * a [cycle] sent as seconds, else the tempo of the master it would have followed with its cycle
+     * kept — and a wall-clock one onto Natural. Refused beside either master.
      */
     val seconds: Boolean = false,
     /** Amount (effects plan D2), 0–1; refused outside it. */
@@ -246,8 +254,9 @@ data class IndirectFxDto(
     val speedMasterUuid: String? = null,
     /** Wall-clock rate master (null → unscaled). Only meaningful for WALL_CLOCK effects. */
     val rateSpeedMasterUuid: String? = null,
-    /** D7's reading — see [FxDto.seconds]. */
-    val seconds: Boolean = false,
+    /** See [FxDto.ownBpm] and [FxDto.natural]. */
+    val ownBpm: Double? = null,
+    val natural: Boolean = false,
     /** See [FxDto.amount], [FxDto.direction], [FxDto.runs] and [FxDto.spent]. */
     val amount: Double = 1.0,
     val direction: String = "FORWARD",
@@ -282,15 +291,25 @@ data class UpdateFxRequest(
     /** Reassign the wall-clock rate master; null = no change, as above. */
     val rateSpeedMasterUuid: String? = null,
     /**
-     * Move the effect between *Seconds* and a master (venue-visit plan D7); null = no change.
-     *
-     * `true` puts it on Seconds: a beat effect runs its division as seconds with no master, and a
-     * wall-clock effect drops its rate master — the explicit *unscaled* `FU-FX-RATE-MASTER-CLEAR`
-     * asked for, since a null [rateSpeedMasterUuid] can only mean "no change". Refused beside either
-     * master. `false` puts it on a master: [speedMasterUuid] for a beat effect (absent → master 1),
-     * [rateSpeedMasterUuid] for a wall-clock one, which must then be named. Naming a master without
-     * this field also leaves Seconds. A move between Seconds and a master changes the loop the effect
-     * runs on, so it is a swap: the id is kept but the phase restarts.
+     * A beat effect onto its *Own tempo* (fx-speed plan D3), 20–300 BPM, or an Own tempo's new tempo;
+     * null = no change. Refused beside either master and on a wall-clock effect. Naming a master leaves
+     * Own tempo. A new tempo moves only the rate, so the phase is kept; a move between a master and
+     * Own tempo changes the loop the effect runs on, so it is a swap: the id is kept but the phase
+     * restarts.
+     */
+    val ownBpm: Double? = null,
+    /**
+     * `true` puts a wall-clock effect on *Natural* (D4), dropping its rate master — the explicit
+     * *unscaled*, since a null [rateSpeedMasterUuid] can only mean "no change". Refused beside either
+     * master and on a beat effect. `false` puts it on a rate master, which must then be named, as
+     * naming one does alone. Null = no change.
+     */
+    val natural: Boolean? = null,
+    /**
+     * The old *Seconds* (venue-visit plan D7), read by D5. `true`: a beat effect onto Own tempo — 120
+     * at twice a [cycle] sent as seconds, else its master's running tempo with its cycle kept — and a
+     * wall-clock one onto Natural. `false`: onto a master, [speedMasterUuid] (absent master 1) or
+     * [rateSpeedMasterUuid]. Refused beside either master when `true`.
      */
     val seconds: Boolean? = null,
     /** Amount (effects plan D2), 0–1; null = no change. Edited in place, phase kept. */
@@ -447,7 +466,18 @@ internal fun parseFxUpdate(state: State, existing: FxInstance, request: UpdateFx
         // dark — same rule the add path applies.
         newFx?.let { requireOutputTypeMatch(it, existing.target) }
 
-        val newTiming = request.cycle?.let { FxTiming(it, existing.timing.startOnBeat) }
+        val registration = request.fxType?.let { state.show.fxRegistry.getRegistration(it) }
+        val newTimingSource = request.fxType?.let { registration?.timingSource ?: TimingSource.BEAT }
+        val kind = newTimingSource ?: existing.registrationTimingSource
+
+        // Own tempo and Natural follow no master, so either beside a master is refused; a master named
+        // on an effect on its own clock takes it off. The old Seconds is read by D5.
+        ownTempoTimingConflict(request.ownBpm, request.seconds, request.natural, request.speedMasterUuid, request.rateSpeedMasterUuid)
+            ?.let { return refused(it) }
+        val clock = resolveRequestedClock(
+            kind, request.ownBpm, request.seconds.takeIf { it == true }, request.natural.takeIf { it == true }, request.cycle,
+        ) { existing.ownBpm ?: state.show.fxEngine.speedMasters.runningBpmOf(existing.speedMasterUuid) }
+        val newTiming = clock.cycle?.let { FxTiming(it, existing.timing.startOnBeat) }
         val newBlendMode = request.blendMode?.let { FxSpecCoercion.Strict.blendMode(it) }
         val newOrder = request.order?.let { FxSpecCoercion.Strict.order(it) }
         val newElementMode = request.elementMode?.let { FxSpecCoercion.Strict.elementMode(it) }
@@ -496,25 +526,24 @@ internal fun parseFxUpdate(state: State, existing: FxInstance, request: UpdateFx
                 request.fxType ?: existing.fxTypeId, stepsAfter,
             )?.let { return refused(it) }
         }
-        // Only when the client actually renamed the type; a parameters-only edit leaves the
+        // Only when the client actually renamed the type (above); a parameters-only edit leaves the
         // instance's registration id — and the clock it runs on — alone. A type swap takes the new
         // type's timing source with it, as the add path does, or a beat effect swapped for a
         // wall-clock one would run on the beat loop.
-        val registration = request.fxType?.let { state.show.fxRegistry.getRegistration(it) }
-        val newTimingSource = request.fxType?.let { registration?.timingSource ?: TimingSource.BEAT }
-
-        // D7. Seconds and a master are two answers to one question, so both is refused; a master
-        // named on an effect that is on Seconds takes it off Seconds.
-        secondsTimingConflict(request.seconds, request.speedMasterUuid, request.rateSpeedMasterUuid)
-            ?.let { return refused(it) }
-        val kind = newTimingSource ?: existing.registrationTimingSource
         val namesItsMaster = if (kind == TimingSource.BEAT) newSpeedMaster != null else newRateSpeedMaster != null
-        val newSeconds = request.seconds ?: if (namesItsMaster && existing.onSeconds) false else null
-        // A wall-clock effect's master *is* its rate master, so leaving Seconds has to say which.
-        if (newSeconds == false && kind == TimingSource.WALL_CLOCK && newRateSpeedMaster == null &&
+        val onOwnClock = existing.onOwnTempo || existing.onNatural
+        val offOwnClock = request.seconds == false || request.natural == false
+        val newClock = when {
+            clock.ownBpm != null -> FxClockMove.OntoOwnTempo(clock.ownBpm)
+            clock.natural -> FxClockMove.OntoNatural
+            offOwnClock || (namesItsMaster && onOwnClock) -> FxClockMove.OntoMaster
+            else -> null
+        }
+        // A wall-clock effect's master *is* its rate master, so leaving Natural has to say which.
+        if (newClock == FxClockMove.OntoMaster && kind == TimingSource.WALL_CLOCK && newRateSpeedMaster == null &&
             existing.rateSpeedMasterUuid == null
         ) {
-            return refused("seconds: false on a wall-clock FX names its master — send rateSpeedMasterUuid")
+            return refused("natural: false on a wall-clock FX names its master — send rateSpeedMasterUuid")
         }
 
         // A split cannot spread the shape over some heads: each split-off head runs alone. Refused
@@ -553,7 +582,7 @@ internal fun parseFxUpdate(state: State, existing: FxInstance, request: UpdateFx
                 newRateSpeedMasterUuid = newRateSpeedMaster,
                 newRegistrationId = registration?.id,
                 newTimingSource = newTimingSource,
-                newSeconds = newSeconds,
+                newClock = newClock,
                 newAmount = newAmount,
                 newDirection = newDirection,
                 newRuns = newRuns,
@@ -609,6 +638,29 @@ internal fun requestedSpreadShape(
 }
 
 /**
+ * The clock a request that starts an effect of [kind] asks for (fx-speed plan D3–D5): checked against
+ * the masters it names ([ownTempoTimingConflict]) and read by [resolveRequestedClock], the old
+ * Seconds without a cycle taking the tempo of [followed] — the master the effect would have run on,
+ * absent master 1. Throws for the add routes' 400. Shared by the fixture, group and programmer add
+ * routes, as [markProgrammerOwned] is.
+ */
+internal fun requestedClock(
+    speedMasters: SpeedMasterBank,
+    kind: TimingSource,
+    ownBpm: Double?,
+    seconds: Boolean,
+    natural: Boolean,
+    cycle: Double?,
+    speedMasterUuid: String?,
+    rateSpeedMasterUuid: String?,
+    followed: java.util.UUID? = null,
+): RequestedClock {
+    ownTempoTimingConflict(ownBpm, seconds, natural, speedMasterUuid, rateSpeedMasterUuid)
+        ?.let { throw IllegalArgumentException(it) }
+    return resolveRequestedClock(kind, ownBpm, seconds, natural, cycle) { speedMasters.runningBpmOf(followed) }
+}
+
+/**
  * Stamp an effect into the programmer's reserved priority band when the request asked for
  * it. Shared by the fixture (`/fx/add`) and group (`/groups/{name}/fx`) add routes so the
  * two can't drift. Must run *before* [FxEngine.addFx], which reads the priority to
@@ -649,7 +701,8 @@ private fun FxInstance.toIndirectDto() = IndirectFxDto(
     intensityMultiplier = intensityMultiplier,
     speedMasterUuid = reportedSpeedMasterUuid,
     rateSpeedMasterUuid = reportedRateSpeedMasterUuid,
-    seconds = onSeconds,
+    ownBpm = ownBpm,
+    natural = onNatural,
     amount = dynamics.amount,
     direction = dynamics.direction.name,
     runs = dynamics.runs,
@@ -672,6 +725,8 @@ internal fun buildFxInstance(
     request: AddFxRequest,
     fixtures: Fixtures = state.show.fixtures,
     engine: FxEngine = state.show.fxEngine,
+    /** The master the FX would have run on, whose tempo the old Seconds without a cycle takes (D5); absent master 1. */
+    followed: java.util.UUID? = null,
 ): FxInstance {
     val effect = createFxFromRequest(request, state)
     // The effect first: its output type is what tells FxTargetFactory that a
@@ -679,8 +734,13 @@ internal fun buildFxInstance(
     val target = createTargetFromRequest(request, state, effect.outputType, fixtures)
     requireOutputTypeMatch(effect, target)
     val registration = state.show.fxRegistry.getRegistration(request.fxType)
+    val kind = registration?.timingSource ?: TimingSource.BEAT
+    val clock = requestedClock(
+        state.show.fxEngine.speedMasters, kind, request.ownBpm, request.seconds, request.natural, request.cycle,
+        request.speedMasterUuid, request.rateSpeedMasterUuid, followed,
+    )
     val timing = FxTiming(
-        cycle = request.cycle ?: registration?.defaultCycle ?: CycleLength.ONE_BAR,
+        cycle = clock.cycle ?: registration?.defaultCycle ?: CycleLength.ONE_BAR,
         startOnBeat = request.startOnBeat
     )
     val blendMode = FxSpecCoercion.Strict.blendMode(request.blendMode)
@@ -708,11 +768,9 @@ internal fun buildFxInstance(
     registration?.timingSource?.let { instance.timingSource = it }
     instance.registrationId = registration?.id
 
-    secondsTimingConflict(request.seconds, request.speedMasterUuid, request.rateSpeedMasterUuid)
-        ?.let { throw IllegalArgumentException(it) }
     instance.speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)
     instance.rateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid)
-    instance.applyTimingChoice(registration?.timingSource ?: TimingSource.BEAT, request.seconds)
+    instance.applyTimingChoice(kind, clock.ownBpm, clock.natural)
 
     markProgrammerOwned(instance, request.programmerOwned)
     if (request.targets != null) {

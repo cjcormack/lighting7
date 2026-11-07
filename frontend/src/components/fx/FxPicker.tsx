@@ -31,7 +31,7 @@ import {
 import { useApplyGroupFxMutation, useRemoveGroupFxMutation } from '@/store/groups'
 import { useIsDeskConnected } from '@/store/status'
 import { useSpeedMasterForFamily } from '@/store/speedMasters'
-import { isOnSeconds, newFxDirection, newFxDivision, presetDefaults, swappedTiming } from '@/lib/fxTiming'
+import { isWallClock, newFxDirection, newFxDivision, presetDefaults, swappedTiming } from '@/lib/fxTiming'
 import { usePaletteListQuery } from '@/store/palettes'
 import {
   categoryForFamily,
@@ -84,7 +84,7 @@ export interface DraftFxPick {
   cycle: number
   /** Its type's own Direction — Bounce for the FX that bounce (terminology plan D24). */
   direction: FxDirection
-  /** The master tagged with the family (D16); absent on a wall-clock effect, which starts on its own Seconds. */
+  /** The master tagged with the family (D16); absent on a wall-clock effect, which starts on Natural. */
   speedMasterUuid?: string | null
   blendMode: string
   parameters: Record<string, string>
@@ -420,12 +420,10 @@ export function FxPicker({
       // A swap across units (a beat effect for a wall-clock flicker) would carry the number across
       // them — 16 beats becoming 16 seconds — so it lands on the new type's own cycle; a swap within
       // one unit keeps the operator's speed and Direction, but for one still at the old type's
-      // default ([swappedTiming]). The desk keeps the swapped effect's timing choice (D7), so a beat
-      // effect on Seconds stays in seconds whichever type it becomes, and the running effect's loop
-      // already reads `WALL_CLOCK` for one.
-      const runningOnSeconds = runningFx != null && isOnSeconds(runningFx, runningFx.timingSource)
-      const fromUnit = (runningFx?.timingSource ?? 'BEAT') === 'WALL_CLOCK' ? 'seconds' : 'beats'
-      const toUnit = entry.timingSource === 'WALL_CLOCK' || runningOnSeconds ? 'seconds' : 'beats'
+      // default ([swappedTiming]). A beat effect on its own tempo reports the `WALL_CLOCK` loop, but
+      // its cycle is beats.
+      const fromUnit = runningFx != null && isWallClock(runningFx, runningFx.timingSource ?? 'BEAT') ? 'seconds' : 'beats'
+      const toUnit = entry.timingSource === 'WALL_CLOCK' ? 'seconds' : 'beats'
       const fromEntry = library?.find((e) => normalizeFxName(e.name) === normalizeFxName(running.fxType))
       const fromPreset = fromEntry?.presets?.find((p) => p.name === pickedPreset)
       const timing = swappedTiming(runningFx ?? {}, presetDefaults(fromEntry, fromPreset), defaults, fromUnit === toUnit)
@@ -461,7 +459,7 @@ export function FxPicker({
         // A new effect runs at its type's own cycle (one bar but for the FX that bounce) on the
         // master tagged with its family, else master 1 (venue-visit plan D16) — stamped
         // here, as the palette editor stamps one, so a null still means master 1 everywhere. A
-        // wall-clock effect starts on its own Seconds.
+        // wall-clock effect starts on Natural.
         cycle: newFxDivision(defaults),
         direction: newFxDirection(defaults),
         ...(entry.timingSource === 'WALL_CLOCK' ? {} : { speedMasterUuid: master }),

@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { Pause, Play, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { isWallClock } from '@/lib/fxTiming'
 import { lightingApi } from '@/api/lightingApi'
 import type { UpdateFxRequest } from '@/api/fxApi'
 import { useFxLibraryQuery, useResetFxToPaletteMutation, type ActiveFx, type FxLibraryEntry } from '@/store/fixtureFx'
@@ -206,12 +207,13 @@ export function FxEditor({
       return
     }
     const request = updateRequestOf(snapshot, setFields.current, master1Uuid)
-    // A revert onto *Seconds* sends `seconds: true`, which clears both masters on the desk — so the
-    // snapshot's (none) is what the rig holds. Otherwise a master the frame could not put back stays
-    // drawn as the desk holds it: a never-assigned speed master needs master 1's uuid, which may not
-    // have arrived. Drawing the snapshot there would show a state the rig is not in.
+    // A revert onto Own tempo or Natural sends `ownBpm` or `natural: true`, which clears the masters
+    // on the desk — so the snapshot's (none) is what the rig holds. Otherwise a master the frame could
+    // not put back stays drawn as the desk holds it: a never-assigned speed master needs master 1's
+    // uuid, which may not have arrived. Drawing the snapshot there would show a state the rig is not in.
+    const freed = request.ownBpm != null || request.natural === true
     const keepsDrawn = (field: 'speedMasterUuid' | 'rateSpeedMasterUuid') =>
-      request.seconds !== true && setFields.current.has(field) && request[field] == null
+      !freed && setFields.current.has(field) && request[field] == null
     setDraft({
       ...snapshot,
       speedMasterUuid: keepsDrawn('speedMasterUuid') ? draft.speedMasterUuid : snapshot.speedMasterUuid,
@@ -242,7 +244,7 @@ export function FxEditor({
       draft: { ...draft, parameters: { ...libraryDefaults, ...draft.parameters } },
       levels,
       ...(levelPair != null ? { levelParams: levelPair } : {}),
-      wallClock: (entry?.timingSource ?? effect.timingSource) === 'WALL_CLOCK',
+      wallClock: isWallClock(draft, entry?.timingSource ?? effect.timingSource),
       steps,
       readOnly: !connected || holding,
       set: (patch, release) => write({ ...draftRef.current, ...patch }, release, OPTIONAL_FIELDS.filter((field) => field in patch)),

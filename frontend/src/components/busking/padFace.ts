@@ -71,7 +71,7 @@ export function describePalette(template: PaletteSummary): string {
     if (template.fx == null) return 'FX'
     // No master label: that reads a live bank through a hook, and this string has to be renderable
     // by the overlay ghost. The pad draws `FxPadDetail` over it and gains the `· M2`.
-    const speed = fxSpeedLabel(template.fx.cycle, template.fx.timingSource, template.fx.seconds)
+    const speed = fxSpeedLabel(template.fx.cycle, template.fx.timingSource, template.fx.ownBpm)
     return [
       template.fx.fxType,
       speed,

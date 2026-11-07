@@ -57,7 +57,7 @@ describe('lensDivision', () => {
     expect(lensDivision(effect({ cycle: 4 }))).toBe('1 bar')
     expect(lensDivision(effect({ cycle: 2 }))).toBe('2 beats')
     expect(lensDivision(effect({ cycle: 4, timingSource: 'WALL_CLOCK' }))).toBe('4 s')
-    expect(lensDivision(effect({ cycle: 0.5, seconds: true }))).toBe('0.5 s')
+    expect(lensDivision(effect({ cycle: 0.5, ownBpm: 96, timingSource: 'WALL_CLOCK' }))).toBe('½')
   })
 })
 

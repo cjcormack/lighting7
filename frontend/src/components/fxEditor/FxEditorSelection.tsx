@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { ChevronDown, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { isWallClock } from '@/lib/fxTiming'
 import { SheetPage } from '@/components/sheet/SheetPage'
 import { ProgrammerTableTabs, useProgrammerTables } from '@/components/programmer/ProgrammerTableTabs'
 import { DeskChip } from '@/components/desk/DeskChip'
@@ -248,7 +249,7 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
         .filter((c) => c.effect.id !== picked?.id)
         .map((c) => {
           const entry = findFxEntry(library, c.effect.fxType)
-          return { effect: c.effect, name: entry?.name ?? c.effect.fxType, wallClock: (entry?.timingSource ?? c.effect.timingSource) === 'WALL_CLOCK' }
+          return { effect: c.effect, name: entry?.name ?? c.effect.fxType, wallClock: isWallClock(c.effect, entry?.timingSource ?? c.effect.timingSource) }
         }),
     [cards, library, picked?.id],
   )

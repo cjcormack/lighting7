@@ -1047,7 +1047,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a recorded effect keeps its timing — a master, or Seconds`() = testApplication {
+    fun `a recorded effect keeps its timing — a master, or its Own tempo`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
@@ -1055,8 +1055,9 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         val stackId = createStack(client, "stack-a")
         val master = state.show.fxEngine.speedMasters.masterStates().first().uuid!!.toString()
 
-        // A busked effect on a named master, and one on Seconds (venue-visit plan S15, D7). Record
-        // dropped the master before S15, so a recorded busk fell back to master 1.
+        // A busked effect on a named master, and one on the old Seconds, which is Own tempo 120 at twice
+        // its cycle (fx-speed plan D5). Record dropped the master before S15, so a recorded busk fell
+        // back to master 1.
         for ((key, request) in listOf(
             "hex-1" to AddFxRequest(
                 fxType = "Wave", fixtureKey = "hex-1", attribute = "dimmer",
@@ -1080,11 +1081,11 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
         val onMaster = response.cue.adHocFx.single { it.targetKey == "hex-1" }
         assertEquals(master, onMaster.speedMasterUuid)
-        assertEquals(false, onMaster.seconds)
-        val onSeconds = response.cue.adHocFx.single { it.targetKey == "hex-2" }
-        assertTrue(onSeconds.seconds)
-        assertEquals(8.0, onSeconds.cycle)
-        assertNull(onSeconds.speedMasterUuid)
+        assertNull(onMaster.ownBpm)
+        val onOwn = response.cue.adHocFx.single { it.targetKey == "hex-2" }
+        assertEquals(120.0, onOwn.ownBpm)
+        assertEquals(16.0, onOwn.cycle)
+        assertNull(onOwn.speedMasterUuid)
     }
 
     /** A Look whose one group row lands on hex-1 and hex-2, as a layer source. */

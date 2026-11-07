@@ -608,11 +608,11 @@ internal fun fxInstancesToCueChildren(
                     sortOrder = adHocFx.size,
                     // The cue child Include brought it back from, which Merge writes it onto.
                     uuid = effect.programmerOrigin?.childUuid,
-                    // The effect's timing (venue-visit plan S15, D7) — its master, or Seconds. The
+                    // The effect's timing (venue-visit plan S15) — its master, or its Own tempo. The
                     // masters were left behind here before S15, so a recorded busk fell back to master 1.
                     speedMasterUuid = effect.speedMasterUuid?.toString(),
                     rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
-                    seconds = effect.seconds,
+                    ownBpm = effect.ownBpm,
                     amount = dyn.amount,
                     direction = dyn.direction.name,
                     runs = dyn.runs,

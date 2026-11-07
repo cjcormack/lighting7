@@ -305,9 +305,10 @@ export interface KeyStackLayer {
   running?: boolean | null
   speedMasterUuid?: string | null
   rateSpeedMasterUuid?: string | null
-  /** The two effect kinds: the loop, and whether the effect is on Seconds (its division is seconds). */
+  /** The two effect kinds: the loop, a beat effect's own tempo, and a wall-clock effect's *Natural*. */
   timingSource?: string | null
-  seconds?: boolean | null
+  ownBpm?: number | null
+  natural?: boolean | null
   /** The two effect kinds: Size (effects plan D2, 0–1) and Direction (D5) — what `onStage` already weighs. */
   amount?: number | null
   direction?: string | null

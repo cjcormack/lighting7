@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.canonicalAttributeName
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
+import uk.me.cormack.lighting7.fx.storedClock
 import uk.me.cormack.lighting7.fx.CueApplyData
 import uk.me.cormack.lighting7.fx.buildCueApplyData
 import uk.me.cormack.lighting7.fx.republishCueLayer
@@ -453,7 +454,7 @@ private fun DaoCueAdHocFxEntity.matches(dto: CueAdHocFxDto, registry: FxRegistry
  * [effect]'s settings in one spelling, so a stored child and the FX Capture read back compare equal
  * whenever they spawn the same effect: names as the spawner parses them, an element mode as
  * [ElementMode.stored] keeps it, the filter and step timing filled in with their defaults, the parameters laid over the
- * library's, Seconds and the masters as `applyTimingChoice` reads them, and no family beside a
+ * library's, Own tempo and the masters as `applyTimingChoice` reads them, and no family beside a
  * property, which the spawner then never reads. Timing, place and uuids are blanked: the cue owns the
  * first two, and the match was made on the last.
  */
@@ -461,8 +462,8 @@ private fun CueAdHocFxDto.canonical(registry: FxRegistry): CueAdHocFxDto {
     val registration = registry.getRegistration(fxType)
     val overMembers = targetType == TargetRef.Group.TYPE || targetType == FxTargetsRef.Selection.TYPE
     val names = FxSpecCoercion.Names
-    // A wall-clock effect is on Seconds whenever it has no rate master, flag or not.
-    val beatSeconds = seconds && registration?.timingSource != TimingSource.WALL_CLOCK
+    // Own tempo is a beat effect's: a wall-clock row naming one runs on Natural at the seconds it meant.
+    val (own, runsAt) = storedClock(registration?.timingSource ?: TimingSource.BEAT, ownBpm, cycle)
     return copy(
         fxType = registration?.id ?: fxType,
         family = if (attribute != null) "" else family,
@@ -476,9 +477,10 @@ private fun CueAdHocFxDto.canonical(registry: FxRegistry): CueAdHocFxDto {
         elementFilter = elementFilter?.let { names.elementFilter(it)?.name ?: it } ?: ElementFilter.ALL.name,
         timing = timing ?: registration?.defaultTiming ?: Timing.CYCLE,
         parameters = registration?.parameters.orEmpty().associate { it.name to it.defaultValue } + parameters,
-        seconds = beatSeconds,
-        speedMasterUuid = if (beatSeconds) null else speedMasterUuidOrNull(speedMasterUuid)?.toString(),
-        rateSpeedMasterUuid = if (seconds) null else speedMasterUuidOrNull(rateSpeedMasterUuid)?.toString(),
+        cycle = runsAt,
+        ownBpm = own,
+        speedMasterUuid = if (ownBpm != null) null else speedMasterUuidOrNull(speedMasterUuid)?.toString(),
+        rateSpeedMasterUuid = if (ownBpm != null) null else speedMasterUuidOrNull(rateSpeedMasterUuid)?.toString(),
         direction = names.canonicalDirection(direction),
         delayMs = null,
         intervalMs = null,

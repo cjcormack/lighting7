@@ -330,7 +330,7 @@ beforeEach(() => {
   mocks.effects = [
     effect(1, { fxType: 'Pulse', targetKey: 'front', isGroupTarget: true, speedMasterUuid: 'm2' }),
     effect(2, { fxType: 'Circle', attribute: 'position', amount: 0.6, direction: 'BOUNCE' }),
-    effect(3, { fxType: 'Lightning', programmerOwned: false, programmerLayerId: 12, runs: 3, spent: true, seconds: true, timingSource: 'WALL_CLOCK', cycle: 4 }),
+    effect(3, { fxType: 'Lightning', programmerOwned: false, programmerLayerId: 12, runs: 3, spent: true, ownBpm: 90, timingSource: 'WALL_CLOCK', cycle: 4 }),
     effect(4, { fxType: 'CandleFlicker', programmerOwned: false, cueId: 9, isRunning: false }),
   ]
   mocks.layers = [
@@ -359,7 +359,7 @@ describe('the FX table', () => {
     expect(rowOf('fx:2')).toHaveTextContent('M1 · 120')
     expect(rowOf('fx:2')).toHaveTextContent('60%')
     expect(rowOf('fx:2')).toHaveTextContent('↔')
-    expect(rowOf('fx:3')).toHaveTextContent('Seconds')
+    expect(rowOf('fx:3')).toHaveTextContent('Own 90')
     expect(rowOf('fx:3')).toHaveTextContent('3× · spent')
     expect(rowOf('fx:3')).toHaveTextContent('in Flash 3x')
     // Blind holds the programmer's own effects, and only those.

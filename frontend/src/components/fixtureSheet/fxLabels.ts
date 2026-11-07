@@ -5,13 +5,13 @@ import { useProjectCueStackListQuery } from '@/store/cueStacks'
 import { usePaletteListQuery } from '@/store/palettes'
 import { isCueRow } from '@/api/cueStacksApi'
 import { fxSpeedLabel } from '../fx/fxConstants'
-import { isOnSeconds } from '@/lib/fxTiming'
+import { followsNoMaster, isWallClock } from '@/lib/fxTiming'
 import type { ActiveFx } from '@/store/fixtureFx'
 
 /**
  * An effect's speed and master as the sheet's chips spell it — `1 bar · M2`, the busk pad's
- * `FxPadDetail` vocabulary. A beat effect with no master runs on master 1; an effect on
- * *Seconds* (D7 — a wall-clock one with no rate master is one) names no master, its `4 s` saying
+ * `FxPadDetail` vocabulary. A beat effect with no master runs on master 1; one on its own tempo
+ * names its tempo, `1 bar · Own 96`, and a wall-clock one on Natural names none, its `4 s` saying
  * what it runs on. Read from the live bank once, so a row and a tray chip do not each subscribe.
  */
 export function useFxDetail(): (effect: ActiveFx) => string {
@@ -19,12 +19,11 @@ export function useFxDetail(): (effect: ActiveFx) => string {
   const indexByUuid = useMemo(() => new Map((data ?? []).map((m) => [m.uuid, m.index])), [data])
   return useCallback(
     (effect: ActiveFx) => {
-      const seconds = isOnSeconds(effect, effect.timingSource)
-      const wallClock = effect.timingSource === 'WALL_CLOCK'
+      const wallClock = isWallClock(effect, effect.timingSource)
       const uuid = wallClock ? effect.rateSpeedMasterUuid : effect.speedMasterUuid
       const index = uuid != null ? indexByUuid.get(uuid) : undefined
-      const master = seconds ? null : index != null ? `M${index}` : 'M1'
-      return [fxSpeedLabel(effect.cycle, effect.timingSource, seconds), master].filter(Boolean).join(' · ')
+      const master = followsNoMaster(effect, effect.timingSource) ? null : index != null ? `M${index}` : 'M1'
+      return [fxSpeedLabel(effect.cycle, effect.timingSource, effect.ownBpm), master].filter(Boolean).join(' · ')
     },
     [indexByUuid],
   )

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { lightingApi } from '@/api/lightingApi'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
-import { getCycleLabel, secondsLabel } from '../fx/fxConstants'
+import { fxSpeedLabel } from '../fx/fxConstants'
 import { EditorSurface } from '../editor/EditorSurface'
 import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
@@ -53,10 +53,9 @@ interface LayerLine {
 /** One stack entry in the Layers board's words. Pure, so the kinds read as a table. */
 export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: number) => string | undefined): LayerLine {
   const fxName = layer.fxName ?? layer.fxType ?? 'FX'
-  // On Seconds, or a wall-clock effect, the division is seconds (venue-visit plan D7).
-  const inSeconds = layer.seconds === true || layer.timingSource === 'WALL_CLOCK'
-  const division =
-    layer.cycle == null ? null : inSeconds ? secondsLabel(layer.cycle) : getCycleLabel(layer.cycle)
+  // A wall-clock effect's division is seconds; a beat effect on its own tempo reports the wall-clock
+  // loop, but its division is beats.
+  const division = layer.cycle == null ? null : fxSpeedLabel(layer.cycle, layer.timingSource ?? 'BEAT', layer.ownBpm)
   const paused = layer.running === false ? 'paused' : null
   switch (layer.kind) {
     case 'PARK':

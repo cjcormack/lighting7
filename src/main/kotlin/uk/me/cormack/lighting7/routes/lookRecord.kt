@@ -738,7 +738,7 @@ private fun DaoLookFxEntity.takeSettings(settings: LookFxSettings) {
     parameters = settings.parameters
     speedMasterUuid = settings.speedMasterUuid
     rateSpeedMasterUuid = settings.rateSpeedMasterUuid
-    seconds = settings.seconds
+    ownBpm = settings.ownBpm
     amount = settings.amount
     direction = settings.direction
     runs = settings.runs
@@ -780,16 +780,18 @@ private fun DaoLookFxEntity.takeChanges(baseline: LookFxSettings, edited: LookFx
     if (edited.segments != baseline.segments) segments = edited.segments
     if (edited.parts != baseline.parts) parts = edited.parts
     if (edited.spreadUnit != baseline.spreadUnit) spreadUnit = edited.spreadUnit
-    // The timing is one choice (D7) — Seconds or a master — so it is written whole when any part of it
-    // moved: a wall-clock row stored with the flag keeps reading Seconds after a rate master is named
-    // unless the flag is cleared with it, and an edit onto Seconds nulls the masters beside it.
-    val timingMoved = edited.seconds != baseline.seconds ||
+    // The clock is one choice (fx-speed plan D3) — Own tempo or a master — so it is written whole when
+    // any part of it moved: an edit onto Own tempo nulls the masters beside it, and one onto a master
+    // clears the Own tempo. A cycle is read on its clock, so a new one writes the running clock with it:
+    // a row whose Own tempo the instance does not run (a wall-clock one, spawned on Natural) is then
+    // stored as it runs.
+    val timingMoved = edited.ownBpm != baseline.ownBpm || (edited.cycle != baseline.cycle && ownBpm != edited.ownBpm) ||
         edited.speedMasterUuid != baseline.speedMasterUuid ||
         edited.rateSpeedMasterUuid != baseline.rateSpeedMasterUuid
     if (timingMoved) {
         speedMasterUuid = edited.speedMasterUuid
         rateSpeedMasterUuid = edited.rateSpeedMasterUuid
-        seconds = edited.seconds
+        ownBpm = edited.ownBpm
     }
 }
 

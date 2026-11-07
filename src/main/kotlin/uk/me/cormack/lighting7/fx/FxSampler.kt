@@ -97,7 +97,7 @@ internal class FxSampler(
         val sampleMs = cycleMs / SAMPLES_PER_CYCLE
         val lengthMs = when (val window = request.window) {
             is FxSampleWindow.Cycles -> window.cycles * cycleMs
-            is FxSampleWindow.Beats -> window.beats * MasterClock.TICKS_PER_BEAT * clock.msPerTick(windowSlot(picked.first(), reads))
+            is FxSampleWindow.Beats -> window.beats * windowMsPerBeat(picked.first(), clock, reads)
             is FxSampleWindow.Seconds -> window.seconds * 1000.0
         }
         var samples = ceil(lengthMs / sampleMs - TICK_EPSILON).toInt().coerceAtLeast(1)
@@ -192,13 +192,15 @@ internal class FxSampler(
     }
 
     /**
-     * One request's reads of each FX — its dynamics, the heads it paints and its masters' slots —
+     * One request's reads of each FX — its dynamics, the heads it paints, its masters' slots and its Own
+     * tempo —
      * taken once, so every part of the request works from one snapshot, as the compose pass does.
      */
     internal inner class Reads {
         private val dynamics = HashMap<FxInstance, FxDynamics>()
         private val members = HashMap<FxInstance, Map<String, Member>>()
         private val slots = HashMap<FxInstance, IntArray>()
+        private val ownTempi = HashMap<FxInstance, Double?>()
 
         fun dynamicsOf(effect: FxInstance): FxDynamics = dynamics.getOrPut(effect) { effect.dynamics }
 
@@ -208,6 +210,9 @@ internal class FxSampler(
         fun speedSlotOf(effect: FxInstance): Int = slotsOf(effect)[0]
 
         fun rateSlotOf(effect: FxInstance): Int = slotsOf(effect)[1]
+
+        /** Its Own tempo as the request first read it, since a tap writes it in place mid-request. */
+        fun ownBpmOf(effect: FxInstance): Double? = ownTempi.getOrPut(effect) { effect.ownBpm }
 
         private fun slotsOf(effect: FxInstance) = slots.getOrPut(effect) {
             intArrayOf(view.speedSlot(effect.speedMasterUuid), view.rateSlot(effect.rateSpeedMasterUuid))
@@ -401,7 +406,7 @@ internal class FxSampler(
             FxPhase.beatPhaseAt(ticks, anchor, division, member.groupSize, dyn, member.offset)
         } else {
             val start = effect.accumulatedScaledMs
-            val scaledMs = start + offsetMs * clock.rateScale(reads.rateSlotOf(effect))
+            val scaledMs = start + offsetMs * wallClockRate(effect, clock, reads)
             val anchor = effect.runsStartScaledMs.takeUnless { it.isNaN() || it > start } ?: start
             own[s] = FxPhase.wallClockOwnCyclesAt(scaledMs, anchor, division, dyn, member.offset)
             FxPhase.wallClockPhaseAt(scaledMs, anchor, division, member.groupSize, dyn, member.offset)
@@ -477,9 +482,21 @@ internal class FxSampler(
         return if (effect.timingSource == TimingSource.BEAT) {
             division * MasterClock.TICKS_PER_BEAT * clock.msPerTick(reads.speedSlotOf(effect))
         } else {
-            division * 1000.0 / clock.rateScale(reads.rateSlotOf(effect))
+            division * 1000.0 / wallClockRate(effect, clock, reads)
         }
     }
+
+    /**
+     * The rate [effect]'s wall-clock accumulator advances at: its Own tempo's (fx-speed plan D3), else
+     * its rate master's scale, 1 on Natural — as the engine's pass advances it.
+     */
+    private fun wallClockRate(effect: FxInstance, clock: FxSampleClock, reads: Reads): Double =
+        reads.ownBpmOf(effect)?.let(::ownTempoRate) ?: clock.rateScale(reads.rateSlotOf(effect))
+
+    /** A beat of the tempo a beat window counts on [effect]: its Own tempo's, else [windowSlot]'s master's. */
+    fun windowMsPerBeat(effect: FxInstance, clock: FxSampleClock, reads: Reads = Reads()): Double =
+        reads.ownBpmOf(effect)?.let { 60_000.0 / it }
+            ?: (MasterClock.TICKS_PER_BEAT * clock.msPerTick(windowSlot(effect, reads)))
 
     private fun fresh(effect: FxInstance): Fx? = try {
         freshFx(effect)
@@ -489,7 +506,7 @@ internal class FxSampler(
 
     /**
      * The master a beat window counts beats on: a beat FX's speed master, a wall-clock FX's rate
-     * master, or master 1 for one on its own seconds.
+     * master, or master 1 for one on Natural. An FX on Own tempo counts its own ([windowMsPerBeat]).
      */
     fun windowSlot(effect: FxInstance, reads: Reads = Reads()): Int = when {
         effect.timingSource == TimingSource.BEAT -> reads.speedSlotOf(effect)

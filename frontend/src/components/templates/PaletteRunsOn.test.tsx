@@ -116,8 +116,14 @@ describe('PaletteRunsOn', () => {
       />,
     )
     expect(screen.getByText('2 s')).toBeTruthy()
-    expect(screen.getByText('Seconds — no master')).toBeTruthy()
+    expect(screen.getByText('Natural — no master')).toBeTruthy()
     expect(screen.queryByText('2 beats')).toBeNull()
+  })
+
+  it('reads a beat effect on its own tempo in beats, against that tempo', () => {
+    render(<PaletteRunsOn projectId={1} family="COLOUR" effect={effect({ ownBpm: 96 })} entry={beatEntry} />)
+    expect(screen.getByText('2 beats')).toBeTruthy()
+    expect(screen.getByText('Own tempo · 96 bpm')).toBeTruthy()
   })
 
   it('counts the heads with a beam effect’s one property', () => {

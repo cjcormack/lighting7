@@ -110,23 +110,34 @@ describe('fxEditorModel', () => {
     expect(updateRequestOf(draft, touched)).not.toHaveProperty('speedMasterUuid')
   })
 
-  it('sends Seconds with no master beside it, and a master with Seconds false (D7)', () => {
+  it('sends an Own tempo with no master beside it, and a master with no tempo (fx-speed plan D3)', () => {
     const onMaster = draftOf(makeActiveFx({ speedMasterUuid: 'm2' }))
-    expect(onMaster.seconds).toBe(false)
-    const touched = new Set(['seconds', 'speedMasterUuid', 'rateSpeedMasterUuid'] as const)
-    const toSeconds = updateRequestOf({ ...onMaster, seconds: true, speedMasterUuid: null }, touched, 'm1')
-    expect(toSeconds.seconds).toBe(true)
-    expect(toSeconds).not.toHaveProperty('speedMasterUuid')
-    expect(toSeconds).not.toHaveProperty('rateSpeedMasterUuid')
-    // Revert of a beat effect moved off its master: Seconds false and the master back.
-    expect(updateRequestOf(onMaster, touched, 'm1')).toMatchObject({ seconds: false, speedMasterUuid: 'm2' })
+    expect(onMaster.ownBpm).toBeNull()
+    const touched = new Set(['ownBpm', 'speedMasterUuid', 'rateSpeedMasterUuid'] as const)
+    const toOwn = updateRequestOf({ ...onMaster, ownBpm: 96, speedMasterUuid: null }, touched, 'm1')
+    expect(toOwn.ownBpm).toBe(96)
+    expect(toOwn).not.toHaveProperty('speedMasterUuid')
+    expect(toOwn).not.toHaveProperty('rateSpeedMasterUuid')
+    expect(toOwn).not.toHaveProperty('seconds')
+    // Revert of a beat effect moved off its master: the master back, which takes it off Own tempo.
+    const back = updateRequestOf(onMaster, touched, 'm1')
+    expect(back).toMatchObject({ speedMasterUuid: 'm2' })
+    expect(back).not.toHaveProperty('ownBpm')
   })
 
-  it("Revert puts a wall-clock effect back to unscaled — FU-FX-RATE-MASTER-CLEAR's close", () => {
-    const unscaled = draftOf(makeActiveFx({ timingSource: 'WALL_CLOCK', rateSpeedMasterUuid: null }))
-    expect(unscaled.seconds).toBe(true)
-    const request = updateRequestOf(unscaled, new Set(['seconds', 'rateSpeedMasterUuid'] as const))
-    expect(request.seconds).toBe(true)
+  it('off Own tempo onto master 1 before its uuid is known, says seconds: false rather than nothing', () => {
+    const draft = { ...draftOf(makeActiveFx({ timingSource: 'WALL_CLOCK', ownBpm: 96 })), ownBpm: null, speedMasterUuid: null }
+    const request = updateRequestOf(draft, new Set(['ownBpm', 'speedMasterUuid'] as const), null)
+    expect(request).toMatchObject({ seconds: false })
+    expect(request).not.toHaveProperty('ownBpm')
+    expect(updateRequestOf(draft, new Set(['ownBpm', 'speedMasterUuid'] as const), 'm1')).not.toHaveProperty('seconds')
+  })
+
+  it("Revert puts a wall-clock effect back on Natural — FU-FX-RATE-MASTER-CLEAR's close", () => {
+    const natural = draftOf(makeActiveFx({ timingSource: 'WALL_CLOCK', rateSpeedMasterUuid: null }))
+    expect(natural.natural).toBe(true)
+    const request = updateRequestOf(natural, new Set(['natural', 'rateSpeedMasterUuid'] as const))
+    expect(request.natural).toBe(true)
     expect(request).not.toHaveProperty('rateSpeedMasterUuid')
   })
 
@@ -285,32 +296,36 @@ describe('fxEditorModel', () => {
     expect(filteredElementCount(5, 'SECOND_HALF')).toBe(2)
   })
 
-  it('reads the desk\'s Seconds off a running effect, whatever loop it reports', () => {
-    expect(draftOf(makeActiveFx({ timingSource: 'WALL_CLOCK', seconds: true })).seconds).toBe(true)
-    expect(draftOf(makeActiveFx({ timingSource: 'WALL_CLOCK', rateSpeedMasterUuid: 'm2' })).seconds).toBe(false)
+  it('reads the desk\'s Own tempo and Natural off a running effect, whatever loop it reports', () => {
+    const own = draftOf(makeActiveFx({ timingSource: 'WALL_CLOCK', ownBpm: 96 }))
+    expect([own.ownBpm, own.natural]).toEqual([96, false])
+    expect(draftOf(makeActiveFx({ timingSource: 'WALL_CLOCK', natural: true })).natural).toBe(true)
+    expect(draftOf(makeActiveFx({ timingSource: 'WALL_CLOCK', rateSpeedMasterUuid: 'm2' })).natural).toBe(false)
   })
 
-  it('keeps a beat effect\'s speed when the chip moves it onto Seconds and back', () => {
-    const bpm = (uuid: string | null) => (uuid === 'm2' ? 60 : 120)
-    const beat = { cycle: 4, seconds: false, speedMasterUuid: null, rateSpeedMasterUuid: null }
-    // Four beats of master 1 at 120 BPM is two seconds.
-    expect(timingChoicePatch(beat, false, null, bpm)).toEqual({
-      seconds: true,
-      speedMasterUuid: null,
-      rateSpeedMasterUuid: null,
-      cycle: 2,
-    })
-    // Two seconds onto master 2 at 60 BPM is two beats.
-    expect(timingChoicePatch({ ...beat, seconds: true, cycle: 2 }, false, 'm2', bpm)).toEqual({
-      seconds: false,
-      speedMasterUuid: 'm2',
-      cycle: 2,
-    })
-    // A master to a master keeps the beats.
-    expect(timingChoicePatch(beat, false, 'm2', bpm)).toEqual({ seconds: false, speedMasterUuid: 'm2' })
-    // A wall-clock effect's number is seconds either way; its master is its rate master.
-    expect(timingChoicePatch({ ...beat, seconds: true }, true, 'm2', bpm)).toEqual({ seconds: false, rateSpeedMasterUuid: 'm2' })
-    expect(timingChoicePatch(beat, true, null, bpm)).toEqual({ seconds: true, speedMasterUuid: null, rateSpeedMasterUuid: null })
+  it('keeps a beat effect\'s speed when the chip moves it onto Own tempo, at its master\'s running tempo', () => {
+    const bpm = (uuid: string | null) => (uuid === 'm2' ? 96 : 120)
+    const beat = { ownBpm: null, speedMasterUuid: null }
+    // Master 1 runs at 120: the Own tempo starts there, the beats unchanged.
+    expect(timingChoicePatch(beat, false, null, bpm)).toEqual({ ownBpm: 120, speedMasterUuid: null, rateSpeedMasterUuid: null })
+    expect(timingChoicePatch({ ownBpm: null, speedMasterUuid: 'm2' }, false, null, bpm)).toMatchObject({ ownBpm: 96 })
+    // Already on Own tempo, the chip's pick keeps the tempo it has.
+    expect(timingChoicePatch({ ownBpm: 90, speedMasterUuid: null }, false, null, bpm)).toMatchObject({ ownBpm: 90 })
+    // Off Own tempo onto a master, the beats kept.
+    expect(timingChoicePatch({ ownBpm: 90, speedMasterUuid: null }, false, 'm2', bpm)).toEqual({ ownBpm: null, speedMasterUuid: 'm2' })
+    // No tempo to read starts at 120.
+    expect(timingChoicePatch(beat, false, null, () => 0)).toMatchObject({ ownBpm: 120 })
+    // A wall-clock effect's number is seconds either way; its master is its rate master, none Natural.
+    expect(timingChoicePatch(beat, true, 'm2', bpm)).toEqual({ natural: false, rateSpeedMasterUuid: 'm2' })
+    expect(timingChoicePatch(beat, true, null, bpm)).toEqual({ natural: true, rateSpeedMasterUuid: null })
+  })
+
+  it('sends Natural on a wall-clock effect with no rate master beside it', () => {
+    const scaled = draftOf(makeActiveFx({ timingSource: 'WALL_CLOCK', rateSpeedMasterUuid: 'm2' }))
+    const request = updateRequestOf({ ...scaled, natural: true, rateSpeedMasterUuid: null }, new Set(['natural', 'rateSpeedMasterUuid'] as const))
+    expect(request.natural).toBe(true)
+    expect(request).not.toHaveProperty('rateSpeedMasterUuid')
+    expect(request).not.toHaveProperty('ownBpm')
   })
 
   it('reads an axis from a camelCase word, never a substring', () => {

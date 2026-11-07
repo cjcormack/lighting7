@@ -2,6 +2,8 @@ package uk.me.cormack.lighting7.models
 
 import org.jetbrains.exposed.v1.javatime.duration
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.dao.IntEntity
@@ -87,6 +89,7 @@ data class LookRowDto(
  * The `delayMs` / `intervalMs` / `randomWindowMs` triple is **not** here: timing is a property of
  * the layer applying the Look, not of the Look itself, and it lives on [DaoCueLayers].
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class LookFxDto(
     val targetType: String,
@@ -107,11 +110,17 @@ data class LookFxDto(
     /** Wall-clock rate master (null → unscaled). See [LookFxSpec.rateSpeedMasterUuid]. */
     val rateSpeedMasterUuid: String? = null,
     /**
-     * On *Seconds* (venue-visit plan D7): the effect follows no master. A beat effect's
-     * `cycle` is then its own cycle in seconds; a wall-clock effect's is seconds already, and
-     * it is on Seconds whenever it has no rate master, flag or not. The masters are null beside it.
-     * See `fx/FxTimingChoice.kt`.
+     * A beat effect's *Own tempo* (fx-speed plan D3), 20–300 BPM: it follows no master, and its
+     * `cycle` of beats runs at this tempo. Null follows its master. A wall-clock effect has none: it
+     * is on *Natural* whenever it has no rate master. The masters are null beside it. See
+     * `fx/FxTimingChoice.kt`.
      */
+    val ownBpm: Double? = null,
+    /**
+     * **Read only, never written**: the retired *Seconds* (venue-visit plan D7), converted at the write
+     * boundary by D5 — a beat effect onto Own tempo 120 at twice [cycle], a wall-clock one onto Natural.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     val seconds: Boolean = false,
     /**
      * Amount (effects plan D2), 0.0–1.0: how much of the effect reaches the stage over what is
@@ -287,8 +296,8 @@ object DaoLookFx : IntIdTable("look_fx") {
     val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
     val rateSpeedMasterUuid = javaUUID("rate_speed_master_uuid").nullable()
 
-    /** D7's *Seconds* for a beat effect; see [LookFxSpec.seconds]. */
-    val seconds = bool("seconds").default(false)
+    /** A beat effect's Own tempo (fx-speed plan D3); null follows its master. See [LookFxSpec.ownBpm]. */
+    val ownBpm = double("own_bpm").nullable()
 
     /** Amount (effects plan D2), 0.0–1.0; see [LookFxSpec.amount]. */
     val amount = double("amount").default(1.0)
@@ -356,12 +365,11 @@ data class LookFxSpec(
      */
     val rateSpeedMasterUuid: String? = null,
     /**
-     * On *Seconds* (venue-visit plan D7): the effect follows no master. A beat effect's
-     * `cycle` is then its own cycle in seconds; a wall-clock effect's is seconds already, and
-     * it is on Seconds whenever it has no rate master, flag or not. The masters are null beside it.
-     * See `fx/FxTimingChoice.kt`.
+     * A beat effect's *Own tempo* (fx-speed plan D3), 20–300 BPM: it follows no master, and its
+     * `cycle` of beats runs at this tempo. Null follows its master. A wall-clock effect has none: it
+     * is on *Natural* whenever it has no rate master. See `fx/FxTimingChoice.kt`.
      */
-    val seconds: Boolean = false,
+    val ownBpm: Double? = null,
     /**
      * Amount (effects plan D2), 0.0–1.0: how much of the effect reaches the stage over what is
      * underneath, weighted after the blend (P3). Refused outside that range at the write boundary.
@@ -390,11 +398,11 @@ data class LookFxSpec(
 
 /**
  * This spec with a layer's beat-division override applied — a busk press's or an AI press's speed.
- * A spec on *Seconds* (D7) keeps its own cycle: the override is beats, and a Seconds effect follows
- * no master for a beat to mean anything against.
+ * A spec on Own tempo (fx-speed plan D3) keeps its own cycle: the override is a master's beats, and an
+ * Own tempo effect follows no master.
  */
 fun LookFxSpec.withCycleOverride(override: Double?): LookFxSpec =
-    if (override == null || seconds) this else copy(cycle = override)
+    if (override == null || ownBpm != null) this else copy(cycle = override)
 
 class DaoLookFxEntity(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<DaoLookFxEntity>(DaoLookFx)
@@ -415,7 +423,7 @@ class DaoLookFxEntity(id: EntityID<Int>) : IntEntity(id) {
     var parameters by DaoLookFx.parameters
     var speedMasterUuid by DaoLookFx.speedMasterUuid
     var rateSpeedMasterUuid by DaoLookFx.rateSpeedMasterUuid
-    var seconds by DaoLookFx.seconds
+    var ownBpm by DaoLookFx.ownBpm
     var amount by DaoLookFx.amount
     var direction by DaoLookFx.direction
     var runs by DaoLookFx.runs

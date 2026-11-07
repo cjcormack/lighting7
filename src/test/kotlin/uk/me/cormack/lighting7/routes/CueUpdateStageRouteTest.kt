@@ -354,16 +354,16 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val rig = seed()
-        val onSeconds = dimmerEffect("hex-1").copy(seconds = true, cycle = 2.0)
-        client.setFx(rig.q, onSeconds)
+        val onOwn = dimmerEffect("hex-1").copy(ownBpm = 96.0, cycle = 2.0)
+        client.setFx(rig.q, onOwn)
         manager.activateEntry(state, rig.a, rig.aQ)
         val id = state.show.fxEngine.cueFx(rig.q).single().id
 
-        client.setFx(rig.q, onSeconds.copy(seconds = false, cycle = 1.0))
+        client.setFx(rig.q, onOwn.copy(ownBpm = null, cycle = 1.0))
         assertEquals(UpdateStageFx(1, 0, 0), client.updateStage(rig.q).body<UpdateStageResponse>().fx)
         val updated = state.show.fxEngine.cueFx(rig.q).single()
         assertEquals(id, updated.id)
-        assertFalse(updated.seconds)
+        assertNull(updated.ownBpm)
         assertEquals(
             UpdateStageFx(0, 0, 0),
             client.updateStage(rig.q, dryRun = true).body<UpdateStageResponse>().fx,

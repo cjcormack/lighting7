@@ -11,6 +11,11 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.FxMode
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.fx.normalizeFxType
+import uk.me.cormack.lighting7.fx.StoredWriteClock
+import uk.me.cormack.lighting7.fx.TimingSource
+import uk.me.cormack.lighting7.fx.timingSourceByName
+import uk.me.cormack.lighting7.fx.wallClockFxTypes
+import uk.me.cormack.lighting7.fx.storedWriteClock
 import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.models.FixtureColours
 import uk.me.cormack.lighting7.models.ProjectKind
@@ -122,6 +127,7 @@ import uk.me.cormack.lighting7.state.logConverted
 import uk.me.cormack.lighting7.state.logKept
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
 import uk.me.cormack.lighting7.sync.dto.CueAdHocFxJson
+import uk.me.cormack.lighting7.sync.dto.StoredFxFields
 import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.CueStackEntryJson
 import uk.me.cormack.lighting7.sync.dto.LegacyCuePlacementJson
@@ -377,6 +383,10 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // as nothing; MIN stays at 5, since an older archive's rows are all literals. A reference to a
 // palette the archive does not hold is refused by name (`PALETTE_REFERENCE_INVALID`).
 //
+// v49 gave the stored FX shapes `ownBpm` and retired `seconds` (fx-speed plan D5). SUPPORTED moved
+// because a v48 reader would run an Own tempo effect on master 1; MIN stays at 5, since an older
+// archive's `seconds` is read as Own tempo or Natural.
+//
 // **These two constants are the real gate.** `FormatVersionJson.minReader` is *written* but never
 // read by the importer — `loadAndValidateArchive` compares against these — so bumping the DTO
 // alone leaves the gate wide open.
@@ -384,7 +394,7 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 48
+internal const val SUPPORTED_FORMAT_VERSION = 49
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -1449,7 +1459,9 @@ class ProjectImporter(private val state: State) {
                     fxType = e.fxType
                     family = e.family
                     attribute = e.attribute
-                    cycle = e.cycle
+                    // An older archive's Seconds as Own tempo, or Natural, with no master, as step 12 writes it (fx-speed plan D5).
+                    val clock = importedClock(e, legacy)
+                    cycle = clock.cycle
                     blendMode = e.blendMode
                     order = e.order
                     phaseOffset = e.phaseOffset
@@ -1457,9 +1469,9 @@ class ProjectImporter(private val state: State) {
                     elementFilter = e.elementFilter
                     timing = e.timing
                     parameters = e.parameters
-                    speedMasterUuid = e.speedMasterUuid?.let { UUID.fromString(it) }
-                    rateSpeedMasterUuid = e.rateSpeedMasterUuid?.let { UUID.fromString(it) }
-                    seconds = e.seconds
+                    speedMasterUuid = if (clock.free && e.seconds) null else e.speedMasterUuid?.let { UUID.fromString(it) }
+                    rateSpeedMasterUuid = if (clock.free && e.seconds) null else e.rateSpeedMasterUuid?.let { UUID.fromString(it) }
+                    ownBpm = clock.ownBpm
                     amount = e.amount
                     direction = e.direction
                     runs = e.runs
@@ -2178,7 +2190,9 @@ class ProjectImporter(private val state: State) {
                     fxType = e.fxType
                     family = e.family
                     attribute = e.attribute
-                    cycle = e.cycle
+                    // An older archive's Seconds as Own tempo, or Natural, with no master, as step 12 writes it (fx-speed plan D5).
+                    val clock = importedClock(e, legacy)
+                    cycle = clock.cycle
                     blendMode = e.blendMode
                     order = e.order
                     phaseOffset = e.phaseOffset
@@ -2186,9 +2200,9 @@ class ProjectImporter(private val state: State) {
                     elementFilter = e.elementFilter
                     timing = e.timing
                     parameters = e.parameters
-                    speedMasterUuid = e.speedMasterUuid?.let { m -> UUID.fromString(m) }
-                    rateSpeedMasterUuid = e.rateSpeedMasterUuid?.let { m -> UUID.fromString(m) }
-                    seconds = e.seconds
+                    speedMasterUuid = if (clock.free && e.seconds) null else e.speedMasterUuid?.let { m -> UUID.fromString(m) }
+                    rateSpeedMasterUuid = if (clock.free && e.seconds) null else e.rateSpeedMasterUuid?.let { m -> UUID.fromString(m) }
+                    ownBpm = clock.ownBpm
                     amount = e.amount
                     direction = e.direction
                     runs = e.runs
@@ -2296,7 +2310,9 @@ class ProjectImporter(private val state: State) {
                 fxType = e.fxType
                 family = e.family
                 attribute = e.attribute
-                cycle = e.cycle
+                // An older archive's Seconds as Own tempo, or Natural, with no master, as step 12 writes it (fx-speed plan D5).
+                val clock = importedClock(e, legacy)
+                cycle = clock.cycle
                 blendMode = e.blendMode
                 order = e.order
                 phaseOffset = e.phaseOffset
@@ -2308,9 +2324,9 @@ class ProjectImporter(private val state: State) {
                 interval = e.intervalMs.asDuration()
                 randomWindow = e.randomWindowMs.asDuration()
                 sortOrder = e.sortOrder
-                speedMasterUuid = e.speedMasterUuid?.let { UUID.fromString(it) }
-                rateSpeedMasterUuid = e.rateSpeedMasterUuid?.let { UUID.fromString(it) }
-                seconds = e.seconds
+                speedMasterUuid = if (clock.free && e.seconds) null else e.speedMasterUuid?.let { UUID.fromString(it) }
+                rateSpeedMasterUuid = if (clock.free && e.seconds) null else e.rateSpeedMasterUuid?.let { UUID.fromString(it) }
+                ownBpm = clock.ownBpm
                 amount = e.amount
                 direction = e.direction
                 runs = e.runs
@@ -2780,6 +2796,15 @@ class ProjectImporter(private val state: State) {
     }
 
     /**
+     * An archive row's clock (fx-speed plan D5): its Own tempo, or an older archive's `seconds` read as
+     * Own tempo 120 at twice its cycle on a beat effect and Natural on a wall-clock one — told apart by
+     * name, a built-in or one of the archive's FX definitions on the wall clock ([LegacyNames.Context.wallClock]),
+     * as the database step tells them, with no registry to ask.
+     */
+    private fun importedClock(e: StoredFxFields, legacy: LegacyNames.Context): StoredWriteClock =
+        storedWriteClock(timingSourceByName(e.fxType, legacy.wallClock), e.ownBpm, e.seconds, e.cycle)
+
+    /**
      * What [LegacyNames.rewriteFx] reads beside an archive's FX: its palettes, read only if an FX
      * names one; its script FX definitions; and whether an FX naming no `pingPong` predates it
      * ([LegacyNames.absentPingPongIsOn]).
@@ -2806,6 +2831,7 @@ class ProjectImporter(private val state: State) {
             definitions = { byId[normalizeFxType(it)] },
             absentPingPongIsOn = LegacyNames.absentPingPongIsOn(formatVersion, fxLibrary),
             writtenBeforeSiblings = formatVersion < LegacyNames.SIBLINGS_FORMAT_VERSION,
+            wallClock = wallClockFxTypes(definitions.filter { it.timingSource == TimingSource.WALL_CLOCK }.map { it.fxId }),
         )
     }
 

@@ -225,7 +225,7 @@ FX reference timing via `CycleLength` constants:
 
 Everything a person reads says the cycle in **beats a cycle** — `½ beat`, `1 beat`, `2 beats`,
 `1 bar`, `2 bars`, `4 bars` — from one table (`SPEED_STEPS` in the frontend's `fxConstants.ts`), the
-editor's segment and every chip alike; an FX on Seconds reads `4 s`. The note values the chips
+editor's segment and every chip alike; an FX on Own tempo reads its beats beside `Own 96`. The note values the chips
 once used (`1/4` for one beat) are gone (`FU-FE-FX-SPEED-SPELLING`, settled by S15).
 
 ## FX types
@@ -1128,7 +1128,7 @@ instance in the band — a busk, Include's children, a programmer layer's — is
 (whose rule is unchanged) against **one read of blind per pass**, the same read that empties the
 suppression map, so a Blind toggle landing mid-pass cannot pair an empty map with an unheld band. A
 held instance keeps its phase and skips only its apply: a beat FX's phase is its master's tick,
-a wall-clock FX's clock — including a beat FX on *Seconds*, which runs on that loop —
+a wall-clock FX's clock — including a beat FX on Own tempo, which runs on that loop —
 advances on every pass before anything is applied, and a stateful FX is still computed. Leaving
 Blind lands it in step with what it started beside, growing from nothing over the Blind fade like a
 press — or at full at once over a value the programmer holds (effects plan §3.5;
@@ -1533,7 +1533,7 @@ envelope or `lastPhase`, or its expansion and plan caches, and never writes DMX:
 a staging one it never applies, to read a paused FX's frame off a head. `FxSamplerParityTest`
 drives the engine a pass at a time and holds *Result* to the committed DMX at every sampled tick —
 every Order with Spread, Wings, Segments and Parts set, Runs with Bounce, *One cycle for: Each head*, *Replace*
-under *Within*, a Circle *Around* a programmer position, Amount, Palette Steps, a Seconds FX, each
+under *Within*, a Circle *Around* a programmer position, Amount, Palette Steps, an Own tempo FX, each
 element mode and filter, a held-back FX, a Local FX over a layer's, and a beat FX with a wall-clock FX
 *Within* it — and checks that sampling leaves every instance field and the controller as they were.
 
@@ -1543,7 +1543,7 @@ The project write guard counts it a runtime gesture, so an operator previews on 
 
 - **The request**: `targets` (the selection, in order), `fx`, `include` (`STACK` | `ONLY`), `window`
   (one of `cycles` of the first FX, `beats` of its master — a wall-clock FX's rate master, master 1
-  for one on its own seconds — or `seconds`; two cycles when none) and `solo` (an index into the
+  for one on Natural, an Own tempo FX its own tempo — or `seconds`; two cycles when none) and `solo` (an index into the
   first 8 of `fx`). Each `fx` entry is `{fxId}`, a running FX; `{draft}`, `POST /fx/add`'s
   body, built by `buildFxInstance` — the add's own write boundary — and never added, its `targets` the
   request's when it names none; or `{fxId, draft}`, the running FX with `draft`, `PUT /fx/{id}`'s
@@ -1567,9 +1567,10 @@ The project write guard counts it a runtime gesture, so an operator previews on 
   `include: ONLY` — each named as a problem otherwise — and a draft whose attribute no notional head
   has (Slot Steps' setting) is the add's own refusal. Nothing on the rig is read or written.
 - **The answer**: `window` (`samples`, `sampleMs`, the length in the first FX's master's `beats` and in
-  `seconds`), `clock` (each master the FX run on with its `tickAtStart` and `msPerBeat`, or
-  `seconds: true` for FX on their own clock, which carries no start time: its playhead runs from
-  sample 0), `rows`, `lanes` (by family, Intensity,
+  `seconds`), `clock` (each master the FX run on with its `tickAtStart` and `msPerBeat`; an Own
+  tempo's `ownBpm` and `msPerBeat`; or `seconds: true` for a wall-clock FX on Natural — the last two
+  carry no start time, so their playhead runs from sample 0; an `fx` entry names its clock by
+  `speedMasterUuid` or `ownBpm`), `rows`, `lanes` (by family, Intensity,
   Colour, Position, Beam; each attribute's rows with `underneath` as one sample, `result`, and each
   FX's own `output` with its `heldBackReason`), `fx` (every FX folded, in apply order: its `fxId`
   and, when asked for, its `entry` in the request; per row its `offsets`, the samples its cycle
@@ -1700,7 +1701,7 @@ FX). The route fixes only where it runs and whose it is:
   is Colour. Agreed with Chris during session 2; an FX palette's family is
   `fxAttributeFamily` over its FX's library family and the attribute it names (fx-settings plan
   D5), Intensity for one naming none.
-- **The timing.** No `cycle` is one bar; a beat FX naming no master and not on *Seconds* is
+- **The timing.** No `cycle` is one bar; a beat FX naming no master and not on Own tempo is
   stamped with the master whose `family` is its library `family`, else master 1 (venue-visit plan
   D16) — `fx/FxTimingChoice.kt`'s `familyMasterUuidFor`, the one reading MCP's FX tools stamp with
   too. That is the library family, not the attribute's family the mask reads: a Pulse on `uv` is Colour for
@@ -1756,7 +1757,7 @@ so a copy on *One cycle for: Each head* keeps its set's `distinctSlots`-scaled c
 own offset and Bounce counts its cycles from it, and an FX reading its place in the spread still
 sees it. `FxSplitTest` runs an FX on two rigs, splits one mid-run and compares every channel
 on every tick. A copy also takes the parent's clocks (`accumulatedScaledMs`, the Runs anchors, the
-start time), masters, timing source, *Seconds*, envelope and band, shares its FX object (as the
+start time), masters, timing source, Own tempo, envelope and band, shares its FX object (as the
 members did; added `carried`, so a stateful FX is not reset), and names its fixture or element with
 element filter `ALL`.
 
@@ -2267,8 +2268,7 @@ heads has the attribute is refused. The spread and element fields then apply as 
   "order": "CENTRE_OUT",
   "elementMode": "FLAT",
   "timing": "CYCLE",
-  "rateSpeedMasterUuid": "7d444840-9dc0-11d1-b245-5ffdce74fad2",
-  "seconds": false
+  "ownBpm": 96
 }
 ```
 
@@ -2284,9 +2284,9 @@ and any concurrently racing pause/resume. Dynamics fields (`phaseOffset`, `order
 replacement, so a tick pass never observes half of an update. `speedMasterUuid` /
 `rateSpeedMasterUuid` are also updated in place; both follow the same null-means-no-change
 convention, and to return an FX to the default, send master 1's uuid (master 1 always exists
-and behaves identically to the null default). `seconds` moves the FX between *Seconds* and a
-master — see [Seconds](#seconds--an-fxs-own-cycle-venue-visit-plan-d7) — and is the only way to
-put a wall-clock FX back to unscaled. `amount`, `direction` and `runs` are dynamics fields, edited
+and behaves identically to the null default). `ownBpm` moves a beat FX onto its Own tempo, and
+`natural: true` is the only way to put a wall-clock FX back to unscaled — see
+[Own tempo](#own-tempo--an-fxs-own-clock-fx-speed-plan-d3d5). `amount`, `direction` and `runs` are dynamics fields, edited
 in place with the phase kept; `runForever: true` clears a count, which a null `runs` (no change)
 cannot say. See §"Amount, direction and runs".
 
@@ -2524,7 +2524,7 @@ its row's run key in `runUuid` (stack-timeline plan D7): a GO hands the outgoing
 the same key, target and attribute to the incoming row, restamped with that row's uuid so *Update
 stage* still reconciles by row. When the two rows' settings differ, the instance is edited in place
 at the GO (`routes.alignFx`, the same edit *Update stage* makes, injected into `CueHolds` as an
-`FxAligner` so `fx/` does not import `routes/`): phase kept, except that a move between Seconds
+`FxAligner` so `fx/` does not import `routes/`): phase kept, except that a move between Own tempo
 and a master restarts it. The key is written by the Show view's Timeline (`timeline/edit`'s `fxOn`,
 `breakRun` and `joinRun`, `docs/cue-stacks-engineering.md` §"Timeline"), the cue copier and the
 importer, and by no cue write. The `cueId`, `layerFxUuid`, `runUuid` and envelope are preserved across
@@ -2559,7 +2559,7 @@ table. At apply time these are converted directly to `FxInstance`s tagged with t
 **A cue FX is edited in draft** (show-cue-editing plan session 6, D17): the cue editor's FX tab
 edits the stored row, never an instance. Its fields are the live editor's (`FxFields`) over a
 draft of the stored FX (`cueFxDraftOf` / `withCueFxDraft` in the frontend's
-`fxEditorModel.ts`, so Seconds, amount, direction, runs and the spread's shape round-trip as a
+`fxEditorModel.ts`, so Own tempo, amount, direction, runs and the spread's shape round-trip as a
 palette's FX does), and every change is the cue's whole `adHocFx` list on its `PATCH`.
 *+ FX* runs the picker in draft: a tap stores the FX with the picker's starting spec —
 `startingSpec`, the step FX's seeded lists, D16's one bar on the family master — on the editor's
@@ -2770,7 +2770,7 @@ holds a real slot, which is the usual case.
 FX, cue ad-hoc FX, per-application overrides, cue-edit, and sync. The two coexist
 rather than excluding each other, so an FX whose `timingSource` changes keeps both
 assignments; BEAT FX simply never read the rate scale. The MCP FX tools take both, and
-*Seconds* beside them (below). **Scripts are the deliberate exception** — the script API has never
+an Own tempo beside them (below). **Scripts are the deliberate exception** — the script API has never
 addressed a per-FX master's absence, so there was nothing to mirror.
 
 For STATEFUL FX, `deltaMs` is computed from the wall-clock interval directly. These
@@ -2779,51 +2779,68 @@ token a rate master has no effect on one that never reads its phase. Both shippe
 FX (`CandleFlicker`, `FluorescentFlicker`) are STATEFUL, so nothing in-tree currently
 exercises rate scaling end to end; author a STANDARD + WALL_CLOCK definition to try it.
 
-### Seconds — an FX's own cycle (venue-visit plan D7)
+### Own tempo — an FX's own clock (fx-speed plan D3–D5)
 
-An FX's **timing** is one of two things: it follows a speed master, or it runs on *Seconds* —
-its own cycle, with no master, for a slow breathe or drift that must not move when the tempo does.
-It is one question for every FX, asked by one chip (`Seconds | M1 | M2…`), and stored as one
-flag, `seconds`, on every FX home: a live `FxInstance`, an FX palette (`palette_fx`), a
-Look's FX (`look_fx`) and a cue's ad-hoc FX (`cue_ad_hoc_fx`), with
-`LookFxSpec`, `StoredFx` and `LookFxSettings` carrying it between them. It syncs from
-`formatVersion` 29. The rules are `fx/FxTimingChoice.kt`'s:
+An FX's **clock** is one of two things: it follows a speed master, or it runs on its own — for a
+slow breathe or drift that must not move when the masters do. It is one question for every FX,
+asked by one chip (`Own tempo | M1 | M2…`, `Natural | M1 | M2…` on a wall-clock FX), and stored as
+one nullable column, `own_bpm`, on every FX home: a live `FxInstance` (`ownBpm`), an FX palette
+(`palette_fx`), a Look's FX (`look_fx`) and a cue's ad-hoc FX (`cue_ad_hoc_fx`), with `LookFxSpec`,
+`StoredFx` and `LookFxSettings` carrying it between them. It syncs from `formatVersion` 49. It
+replaced *Seconds* (venue-visit plan D7), a flag that read a beat FX's `cycle` as seconds. The
+rules are `fx/FxTimingChoice.kt`'s:
 
-- **A beat FX on Seconds** reads its `cycle` as seconds and runs on the **wall-clock
-  loop** with both masters null — `FxInstance.seconds` true, `timingSource` `WALL_CLOCK`,
-  `rateMasterSlot` `NO_RATE_MASTER`. That is exactly an unscaled wall-clock FX, so neither loop
-  learned anything; `applyTimingChoice` is the one writer before an instance reaches the engine, and
-  `FxEngine.updateFx`'s `newSeconds` the one after (a swap, since the loop changes).
-- **A wall-clock FX's** cycle is seconds already. Its Seconds is having **no rate master**,
-  and a master is its rate master, which scales the cycle by `bpm / 120` as above. So the instance's
-  flag stays false for it — `FxInstance.registrationTimingSource` can then tell the two kinds apart on
-  the wall clock — and `FxInstance.onSeconds` is the reading for either kind. A stored row may
-  carry the flag for a wall-clock FX (a client's or the AI's Seconds), which spawns it with no rate
-  master; a stored wall-clock row with no rate master and no flag — every row before S15 — is on
-  Seconds too.
-- **Seconds is free of every master**, so nothing retimes it: a cue layer's or a programmer layer's
-  master override does not reach it (`FxSpawner` applies the timing after the overrides), and a
-  busk or AI press's cycle override leaves its cycle alone
-  (`LookFxSpec.withCycleOverride`). A wall-clock row that merely has no rate master keeps
-  the rule it always had — a layer's rate override still scales it.
-- **On the wire**: `POST /fx/add` and `POST /groups/{name}/fx` take `seconds`; `PUT /fx/{id}` and
-  `updateFx` (one parse, `applyFxUpdate`) take `seconds: Boolean?` — `true` onto Seconds, `false`
-  onto the master sent beside it (a beat FX's absent master is master 1; a wall-clock FX must
-  name its rate master, since a null one *is* Seconds), and naming a master alone also leaves Seconds.
-  `seconds: true` beside a master is refused on the FX routes and by the MCP FX tools
-  (`secondsTimingConflict`) — two answers to one question; the stored-FX writes take Seconds and
-  drop the master instead (below). A move between Seconds and a master changes the loop the FX
-  runs on, so it is a swap and the FX's **phase restarts**; every other edit keeps it. On a wall-clock FX, `seconds: true` is the explicit *unscaled* that a null
-  `rateSpeedMasterUuid` (which means "no change") never could say — `FU-FX-RATE-MASTER-CLEAR`, closed
-  by S15. `FxDto.seconds` (and the group and indirect FX DTOs') reports `onSeconds`; a beat
-  FX on Seconds reports `timingSource` `WALL_CLOCK`, the loop it runs on, so every speed label
-  reads its number as seconds.
-- **A stored row on Seconds keeps no master beside the flag**: the Look, palette and cue writes
-  null both masters where `seconds` is set, rather than refusing the pair as the FX routes do.
-- **Record and Include carry it** with the masters. Both had dropped the masters of a cue's ad-hoc
-  FX until S15 — `programmerCapture` recorded none, and `CueAdHocFxDto.toFxSpec`
-  (Include's adapter) passed none on — so a recorded busk fell back to master 1.
-- **Blind holds it like any programmer FX** (show-cue-editing plan D7): a busk on Seconds runs on
+- **A beat FX on Own tempo** keeps its `cycle` in **beats** and runs at `ownBpm` (20–300), so a
+  cycle takes `cycle × 60 ÷ ownBpm` seconds. It runs on the **wall-clock loop** with both masters
+  null — `timingSource` `WALL_CLOCK`, `rateMasterSlot` `NO_RATE_MASTER` — its accumulator advancing
+  at `ownBpm / 60` (`FxInstance.ownTempoScale`), so the stored beats are seconds at 60 BPM and every
+  wall-clock reader of `timing.cycle` reads them that way. Three readers sample that rate rather than
+  a rate master's: the engine's wall-clock pass, the sampler (`FxSampler`'s phase, `cycleMs` and a
+  `beats` window, `windowMsPerBeat`) and the preview's clock (`FxPreviewClock.ownBpm`, its
+  `msPerBeat`). `applyTimingChoice` is the one writer before an instance reaches the engine.
+- **A new Own tempo moves only the rate**, so the phase is kept: `FxEngine.updateFx` writes it in
+  place (`FxClockMove.OntoOwnTempo` on an FX already on it; `ownBpm` is `@Volatile`). A move between
+  a master and Own tempo changes the loop the FX runs on, so it is a swap and the FX's **phase
+  restarts**; every other edit keeps it.
+- **A wall-clock FX's** cycle is seconds, and it has no Own tempo (D4). It follows a rate master,
+  which scales the cycle by `bpm / 120` as above, or runs on **Natural**: no rate master, a fixed
+  120 BPM. `FxInstance.onNatural` reads it; `ownBpm` on a wall-clock FX is refused at every door. A
+  stored wall-clock row that says an Own tempo (an FX a script registers, which D5's rewrite could
+  not tell from a beat one) runs on Natural at the seconds it meant — its cycle of beats at that tempo
+  (`storedClock`) — and a stored write of one is kept that way, on Natural at that cycle
+  (`storedWriteClock`), so a client sending such a row back is not refused. Every other wall-clock FX
+  — a built-in or a project's definition, which the step names — is refused an Own tempo at the
+  stored writes as at the FX routes and the MCP tools.
+- **Own tempo is free of every master**, so nothing retimes it: a cue layer's or a programmer layer's
+  master override does not reach it (`FxSpawner` applies the clock after the overrides), and a
+  busk or AI press's cycle override leaves its cycle alone (`LookFxSpec.withCycleOverride`). A
+  wall-clock row on Natural keeps the rule it always had — a layer's rate override still scales it.
+- **On the wire**: `POST /fx/add`, `POST /groups/{name}/fx` and `POST /programmer/fx` take `ownBpm`
+  and `natural`; `PUT /fx/{id}` and `updateFx` (one parse, `applyFxUpdate`) take `ownBpm` (onto Own
+  tempo, or a new tempo) and `natural: Boolean?` — `true` onto Natural, the explicit *unscaled* a null
+  `rateSpeedMasterUuid` (which means "no change") never could say; `false` onto the rate master sent
+  beside it, which must be named, as naming a master alone takes an FX off its own clock. An own
+  clock beside a master is refused on the FX routes and by the MCP FX tools
+  (`ownTempoTimingConflict`); the stored-FX writes take Own tempo and drop the master instead.
+  `FxDto` (and the group and indirect FX DTOs) report `ownBpm` and `natural`; a beat FX on Own tempo
+  reports `timingSource` `WALL_CLOCK`, the loop it runs on.
+- **The old `seconds` still reads** on every request — the FX routes, `updateFx`, the stored-FX
+  writes (`@EncodeDefault(NEVER)` on their DTOs, so never answered) and the MCP tools — by D5: on a
+  beat FX, with a `cycle`, Own tempo 120 at twice it (the same output, as the database step's
+  rewrite); without one, Own tempo at the running tempo of the master it would have followed, its
+  cycle kept; on a wall-clock FX, Natural. `seconds: false` on an update is onto a master.
+- **The rewrite** (database step 12, `state/OwnTempoMigration.kt`): every Look, cue and palette FX
+  on Seconds became Own tempo 120 at twice its cycle — the wall-clock loop at twice the rate over
+  twice the cycle, which is the same output to the bit (`OwnTempoEquivalenceTest`) — or, on a
+  wall-clock FX, Natural; then the column went. With no registry to ask, a wall-clock FX is told by
+  name (`wallClockFxTypes`, normalised as the registry resolves a name): a built-in
+  (`BUILT_IN_WALL_CLOCK_FX`, which `FxTimingChoiceTest` holds to the library) or one of its project's FX
+  definitions on the wall clock. One exception to P3 is accepted: a wall-clock FX that read its phase
+  and was flagged on Seconds ignored a layer's cycle and rate-master overrides, which Natural does not
+  — the model has nowhere left to keep the difference. Neither built-in reads either. The importer reads an
+  older archive's `seconds` by the same rule (`ProjectImporter.importedClock`).
+- **Record and Include carry it** with the masters, as they did Seconds.
+- **Blind holds it like any programmer FX** (show-cue-editing plan D7): a busk on Own tempo runs on
   the wall clock, whose accumulators advance before the pass applies anything, so a held one keeps its
   place in real time and lands in step when Blind goes off — §"Programmer suppression and the
   priority band".
@@ -2834,10 +2851,10 @@ written**, never resolved later, so `null` still means master 1 everywhere: by t
 (`FxPicker`), the palette editor, the MCP FX tools (`AiTools.parseFxTiming`, which also
 makes `cycle` optional) and the programmer's bare FX press (`POST /programmer/fx`);
 the desk's two read one rule, `fx/FxTimingChoice.kt`'s `familyMasterUuidFor`. REST's
-`AddFxRequest` and `AddGroupFxRequest` default an omitted cycle to one bar and stamp nothing. A **wall-clock** FX starts on its own Seconds — four
-seconds — since "one bar" means nothing to an FX timed in seconds. Moving a beat FX between
-Seconds and a master in the editor or the palette sheet keeps its speed: the cycle is converted
-at the master's tempo (4 beats at 120 BPM is 2 s). The effects plan's sessions build on this timing
+`AddFxRequest` and `AddGroupFxRequest` default an omitted cycle to one bar and stamp nothing. A **wall-clock** FX starts on Natural — four
+seconds — since "one bar" means nothing to an FX timed in seconds. Moving a beat FX from a master
+onto Own tempo in the editor or the palette sheet keeps its speed (D3): the Own tempo starts at the
+tempo the master is running at, and the cycle is kept. The effects plan's sessions build on this timing
 and default.
 
 ### Configuration

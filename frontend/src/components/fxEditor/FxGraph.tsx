@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { ChevronDown, ChevronRight, Pause, Play, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EditorReadout } from '@/components/editor/EditorReadout'
+import { ownTempoLabel } from '@/components/fx/fxConstants'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import { paletteAttributeFor } from '@/lib/paletteIntent'
 import { dmxToCentre, formatCentre } from '@/lib/positionScale'
@@ -821,7 +822,11 @@ function GraphToolbar({
         {clock.kind === 'master' ? (
           <MasterChip uuid={clock.speedMasterUuid} />
         ) : (
-          pickedFx != null && <span className="inline-flex h-7 items-center rounded-md border px-2 text-xs text-muted-foreground">Seconds</span>
+          pickedFx != null && (
+            <span className="inline-flex h-7 items-center rounded-md border px-2 text-xs text-muted-foreground">
+              {pickedFx.ownBpm != null ? ownTempoLabel(pickedFx.ownBpm) : 'Natural'}
+            </span>
+          )
         )}
         <button
           type="button"

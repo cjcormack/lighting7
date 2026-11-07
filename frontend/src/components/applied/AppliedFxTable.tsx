@@ -20,9 +20,9 @@ import type { PaletteSummary } from '@/api/palettesApi'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { isHeldByBlind } from '@/lib/heldBack'
 import { fxTargetLabel, selectionItems } from '@/lib/fxTargets'
-import { isOnSeconds } from '@/lib/fxTiming'
+import { bpmLabel, isOnNatural, isWallClock } from '@/lib/fxTiming'
 import { isPaletteSteps, isSlotSteps, parseStepList, slotLabel } from '@/lib/stepFx'
-import { getCycleLabel, secondsLabel } from '@/components/fx/fxConstants'
+import { getCycleLabel, ownTempoLabel, secondsLabel } from '@/components/fx/fxConstants'
 import { parsePaletteRefUuid } from '@/components/fx/colourUtils'
 import { HeldBlindMark } from '@/components/fx/HeldBlindMark'
 import { useStopFx, useToggleFxPause } from '@/components/fx/useFxControls'
@@ -68,8 +68,8 @@ const SORT_KEYS: ReadonlySet<string> = new Set(['name', 'attribute', 'target', '
  * selection one row with its reach from `lib/fxTargets.ts`, a split edit one row per head copy,
  * a step effect naming its palettes or slots.
  *
- * **It reads what the desk reports and computes nothing**: timing is *Seconds* or the master the
- * instance names (`seconds`, `speedMasterUuid`, `rateSpeedMasterUuid`, read against the live bank),
+ * **It reads what the desk reports and computes nothing**: timing is its Own tempo, Natural or the
+ * master the instance names (`ownBpm`, `natural`, `speedMasterUuid`, `rateSpeedMasterUuid`, read against the live bank),
  * amount, direction and runs are the instance's fields, *spent* is its `spent`, and *held · Blind* is
  * `isHeldByBlind`.
  *
@@ -287,9 +287,7 @@ function stepNames(effect: ActiveFx, palettesByUuid: ReadonlyMap<string, Palette
 }
 
 function speedLabel(effect: ActiveFx): string {
-  return effect.timingSource === 'WALL_CLOCK' || effect.seconds === true
-    ? secondsLabel(effect.cycle)
-    : getCycleLabel(effect.cycle)
+  return isWallClock(effect, effect.timingSource) ? secondsLabel(effect.cycle) : getCycleLabel(effect.cycle)
 }
 
 function amountLabel(effect: ActiveFx): string {
@@ -420,16 +418,18 @@ function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColu
 }
 
 /**
- * *Seconds* or the master an effect follows, read off the live bank by uuid: a beat effect's null is
- * master 1, a wall-clock effect's rate master is its only master and none is its own Seconds.
+ * The master an effect follows, read off the live bank by uuid, or its Own tempo or Natural: a beat
+ * effect's null is master 1, a wall-clock effect's rate master is its only master and none is Natural.
  */
 function TimingCell({ effect, speed = false }: { effect: ActiveFx; speed?: boolean }) {
-  const wallClock = effect.timingSource === 'WALL_CLOCK'
-  const seconds = isOnSeconds(effect, effect.timingSource)
+  const wallClock = isWallClock(effect, effect.timingSource)
+  const ownBpm = effect.ownBpm ?? null
+  const natural = isOnNatural(effect, effect.timingSource)
   const uuid = wallClock ? effect.rateSpeedMasterUuid : effect.speedMasterUuid
   const { label, title } = useSpeedMasterLiveQuery(undefined, {
     selectFromResult: ({ data }) => {
-      if (seconds) return { label: 'Seconds', title: 'Its own cycle in seconds — follows no master' }
+      if (ownBpm != null) return { label: ownTempoLabel(ownBpm), title: `Its own tempo, ${bpmLabel(ownBpm)} BPM — follows no master` }
+      if (natural) return { label: 'Natural', title: 'Its own cycle in seconds at 120 BPM — follows no master' }
       const master = data?.find((m) => (uuid == null ? m.index === 1 : m.uuid === uuid))
       if (master == null) return { label: uuid == null ? 'M1' : 'M?', title: undefined }
       const prefix = wallClock ? 'Rate ' : ''

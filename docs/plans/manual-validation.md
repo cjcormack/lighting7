@@ -941,7 +941,7 @@ layer, and the folds on the iPad and a phone.
 1. **Rows.** Open *Applied* under Programmer on Screen 2 with the programmer on Screen 1. Each table
    lists what the rail lists, in the rail's order and numbering. Press a busk pad and release one on
    Screen 1: the tables follow without a reload.
-2. **What the desk reports.** An FX on a master reads *M2 · 96*; one on Seconds reads *Seconds*.
+2. **What the desk reports.** An FX on a master reads *M2 · 96*; one on its Own tempo reads *Own 96* (once *Seconds*, fx-speed plan session 1).
    Turn Blind on: the programmer's FX read *held · Blind* and the others do not. Press an FX
    palette with *Runs* set to 3. When it has run its count, its Applied FX row and its Applied
    Palettes row both read *spent*.
@@ -1720,11 +1720,11 @@ or a desk's own masters stamp a new FX.
    speeds up.
 4. **Back.** Pick M2 again: the cycle reads in beats and does not jump. *Revert* puts it back as it
    opened.
-5. **Fluorescent Flicker.** Start one, give its chip M2, then pick *Seconds*: it is unscaled. Revert
-   from M2 lands *Seconds* again (the old `FU-FX-RATE-MASTER-CLEAR`).
-6. **Record and run.** Record the Seconds Pulse into a cue, clear, GO the cue: it runs on Seconds at
-   the same cycle. Include the cue: the editor reads *Seconds*. Make an FX palette from it: the
-   pad reads `Pulse · 2.67 s`.
+5. **Fluorescent Flicker.** Start one, give its chip M2, then pick *Natural* (once *Seconds*): it is unscaled. Revert
+   from M2 lands *Natural* again (the old `FU-FX-RATE-MASTER-CLEAR`).
+6. **Record and run.** Record the Pulse on its own clock (*Own tempo* since fx-speed plan session 1) into a cue, clear,
+   GO the cue: it runs on that tempo at the same speed. Include the cue: the editor reads *Own tempo*. Make an FX palette from it: the
+   pad reads the Pulse with its tempo, `Own …`.
 7. **The words.** Every chip on the busk pads, the fixture sheet and the programmer's FX table says the
    cycle as the editor's segment does (`½ beat`, `1 bar`), never `1/4`.
 

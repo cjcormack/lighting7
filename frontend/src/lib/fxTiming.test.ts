@@ -1,45 +1,47 @@
 import { describe, expect, it } from 'vitest'
-import { beatsToSeconds, isOnSeconds, newFxDirection, newFxDivision, secondsToBeats, swappedTiming } from './fxTiming'
+import {
+  clampOwnBpm,
+  followsNoMaster,
+  isOnNatural,
+  isOnOwnTempo,
+  isWallClock,
+  newFxDirection,
+  newFxDivision,
+  swappedTiming,
+} from './fxTiming'
 
-/** Venue-visit plan D7: an effect follows a master, or runs on Seconds — read one way for both kinds. */
-describe('isOnSeconds', () => {
-  it('reads the flag on any effect', () => {
-    expect(isOnSeconds({ seconds: true }, 'BEAT')).toBe(true)
-    expect(isOnSeconds({ seconds: false }, 'BEAT')).toBe(false)
-    expect(isOnSeconds({}, 'BEAT')).toBe(false)
+/** Fx-speed plan D3, D4: a beat FX follows a master or its own tempo; a wall-clock FX a rate master or Natural. */
+describe('an FX’s timing', () => {
+  it('reads Own tempo from the tempo alone', () => {
+    expect(isOnOwnTempo({ ownBpm: 96 })).toBe(true)
+    expect(isOnOwnTempo({ ownBpm: null })).toBe(false)
+    expect(isOnOwnTempo({})).toBe(false)
   })
 
-  it('reads a wall-clock effect with no rate master as Seconds, flag or not', () => {
-    expect(isOnSeconds({ rateSpeedMasterUuid: null }, 'WALL_CLOCK')).toBe(true)
-    expect(isOnSeconds({}, 'WALL_CLOCK')).toBe(true)
-    expect(isOnSeconds({ rateSpeedMasterUuid: 'm2' }, 'WALL_CLOCK')).toBe(false)
+  it('reads a running Own tempo FX’s cycle as beats, though it reports the wall-clock loop', () => {
+    expect(isWallClock({ ownBpm: 96 }, 'WALL_CLOCK')).toBe(false)
+    expect(isWallClock({}, 'WALL_CLOCK')).toBe(true)
+    expect(isWallClock({}, 'BEAT')).toBe(false)
+    expect(isOnNatural({ ownBpm: 96 }, 'WALL_CLOCK')).toBe(false)
   })
 
-  it('says a beat effect with no master is on master 1, not Seconds', () => {
-    expect(isOnSeconds({ rateSpeedMasterUuid: null }, 'BEAT')).toBe(false)
-    expect(isOnSeconds({ rateSpeedMasterUuid: null }, null)).toBe(false)
-  })
-})
-
-describe('the conversions that keep a speed across the move', () => {
-  it('turns beats at a tempo into seconds and back', () => {
-    expect(beatsToSeconds(4, 120)).toBe(2)
-    expect(secondsToBeats(2, 120)).toBe(4)
-    expect(secondsToBeats(beatsToSeconds(3, 90), 90)).toBe(3)
+  it('reads a wall-clock FX with no rate master as Natural', () => {
+    expect(isOnNatural({ rateSpeedMasterUuid: null }, 'WALL_CLOCK')).toBe(true)
+    expect(isOnNatural({}, 'WALL_CLOCK')).toBe(true)
+    expect(isOnNatural({ rateSpeedMasterUuid: 'm2' }, 'WALL_CLOCK')).toBe(false)
   })
 
-  it('lands back on the beat grid after the millisecond rounding on the way out', () => {
-    // One bar at 90 BPM is 2.667 s: back at 90 it is one bar, and at 120 it is 5⅓ beats.
-    expect(beatsToSeconds(4, 90)).toBe(2.667)
-    expect(secondsToBeats(beatsToSeconds(4, 90), 90)).toBe(4)
-    expect(secondsToBeats(beatsToSeconds(4, 90), 120)).toBe(5.333)
-    // A cycle the operator typed in seconds that lands off the grid is left as it is.
-    expect(secondsToBeats(1.234, 120)).toBe(2.468)
+  it('says a beat FX with no master is on master 1, not free of one', () => {
+    expect(followsNoMaster({ rateSpeedMasterUuid: null }, 'BEAT')).toBe(false)
+    expect(followsNoMaster({}, null)).toBe(false)
+    expect(followsNoMaster({ ownBpm: 120 }, 'BEAT')).toBe(true)
+    expect(followsNoMaster({}, 'WALL_CLOCK')).toBe(true)
   })
 
-  it('leaves the number alone with no tempo to convert at', () => {
-    expect(beatsToSeconds(4, 0)).toBe(4)
-    expect(secondsToBeats(4, 0)).toBe(4)
+  it('holds a typed tempo to the desk’s bounds', () => {
+    expect(clampOwnBpm(96.04)).toBe(96)
+    expect(clampOwnBpm(5)).toBe(20)
+    expect(clampOwnBpm(400)).toBe(300)
   })
 })
 

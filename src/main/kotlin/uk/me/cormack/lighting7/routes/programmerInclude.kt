@@ -373,7 +373,7 @@ internal fun CueAdHocFxDto.toFxSpec() = LookFxSpec(
     // what the operator changed (venue-visit plan S15 — the masters were dropped here before it).
     speedMasterUuid = speedMasterUuid,
     rateSpeedMasterUuid = rateSpeedMasterUuid,
-    seconds = seconds,
+    ownBpm = ownBpm,
     amount = amount,
     direction = direction,
     runs = runs,
