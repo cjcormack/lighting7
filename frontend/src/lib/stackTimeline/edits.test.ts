@@ -203,11 +203,11 @@ describe('FX cells and runs', () => {
     ])
   })
 
-  it('words a cycle in beats on a master or its own tempo, and in seconds on the wall clock', () => {
-    expect(fxCycleWords({ cycle: 4, speedMasterUuid: 'm1' })).toBe('1 bar')
-    expect(fxCycleWords({ cycle: 4, speedMasterUuid: null })).toBe('4 s')
-    expect(fxCycleWords({ cycle: 8, speedMasterUuid: 'm1', ownBpm: 96 })).toBe('2 bars · Own 96')
-    expect(settingsChangeLabel({ cycle: 2 }, { cycle: 4 })).toBe('4 s')
+  it('words the Speed, its cycle in beats on a master or its own tempo and in seconds on the wall clock', () => {
+    expect(fxCycleWords({ cycle: 4, speedMasterUuid: 'm1' })).toBe('×1')
+    expect(fxCycleWords({ cycle: 4, speedMasterUuid: null })).toBe('×½')
+    expect(fxCycleWords({ cycle: 8, speedMasterUuid: 'm1', ownBpm: 96 })).toBe('×½ · Own 96')
+    expect(settingsChangeLabel({ cycle: 2 }, { cycle: 4 })).toBe('×½')
     expect(settingsChangeLabel({ cycle: 4, ownBpm: 120 }, { cycle: 4, ownBpm: 96 })).toBe('Own 96')
   })
 

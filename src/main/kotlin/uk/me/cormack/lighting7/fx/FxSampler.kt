@@ -402,8 +402,9 @@ internal class FxSampler(
             val start = clock.tickAt(slot)
             val ticks = start + floor(offsetMs / clock.msPerTick(slot) + TICK_EPSILON).toLong()
             val anchor = effect.runsStartTick.takeUnless { it == FxInstance.UNANCHORED || it > start } ?: start
-            own[s] = FxPhase.beatOwnCyclesAt(ticks, anchor, division, dyn, member.offset)
-            FxPhase.beatPhaseAt(ticks, anchor, division, member.groupSize, dyn, member.offset)
+            val shift = effect.cycleShift
+            own[s] = FxPhase.beatOwnCyclesAt(ticks, anchor, division, dyn, member.offset, shift)
+            FxPhase.beatPhaseAt(ticks, anchor, division, member.groupSize, dyn, member.offset, shift = shift)
         } else {
             val start = effect.accumulatedScaledMs
             val scaledMs = start + offsetMs * wallClockRate(effect, clock, reads)

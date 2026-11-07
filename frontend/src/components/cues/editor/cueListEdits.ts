@@ -81,3 +81,17 @@ export function changeDrawn<T extends Ordered>(
   const at = indexOfDrawn(stored, drawn[index], index, idOf)
   return at < 0 ? null : replaceAt(stored, at, change(stored[at]))
 }
+
+/**
+ * A cue's *Tempo on GO* with [speedMasterUuid] set to [bpm] (fx-speed plan D8): its row replaced in
+ * place, else one added at the end.
+ */
+export function withTempoRow<T extends { speedMasterUuid: string; bpm: number }>(
+  rows: readonly T[],
+  speedMasterUuid: string,
+  bpm: number,
+): { speedMasterUuid: string; bpm: number }[] {
+  return rows.some((r) => r.speedMasterUuid === speedMasterUuid)
+    ? rows.map((r) => (r.speedMasterUuid === speedMasterUuid ? { speedMasterUuid, bpm } : r))
+    : [...rows, { speedMasterUuid, bpm }]
+}

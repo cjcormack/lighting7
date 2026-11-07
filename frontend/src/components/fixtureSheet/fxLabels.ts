@@ -4,28 +4,34 @@ import { useCurrentProjectQuery } from '@/store/projects'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
 import { usePaletteListQuery } from '@/store/palettes'
 import { isCueRow } from '@/api/cueStacksApi'
-import { fxSpeedLabel } from '../fx/fxConstants'
-import { followsNoMaster, isWallClock } from '@/lib/fxTiming'
+import { NATURAL_BPM, cycleSeconds, fxSpeedLabel, secondsWords } from '@/lib/fxSpeed'
+import { bpmLabel, followsNoMaster, isWallClock } from '@/lib/fxTiming'
 import type { ActiveFx } from '@/store/fixtureFx'
 
 /**
- * An effect's speed and master as the sheet's chips spell it — `1 bar · M2`, the busk pad's
- * `FxPadDetail` vocabulary. A beat effect with no master runs on master 1; one on its own tempo
- * names its tempo, `1 bar · Own 96`, and a wall-clock one on Natural names none, its `4 s` saying
- * what it runs on. Read from the live bank once, so a row and a tray chip do not each subscribe.
+ * An effect's speed and master as the sheet's chips spell it — `×1 · M2`, the busk pad's
+ * `FxPadDetail` vocabulary (fx-speed plan D2). A beat effect with no master runs on master 1; one on
+ * its own tempo names its tempo, `×1 · Own 96`, and a wall-clock one on Natural names none. Asked for
+ * `seconds`, a chip's hover: the cycle in seconds at the tempo it runs at, `1.82 s a cycle at 132 BPM`.
+ * Read from the live bank once, so a row and a tray chip do not each subscribe.
  */
-export function useFxDetail(): (effect: ActiveFx) => string {
+export function useFxDetail(): (effect: ActiveFx, what?: 'label' | 'seconds') => string {
   const { data } = useSpeedMasterLiveQuery(undefined)
-  const indexByUuid = useMemo(() => new Map((data ?? []).map((m) => [m.uuid, m.index])), [data])
+  const byUuid = useMemo(() => new Map((data ?? []).map((m) => [m.uuid, m])), [data])
+  const master1Bpm = data?.find((m) => m.index === 1)?.bpm
   return useCallback(
-    (effect: ActiveFx) => {
+    (effect: ActiveFx, what: 'label' | 'seconds' = 'label') => {
       const wallClock = isWallClock(effect, effect.timingSource)
       const uuid = wallClock ? effect.rateSpeedMasterUuid : effect.speedMasterUuid
-      const index = uuid != null ? indexByUuid.get(uuid) : undefined
-      const master = followsNoMaster(effect, effect.timingSource) ? null : index != null ? `M${index}` : 'M1'
+      const found = uuid != null ? byUuid.get(uuid) : undefined
+      if (what === 'seconds') {
+        const bpm = effect.ownBpm != null && !wallClock ? effect.ownBpm : wallClock && uuid == null ? NATURAL_BPM : (found?.bpm ?? master1Bpm ?? NATURAL_BPM)
+        return `${secondsWords(cycleSeconds(effect.cycle, wallClock, bpm))} a cycle at ${bpmLabel(bpm)} BPM`
+      }
+      const master = followsNoMaster(effect, effect.timingSource) ? null : found != null ? `M${found.index}` : 'M1'
       return [fxSpeedLabel(effect.cycle, effect.timingSource, effect.ownBpm), master].filter(Boolean).join(' · ')
     },
-    [indexByUuid],
+    [byUuid, master1Bpm],
   )
 }
 

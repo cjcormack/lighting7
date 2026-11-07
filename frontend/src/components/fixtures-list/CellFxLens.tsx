@@ -14,7 +14,7 @@ import { isHeldBack, isHeldByBlind } from '@/lib/heldBack'
 import { useActiveFxQuery, type ActiveFx } from '@/store/fixtureFx'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useStableCallback } from '@/hooks/useStableCallback'
-import { fxSpeedLabel } from '../fx/fxConstants'
+import { fxSpeedLabel } from '@/lib/fxSpeed'
 import { FxEditorPopover } from '../fx/FxEditorPopover'
 import { useStopFx } from '../fx/useFxControls'
 import {
@@ -98,14 +98,9 @@ function couldPaint(effect: ActiveFx, desk: LensDesk): boolean {
   return effect.cueStackId == null || desk.stackFxAmount(effect.cueStackId) > 0
 }
 
-/**
- * The division as the chip says it: a fraction of a beat as its glyph alone (`½`), else the label —
- * beats on a master or an Own tempo alike, which the chip does not name.
- */
+/** The Speed as the chip says it (fx-speed plan D2): `×1`, `×½`, on a master or an Own tempo alike, which the chip does not name. */
 export function lensDivision(effect: ActiveFx): string {
-  const label = fxSpeedLabel(effect.cycle, effect.ownBpm != null ? 'BEAT' : effect.timingSource) ?? ''
-  const fraction = /^([⅛¼½¾⅓⅔]) beat$/.exec(label)
-  return fraction != null ? fraction[1] : label
+  return fxSpeedLabel(effect.cycle, effect.ownBpm != null ? 'BEAT' : effect.timingSource) ?? ''
 }
 
 interface LensActions {

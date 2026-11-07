@@ -1,13 +1,8 @@
 import { Badge } from '@/components/ui/badge'
 import { Layers, LayoutGrid, ListOrdered } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import {
-  FX_FAMILY_INFO,
-  fxSpeedLabel,
-  getOrderLabel,
-  elementModeSummary,
-  getElementFilterLabel,
-} from './fxConstants'
+import { FX_FAMILY_INFO, getOrderLabel, elementModeSummary, getElementFilterLabel } from './fxConstants'
+import { fxSpeedLabel } from '@/lib/fxSpeed'
 import { resolveColourToHex, isPaletteRef } from './colourUtils'
 import { useColourPalettes, type ColourPalettes } from './FxColourPalettes'
 import { SpeedMasterChip } from './SpeedMasterChip'

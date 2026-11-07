@@ -8,10 +8,10 @@ import { TimingBadge } from '@/components/cues/TimingBadge'
 import { TimingFields } from '@/components/cues/TimingEditor'
 import { EditorLabel } from '@/components/editor/EditorLabel'
 import { EditorReadout } from '@/components/editor/EditorReadout'
-import { FxFields } from '@/components/fx/FxFields'
+import { FxFields, type FxTempoHost } from '@/components/fx/FxFields'
 import { FxPicker, type DraftFxPick } from '@/components/fx/FxPicker'
 import { selectionKeyOf, storedFxOf } from '@/components/fx/draftFx'
-import { fxSpeedLabel } from '@/components/fx/fxConstants'
+import { fxSpeedLabel } from '@/lib/fxSpeed'
 import { cueFxDraftOf, fxSwapOptions, runsWord, swappedDraft, withCueFxDraft, type FxDraft } from '@/components/fx/fxEditorModel'
 import { useFxScope } from '@/components/fx/useFxScope'
 import { fxTargetOf } from '@/components/fx/selectionFxTarget'
@@ -29,11 +29,12 @@ import { usePaletteListQuery } from '@/store/palettes'
 import { useFxLibraryQuery, type FxLibraryEntry } from '@/store/fixtureFx'
 import { useGroupListQuery } from '@/store/groups'
 import { useSpeedMasterDisplay } from '@/store/speedMasters'
-import type { Cue, CueAdHocFx, CueTarget } from '@/api/cuesApi'
+import { usePatchProjectCueMutation } from '@/store/cues'
+import type { Cue, CueAdHocFx, CueSpeedMaster, CueTarget } from '@/api/cuesApi'
 import { useCueRowStore } from './CueRowStore'
 import { useCueValuesView } from './CueValuesView'
 import { CueEditorIsolation, useRefusedEditKeys } from './editorIsolation'
-import { appendItem, changeDrawn, fxId, indexOfDrawn, moveDrawn, removeDrawn, replaceAt } from './cueListEdits'
+import { appendItem, changeDrawn, withTempoRow, fxId, indexOfDrawn, moveDrawn, removeDrawn, replaceAt } from './cueListEdits'
 import { NO_VALUES_SELECTION } from './CueLooksTab'
 
 const NO_SELECTION: readonly CueTarget[] = []
@@ -70,6 +71,7 @@ export function CueFxTab(props: {
 
 function FxBody({
   cue,
+  projectId,
   readOnlyReason,
   region,
   onRequestUnlock,
@@ -82,6 +84,7 @@ function FxBody({
 }) {
   const store = useCueRowStore()
   const view = useCueValuesView()
+  const tempoHost = useCueTempoHost(cue, projectId)
   const { data: library } = useFxLibraryQuery()
   const { fixtures } = useFixtureLookup()
   const { data: groups } = useGroupListQuery()
@@ -272,6 +275,7 @@ function FxBody({
                       libraryLoaded={library != null}
                       readOnly={readOnly}
                       swap={swapFor(effect, index)}
+                      tempoHost={tempoHost}
                       onDraft={(draft, release) => editOne(index, (stored) => withCueFxDraft(stored, draft), release)}
                       onTiming={(timing) => editOne(index, (stored) => ({ ...stored, ...timing }), false)}
                     />
@@ -285,6 +289,27 @@ function FxBody({
     </div>
   )
 }
+
+/**
+ * Where a Tap on a master lands in the cue FX tab (fx-speed plan D8): that master's row of the cue's
+ * *Tempo on GO*, added where the cue has none, the whole list saved as the Cue tab saves it. Nothing
+ * is sent live: the tempo is the cue's, played on its GO.
+ */
+function useCueTempoHost(cue: Cue, projectId: number): FxTempoHost {
+  const [patchCue] = usePatchProjectCueMutation()
+  const rows = cue.speedMasters ?? NO_TEMPOS
+  return useMemo(
+    () => ({
+      kind: 'cue',
+      rows,
+      setRow: (speedMasterUuid: string, bpm: number) =>
+        patchCue({ projectId, cueId: cue.id, speedMasters: withTempoRow(rows, speedMasterUuid, bpm) }),
+    }),
+    [rows, patchCue, projectId, cue.id],
+  )
+}
+
+const NO_TEMPOS: readonly CueSpeedMaster[] = []
 
 /** A row's type swap: the FX it can become, and the swap over the heads the row runs on. */
 interface CueFxSwap {
@@ -427,6 +452,7 @@ function CueFxEditor({
   libraryLoaded,
   readOnly,
   swap,
+  tempoHost,
   onDraft,
   onTiming,
 }: {
@@ -435,6 +461,7 @@ function CueFxEditor({
   libraryLoaded: boolean
   readOnly: boolean
   swap?: CueFxSwap
+  tempoHost: FxTempoHost
   onDraft: (draft: FxDraft, release: boolean) => void
   onTiming: (timing: Pick<CueAdHocFx, 'delayMs' | 'intervalMs' | 'randomWindowMs'>) => void
 }) {
@@ -472,6 +499,7 @@ function CueFxEditor({
           attribute={effect.attribute}
           readOnly={readOnly}
           swap={swap && { options: swap.options, onSwap: (to) => swap.onSwap(to, scope.headCount) }}
+          tempoHost={tempoHost}
           set={(patch, release = true) => write({ ...draft, ...patch }, release)}
           setParam={(name, value, release) => write({ ...draft, parameters: { ...draft.parameters, [name]: value } }, release)}
         />

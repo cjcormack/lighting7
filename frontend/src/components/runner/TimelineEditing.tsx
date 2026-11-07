@@ -26,6 +26,7 @@ import { useSpeedMasterListQuery } from '@/store/speedMasters'
 import { parseAttributeMask, serializeAttributeMask } from '@/lib/attributeFamily'
 import { MaskToggles, maskIsEmpty, maskToWire, useMaskDraft, type MaskValue } from '@/components/programmer/maskPicker'
 import { shownSceneryState } from '@/lib/scenery'
+import { useCycleSeconds } from '@/components/fx/useCycleSeconds'
 import { cellTargetOf, fxCycleWords, replacePlan, settingsChangeLabel, sharedValue, type FxRunCell, type FxRunVerb, type TimelineColumn } from '@/lib/stackTimeline'
 import { fxDynamicsParts } from '@/lib/fxDynamics'
 import { runsWord } from '@/components/fx/fxEditorModel'
@@ -728,6 +729,17 @@ export function TimelineSceneryPopover({
 
 // ── An FX cell ────────────────────────────────────────────────────────────────────────────────────
 
+/** A cue's FX's cycle in seconds at the tempo it runs at, its hover (fx-speed plan D2); undefined with no cycle. */
+function cycleTimingOf(settings: Record<string, unknown>, secondsOf: ReturnType<typeof useCycleSeconds>): string | undefined {
+  if (typeof settings.cycle !== 'number') return undefined
+  const ownBpm = typeof settings.ownBpm === 'number' ? settings.ownBpm : null
+  const beatMaster = typeof settings.speedMasterUuid === 'string' ? settings.speedMasterUuid : null
+  const rateMaster = typeof settings.rateSpeedMasterUuid === 'string' ? settings.rateSpeedMasterUuid : null
+  // As `fxCycleWords` reads them: a beat FX names its master or its Own tempo, a wall-clock one neither.
+  const wallClock = ownBpm == null && beatMaster == null
+  return secondsOf({ cycle: settings.cycle, wallClock, ownBpm, masterUuid: wallClock ? rateMaster : beatMaster })
+}
+
 /** One cue's FX settings as the run popover lists them, in the pad face's words: `½ beat · ↔ · 60 % · ADDITIVE`. */
 export function fxSettingsWords(settings: Record<string, unknown>): string {
   const parts: string[] = []
@@ -780,6 +792,7 @@ export function TimelineFxRunPopover({
 }) {
   const anchorRef = useRef<{ getBoundingClientRect(): DOMRect } | null>(null)
   anchorRef.current = { getBoundingClientRect: () => anchor()?.getBoundingClientRect() ?? new DOMRect() }
+  const secondsOf = useCycleSeconds()
   const here = run.find((cell) => cell.entryId === entryId)
   const at = here == null ? '' : cueLabel(here.cueId)
   const keyed = here?.effect.runUuid != null
@@ -826,7 +839,7 @@ export function TimelineFxRunPopover({
               className={cn('grid grid-cols-[44px_1fr_auto] items-baseline gap-2 rounded px-1 py-0.5', cell.entryId === entryId && 'bg-muted')}
             >
               <span className="font-mono">{cueLabel(cell.cueId)}</span>
-              <span className="min-w-0 truncate">
+              <span className="min-w-0 truncate" title={cycleTimingOf(cell.effect.settings, secondsOf)}>
                 {i === 0 ? (
                   fxSettingsWords(cell.effect.settings)
                 ) : cell.changed ? (

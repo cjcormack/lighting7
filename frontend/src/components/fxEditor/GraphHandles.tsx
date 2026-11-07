@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { cn } from '@/lib/utils'
-import { getCycleLabel } from '@/components/fx/fxConstants'
+import { cycleSeconds, runningSpeed, secondsWords, speedLabel } from '@/lib/fxSpeed'
+import { useFxTempo } from '@/components/fx/useFxTempo'
 import type { GraphMark, LinkedEditor } from '@/components/fx/fxGraphLink'
 import type { FxPreviewFx, FxPreviewRow } from '@/store/fxPreview'
 import { SAMPLES_PER_CYCLE, levelScale, rowStarts, rungRow, sampleX, type LaidSection, type LaneLayout } from './fxGraphModel'
@@ -126,9 +127,10 @@ function Knob({
 }
 
 /**
- * **The Cycle tab** (FX editor follow-ups D4), on the beat ruler at the first cycle's end, labelled
- * with the cycle: dragged sideways it sets Cycle, snapping to the cycle steps (or to 0.05 s in
- * seconds), and writes through the inspector's editor as the graph's other handles do.
+ * **The Speed tab** (FX editor follow-ups D4; fx-speed plan §4), on the beat ruler at the first
+ * cycle's end, labelled with the Speed: dragged sideways it sets the cycle on the slider's log scale,
+ * snapping to powers of two, and writes through the inspector's editor as the graph's other handles
+ * do. Its hover says the Speed and the seconds a cycle at the running tempo, `×2 · 0.94 s`.
  */
 export function CycleTab({
   plotLeft,
@@ -149,7 +151,8 @@ export function CycleTab({
   const [drag, setDrag] = useState<{ x: number; cycle: number } | null>(null)
   const edgeX = sampleX({ plotLeft, plotWidth }, samples, SAMPLES_PER_CYCLE)
   const inSeconds = editor.wallClock
-  const cycleWords = (cycle: number) => (inSeconds ? `${cycle} s` : getCycleLabel(cycle))
+  const tempo = useFxTempo(editor.draft, inSeconds)
+  const cycleWords = (cycle: number) => speedLabel(runningSpeed(cycle, inSeconds))
   const hovering = useRef(false)
   useEffect(() => () => {
     if (hovering.current) onHighlight?.(null)
@@ -179,7 +182,7 @@ export function CycleTab({
   return (
     <div
       data-fx-handle="cycle"
-      title={`Cycle ${cycleWords(editor.draft.cycle)} — drag to set it`}
+      title={`Speed ${cycleWords(editor.draft.cycle)} · ${secondsWords(cycleSeconds(editor.draft.cycle, inSeconds, tempo))} — drag to set it`}
       onPointerDown={start}
       onPointerEnter={() => {
         hovering.current = true

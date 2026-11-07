@@ -27,7 +27,7 @@ import { useCopyPaletteMutation, useSavePaletteMutation } from '@/store/palettes
 import type { PaletteFx, PaletteInput, PaletteSummary } from '@/api/palettesApi'
 import type { SpeedMaster } from '@/api/speedMastersApi'
 import { OWN_BPM_DEFAULT, clampOwnBpm, followsNoMaster } from '@/lib/fxTiming'
-import { ownTempoLabel } from '@/components/fx/fxConstants'
+import { ownTempoLabel } from '@/lib/fxSpeed'
 import { usePaletteDelete } from './usePaletteDelete'
 import { PaletteValue } from './PaletteValue'
 import { PaletteValueCell, type PaletteValueDraft, type PaletteValueLanding } from './PaletteValueCell'

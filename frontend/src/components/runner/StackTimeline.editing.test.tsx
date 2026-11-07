@@ -40,7 +40,11 @@ vi.mock('@/store/palettes', () => ({
   }),
 }))
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [{ id: 4, name: 'Warm', families: ['INTENSITY'] }] }) }))
-vi.mock('@/store/speedMasters', () => ({ useSpeedMasterListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/speedMasters', () => ({
+  useSpeedMasterListQuery: () => ({ data: [] }),
+  useSpeedMasterLiveQuery: (_arg?: unknown, options?: { selectFromResult?: (r: { data: unknown[] }) => unknown }) =>
+    options?.selectFromResult ? options.selectFromResult({ data: [] }) : { data: [] },
+}))
 vi.mock('@/store/stageElements', () => ({
   useStageElementListQuery: () => ({
     data: [{ uuid: 'tabs', name: 'House tabs', kind: 'DRAPE', positionZ: 0, params: { operation: 'DRAW', states: { open: 1 } } }],
@@ -420,7 +424,7 @@ describe('FX cells', () => {
     fireEvent.click(cell(102, FX))
     expect(edit).not.toHaveBeenCalled()
     const list = document.querySelector('[data-timeline-run-list]')!
-    expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['Q11 beatstarts', 'Q2◆ 2 beatsedited in place'])
+    expect([...list.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['Q1×4starts', 'Q2◆ ×2edited in place'])
     expect(edit).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Join run above' })).toHaveProperty('disabled', true)
     fireEvent.click(screen.getByRole('button', { name: 'Break run at Q2' }))

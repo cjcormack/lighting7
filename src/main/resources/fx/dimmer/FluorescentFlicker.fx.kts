@@ -5,6 +5,7 @@ family: intensity
 outputType: SLIDER
 fxMode: STATEFUL
 timingSource: WALL_CLOCK
+ownPace: true
 compatibleAttributes: [dimmer, uv]
 parameters:
   - name: high
@@ -39,7 +40,7 @@ parameters:
     type: double
     default: "0.3"
     description: How fast the on/off cycles are during a flicker (lower = faster)
-    label: Speed
+    label: Burst rate
     min: 0.05
     max: 0.95
     step: 0.01

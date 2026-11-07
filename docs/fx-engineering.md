@@ -264,10 +264,30 @@ FX reference timing via `CycleLength` constants:
 | `ONE_BAR` | 4.0 | Four beats — a new FX's default (venue-visit plan D16) |
 | `TWO_BARS` | 8.0 | Eight beats |
 
-Everything a person reads says the cycle in **beats a cycle** — `½ beat`, `1 beat`, `2 beats`,
-`1 bar`, `2 bars`, `4 bars` — from one table (`SPEED_STEPS` in the frontend's `fxConstants.ts`), the
-editor's segment and every chip alike; an FX on Own tempo reads its beats beside `Own 96`. The note values the chips
-once used (`1/4` for one beat) are gone (`FU-FE-FX-SPEED-SPELLING`, settled by S15).
+What a person reads is the FX's **Speed** (fx-speed plan D1, D2), never the cycle: how fast it runs
+against its tempo, ×1 one cycle a bar and each snap doubling or halving it. It is a view of the
+stored `cycle` — `4 ÷ cycle` on a beat FX, on a master or its Own tempo; `2 ÷ cycle` on a wall-clock
+FX, whose cycle is seconds, on a rate master or Natural — so ×1 is one bar at the running tempo on
+either and nothing stored changed. A beat FX runs its cycle as whole ticks, 24 a beat
+(`FxPhase.beatCycleTicks` truncates the rest), so the editor writes a cycle rounded to whole ticks
+and every label says the Speed that runs: ×5 is 19 ticks, `×5.05`. The editor's slider runs ×1/16
+to ×16 on a log scale, labelled ×¼ ×½ ×1 ×2 ×4 and ticked at ×1/16 ×⅛ ×8 ×16, sticks at every power
+of two unless ⌥ is held, and ends in a typed value (`⅔`, `2/3`, `0.5`) from ×1/512 to ×32; the
+graph's Speed handle drags on the same scale, snapping to powers of two. The readout beneath it says
+the cycle in seconds at the tempo the FX runs at, live, and in bars or beats where the Speed is a
+power of two: *1 bar · 1.82 s a cycle at 132 BPM*. Chips read `×1 · M1`, `×½ · Own 96`. The
+arithmetic, the snaps and the words are `frontend/src/lib/fxSpeed.ts`, pinned to the desk's snap
+and whole ticks, and to `TapTempo`, by `src/test/resources/fx/fxSpeed.fixture.json`
+(`FxSpeedPhaseTest`, `fxSpeed.test.ts`).
+
+Tap in the editor's Speed section goes where the section is (D8): in the live FX editor it holds the
+master in the programmer (`programmer.tapTempo`, `programmer.setTempo` for the typed tempo); in the
+cue FX tab it sets that master's row of the cue's *Tempo on GO*, counted in the window by
+`frontend/src/lib/tapTempo.ts` and sending nothing live; in the palette editor it is a live tap. On
+Own tempo it sets the FX's own tempo, counted in the window the same way, and no other FX moves. A
+wall-clock FX on Natural has no Tap. A stateful FX that reads neither its cycle nor a rate master
+declares `ownPace: true` in its frontmatter (Candle Flicker, Fluorescent Flicker; the library's
+`ownPace`), and its Speed section says *Runs at its own pace* (D4).
 
 ## FX types
 
@@ -585,7 +605,9 @@ functions of phase. They receive tick-level timing (`ClockTick` + `deltaMs`) ins
 a 0-1 phase value.
 
 The built-in ones are Candle Flicker and Fluorescent Flicker, in the Intensity table above. Both run
-on the wall clock (`timingSource: WALL_CLOCK`), so their Cycle is seconds.
+on the wall clock (`timingSource: WALL_CLOCK`) and read neither their cycle nor a rate master
+(`FU-SPEED-RATEMASTER-STATEFUL`), so both declare `ownPace: true` and the editor shows them no Speed
+(fx-speed plan D4). A user's stateful FX that reads its phase leaves the flag off and keeps it.
 
 Stateful FX implement the `StatefulFx` interface:
 - `initialize()` — called once when added to the engine, resets state
@@ -1435,6 +1457,30 @@ rather than the master's tick 0. A forever FX's phase is exactly what it was —
 still split into whole cycles and a fraction in integer arithmetic — and the whole-target form
 (`calculatePhase`) is the same function at offset 0 — except for a copy split off a spread
 (`FxInstance.splitMember`), which makes its member's call: that member's offset and group size.
+
+**A speed change keeps the FX's place** (fx-speed plan D6). `FxEngine.updateFx` swaps the instance
+for a new cycle, and the swap keeps its **elapsed cycles**, whole and fraction, so its phase, its run
+count and Bounce's parity are what they were. A beat FX does it through `FxInstance.cycleShift`, a
+`CycleShift` of ticks added to its elapsed ticks (`FxPhase.beatClock`; set where `swapFor` calls
+`keepCycles`): `(elapsed + shift) ÷ ticksPerCycle` is the same either side of the change. A forever
+beat FX whose new cycle is a power of two of a beat (`FxPhase.isSnappedCycle`) then **glides** its
+shift, linearly over one new cycle from the tick of the change, to the nearest multiple of the grid
+— one cycle, two under Bounce (`glideGridCycles`), so its forward cycles start where an unmoved
+one's would — after which its phase is an unmoved FX's: at a snap each cycle starts on a bar or a
+beat again. It moves at most half a grid, at most a cycle, in a cycle, so it never runs backwards. An
+FX with runs keeps its count and does not glide; nor does a wall-clock FX, Own tempo included, which
+has no master grid: `keepCycles` rescales its accumulator (and its runs anchor) by the ratio of the
+cycles. Every instance that stands in for another — a swap, a split's head copies, a programmer
+undo's restore — takes it with the rest of the run's place (`FxEngine.carryRunState`), and then
+`followClock` decides: on the same clock (the same loop, and a beat FX's same master) a new cycle keeps
+the elapsed cycles, so an undo of a speed change works its shift out for the restored cycle; on
+another master or loop the shift goes, since it counts the old master's ticks, and the FX starts on the
+new clock's grid — a move between a master and Own tempo still restarts the phase. A wall-clock FX
+moving between a rate master and Natural is on one loop, so a cycle sent with it is rescaled. The shift
+is never stored: a re-GO, a carried reload and `restartRuns` start on the grid, and an FX never sped
+up takes the integer arithmetic as before. The glide's ticks are the cycle's whole ticks, so
+under *One cycle for: Each head* it aligns each step, not the whole sequence. `FxSampler` reads the
+same shift, so a preview draws what the stage runs.
 
 ### FxContext
 

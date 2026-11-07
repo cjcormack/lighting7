@@ -22,7 +22,8 @@ import { isHeldByBlind } from '@/lib/heldBack'
 import { fxTargetLabel, selectionItems } from '@/lib/fxTargets'
 import { bpmLabel, isOnNatural, isWallClock } from '@/lib/fxTiming'
 import { isPaletteSteps, isSlotSteps, parseStepList, slotLabel } from '@/lib/stepFx'
-import { getCycleLabel, ownTempoLabel, secondsLabel } from '@/components/fx/fxConstants'
+import { ownTempoLabel, runningSpeed, speedLabel as speedWords } from '@/lib/fxSpeed'
+import { useCycleSeconds } from '@/components/fx/useCycleSeconds'
 import { parsePaletteRefUuid } from '@/components/fx/colourUtils'
 import { HeldBlindMark } from '@/components/fx/HeldBlindMark'
 import { useStopFx, useToggleFxPause } from '@/components/fx/useFxControls'
@@ -287,7 +288,15 @@ function stepNames(effect: ActiveFx, palettesByUuid: ReadonlyMap<string, Palette
 }
 
 function speedLabel(effect: ActiveFx): string {
-  return isWallClock(effect, effect.timingSource) ? secondsLabel(effect.cycle) : getCycleLabel(effect.cycle)
+  return speedWords(runningSpeed(effect.cycle, isWallClock(effect, effect.timingSource)))
+}
+
+/** The Speed, its hover the cycle in seconds at the tempo the FX runs at (fx-speed plan D2). */
+function SpeedCell({ effect }: { effect: ActiveFx }) {
+  const secondsOf = useCycleSeconds()
+  const wallClock = isWallClock(effect, effect.timingSource)
+  const title = secondsOf({ cycle: effect.cycle, wallClock, ownBpm: effect.ownBpm, masterUuid: wallClock ? effect.rateSpeedMasterUuid : effect.speedMasterUuid })
+  return cellText(speedLabel(effect), title, true)
 }
 
 function amountLabel(effect: ActiveFx): string {
@@ -334,10 +343,10 @@ function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColu
   }
   const speed: SheetColumn<FxSheetRow, FxColumnKey> = {
     key: 'speed',
-    label: 'Cycle',
+    label: 'Speed',
     width: '80px',
     value: () => undefined,
-    display: (row) => cellText(speedLabel(row.effect), undefined, true),
+    display: (row) => <SpeedCell effect={row.effect} />,
   }
   const timingSpeed: SheetColumn<FxSheetRow, FxColumnKey> = {
     key: 'timingSpeed',

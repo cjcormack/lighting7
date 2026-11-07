@@ -375,6 +375,11 @@ export function programmerSetTempo(speedMasterUuid: string, bpm: number) {
   lightingApi.programmer.setTempo(speedMasterUuid, bpm)
 }
 
+/** A tap on a master in the FX editor: the desk counts it and holds the master at what it hears. */
+export function programmerTapTempo(speedMasterUuid: string) {
+  lightingApi.programmer.tapTempo(speedMasterUuid)
+}
+
 /** *Capture*: hold a master at the tempo it is running at. */
 export function programmerHoldTempo(speedMasterUuid: string) {
   lightingApi.programmer.holdTempo(speedMasterUuid)

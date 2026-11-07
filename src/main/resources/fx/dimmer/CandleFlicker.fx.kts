@@ -5,6 +5,7 @@ family: intensity
 outputType: SLIDER
 fxMode: STATEFUL
 timingSource: WALL_CLOCK
+ownPace: true
 compatibleAttributes: [dimmer, uv]
 parameters:
   - name: base

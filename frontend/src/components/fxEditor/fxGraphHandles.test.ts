@@ -1,43 +1,41 @@
 import { describe, expect, it } from 'vitest'
-import { SPEED_STEPS } from '@/components/fx/fxConstants'
 import { previewFx } from '@/test/fxPreviewAnswers'
 import { cycleFromDrag, phaseFromDrag, snapCycle, spreadFromDrag, spreadShareOf } from './fxGraphHandles'
 
 /**
- * What each of the graph's handles writes (FX editor plan D12): Cycle snapped to a step, Spread
+ * What each of the graph's handles writes (FX editor plan D12): the Speed snapped to a power of two, Spread
  * moved so the grabbed row's start follows the finger, Phase wrapped within its cycle.
  */
 describe('the graph’s handles', () => {
-  it('snaps Cycle to the nearest of the cycle steps, by ratio', () => {
+  it('snaps the Speed to the nearest power of two, by ratio', () => {
     expect(snapCycle(3.1)).toBe(4)
     expect(snapCycle(2.7)).toBe(2)
     expect(snapCycle(0.01)).toBe(0.125)
-    expect(snapCycle(100)).toBe(16)
-    for (const { value } of SPEED_STEPS) expect(snapCycle(value)).toBe(value)
+    expect(snapCycle(100)).toBe(128)
+    for (const cycle of [0.125, 0.5, 1, 2, 4, 8, 16, 64]) expect(snapCycle(cycle)).toBe(cycle)
   })
 
-  it('scales Cycle by how far the first cycle’s edge moved from the plot’s left, onto a step', () => {
+  it('scales the cycle by how far the first cycle’s edge moved from the plot’s left, onto a snap', () => {
     // The edge 100px into the plot: dragged to 200px is twice the cycle, to 50px half of it.
     expect(cycleFromDrag(4, 72, 172, 272)).toBe(8)
     expect(cycleFromDrag(4, 72, 172, 122)).toBe(2)
     expect(cycleFromDrag(4, 72, 172, 180)).toBe(4)
-    // Past the plot's left edge it is the shortest step, never zero or negative.
+    // Past the plot's left edge it is the fastest snap the drag reaches, never zero or negative.
     expect(cycleFromDrag(4, 72, 172, 0)).toBe(0.125)
   })
 
-  it('keeps a cycle off the steps until the drag leaves it for one', () => {
-    // A triplet's 3 beats and 32 beats are no step: a nudge keeps them, a real drag moves to a step.
+  it('keeps a Speed off the snaps until the drag leaves it for one', () => {
+    // A triplet's 3 beats (×⅔): a nudge keeps it, a real drag moves to a snap.
     expect(cycleFromDrag(3, 72, 172, 175)).toBe(3)
     expect(cycleFromDrag(3, 72, 172, 202)).toBe(4)
-    expect(cycleFromDrag(32, 72, 172, 175)).toBe(32)
     expect(cycleFromDrag(32, 72, 172, 122)).toBe(16)
   })
 
-  it('moves a cycle in seconds to the nearest 0.05 s, with no beat steps', () => {
-    expect(cycleFromDrag(30, 72, 172, 175, true)).toBe(30.9)
-    expect(cycleFromDrag(0.05, 72, 172, 172, true)).toBe(0.05)
-    expect(cycleFromDrag(3, 72, 172, 122, true)).toBe(1.5)
-    expect(cycleFromDrag(500, 72, 172, 272, true)).toBe(600)
+  it('snaps a wall-clock cycle to a power of two of its Speed too', () => {
+    // Two seconds is ×1 on the wall clock.
+    expect(cycleFromDrag(2, 72, 172, 272, true)).toBe(4)
+    expect(cycleFromDrag(3, 72, 172, 175, true)).toBe(3)
+    expect(cycleFromDrag(4, 72, 172, 122, true)).toBe(2)
   })
 
   it('moves Spread by the drag over the grabbed row’s share of a cycle, within the desk’s range', () => {

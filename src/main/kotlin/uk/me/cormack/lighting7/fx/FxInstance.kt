@@ -879,6 +879,14 @@ class FxInstance internal constructor(
     var runsStartScaledMs: Double = Double.NaN
 
     /**
+     * A beat effect's offset onto its master's ticks after a change of cycle (fx-speed plan D6), or
+     * null. Set by `FxEngine.updateFx` before the swap instance is published, and cleared with the
+     * N-shot anchors, since a new count runs from now.
+     */
+    @Volatile
+    internal var cycleShift: CycleShift? = null
+
+    /**
      * Set by the phase functions on a pass when some member of an N-shot is still to finish its runs
      * (running, or waiting for its offset to come round). The compose pass clears it and [runsEvaluated]
      * before the effect's pass and reads them after: evaluated but nothing pending means the clock
@@ -1147,7 +1155,7 @@ class FxInstance internal constructor(
             // A master whose count went backwards (a reload) re-anchors rather than counting negative.
             runsStartTick = ticks
         }
-        return FxPhase.beatPhaseAt(ticks, runsStartTick, division, groupSize, dynamics, distributionOffset, runsTally)
+        return FxPhase.beatPhaseAt(ticks, runsStartTick, division, groupSize, dynamics, distributionOffset, runsTally, cycleShift)
     }
 
     /** The effective cycle length for a member pass; see [FxPhase.memberDivision]. */

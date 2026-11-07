@@ -76,6 +76,12 @@ data class FxRegistration(
      */
     val legacy: Boolean = false,
     /**
+     * A wall-clock FX that reads neither its cycle nor a rate master (fx-speed plan D4), so the editor
+     * offers it no Speed: Candle Flicker and Fluorescent Flicker. A stateful FX that reads its phase
+     * leaves it false and keeps its Speed.
+     */
+    val ownPace: Boolean = false,
+    /**
      * The list parameter whose entries are this FX's steps (fx-settings plan D6) — Colour Cycle's
      * `colours` — or null: only an FX that names one takes a [SpreadUnit.STEP] spread.
      */
@@ -107,6 +113,8 @@ data class FxTypeInfo(
     val attributeDefaults: Map<String, Map<String, String>> = emptyMap(),
     /** Kept for stored FX only, never offered ([FxRegistration.legacy]); absent is false. */
     val legacy: Boolean = false,
+    /** [FxRegistration.ownPace]; absent is false. */
+    val ownPace: Boolean = false,
     /** [FxRegistration.stepsFrom]; absent for an FX with no steps. */
     val stepsFrom: String? = null,
 )
@@ -264,6 +272,7 @@ class FxRegistry {
                     presets = reg.presets,
                     attributeDefaults = reg.attributeDefaults,
                     legacy = reg.legacy,
+                    ownPace = reg.ownPace,
                     stepsFrom = reg.stepsFrom,
                 )
             }

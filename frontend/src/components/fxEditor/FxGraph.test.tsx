@@ -412,24 +412,29 @@ describe('the handles (FX editor plan D12, §4.4)', () => {
     fireEvent.pointerUp(window, { clientX: to.x, clientY: to.y })
   }
 
-  it('drags the first cycle’s edge for Cycle, snapping to a step, the release landing', () => {
+  it('drags the first cycle’s edge for the Speed, snapping to a power of two, the release landing', () => {
     const editor = editorOf()
     draw(handleAnswer(), { editor })
-    // The Cycle tab sits on the ruler at the first cycle's end, labelled with the cycle.
+    // The Speed tab sits on the ruler at the first cycle's end, labelled with the Speed.
     const tab = handle('cycle')!
     expect(tab.closest('[data-fx-graph-ruler]')).not.toBeNull()
     expect(tab.style.left).toBe('112px')
-    expect(tab).toHaveTextContent('1 bar')
+    expect(tab).toHaveTextContent('×1')
     fireEvent.pointerDown(tab, { button: 0, clientX: 112, clientY: 10 })
-    // 40px further is twice the cycle; 44px is still twice it, on the step.
+    // 40px further is twice the cycle; 44px is still twice it, on the snap.
     fireEvent.pointerMove(window, { clientX: 152, clientY: 10 })
     fireEvent.pointerMove(window, { clientX: 156, clientY: 10 })
     expect(editor.set.mock.calls).toEqual([[{ cycle: 8 }, false]])
-    expect(document.querySelector('[data-fx-handle-label]')).toHaveTextContent('2 bars')
+    expect(document.querySelector('[data-fx-handle-label]')).toHaveTextContent('×½')
     expect(tab.style.left).toBe('152px')
     fireEvent.pointerUp(window, { clientX: 156, clientY: 10 })
     expect(editor.set).toHaveBeenLastCalledWith({ cycle: 8 }, true)
-    expect(document.querySelector('[data-fx-handle-label]')).toHaveTextContent('1 bar')
+    expect(document.querySelector('[data-fx-handle-label]')).toHaveTextContent('×1')
+  })
+
+  it('offers no Speed tab for an FX that runs at its own pace (fx-speed plan D4)', () => {
+    draw(handleAnswer(), { editor: { ...editorOf(), ownPace: true } })
+    expect(handle('cycle')).toBeNull()
   })
 
   it('lands nothing for a drag that never leaves its step', () => {
@@ -451,14 +456,15 @@ describe('the handles (FX editor plan D12, §4.4)', () => {
     expect(editor.set).not.toHaveBeenCalled()
   })
 
-  it('drags the first cycle’s edge of a wall-clock FX in seconds, not onto the beat steps', () => {
+  it('snaps a wall-clock FX’s Speed to a power of two too, its cycle in seconds', () => {
     const editor = { ...editorOf({ cycle: 30, timingSource: 'WALL_CLOCK' }), wallClock: true }
     draw(handleAnswer(), { editor })
+    // 33 s is nearer ×1/16's 32 s than the 30 s it began on.
     drag(handle('cycle')!, { x: 112, y: 10 }, { x: 116, y: 10 })
-    expect(editor.set).toHaveBeenLastCalledWith({ cycle: 33 }, true)
+    expect(editor.set).toHaveBeenLastCalledWith({ cycle: 32 }, true)
   })
 
-  it('snaps an Own tempo FX’s cycle onto the beat steps, as on a master', () => {
+  it('snaps an Own tempo FX’s cycle onto a power of two of a beat, as on a master', () => {
     const editor = editorOf({ ownBpm: 96, timingSource: 'WALL_CLOCK' })
     draw(handleAnswer(), { editor })
     drag(handle('cycle')!, { x: 112, y: 10 }, { x: 156, y: 10 })

@@ -1,5 +1,5 @@
 import type { TimelineEditOp, TimelineFx } from '@/api/stackTimelineApi'
-import { fxSpeedLabel, getCycleLabel, ownTempoLabel, secondsLabel } from '@/components/fx/fxConstants'
+import { fxSpeedLabel, ownTempoLabel } from '@/lib/fxSpeed'
 import type { TimelineCells } from './cells'
 import { filledOf, type TimelineCueRef } from './edits'
 import type { TimelineColumn } from './model'
@@ -85,13 +85,13 @@ export function joinRunVerb(
   return { op: { op: 'joinRun', cueId: order[at].cueId, fxUuid: effect.uuid, entryId }, reason: null }
 }
 
-/** An FX's cycle as its settings time it: in beats on a master or its Own tempo, in seconds on the wall clock. */
+/** An FX's Speed as its settings time it: its cycle in beats on a master or its Own tempo, in seconds on the wall clock. */
 export function fxCycleWords(settings: Record<string, unknown>): string | null {
   const cycle = settings.cycle
   if (typeof cycle !== 'number') return null
   if (typeof settings.ownBpm === 'number') return fxSpeedLabel(cycle, 'BEAT', settings.ownBpm)
   // A beat FX's settings name its speed master; a wall-clock one names none.
-  return settings.speedMasterUuid != null ? getCycleLabel(cycle) : secondsLabel(cycle)
+  return fxSpeedLabel(cycle, settings.speedMasterUuid != null ? 'BEAT' : 'WALL_CLOCK')
 }
 
 /** What changed inside an FX run, as the ◆ says it — the first setting that moved. */

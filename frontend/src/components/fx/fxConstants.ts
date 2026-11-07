@@ -1,7 +1,6 @@
 import { Sun, Palette, Move, Aperture, SlidersHorizontal, ListOrdered, type LucideIcon } from 'lucide-react'
 import { ORDER_LABELS, ORDER_OPTIONS, orderLabel } from '@/lib/orderLabels'
 import type { ElementMode } from '@/api/groupsApi'
-import { bpmLabel } from '@/lib/fxTiming'
 
 /**
  * The heads an FX palette is drawn on with nothing to count (FX editor plan D15): its head ladder
@@ -9,34 +8,6 @@ import { bpmLabel } from '@/lib/fxTiming'
  */
 export const NOTIONAL_HEADS = 8
 export const NOTIONAL_HEADS_WORD = 'eight'
-
-/**
- * An FX's cycle, in **beats a cycle** — the one spelling every surface uses
- * (`FU-FE-FX-SPEED-SPELLING`, settled by venue-visit plan S15). The editor's Cycle chip draws
- * these labels and every chip reads them through [getCycleLabel], so a cycle is never *1*
- * in one place and *1/4* in another. A bar is four beats (venue-visit plan D16's words), so the
- * long cycles say bars.
- *
- * The note values (`1/4` for one beat, `1/32` for an eighth of one) are gone: they read the same
- * glyph-shape as the segment's fractions for a different number.
- */
-export const SPEED_STEPS: readonly { value: number; label: string }[] = [
-  { value: 0.125, label: '⅛ beat' },
-  { value: 0.25, label: '¼ beat' },
-  { value: 0.5, label: '½ beat' },
-  { value: 1, label: '1 beat' },
-  { value: 2, label: '2 beats' },
-  { value: 4, label: '1 bar' },
-  { value: 8, label: '2 bars' },
-  { value: 16, label: '4 bars' },
-]
-
-/** The fractions a division off the eight is still said with — a triplet's ⅓. */
-const FRACTION_GLYPHS: readonly { value: number; glyph: string }[] = [
-  { value: 1 / 3, glyph: '⅓' },
-  { value: 2 / 3, glyph: '⅔' },
-  { value: 0.75, glyph: '¾' },
-]
 
 /** A number as a label writes it: at most three decimals, no trailing zeros. */
 export function trimNumber(n: number): string {
@@ -140,53 +111,4 @@ export function getFxDescription(fxName: string, libraryDescription?: string): s
 
 export function getOrderLabel(order: string): string {
   return ORDER_LABELS[order] ?? order.toLowerCase()
-}
-
-/**
- * An effect's speed as a label, with its **unit resolved** — beats a cycle for a beat effect, seconds
- * for a `WALL_CLOCK` one; a beat effect on its own tempo ([ownBpm], fx-speed plan D3) says it after
- * its beats, `1 bar · Own 96`. A running effect on Own tempo reports `WALL_CLOCK`, the loop it runs
- * on, and [ownBpm] is what says its cycle is still beats.
- *
- * `cycle` carries both readings on one field, and they are a tempo apart: `2` is two beats
- * or two seconds, and only the timing says which. Everything that renders a speed away from the
- * live editor's fields (`FxFields`, which have the library entry in hand and label the input
- * themselves) goes through this, so no surface has to re-derive the rule and none can get it half
- * right.
- *
- * **Null when the timing source is unknown** and the effect has no Own tempo, and callers should
- * then say nothing about the speed. That happens for a palette whose stored `fxType` no longer
- * resolves in the registry — an import from a desk carrying script-registered effects this one does
- * not have. A confident "2 bars" for a two-second cycle is worse than an absent clause.
- */
-export function fxSpeedLabel(
-  cycle: number,
-  timingSource: string | null | undefined,
-  ownBpm: number | null = null,
-): string | null {
-  if (ownBpm != null) return `${getCycleLabel(cycle)} · ${ownTempoLabel(ownBpm)}`
-  if (timingSource == null) return null
-  return timingSource === 'WALL_CLOCK' ? secondsLabel(cycle) : getCycleLabel(cycle)
-}
-
-/** An Own tempo as a chip says it — `Own 96`. */
-export function ownTempoLabel(bpm: number): string {
-  return `Own ${bpmLabel(bpm)}`
-}
-
-/** A cycle in seconds — `4 s`, `0.5 s`. */
-export function secondsLabel(seconds: number): string {
-  return `${trimNumber(seconds)} s`
-}
-
-/** A division in beats a cycle, from [SPEED_STEPS] — `1 bar`, `½ beat`, `3 beats` off the table. */
-export function getCycleLabel(cycle: number): string {
-  const step = SPEED_STEPS.find((o) => Math.abs(o.value - cycle) < 0.001)
-  if (step) return step.label
-  const fraction = FRACTION_GLYPHS.find((f) => Math.abs(f.value - cycle) < 0.001)
-  if (fraction) return `${fraction.glyph} beat`
-  if (cycle >= 4 && Math.abs(cycle / 4 - Math.round(cycle / 4)) < 0.001) {
-    return `${Math.round(cycle / 4)} bars`
-  }
-  return `${trimNumber(cycle)} ${cycle === 1 ? 'beat' : 'beats'}`
 }

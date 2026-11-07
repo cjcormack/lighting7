@@ -1,5 +1,5 @@
 import { AudioWaveform } from 'lucide-react'
-import { fxSpeedLabel } from '@/components/fx/fxConstants'
+import { fxSpeedLabel } from '@/lib/fxSpeed'
 import { isAroundSpelling } from '@/components/fx/fxEditorModel'
 import { describePaletteRows, paletteRowsSwatch } from '@/lib/paletteIntent'
 import type { PaletteSummary } from '@/api/palettesApi'

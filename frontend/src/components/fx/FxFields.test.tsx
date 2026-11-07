@@ -53,8 +53,23 @@ vi.mock('@/components/ui/slider', () => ({
   ),
 }))
 
+const BANK = [{ uuid: 'm1', index: 1, name: 'Main', bpm: 120 }, { uuid: 'm2', index: 2, name: 'Slow', bpm: 60 }]
+const tempoCalls = vi.hoisted(() => ({
+  tapSpeedMaster: vi.fn(),
+  setSpeedMasterBpm: vi.fn(),
+  programmerTapTempo: vi.fn(),
+  programmerSetTempo: vi.fn(),
+}))
 vi.mock('@/store/speedMasters', () => ({
-  useSpeedMasterLiveQuery: () => ({ data: [{ uuid: 'm1', index: 1, name: 'Main', bpm: 120 }, { uuid: 'm2', index: 2, name: 'Slow', bpm: 60 }] }),
+  useSpeedMasterLiveQuery: (_arg?: unknown, options?: { selectFromResult?: (r: { data: typeof BANK }) => unknown }) =>
+    options?.selectFromResult ? options.selectFromResult({ data: BANK }) : { data: BANK },
+  tapSpeedMaster: tempoCalls.tapSpeedMaster,
+  setSpeedMasterBpm: tempoCalls.setSpeedMasterBpm,
+}))
+vi.mock('@/store/programmer', () => ({
+  useProgrammerTempo: () => ({ projectId: 1, masters: [{ speedMasterUuid: 'm1', bpm: 120 }] }),
+  programmerTapTempo: tempoCalls.programmerTapTempo,
+  programmerSetTempo: tempoCalls.programmerSetTempo,
 }))
 vi.mock('./FxColourPicker', () => ({ FxColourPicker: () => null }))
 vi.mock('./FxColourListPicker', () => ({ FxColourListPicker: () => null }))
@@ -106,7 +121,7 @@ function fields(
   entry: FxLibraryEntry,
   d: FxDraft,
   scope: FxScope = SCOPE,
-  more: Pick<ComponentProps<typeof FxFields>, 'attribute' | 'layout' | 'swap'> = {},
+  more: Pick<ComponentProps<typeof FxFields>, 'attribute' | 'layout' | 'swap' | 'tempoHost'> = {},
 ) {
   const set = vi.fn()
   const setParam = vi.fn()
@@ -152,86 +167,202 @@ function Harness({ entry, initial, scope, external }: { entry: FxLibraryEntry; i
 
 afterEach(cleanup)
 
-/** The Cycle chip's popover: its steps, its typed field and *Same cycle as…*. */
-function openCycle() {
-  fireEvent.click(screen.getByRole('button', { name: /^Cycle: / }))
+afterEach(() => {
+  vi.restoreAllMocks()
+  for (const call of Object.values(tempoCalls)) call.mockClear()
+})
+
+/** Taps at [times] (ms), counted where the window counts them. */
+function tapAt(times: number[]) {
+  const now = vi.spyOn(performance, 'now')
+  for (const t of times) {
+    now.mockReturnValueOnce(t)
+    fireEvent.click(screen.getByRole('button', { name: /^Tap / }))
+  }
 }
 
 describe('FxFields', () => {
-  it('gives a wall-clock effect with no rate master Natural, and a beat effect beats and its speed master', () => {
+  it('gives a wall-clock effect with no rate master Natural, with no Tap, and a beat effect its master and Tap', () => {
     fields(FLICKER, draft())
-    openCycle()
-    expect(screen.getByRole('spinbutton', { name: /Cycle seconds/ }).closest('div')).toBeTruthy()
-    expect(screen.queryByRole('radiogroup', { name: 'Cycle' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Timing: Natural' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Tempo: Natural' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Tap / })).toBeNull()
+    expect(screen.getByText('120 BPM · Natural')).toBeTruthy()
+    // Two seconds a cycle is ×1 on the wall clock.
+    expect((screen.getByRole('textbox', { name: 'Speed value' }) as HTMLInputElement).value).toBe('×1')
     cleanup()
-    fields(PULSE, draft())
-    openCycle()
-    expect(screen.getByRole('radiogroup', { name: 'Cycle' })).toBeTruthy()
-    expect(screen.queryByRole('spinbutton', { name: /Cycle seconds/ })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Timing: M1 · 120' })).toBeTruthy()
+    fields(PULSE, draft({ cycle: 4 }))
+    expect(screen.getByRole('button', { name: 'Tempo: M1 · Main' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Tap the master’s tempo' })).toBeTruthy()
+    expect((screen.getByRole('spinbutton', { name: /^Tempo/ }) as HTMLInputElement).value).toBe('120')
+    expect(screen.getByText('1 bar · 2 s a cycle at 120 BPM')).toBeTruthy()
   })
 
-  it('reads a beat effect on its own tempo in beats, its chip naming the tempo, with no master named', () => {
+  it('reads a beat effect on its own tempo in beats against that tempo, its chip saying Own', () => {
     fields(PULSE, draft({ ownBpm: 96, cycle: 4 }))
-    expect(screen.getByRole('button', { name: 'Cycle: 1 bar' })).toBeTruthy()
-    openCycle()
-    expect(screen.getByRole('radiogroup', { name: 'Cycle' })).toBeTruthy()
-    expect(screen.queryByRole('spinbutton', { name: /Cycle seconds/ })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Timing: Own 96' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Tempo: Own 96' })).toBeTruthy()
+    expect(screen.getByText('1 bar · 2.5 s a cycle at 96 BPM')).toBeTruthy()
   })
 
-  it('offers Own tempo on a beat effect, its BPM field sending the tempo alone', () => {
+  it('types and taps an Own tempo into the FX alone, counted by the desk’s rules', () => {
     const { set } = fields(PULSE, draft({ ownBpm: 96 }))
-    fireEvent.click(screen.getByRole('button', { name: 'Timing: Own 96' }))
-    expect(screen.getByRole('radio', { name: 'Own tempo' }).getAttribute('aria-checked')).toBe('true')
-    expect(screen.queryByRole('radio', { name: 'Natural' })).toBeNull()
     const bpm = screen.getByRole('spinbutton', { name: /Own tempo/ }) as HTMLInputElement
     expect(bpm.value).toBe('96')
     fireEvent.change(bpm, { target: { value: '140' } })
     fireEvent.keyDown(bpm, { key: 'Enter' })
     expect(set).toHaveBeenLastCalledWith({ ownBpm: 140, speedMasterUuid: null, rateSpeedMasterUuid: null }, true)
+    tapAt([10_000, 10_500, 11_000])
+    expect(set).toHaveBeenLastCalledWith({ ownBpm: 120, speedMasterUuid: null, rateSpeedMasterUuid: null }, true)
+    expect(tempoCalls.tapSpeedMaster).not.toHaveBeenCalled()
   })
 
   it('moves a beat effect from its master onto Own tempo at the tempo that master is running at', () => {
     const { set } = fields(PULSE, draft({ speedMasterUuid: 'm2', cycle: 4 }))
-    fireEvent.click(screen.getByRole('button', { name: 'Timing: M2 · 60' }))
-    // On a master there is no tempo of its own to type.
-    expect(screen.queryByRole('spinbutton', { name: /Own tempo/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Tempo: M2 · Slow' }))
     fireEvent.click(screen.getByRole('radio', { name: 'Own tempo' }))
     // The cycle stays in beats, so the speed is kept.
     expect(set).toHaveBeenLastCalledWith({ ownBpm: 60, speedMasterUuid: null, rateSpeedMasterUuid: null }, true)
   })
 
-  it('moves a beat effect off Own tempo onto a master by naming the master, the cycle kept', () => {
+  it('lists the masters before Own tempo, and moves off Own tempo by naming a master, the cycle kept', () => {
     const { set } = fields(PULSE, draft({ ownBpm: 96, cycle: 4 }))
-    fireEvent.click(screen.getByRole('button', { name: 'Timing: Own 96' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Tempo: Own 96' }))
+    const options = Array.from(screen.getByRole('radiogroup', { name: 'Tempo' }).querySelectorAll('button')).map((b) => b.getAttribute('aria-label'))
+    expect(options).toEqual(['M1 · Main', 'M2 · Slow', 'Own tempo'])
+    expect(screen.getByRole('radio', { name: 'Own tempo' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.queryByRole('radio', { name: 'Natural' })).toBeNull()
     fireEvent.click(screen.getByRole('radio', { name: 'M1 · Main' }))
     expect(set).toHaveBeenLastCalledWith({ ownBpm: null, speedMasterUuid: 'm1' }, true)
   })
 
   it('offers Natural on a wall-clock effect, which sends natural and no rate master', () => {
     const { set } = fields(FLICKER, draft({ rateSpeedMasterUuid: 'm2' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Timing: rate M2 · 60' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Tempo: rate M2 · Slow' }))
     expect(screen.queryByRole('radio', { name: 'Own tempo' })).toBeNull()
     fireEvent.click(screen.getByRole('radio', { name: 'Natural' }))
     expect(set).toHaveBeenLastCalledWith({ natural: true, rateSpeedMasterUuid: null }, true)
-    expect(screen.queryByRole('spinbutton', { name: /Own tempo/ })).toBeNull()
   })
 
   it('names a stored rate master the bank does not hold as M1, the master the desk runs it on — not Natural', () => {
     fields(FLICKER, draft({ rateSpeedMasterUuid: 'gone' }))
-    expect(screen.getByRole('button', { name: 'Timing: rate M1 · 120' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Tempo: rate M1 · Main' })).toBeTruthy()
   })
 
-  it('speaks the segment in the one spelling the chips use — beats a cycle, bars from four', () => {
-    fields(PULSE, draft({ cycle: 4 }))
-    expect(screen.getByRole('button', { name: 'Cycle: 1 bar' })).toBeTruthy()
-    openCycle()
-    const segment = screen.getByRole('radiogroup', { name: 'Cycle' })
-    const labels = Array.from(segment.querySelectorAll('button')).map((b) => b.textContent)
-    expect(labels).toEqual(['⅛ beat', '¼ beat', '½ beat', '1 beat', '2 beats', '1 bar', '2 bars', '4 bars'])
-    expect(screen.getByRole('radio', { name: '1 bar a cycle' }).getAttribute('aria-checked')).toBe('true')
+  it('labels the slider’s snaps ×¼ to ×4, and sticks a drag to a power of two', () => {
+    const { set } = fields(PULSE, draft({ cycle: 4 }))
+    const labels = Array.from(document.querySelectorAll('[aria-hidden] > span')).map((s) => s.textContent).filter(Boolean)
+    expect(labels).toEqual(['×¼', '×½', '×1', '×2', '×4'])
+    const slider = screen.getByRole('slider', { name: 'Speed' }) as HTMLInputElement
+    expect(slider.value).toBe('500')
+    // 0.5 + 1/8 of an octave's share above ×2 (an octave is 125 of 1000) — near enough to stick.
+    fireEvent.change(slider, { target: { value: '630' } })
+    expect(set).toHaveBeenLastCalledWith({ cycle: 2 }, false)
+    // Between ×2 and ×4 it slides, in whole ticks: ×2.83 is 34 ticks.
+    fireEvent.change(slider, { target: { value: '687' } })
+    expect(set).toHaveBeenLastCalledWith({ cycle: 34 / 24 }, false)
+    fireEvent.pointerUp(slider)
+    expect(set).toHaveBeenLastCalledWith({ cycle: 34 / 24 }, true)
+  })
+
+  it('moves a quarter of an octave an arrow, and a whole one with Shift', () => {
+    const { set } = fields(PULSE, draft({ cycle: 4 }))
+    const slider = screen.getByRole('slider', { name: 'Speed' })
+    fireEvent.keyDown(slider, { key: 'ArrowRight', shiftKey: true })
+    expect(set).toHaveBeenLastCalledWith({ cycle: 2 }, true)
+    fireEvent.keyDown(slider, { key: 'ArrowLeft' })
+    // ×2^-¼ is 4 ÷ 0.84 beats, 114 ticks.
+    expect(set).toHaveBeenLastCalledWith({ cycle: 114 / 24 }, true)
+  })
+
+  it('types a fraction or a decimal, says the Speed that runs, and lights the typed value off a snap', () => {
+    const { set } = fields(PULSE, draft({ cycle: 4 }))
+    const typed = screen.getByRole('textbox', { name: 'Speed value' }) as HTMLInputElement
+    expect(typed.closest('[data-typed-cell]')?.hasAttribute('data-lit')).toBe(false)
+    fireEvent.change(typed, { target: { value: '⅔' } })
+    fireEvent.keyDown(typed, { key: 'Enter' })
+    expect(set).toHaveBeenLastCalledWith({ cycle: 6 }, true)
+    fireEvent.change(typed, { target: { value: '5' } })
+    fireEvent.keyDown(typed, { key: 'Enter' })
+    expect(set).toHaveBeenLastCalledWith({ cycle: 19 / 24 }, true)
+    cleanup()
+    fields(PULSE, draft({ cycle: 19 / 24 }))
+    const five = screen.getByRole('textbox', { name: 'Speed value' }) as HTMLInputElement
+    expect(five.value).toBe('×5.05')
+    expect(five.closest('[data-typed-cell]')?.hasAttribute('data-lit')).toBe(true)
+  })
+
+  it('draws a Speed off the track at its end, writing nothing until the thumb is dragged', () => {
+    const { set } = fields(PULSE, draft({ cycle: 128 }))
+    expect((screen.getByRole('slider', { name: 'Speed' }) as HTMLInputElement).value).toBe('0')
+    expect((screen.getByRole('textbox', { name: 'Speed value' }) as HTMLInputElement).value).toBe('×1/32')
+    expect(set).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['programmer', { kind: 'programmer' } as const, 'programmerTapTempo', 'programmerSetTempo'],
+    ['live', { kind: 'live' } as const, 'tapSpeedMaster', 'setSpeedMasterBpm'],
+  ] as const)('sends a Tap and a typed tempo on a master to the %s', (_host, tempoHost, tap, typedTo) => {
+    fields(PULSE, draft({ speedMasterUuid: 'm1' }), SCOPE, { tempoHost })
+    fireEvent.click(screen.getByRole('button', { name: 'Tap the master’s tempo' }))
+    expect(tempoCalls[tap]).toHaveBeenCalledWith('m1')
+    const field = screen.getByRole('spinbutton', { name: /^Tempo/ })
+    fireEvent.change(field, { target: { value: '130' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(tempoCalls[typedTo]).toHaveBeenCalledWith('m1', 130)
+  })
+
+  it('marks a master the programmer holds in amber in the live editor', () => {
+    fields(PULSE, draft({ speedMasterUuid: 'm1' }), SCOPE, { tempoHost: { kind: 'programmer' } })
+    expect(document.querySelector('[data-held-tempo]')).toBeTruthy()
+    expect(screen.getByText('held in the programmer')).toBeTruthy()
+  })
+
+  it('taps a master into the cue’s Tempo on GO in the cue FX tab, sending nothing live', () => {
+    const setRow = vi.fn()
+    fields(PULSE, draft({ speedMasterUuid: 'm2' }), SCOPE, { tempoHost: { kind: 'cue', rows: [{ speedMasterUuid: 'm2', bpm: 90 }], setRow } })
+    expect((screen.getByRole('spinbutton', { name: /^Tempo/ }) as HTMLInputElement).value).toBe('90')
+    tapAt([0, 400, 800])
+    expect(setRow).toHaveBeenLastCalledWith('m2', 150)
+    expect(tempoCalls.tapSpeedMaster).not.toHaveBeenCalled()
+    expect(tempoCalls.programmerTapTempo).not.toHaveBeenCalled()
+  })
+
+  it('offers no Tap or tempo on a follower master, whose leader sets it', () => {
+    BANK.push({ uuid: 'm3', index: 3, name: 'Half', bpm: 60, followNum: 1, followDen: 2, followTargetUuid: 'm1' } as (typeof BANK)[number])
+    try {
+      fields(PULSE, draft({ speedMasterUuid: 'm3' }), SCOPE, { tempoHost: { kind: 'cue', rows: [], setRow: vi.fn() } })
+      expect(screen.queryByRole('button', { name: /^Tap / })).toBeNull()
+      expect(screen.queryByRole('spinbutton', { name: /^Tempo/ })).toBeNull()
+      expect(screen.getByText('60 BPM · follows M1, whose tempo it takes')).toBeTruthy()
+    } finally {
+      BANK.pop()
+    }
+  })
+
+  it('keeps a typed tempo while the master’s tempo moves under it', () => {
+    const { rerender } = render(
+      <FxFields entry={PULSE} timingSource="BEAT" draft={draft({ speedMasterUuid: 'm1' })} scope={SCOPE} extendedChannels={undefined} settingAttribute={undefined} readOnly={false} set={vi.fn()} setParam={vi.fn()} />,
+    )
+    const field = screen.getByRole('spinbutton', { name: /^Tempo/ }) as HTMLInputElement
+    field.focus()
+    fireEvent.change(field, { target: { value: '12' } })
+    BANK[0].bpm = 121
+    try {
+      rerender(
+        <FxFields entry={PULSE} timingSource="BEAT" draft={draft({ speedMasterUuid: 'm1' })} scope={SCOPE} extendedChannels={undefined} settingAttribute={undefined} readOnly={false} set={vi.fn()} setParam={vi.fn()} />,
+      )
+      expect((screen.getByRole('spinbutton', { name: /^Tempo/ }) as HTMLInputElement).value).toBe('12')
+    } finally {
+      BANK[0].bpm = 120
+    }
+  })
+
+  it('says a stateful flicker runs at its own pace, with no tempo, Tap or slider (D4)', () => {
+    fields({ ...FLICKER, name: 'Candle Flicker', ownPace: true }, draft())
+    expect(screen.getByText('Runs at its own pace')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Tempo: / })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Tap / })).toBeNull()
+    expect(screen.queryByRole('slider', { name: 'Speed' })).toBeNull()
+    expect(screen.getByRole('radiogroup', { name: 'Direction' })).toBeTruthy()
   })
 
   it('holds an int slider at twice its declared default, and lets the field type past it', () => {
@@ -244,7 +375,7 @@ describe('FxFields', () => {
     expect(setParam).toHaveBeenLastCalledWith('flickerDurationMs', '400', true)
   })
 
-  it('puts Amount in percent under Mix and Direction as three glyphs in the Timing strip', () => {
+  it('puts Amount in percent under Mix and Direction as three glyphs under Speed', () => {
     const { set } = fields(PULSE, draft({ amount: 0.6, direction: 'BACKWARD' }))
     const size = screen.getByRole('spinbutton', { name: /Amount/ }) as HTMLInputElement
     expect(size.value).toBe('60')
@@ -253,7 +384,7 @@ describe('FxFields', () => {
     expect(set).toHaveBeenLastCalledWith({ amount: 0.4 }, true)
     expect(screen.getByRole('region', { name: 'Mix' }).contains(size)).toBe(true)
     const direction = screen.getByRole('radiogroup', { name: 'Direction' })
-    expect(screen.getByRole('region', { name: 'Timing' }).contains(direction)).toBe(true)
+    expect(screen.getByRole('region', { name: 'Speed' }).contains(direction)).toBe(true)
     expect(Array.from(direction.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'))).toEqual([
       'Forward',
       'Backward',
@@ -264,37 +395,24 @@ describe('FxFields', () => {
     expect(set).toHaveBeenLastCalledWith({ direction: 'BOUNCE' })
   })
 
-  it('chips Runs in the Timing strip: forever, ×1 to ×4, or a typed count lit when it is none of them', () => {
+  it('chips Runs under Speed: forever, ×1 to ×4, or a typed count lit when it is none of them', () => {
     const { set } = fields(PULSE, draft())
     expect(screen.getByRole('button', { name: 'Runs: forever' }).textContent).toContain('∞')
     fireEvent.click(screen.getByRole('button', { name: 'Runs: forever' }))
     expect(screen.getByRole('radio', { name: 'Forever' }).getAttribute('aria-checked')).toBe('true')
-    expect(document.querySelector('[data-typed-cell]')?.hasAttribute('data-lit')).toBe(false)
+    expect(screen.getByRole('spinbutton', { name: 'Runs count' }).closest('[data-typed-cell]')?.hasAttribute('data-lit')).toBe(false)
     fireEvent.click(screen.getByRole('radio', { name: '2 runs' }))
     expect(set).toHaveBeenLastCalledWith({ runs: 2 })
     cleanup()
     const second = fields(PULSE, draft({ runs: 7 }))
     fireEvent.click(screen.getByRole('button', { name: 'Runs: 7 runs' }))
-    expect(document.querySelector('[data-typed-cell]')?.hasAttribute('data-lit')).toBe(true)
+    expect(screen.getByRole('spinbutton', { name: 'Runs count' }).closest('[data-typed-cell]')?.hasAttribute('data-lit')).toBe(true)
     const count = screen.getByRole('spinbutton', { name: 'Runs count' })
     fireEvent.change(count, { target: { value: '9' } })
     fireEvent.keyDown(count, { key: 'Enter' })
     expect(second.set).toHaveBeenLastCalledWith({ runs: 9 })
     fireEvent.click(screen.getByRole('radio', { name: 'Forever' }))
     expect(second.set).toHaveBeenLastCalledWith({ runs: null })
-  })
-
-  it('opens the eight steps from the Cycle chip, the typed division lit only off them', () => {
-    const { set } = fields(PULSE, draft({ cycle: 1 / 3 }))
-    expect(screen.getByRole('button', { name: 'Cycle: ⅓ beat' })).toBeTruthy()
-    openCycle()
-    expect(screen.getByRole('spinbutton', { name: 'Beats a cycle' }).closest('[data-typed-cell]')?.hasAttribute('data-lit')).toBe(true)
-    fireEvent.click(screen.getByRole('radio', { name: '2 beats a cycle' }))
-    expect(set).toHaveBeenLastCalledWith({ cycle: 2 })
-    cleanup()
-    fields(PULSE, draft({ cycle: 2 }))
-    openCycle()
-    expect(screen.getByRole('spinbutton', { name: 'Beats a cycle' }).closest('[data-typed-cell]')?.hasAttribute('data-lit')).toBe(false)
   })
 
   it("draws a parameter's own sentence under its control", () => {
@@ -695,9 +813,9 @@ describe('FxFields in four questions (fx-settings plan D9)', () => {
   }
   const sections = () => [...document.querySelectorAll('section')].map((el) => el.getAttribute('aria-label'))
 
-  it.each(['editor', 'inspector'] as const)('draws Timing, the FX’s own section, Across the heads, Mix and then Advanced in the %s layout', (layout) => {
+  it.each(['editor', 'inspector'] as const)('draws Speed, the FX’s own section, Across the heads, Mix and then Advanced in the %s layout', (layout) => {
     fields(WAVE, draft({ parameters: { shape: 'SINE' } }), HEADS, { layout, attribute: 'dimmer' })
-    expect(sections()).toEqual(['Timing', 'Levels', 'Across the heads', 'Mix'])
+    expect(sections()).toEqual(['Speed', 'Levels', 'Across the heads', 'Mix'])
     const advanced = screen.getByRole('button', { name: /^Advanced/ })
     const mix = screen.getByRole('region', { name: 'Mix' })
     expect(mix.compareDocumentPosition(advanced) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -803,9 +921,9 @@ describe('FxFields in four questions (fx-settings plan D9)', () => {
         />
       </FxChipSheetContext.Provider>,
     )
-    fireEvent.click(screen.getByRole('button', { name: /^Cycle: / }))
-    const sheet = screen.getByRole('dialog', { name: 'Cycle' })
+    fireEvent.click(screen.getByRole('button', { name: /^Tempo: / }))
+    const sheet = screen.getByRole('dialog', { name: 'Tempo' })
     expect(sheet.querySelector('[data-chip-sheet]')).toBeTruthy()
-    expect(sheet.contains(screen.getByRole('radiogroup', { name: 'Cycle' }))).toBe(true)
+    expect(sheet.contains(screen.getByRole('radiogroup', { name: 'Tempo' }))).toBe(true)
   })
 })

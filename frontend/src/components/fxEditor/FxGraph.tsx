@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { ChevronDown, ChevronRight, Pause, Play, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EditorReadout } from '@/components/editor/EditorReadout'
-import { ownTempoLabel } from '@/components/fx/fxConstants'
+import { ownTempoLabel } from '@/lib/fxSpeed'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import { paletteAttributeFor } from '@/lib/paletteIntent'
 import { dmxToCentre, formatCentre } from '@/lib/positionScale'
@@ -352,7 +352,7 @@ function GraphBody({
             palette={palette}
             contextOf={contextOf}
           >
-            {handles != null && (
+            {handles != null && handles.ownPace !== true && (
               <CycleTab plotLeft={gutter} plotWidth={plotWidth} samples={answer.window.samples} editor={handles} lit={highlight === 'cycle'} onHighlight={onHighlight} />
             )}
           </GraphRuler>
