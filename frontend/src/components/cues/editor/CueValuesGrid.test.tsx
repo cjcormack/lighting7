@@ -377,6 +377,17 @@ describe('CueValuesGrid', () => {
     expect(await saved(2)).toEqual([])
   })
 
+  it('⌘-click adds a cell in another column, and a typed level reaches only the cells selected (programmer-fixes plan D1)', async () => {
+    data.cues.set(1, cue(1, []))
+    data.cooked.set(1, [layerRow('orbit-sr', 'dimmer', '255'), layerRow('orbit-sl', 'dimmer', '255')])
+    render(<Editor cueId={1} />)
+    selectCell(1, 'fixture:orbit-sr', 'dimmer')
+    fireEvent.click(within(cell(1, 'fixture:orbit-sl', 'colour')).getByRole('button'), { metaKey: true, detail: 1 })
+    await typeLevel('80')
+    // Orbit SL's dimmer sits in the gap: the level lands on Orbit SR's alone, the colour cell taking none.
+    expect(await saved(1)).toEqual([{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '204', sortOrder: 0 }])
+  })
+
   it('keeps every row’s fade and order through an edit', async () => {
     data.cues.set(
       1,

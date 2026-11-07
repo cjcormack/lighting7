@@ -239,6 +239,7 @@ export function AppliedTableShell<Row extends SheetRow, C extends string>({
             ) : null
           }
           marqueeDragging={sheet.marqueeDragging}
+          addLatch={sheet.addLatch}
           foldForStrip={false}
         />
       </div>

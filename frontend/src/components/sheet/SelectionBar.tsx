@@ -1,11 +1,13 @@
 import { useRef, type ReactNode } from 'react'
-import { MousePointerSquareDashed } from 'lucide-react'
+import { MousePointerSquareDashed, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useCoarsePointer } from '@/hooks/useCoarsePointer'
 import { MID_FOLDED_CLASS, PHONE_FOLDED_CLASS } from './toolbarFolds'
 import { CHROME_ROW_CLASS } from './sheetFrame'
 import { selectionBandState } from './selectionBand'
+import type { AddLatchControl } from './useAddLatch'
 
 /** The ShowBar's key-cap styling, so the two hints read as one vocabulary. */
 const KBD_CLASS = 'rounded border bg-muted/50 px-1.5 py-px text-[9.5px]'
@@ -20,6 +22,32 @@ const KBD_CLASS = 'rounded border bg-muted/50 px-1.5 py-px text-[9.5px]'
  * a drag ends — see `selectionBandState`.
  */
 const SHORT_VIEWPORT = '(max-height: 500px)'
+
+/**
+ * The *Add* latch (programmer-fixes plan D7): on a touch screen, a tap that adds to the selection
+ * the way a ⌘-click does, and a held drag that accumulates. Drawn only for a coarse pointer — a
+ * mouse has ⌘ — and nothing at all without a [latch].
+ */
+export function AddLatchToggle({ latch }: { latch?: AddLatchControl | null }) {
+  const coarse = useCoarsePointer()
+  if (latch == null || !coarse) return null
+  return (
+    <button
+      type="button"
+      aria-pressed={latch.on}
+      aria-label="Add"
+      onClick={latch.onToggle}
+      title="Add: a tap adds a cell or a row to the selection, or takes it out"
+      className={cn(
+        'inline-flex h-8 shrink-0 items-center gap-1 rounded-md border px-2 text-xs font-medium',
+        latch.on ? 'border-primary bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent',
+      )}
+    >
+      <Plus className="size-3.5" aria-hidden />
+      <span className={PHONE_FOLDED_CLASS}>Add</span>
+    </button>
+  )
+}
 
 export interface SelectionBarProps {
   /**
@@ -75,6 +103,8 @@ export interface SelectionBarProps {
    * short label rather than a scroller — the cue sheet's lock note — says false.
    */
   foldForStrip?: boolean
+  /** The *Add* latch, drawn on a coarse pointer only (`AddLatchToggle`). */
+  addLatch?: AddLatchControl | null
 }
 
 /**
@@ -127,6 +157,7 @@ export function SelectionBar({
   verbs,
   marqueeDragging,
   foldForStrip = strip != null,
+  addLatch = null,
 }: SelectionBarProps) {
   const shortViewport = useMediaQuery(SHORT_VIEWPORT)
   const hasSelection = !!verbs || cellLabel != null
@@ -161,6 +192,7 @@ export function SelectionBar({
             <span className="text-xs">Nothing selected</span>
           </>
         )}
+        <AddLatchToggle latch={addLatch} />
         {chip}
       </div>
     )
@@ -229,6 +261,7 @@ export function SelectionBar({
           )}
         </>
       )}
+      <AddLatchToggle latch={addLatch} />
       {chip}
       {strip}
       {/* `ml-auto`, not a `flex-1` spacer. A strip's chip scroller is itself `flex-1`, and two

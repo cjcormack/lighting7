@@ -14,6 +14,7 @@ import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
 import { useEditorOpen } from '../../editor/useEditorOpen'
 import { firstWhiteMix, isWarmthOnly, WarmthCell } from './WarmthCell'
 import { warmthReading } from '../../editor/WarmthEditor'
+import type { CellClickEvent } from '../../sheet/cellSelectionModel'
 
 interface ColourCellOwnProps {
   value: Extract<CellValue, { kind: 'colour' }>
@@ -73,7 +74,7 @@ interface ColourCellOwnProps {
    */
   selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
-  onBeginEdit: () => void
+  onBeginEdit: (event?: CellClickEvent) => void
   /**
    * The cell's `(head, property)` keys, for the source chip on the editor's label line
    * (fixture-fx-sheets plan D19). Given by the programmer grid where it draws ownership; absent,

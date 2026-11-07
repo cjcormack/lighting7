@@ -17,6 +17,7 @@ import { headsLine } from '../../editor/editorCopy'
 import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
 import { useEditorKeyboard } from '../../editor/useEditorKeyboard'
 import { useEditorOpen } from '../../editor/useEditorOpen'
+import type { CellClickEvent } from '../../sheet/cellSelectionModel'
 
 export interface WarmthCellProps extends CellClickBehaviour {
   /** The colour the heads' whites make — a white mix reads as any colour head does. */
@@ -39,7 +40,7 @@ export interface WarmthCellProps extends CellClickBehaviour {
   keyboardSeed?: string | null
   selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
-  onBeginEdit: () => void
+  onBeginEdit: (event?: CellClickEvent) => void
   sourceKeys?: readonly CellKey[]
 }
 

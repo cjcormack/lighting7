@@ -129,6 +129,16 @@ export function openCellEditorTarget<C extends string = string>(): CellRef<C> | 
   return { rowId, col: col as C }
 }
 
+/**
+ * Take the focus off a cell's trigger, as a marquee's release does: after a click that may have
+ * left that cell unselected, a focused trigger would take Enter, a character and ⌫ for itself.
+ */
+export function releaseCellTriggerFocus(): void {
+  if (typeof document === 'undefined') return
+  const active = document.activeElement
+  if (active instanceof HTMLElement && active.closest('[data-cell]') != null) active.blur()
+}
+
 export function marqueeOwnsKeyTarget<C extends string = string>(
   target: EventTarget | null,
   isCellSelected: (rowId: RowId, col: C) => boolean,

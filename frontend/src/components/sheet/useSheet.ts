@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { orderedSelectedCells, type CellActionCopy, type CellKeyboardPermission } from './cellEntry'
-import type { CellFlow, CellRef, RowId } from './cellSelectionModel'
-import { arrowStepTarget, type ListSelectIntent } from './listSelectionModel'
+import type { CellClickEvent, CellFlow, CellRef, RowId } from './cellSelectionModel'
+import { arrowStepTarget, cellClickIntent, latchedIntent, listSelectionIntentFor, type ListSelectIntent } from './listSelectionModel'
 import { stepCellSelection, useCellSelection, type CellSelection } from './useCellSelection'
 import { useCellEditorRequests } from './useCellEditorRequests'
+import { blankClickKeepsSelection, useAddLatch } from './useAddLatch'
 import { useLocalListSelection } from './useLocalListSelection'
 import { useSheetKeyboard, type SheetCellKeys, type SheetKeyRefusal, type SheetRowKeys } from './useSheetKeyboard'
 import { useLivePush } from '../editor/useLivePush'
@@ -196,10 +197,21 @@ export function useSheet<Row extends SheetRow, C extends string>({
     [rows, selectedRowIds],
   )
 
+  // ── The Add latch (touch, D7): every clear below turns it off ──
+  const { control: addLatch, ref: addLatchRef, off: addLatchOff } = useAddLatch()
+
   const clearByLadder = useCallback(() => {
+    addLatchOff()
     if (cellCount > 0) clearCells()
     else clearRows()
-  }, [cellCount, clearCells, clearRows])
+  }, [addLatchOff, cellCount, clearCells, clearRows])
+  /** A click on a blank cell clears, unless it is building a selection (D1). */
+  const backgroundClick = useCallback(
+    (event?: CellClickEvent) => {
+      if (!blankClickKeepsSelection(event, addLatchRef.current)) clearByLadder()
+    },
+    [addLatchRef, clearByLadder],
+  )
 
   /** The marquee by column, rows in visible order — the one expansion behind every consumer. */
   const columnGroups = useMemo(
@@ -478,15 +490,27 @@ export function useSheet<Row extends SheetRow, C extends string>({
   const [marqueeDragging, setMarqueeDragging] = useState(false)
 
   const handleRowClick = useCallback(
-    (id: RowId, e: React.MouseEvent) => selectRow(id, intentFor(e)),
-    [selectRow],
+    (id: RowId, e: React.MouseEvent) => selectRow(id, latchedIntent(listSelectionIntentFor(e), addLatchRef.current)),
+    [addLatchRef, selectRow],
+  )
+  /**
+   * A click on one cell, by [intent] (`CellSelection.click`): the rows go first, since rows and
+   * cells are one selection. The door the Timeline's own modified click goes through too.
+   */
+  const clickCell = useCallback(
+    (cell: CellRef<C>, intent: ListSelectIntent, detail?: number) => {
+      if (rowCountRef.current > 0) clearRows()
+      cellSelection.click(cell, intent, cellGrid, detail)
+    },
+    [cellGrid, cellSelection, clearRows],
   )
   const handleBeginCellEdit = useCallback(
-    (row: Row, col: C) => {
+    (row: Row, col: C, event?: CellClickEvent) => {
       if (row.divider != null) return
-      selectCells([{ rowId: row.id, col }], 'replace')
+      const { intent, detail } = cellClickIntent(event, addLatchRef.current)
+      clickCell({ rowId: row.id, col }, intent, detail)
     },
-    [selectCells],
+    [addLatchRef, clickCell],
   )
 
   // ── Spread ──
@@ -525,7 +549,8 @@ export function useSheet<Row extends SheetRow, C extends string>({
     closeEditorCell: requests.closeEditorCell,
     editorAnchorRef: setButtonRef,
     onMarqueeDragChange: setMarqueeDragging,
-    onBackgroundClick: clearByLadder,
+    onBackgroundClick: backgroundClick,
+    addLatch: addLatch.on,
     selectionEmpty: rowSelection.count === 0 && cellCount === 0,
     scrollToRowId,
     onScrolledToRow: () => setScrollToRowId(null),
@@ -551,18 +576,13 @@ export function useSheet<Row extends SheetRow, C extends string>({
     clearSelectedCells,
     onRefused,
     clearByLadder,
+    /** The selection bar's *Add* latch: its state and its toggle. */
+    addLatch,
+    clickCell,
     selectRow,
     setRows,
     scrollTo,
     marqueeDragging,
     tableProps,
   }
-}
-
-function intentFor(e: React.MouseEvent): ListSelectIntent {
-  const cmd = e.metaKey || e.ctrlKey
-  if (cmd && e.shiftKey) return 'range-add'
-  if (e.shiftKey) return 'range'
-  if (cmd) return 'toggle'
-  return 'replace'
 }

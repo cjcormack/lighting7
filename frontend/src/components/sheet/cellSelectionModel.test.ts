@@ -3,10 +3,12 @@ import {
   applyCellSelection,
   cellArrowStep,
   cellKey,
+  cellRectangle,
   cursorOfSelection,
   cellsByColumn,
   describeCellScope,
   parseCellKey,
+  toggleCell,
   visibleCells,
 } from './cellSelectionModel'
 import type { ColumnKey } from '../fixtures-list/columns'
@@ -264,5 +266,63 @@ describe('cursorOfSelection', () => {
       { rowId: 'r2', col: 'b' },
     ]
     expect(cursorOfSelection(cells)).toEqual({ anchor: cells[0], head: cells[1] })
+  })
+})
+
+describe('toggleCell', () => {
+  const start = new Set([cellKey(rid('a'), col('dimmer')), cellKey(rid('b'), col('dimmer'))])
+
+  it('adds a cell that is not selected and removes one that is', () => {
+    const added = toggleCell(start, ref('c', 'colour'))
+    expect(added.has(cellKey(rid('c'), col('colour')))).toBe(true)
+    expect(added.size).toBe(3)
+    const removed = toggleCell(added, ref('a', 'dimmer'))
+    expect([...removed].sort()).toEqual([cellKey(rid('b'), col('dimmer')), cellKey(rid('c'), col('colour'))].sort())
+  })
+
+  it('is not the marquee’s toggle, which only ever adds', () => {
+    const next = applyCellSelection(start, [ref('a', 'dimmer')], 'toggle')
+    expect(next.has(cellKey(rid('a'), col('dimmer')))).toBe(true)
+    expect(next.size).toBe(2)
+  })
+})
+
+describe('cellRectangle', () => {
+  const grid: CellGrid<ColumnKey> = {
+    rows: ['r0', 'r1', 'r2', 'r3'].map(rid),
+    cols: ['dimmer', 'colour', 'position'].map(col),
+  }
+
+  it('is the rectangle a ⇧-arrow walks to the same corner', () => {
+    const anchor = ref('r1', 'colour')
+    // ⇧↓ ×2 then ⇧← from r1/colour: the head ends on r3/dimmer.
+    let cursor: CellCursor<ColumnKey> | null = { anchor, head: anchor }
+    let cells: CellRef<ColumnKey>[] = []
+    for (const arrow of ['down', 'down', 'left'] as CellArrow[]) {
+      const step: { cursor: CellCursor<ColumnKey>; cells: CellRef<ColumnKey>[] } = cellArrowStep(grid, 'grid', cursor, arrow, true)!
+      cursor = step.cursor
+      cells = step.cells
+    }
+    expect(cursor!.head).toEqual(ref('r3', 'dimmer'))
+    expect(cellRectangle(grid, anchor, ref('r3', 'dimmer'))).toEqual(cells)
+  })
+
+  it('runs in reading order whichever way the corners lie', () => {
+    expect(cellRectangle(grid, ref('r2', 'position'), ref('r1', 'colour'))).toEqual([
+      ref('r1', 'colour'),
+      ref('r1', 'position'),
+      ref('r2', 'colour'),
+      ref('r2', 'position'),
+    ])
+  })
+
+  it('covers cells a row does not take', () => {
+    const sparse = { ...grid, takes: (rowId: RowId) => rowId !== 'r1' }
+    expect(cellRectangle(sparse, ref('r0', 'dimmer'), ref('r2', 'dimmer'))).toHaveLength(3)
+  })
+
+  it('answers null for a corner off the grid', () => {
+    expect(cellRectangle(grid, ref('gone', 'dimmer'), ref('r1', 'dimmer'))).toBeNull()
+    expect(cellRectangle(grid, ref('r0', 'uv'), ref('r1', 'dimmer'))).toBeNull()
   })
 })

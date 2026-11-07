@@ -1,6 +1,6 @@
 import type { ReactNode, RefObject } from 'react'
 import type { SpreadPlan } from '../editor/SpreadPanel'
-import type { CellRef, RowId } from './cellSelectionModel'
+import type { CellClickEvent, CellRef, RowId } from './cellSelectionModel'
 import type { CellSelection } from './useCellSelection'
 
 /**
@@ -46,7 +46,8 @@ export interface SheetCellProps<V> {
   keyboardSeed: string | null
   selectionEmpty?: boolean
   editorAnchorRef?: RefObject<HTMLElement | null>
-  onBeginEdit: () => void
+  /** A click on the cell: the host selects it by the click's modifiers (`CellSelection.click`). */
+  onBeginEdit: (event?: CellClickEvent) => void
   /** The editor's commit, which the container spreads over every selected cell of this column. */
   onCommit: (value: V) => void
 }
