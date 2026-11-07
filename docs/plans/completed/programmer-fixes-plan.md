@@ -1,7 +1,7 @@
 # Programmer fixes
 
-> **Document status: PLANNED. Design agreed 2026-11-06 (§3), corrected in review the same day
-> (§4).** No session started.
+> **Document status: DONE — sessions 1–5 merged (2026-11-07).** Design agreed 2026-11-06 (§3),
+> corrected in review the same day (§4).
 
 The design record is [`programmer-fixes-design/INDEX.md`](programmer-fixes-design/INDEX.md), and its
 one-page copy [`programmer-fixes.html`](programmer-fixes-design/programmer-fixes.html) holds the
@@ -351,7 +351,7 @@ suites locally: no Gradle change, schema, sync or cross-package refactor.
 | 2 | Element rows stay put | merged | `claude/determined-goodall-rw10tw` | [#370](https://github.com/cjcormack/lighting7/pull/370) | 993814b |
 | 3 | Cells with gaps | merged | `claude/lucid-johnson-fw56wn` | [#372](https://github.com/cjcormack/lighting7/pull/372) | a3325c3 |
 | 4 | Recent values on the desk | merged | `claude/optimistic-dijkstra-u99aaa` | [#373](https://github.com/cjcormack/lighting7/pull/373) | 3a8458f |
-| 5 | Recents in every value editor | in review | `claude/programmer-fixes-3nje52` | | |
+| 5 | Recents in every value editor | merged | `claude/programmer-fixes-3nje52` | [#375](https://github.com/cjcormack/lighting7/pull/375) | d851f71 |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -584,7 +584,8 @@ same as a typed percent. `useWindowRelease` is the window release `ColourControl
 
 ## 6. Operator checks
 
-One row in `manual-validation.md` per merged session, at the desk:
+Recorded as [`FU-MANUAL-PROGRAMMER-FIXES`](../manual-validation.md#fu-manual-programmer-fixes),
+one check for all five sessions, at the desk:
 
 - Session 1: with `localStorage['lighting7.debug.fxPickerClose'] = '1'` set in the desk's window,
   row C → FX → Colour Cycle and a single-colour FX on a selected head, each colour's dot dragged

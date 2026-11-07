@@ -1,6 +1,7 @@
 # FX settings: fewer FX, step-aligned chases, and an editor in four questions
 
-> **Document status: READY — written 2026-10-26 from the page Chris and Claude agreed that day.**
+> **Document status: DONE — sessions 1–6 merged (2026-10-27).** Written 2026-10-26 from the page
+> Chris and Claude agreed that day.
 > Six sessions, each one PR, each stacked on the one before while that one is unmerged, each run by
 > `/next-session` (§5). The page and the record are in
 > [`fx-settings-design/INDEX.md`](fx-settings-design/INDEX.md).
@@ -151,7 +152,7 @@ is titled *FX settings: session N — title*. Never merge a later session's PR b
 | 3 | Colour Cycle and Path absorb their siblings | merged | `claude/fx-settings-s3` | [#304](https://github.com/cjcormack/lighting7/pull/304) | `01b2f45a` |
 | 4 | Each head later by: spread in steps, and Width one head | merged | `claude/fx-settings-s4` | [#305](https://github.com/cjcormack/lighting7/pull/305) | `f64856a1` |
 | 5 | The inspector in four questions | merged | `claude/fx-settings-s5` | [#306](https://github.com/cjcormack/lighting7/pull/306) | `934a5aba` |
-| 6 | Across the heads | in review | `claude/fx-settings-s6` | | |
+| 6 | Across the heads | merged | `claude/fx-settings-s6` | [#307](https://github.com/cjcormack/lighting7/pull/307) | `ac6763dd` |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
