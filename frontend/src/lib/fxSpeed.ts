@@ -91,6 +91,49 @@ export function stepSpeed(speed: number, quarters: number): number {
   return clampSpeed(2 ** (passes ? between : to))
 }
 
+/** A surface fader's travel for *FX speed* (D13): ×¼ to ×4. */
+export const FADER_MIN = 0.25
+export const FADER_MAX = 4
+
+/** An encoder ring's position at ×1: one 7-bit step a quarter of an octave either side. */
+export const RING_CENTRE = 64
+
+/**
+ * Where a surface's *FX speed* control shows [speed] — the desk's `FxSpeed.ringPosition` and
+ * `faderPosition`: an encoder's ring a step a quarter of an octave about ×1 at 64, a fader on ×¼–×4
+ * at the nearer end past either.
+ */
+export function surfacePosition(speed: number, encoder: boolean): number {
+  if (!(speed > 0)) return 0
+  if (encoder) return Math.min(127, Math.max(0, Math.round(RING_CENTRE + 4 * Math.log2(clampSpeed(speed)))))
+  const p = (Math.log2(speed) - Math.log2(FADER_MIN)) / (Math.log2(FADER_MAX) - Math.log2(FADER_MIN))
+  return Math.round(Math.min(1, Math.max(0, p)) * 127)
+}
+
+/** The Speed a surface's *FX speed* control at [value7Bit] stands for, [surfacePosition]'s inverse. */
+export function speedAtSurfacePosition(value7Bit: number, encoder: boolean): number {
+  const v = Math.min(127, Math.max(0, value7Bit))
+  if (encoder) return clampSpeed(2 ** ((v - RING_CENTRE) / 4))
+  return 2 ** (Math.log2(FADER_MIN) + (v / 127) * (Math.log2(FADER_MAX) - Math.log2(FADER_MIN)))
+}
+
+/** The Speed a fader at [value7Bit] sets (D13), stuck at each power of two: the desk's `FxSpeed.faderSpeed`. */
+export function faderSpeed(value7Bit: number): number {
+  return stickSpeed(speedAtSurfacePosition(value7Bit, false))
+}
+
+/**
+ * What a surface's *FX speed* control at [value7Bit] says of the lead FX, in words: `×2` on a power of
+ * two, `about ×1.19` between (a ring is a quarter of an octave a step, a fader about a thirtieth of
+ * one), and `×4 or faster` / `×¼ or slower` at a fader's ends, where a lead past them stands.
+ */
+export function surfaceSpeedWords(value7Bit: number, encoder: boolean): string {
+  if (!encoder && value7Bit >= 127) return `${speedLabel(FADER_MAX)} or faster`
+  if (!encoder && value7Bit <= 0) return `${speedLabel(FADER_MIN)} or slower`
+  const speed = speedAtSurfacePosition(value7Bit, encoder)
+  return isPowerOfTwo(speed) ? speedLabel(speed) : `about ${speedLabel(speed)}`
+}
+
 /** Where [speed] sits on the track, 0–1, clamped to its ends; [off] when it lies past one. */
 export function trackPosition(speed: number): { position: number; off: 'low' | 'high' | null } {
   const lo = Math.log2(TRACK_MIN)

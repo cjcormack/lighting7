@@ -40,6 +40,14 @@ describe('describeTarget', () => {
     ).toBe('Speed master tempo · 60–180 · M1')
     expect(describeTarget({ type: 'speedMasterTap', masterUuid: null }))
       .toBe('Speed master tap tempo · M1')
+    expect(describeTarget({ type: 'speedMasterScale', masterUuid: null, factor: 0.5 }))
+      .toBe('Speed master tempo ×½ · M1')
+    expect(describeTarget({ type: 'speedMasterScale', masterUuid: 'aaaa-2', factor: 2 }))
+      .toBe('Speed master tempo ×2')
+  })
+
+  it('says the selection FX speed is the selection’s', () => {
+    expect(describeTarget({ type: 'fxSpeed' })).toBe('Sel · FX speed')
   })
 
   it('unwraps a flash target recursively', () => {

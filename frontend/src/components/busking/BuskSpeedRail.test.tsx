@@ -14,6 +14,7 @@ import {
 // lightingApi's real WebSocket, exactly as `SpeedMasters.test.tsx` does.
 const setSpeedMasterBpm = vi.fn()
 const tapSpeedMaster = vi.fn()
+const scaleSpeedMaster = vi.fn()
 const saveMaster = vi.fn((_body: Record<string, unknown>) => ({
   unwrap: () => Promise.resolve({}),
 }))
@@ -27,6 +28,7 @@ vi.mock('@/store/speedMasters', () => ({
   useDeleteSpeedMasterMutation: () => [vi.fn(), { isLoading: false }],
   setSpeedMasterBpm: (...args: unknown[]) => setSpeedMasterBpm(...args),
   tapSpeedMaster: (...args: unknown[]) => tapSpeedMaster(...args),
+  scaleSpeedMaster: (...args: unknown[]) => scaleSpeedMaster(...args),
   subscribeToSpeedMasterBeat: () => ({ unsubscribe: () => {} }),
   useMaster1Uuid: () => liveMasters.find((m) => m.index === 1)?.uuid ?? null,
   requestSpeedMasterBeat: () => {},
@@ -192,6 +194,29 @@ describe('BuskSpeedRail — the three arms', () => {
     // The bpm is a readout, not a draft opener.
     fireEvent.click(screen.getByText('60'))
     expect(screen.queryByLabelText('Master 2 tempo')).toBeNull()
+  })
+})
+
+describe('BuskSpeedRail — ×½ and ×2', () => {
+  it('halves or doubles a master, and greys a factor that would leave 20–300', () => {
+    liveMasters = [live(1, { bpm: 160 }), live(2, { name: 'Chase', bpm: 30 })]
+    rows = [row(1), row(2, { name: 'Chase' })]
+    render(<BuskSpeedRail />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Halve the tempo of master 1' }))
+    expect(scaleSpeedMaster).toHaveBeenLastCalledWith(liveMasters[0]!.uuid, 0.5)
+    expect(screen.getByRole('button', { name: 'Double the tempo of master 1' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Halve the tempo of master 2' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Double the tempo of master 2' }))
+    expect(scaleSpeedMaster).toHaveBeenLastCalledWith(liveMasters[1]!.uuid, 2)
+  })
+
+  it('greys both on a follower, whose leader halves it', () => {
+    liveMasters = [live(1), live(2, { bpm: 60, followNum: 1, followDen: 2 })]
+    rows = [row(1), row(2, { followNum: 1, followDen: 2 })]
+    render(<BuskSpeedRail />)
+    expect(screen.getByRole('button', { name: 'Halve the tempo of master 2' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Double the tempo of master 2' })).toBeDisabled()
   })
 })
 

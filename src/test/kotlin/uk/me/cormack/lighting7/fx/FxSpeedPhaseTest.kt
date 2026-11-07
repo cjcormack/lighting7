@@ -40,11 +40,23 @@ class FxSpeedPhaseTest {
     private data class TapCase(val times: List<Long>, val bpm: Double? = null)
 
     @Serializable
+    private data class DetentCase(val speed: Double, val quarters: Int, val to: Double)
+
+    @Serializable
+    private data class FaderCase(val value: Int, val speed: Double)
+
+    @Serializable
+    private data class PositionCase(val speed: Double, val ring: Int, val fader: Int)
+
+    @Serializable
     private data class Vector(
         val snaps: List<Snap>,
         val glides: List<GlideCase>,
         val speeds: List<SpeedCase>,
         val taps: List<TapCase>,
+        val detents: List<DetentCase>,
+        val faders: List<FaderCase>,
+        val positions: List<PositionCase>,
     )
 
     private val vector: Vector = lenient.decodeFromString(
@@ -86,6 +98,26 @@ class FxSpeedPhaseTest {
             for (time in case.times) bpm = taps.tap(time)
             if (case.bpm == null) assertNull(bpm, "taps ${case.times}")
             else assertTrue(abs(assertNotNull(bpm, "taps ${case.times}") - case.bpm) < 1e-9, "taps ${case.times}: $bpm")
+        }
+    }
+
+    @Test
+    fun `the surface's detents, fader and positions match the shared vector`() {
+        for (case in vector.speeds) {
+            assertEquals(case.cycle, FxSpeed.cycleOf(case.speed, wallClock = false), "×${case.speed} writes whole ticks")
+            assertTrue(abs(FxSpeed.runningSpeed(case.cycle, wallClock = false) - case.runsAt) < 1e-9, "×${case.speed} runs at ${case.runsAt}")
+        }
+        for (case in vector.detents) {
+            val to = FxSpeed.stepSpeed(case.speed, case.quarters)
+            assertTrue(abs(to - case.to) < 1e-12, "×${case.speed} ${case.quarters} detents: $to, not ${case.to}")
+        }
+        for (case in vector.faders) {
+            val speed = FxSpeed.faderSpeed(case.value)
+            assertTrue(abs(speed - case.speed) < 1e-12, "fader at ${case.value}: $speed, not ${case.speed}")
+        }
+        for (case in vector.positions) {
+            assertEquals(case.ring, FxSpeed.ringPosition(case.speed), "ring at ×${case.speed}")
+            assertEquals(case.fader, FxSpeed.faderPosition(case.speed), "fader at ×${case.speed}")
         }
     }
 

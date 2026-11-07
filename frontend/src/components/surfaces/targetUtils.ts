@@ -112,6 +112,8 @@ export function describeTarget(target: BindingTarget): string {
       }`
     case "speedMasterTap":
       return `Speed master tap tempo${target.masterUuid == null ? " · M1" : ""}`
+    case "speedMasterScale":
+      return `Speed master tempo ${target.factor === 2 ? "×2" : "×½"}${target.masterUuid == null ? " · M1" : ""}`
     // The selection-relative arms name no target of their own, so `Sel` is doing real work: it is
     // the whole difference between "this control writes colour on the movers" and "this control
     // writes colour on whatever is selected".
@@ -119,6 +121,8 @@ export function describeTarget(target: BindingTarget): string {
       return `Sel · ${target.attribute}${axisSuffix(target.colourAxis)}`
     case "selectionFan":
       return `Sel · fan ${FAN_AXIS_WORDS[target.axis]}`
+    case "fxSpeed":
+      return "Sel · FX speed"
     case "selectTarget":
       return `${target.mode === "replace" ? "Select only" : "Select"} ${target.target.key}`
     case "clearSelection":

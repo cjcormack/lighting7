@@ -169,6 +169,9 @@ object BindingHealthEvaluator {
         BindingTarget.SelectionPrev -> AssignmentHealth.Ok
         is BindingTarget.SelectionCells -> AssignmentHealth.Ok
         is BindingTarget.SelectionFan -> AssignmentHealth.Ok
+        // A selection with no Local FX on it is a fact about this second too: the ring goes dark
+        // and the move is dropped, but the binding is not dead.
+        BindingTarget.FxSpeed -> AssignmentHealth.Ok
         is BindingTarget.Unknown -> AssignmentHealth.UnknownTarget(target.targetType)
         is BindingTarget.SetBank -> {
             val profile = context.deviceTypes.firstOrNull { it.typeKey == target.deviceTypeKey }
@@ -181,6 +184,7 @@ object BindingHealthEvaluator {
         is BindingTarget.Flash -> evaluate(target.target, context)
         is BindingTarget.SpeedMasterBpm -> checkSpeedMaster(target.masterUuid, context)
         is BindingTarget.SpeedMasterTap -> checkSpeedMaster(target.masterUuid, context)
+        is BindingTarget.SpeedMasterScale -> checkSpeedMaster(target.masterUuid, context)
         BindingTarget.Blackout -> AssignmentHealth.Ok
         BindingTarget.GrandMasterToggle -> AssignmentHealth.Ok
         BindingTarget.GrandMasterFader -> AssignmentHealth.Ok

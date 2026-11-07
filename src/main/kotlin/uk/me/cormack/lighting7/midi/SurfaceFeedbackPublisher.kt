@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.midi
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -19,6 +20,7 @@ import uk.me.cormack.lighting7.fx.AppliedSource
 import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.fx.ProgrammerLayerStack
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
+import uk.me.cormack.lighting7.fx.FxSpeed
 import uk.me.cormack.lighting7.fx.StackFxAmounts
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
@@ -177,6 +179,13 @@ class SurfaceFeedbackPublisher(
     private val stackIdResolver: ((stackUuid: String) -> Int?)? = null,
     /** The fan encoders' gesture, for `SelectionFan` rings (venue-visit plan S12). Null disables that arm. */
     private val selectionFan: FanRing? = null,
+    /** The selection's FX speed, for `FxSpeed` controls (fx-speed plan D13). Null disables that arm. */
+    private val fxSpeed: FxSpeedRing? = null,
+    /**
+     * The live show's running-FX list, which an `FxSpeed` control's value follows. A provider because
+     * the engine is per show, like [stackFxAmountsProvider].
+     */
+    private val fxStateProvider: (() -> Flow<*>)? = null,
     private val types: () -> List<ControlSurfaceRegistry.DeviceTypeInfo> = { ControlSurfaceRegistry.allTypes },
     val touchState: TouchStateTracker = TouchStateTracker(),
     val takeover: SoftTakeoverStateMachine = SoftTakeoverStateMachine(),
@@ -314,6 +323,17 @@ class SurfaceFeedbackPublisher(
         val policy: BindingTakeoverPolicy,
     )
 
+    /**
+     * A control bound to the selection's FX speed — [GrandMasterEntry]'s shape, its value the lead FX's
+     * Speed ([FxSpeedRing.leadSpeed]): a step a quarter of an octave on an encoder's ring, ×¼–×4 for a fader,
+     * which soft takeover picks up there.
+     */
+    private data class FxSpeedEntry(
+        val displayKey: String,
+        val control: ControlDescriptor,
+        val policy: BindingTakeoverPolicy,
+    )
+
     /** Snapshot of every derived index produced by a single [rebuildIndex] pass. */
     private data class Index(
         val byChannel: Map<Long, List<ContinuousEntry>>,
@@ -351,6 +371,8 @@ class SurfaceFeedbackPublisher(
         val stackFxAmountEntries: List<StackFxAmountEntry>,
         /** Fan encoders: likewise. */
         val fanEntries: List<FanEntry> = emptyList(),
+        /** FX speed controls: likewise. */
+        val fxSpeedEntries: List<FxSpeedEntry> = emptyList(),
     ) {
         companion object {
             val EMPTY = Index(
@@ -392,6 +414,8 @@ class SurfaceFeedbackPublisher(
     private var speedMasterJob: Job? = null
     private var stackFxAmountJob: Job? = null
     private var fanJob: Job? = null
+    private var fxSpeedJob: Job? = null
+    private var fxSpeedShownJob: Job? = null
     private var locateJob: Job? = null
     private var layersJob: Job? = null
     private var publisherScope: CoroutineScope? = null
@@ -454,6 +478,12 @@ class SurfaceFeedbackPublisher(
                 .onEach { resyncFanEntries(index.get().fanEntries) }
                 .launchIn(scope)
         }
+        fxSpeed?.let { speed ->
+            fxSpeedShownJob = speed.shown
+                .onEach { resyncFxSpeedEntries(index.get().fxSpeedEntries, force = true) }
+                .launchIn(scope)
+        }
+        subscribeFxState(scope)
     }
 
     /**
@@ -560,6 +590,23 @@ class SurfaceFeedbackPublisher(
             .launchIn(scope)
     }
 
+    /**
+     * (Re)subscribe to the current show's running-FX list, per show like [subscribeScaler], so an
+     * `FxSpeed` control follows its lead FX — moved by this control, the FX editor or anything else.
+     */
+    private fun subscribeFxState(scope: CoroutineScope) {
+        fxSpeedJob?.cancel()
+        if (fxSpeed == null) return
+        val flow = try {
+            fxStateProvider?.invoke()
+        } catch (_: Exception) {
+            null
+        } ?: return
+        fxSpeedJob = flow
+            .onEach { index.get().fxSpeedEntries.takeIf { it.isNotEmpty() }?.let { resyncFxSpeedEntries(it) } }
+            .launchIn(scope)
+    }
+
     /** (Re)subscribe to the current show's locate state, per show like [subscribeScaler]. */
     private fun subscribeLocate(scope: CoroutineScope) {
         locateJob?.cancel()
@@ -587,6 +634,10 @@ class SurfaceFeedbackPublisher(
         stackFxAmountJob = null
         fanJob?.cancel()
         fanJob = null
+        fxSpeedJob?.cancel()
+        fxSpeedJob = null
+        fxSpeedShownJob?.cancel()
+        fxSpeedShownJob = null
         locateJob?.cancel()
         locateJob = null
         layersJob?.cancel()
@@ -609,6 +660,7 @@ class SurfaceFeedbackPublisher(
             subscribeScaler(it)
             subscribeSpeedMasters(it)
             subscribeStackFxAmounts(it)
+            subscribeFxState(it)
             subscribeLocate(it)
             subscribeProgrammerLayers(it)
         }
@@ -879,6 +931,7 @@ class SurfaceFeedbackPublisher(
         val grandMasterEntries = mutableListOf<GrandMasterEntry>()
         val stackFxAmountEntries = mutableListOf<StackFxAmountEntry>()
         val fanEntries = mutableListOf<FanEntry>()
+        val fxSpeedEntries = mutableListOf<FxSpeedEntry>()
         // Every record and page uuid a bound button on an attached device names, resolved in one
         // batch below rather than one lookup per button.
         val recordRefs = RecordRefResolver(projectId)
@@ -918,6 +971,9 @@ class SurfaceFeedbackPublisher(
                     }
                     (binding.target as? BindingTarget.SelectionFan)?.let { fan ->
                         fanEntries += FanEntry(displayKey, control, fan.axis, binding.takeoverPolicy ?: classDefault)
+                    }
+                    if (binding.target == BindingTarget.FxSpeed) {
+                        fxSpeedEntries += FxSpeedEntry(displayKey, control, binding.takeoverPolicy ?: classDefault)
                     }
                     (binding.target as? BindingTarget.StackFxAmount)?.let { stack ->
                         stackFxAmountEntries += StackFxAmountEntry(
@@ -1008,6 +1064,7 @@ class SurfaceFeedbackPublisher(
                 grandMasterEntries = grandMasterEntries,
                 stackFxAmountEntries = stackFxAmountEntries,
                 fanEntries = fanEntries,
+                fxSpeedEntries = fxSpeedEntries,
             )
         )
         // Seed takeover state so a PICKUP encoder knows where the tempo already sits before
@@ -1016,6 +1073,7 @@ class SurfaceFeedbackPublisher(
         resyncGrandMasterEntries(grandMasterEntries)
         resyncStackFxAmountEntries(stackFxAmountEntries)
         resyncFanEntries(fanEntries)
+        resyncFxSpeedEntries(fxSpeedEntries)
     }
 
     private fun resolveStackUuid(stackUuid: String): Int? = try {
@@ -1090,6 +1148,7 @@ class SurfaceFeedbackPublisher(
             idx.stackFxAmountEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId },
         )
         resyncFanEntries(idx.fanEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId })
+        resyncFxSpeedEntries(idx.fxSpeedEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId })
         val entries = idx.continuousByDisplay[displayKey] ?: return
         for (entry in entries) {
             if (entry.control.controlId != controlId) continue
@@ -1133,6 +1192,7 @@ class SurfaceFeedbackPublisher(
         resyncGrandMasterEntries(idx.grandMasterEntries.filter { it.displayKey == displayKey })
         resyncStackFxAmountEntries(idx.stackFxAmountEntries.filter { it.displayKey == displayKey })
         resyncFanEntries(idx.fanEntries.filter { it.displayKey == displayKey })
+        resyncFxSpeedEntries(idx.fxSpeedEntries.filter { it.displayKey == displayKey })
         // Folded once for the whole device resync rather than once per record-button LED in it.
         val applied = appliedSources()
         for (entry in idx.ledsByDisplay[displayKey].orEmpty()) {
@@ -1382,6 +1442,47 @@ class SurfaceFeedbackPublisher(
             sendControlFeedback(entry.displayKey, entry.control, value7Bit)
             takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
         }
+    }
+
+    /**
+     * Push the lead FX's Speed onto each entry's control and record it for PICKUP; with no Local FX on
+     * the selection the control reads nothing (a dark ring), as a selection control with nothing
+     * selected does. A fader already standing where it says the lead's Speed — its own write echoing
+     * back, snapped or rounded to whole ticks — keeps its position as the logical value, so the echo
+     * never re-arms its pickup. [force] sends past the transport's last-sent cache, for a ring the
+     * device is known not to hold.
+     */
+    private fun resyncFxSpeedEntries(entries: List<FxSpeedEntry>, force: Boolean = false) {
+        val ring = fxSpeed ?: return
+        if (entries.isEmpty()) return
+        val lead = runCatching { ring.leadSpeed() }.getOrNull()
+        for (entry in entries) {
+            if (lead == null) {
+                sendRingOff(entry.displayKey, entry.control)
+                continue
+            }
+            val position = if (entry.control is EncoderDescriptor) {
+                FxSpeed.ringPosition(lead)
+            } else {
+                val physical = takeover.stateFor(entry.displayKey, entry.control.controlId).lastPhysical?.toInt()
+                if (physical != null && FxSpeed.faderSays(physical, lead)) physical else FxSpeed.faderPosition(lead)
+            }
+            val value7Bit = position.toUByte()
+            if (force) invalidateControlFeedback(entry.displayKey, entry.control)
+            sendControlFeedback(entry.displayKey, entry.control, value7Bit)
+            takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
+        }
+    }
+
+    /** Drop the transport's last-sent bytes for [control]'s feedback, so the next send goes out. */
+    private fun invalidateControlFeedback(displayKey: String, control: ControlDescriptor) {
+        val controller = controllerLookup(displayKey) ?: return
+        val (channel, cc) = when (control) {
+            is FaderDescriptor -> control.channel to (control.motorCc ?: control.cc)
+            is EncoderDescriptor -> control.channel to (control.ringCc ?: return)
+            else -> return
+        }
+        controller.invalidateFeedbackCache(MidiControlKey(channel, MidiControlKey.Type.CC, cc))
     }
 
     private fun sendContinuousFeedback(entry: ContinuousEntry, value7Bit: UByte) {

@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import uk.me.cormack.lighting7.fx.MasterClock
+import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.state.SubselectMode
 
@@ -16,10 +17,11 @@ import uk.me.cormack.lighting7.state.SubselectMode
  *
  * Targets fall into three rough families:
  *   - **Continuous** ([FixtureAttribute], [GroupAttribute], [SpeedMasterBpm], [GrandMasterFader],
- *     [StackFxAmount]) — fader / encoder movements map to a Layer 2 property write (Phase 3), a
- *     tempo write, the grand master's level or a cue stack's FX amount.
+ *     [StackFxAmount], [FxSpeed]) — fader / encoder movements map to a Layer 2 property write
+ *     (Phase 3), a tempo write, the grand master's level, a cue stack's FX amount or the selection's
+ *     FX speed.
  *   - **Discrete** ([CueStackGo], [CueStackBack], [CueStackPause], [FireCue],
- *     [SpeedMasterTap], [FireTrigger]) — button press invokes a service call.
+ *     [SpeedMasterTap], [SpeedMasterScale], [FireTrigger]) — button press invokes a service call.
  *   - **Momentary / global / meta** ([Flash], [Blackout], [GrandMasterToggle], [SetBank]) —
  *     press / release change transport-level state.
  *   - **Selection-relative** ([SelectionAttribute], [SelectionFan], [SelectTarget], [ClearSelection],
@@ -204,6 +206,28 @@ sealed class BindingTarget {
     @Serializable
     @SerialName("speedMasterTap")
     data class SpeedMasterTap(val masterUuid: String? = null) : BindingTarget()
+
+    /**
+     * Halve or double a speed master's tempo on press (fx-speed plan D12), [masterUuid] null → master
+     * 1. A tempo write like [SpeedMasterTap]'s: on a held master it moves the hold. A press that would
+     * leave 20–300, or one on a follower, is refused and logged.
+     */
+    @Serializable
+    @SerialName("speedMasterScale")
+    data class SpeedMasterScale(val masterUuid: String? = null, val factor: Double) : BindingTarget() {
+        init {
+            require(factor in SpeedMasterBank.SCALE_FACTORS) { "SpeedMasterScale factor must be 0.5 or 2" }
+        }
+    }
+
+    /**
+     * The Speed of every Local FX painting a head of the desk selection (fx-speed plan D13), each
+     * whole — see [SelectionFxSpeed]. An encoder moves each a quarter of an octave a detent; a fader
+     * sets every one from ×¼ to ×4, picking up at the lead FX's Speed. The ring shows the lead's.
+     */
+    @Serializable
+    @SerialName("fxSpeed")
+    data object FxSpeed : BindingTarget()
 
     /**
      * Write a continuous property on **every selected target** — a fixture in the selection

@@ -181,6 +181,24 @@ class BindingTargetSerializationTest {
     }
 
     @Test
+    fun `a tempo scale and the selection's FX speed round trip`() {
+        val scale: BindingTarget = BindingTarget.SpeedMasterScale("7d444840-9dc0-11d1-b245-5ffdce74fad2", 0.5)
+        val encoded = BindingTargetJson.encodeToString(scale)
+        assertTrue(encoded.contains("\"type\":\"speedMasterScale\""), encoded)
+        assertEquals(scale, BindingTargetJson.decodeFromString<BindingTarget>(encoded))
+        val m1 = assertIs<BindingTarget.SpeedMasterScale>(
+            BindingTargetJson.decodeFromString<BindingTarget>("""{"type":"speedMasterScale","factor":2.0}"""),
+        )
+        assertNull(m1.masterUuid)
+        assertFailsWith<IllegalArgumentException> { BindingTarget.SpeedMasterScale(null, 3.0) }
+
+        assertEquals("{\"type\":\"fxSpeed\"}", BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.FxSpeed))
+        assertEquals(BindingTarget.FxSpeed, BindingTargetJson.decodeFromString<BindingTarget>("{\"type\":\"fxSpeed\"}"))
+        assertEquals(ControlKind.BUTTON, targetControlKind(scale))
+        assertEquals(ControlKind.CONTINUOUS, targetControlKind(BindingTarget.FxSpeed))
+    }
+
+    @Test
     fun `speed-master BPM rejects an inverted or out-of-clock-range window`() {
         assertFailsWith<IllegalArgumentException> {
             BindingTarget.SpeedMasterBpm(minBpm = 150.0, maxBpm = 90.0)

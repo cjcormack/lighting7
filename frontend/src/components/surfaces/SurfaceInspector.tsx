@@ -43,6 +43,7 @@ import { LearnModeOverlay } from "./LearnModeOverlay"
 import { describeTarget, effectiveTarget } from "./targetUtils"
 import { describeBindingTarget, useRecordBindingOptions } from "./recordOptions"
 import { midiPercent } from "./surfacePanelGeometry"
+import { surfaceSpeedWords } from "@/lib/fxSpeed"
 
 /**
  * The clicked control: what it is, what it is bound to, and what it is doing.
@@ -413,6 +414,7 @@ function LiveCard({
   const isSelectionTarget =
     resolved?.target.type === "selectionAttribute" ||
     resolved?.target.type === "selectionFan" ||
+    resolved?.target.type === "fxSpeed" ||
     resolved?.target.type === "selectTarget" ||
     resolved?.target.type === "locateSelection"
 
@@ -444,6 +446,13 @@ function LiveCard({
         <p className="text-muted-foreground">LED {state.led}</p>
       )}
       {resolved && <StageValue target={resolved.target} />}
+      {resolved?.target.type === "fxSpeed" && selection.length > 0 && state != null && (
+        <p className="text-muted-foreground">
+          {state.value == null
+            ? "No Local FX on the selection — a move is dropped"
+            : `Lead FX at ${surfaceSpeedWords(state.value, descriptor.type === "encoder")}`}
+        </p>
+      )}
       {isSelectionTarget && (
         <p className="flex items-center gap-1 text-muted-foreground">
           <Wand2 className="size-3" />

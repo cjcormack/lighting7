@@ -8,6 +8,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_FOLLOWER
+import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_RANGE
 import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_UNKNOWN
 import uk.me.cormack.lighting7.models.DaoSpeedMaster
 import uk.me.cormack.lighting7.models.DaoSpeedMasters
@@ -87,6 +88,28 @@ class SpeedMasterSocketTest : RouteIntegrationTest() {
             val error = frames.filterIsInstance<SpeedMasterErrorOutMessage>().single()
             assertEquals(CODE_SPEED_MASTER_UNKNOWN, error.code)
             assertEquals(stray, error.masterUuid)
+        }
+    }
+
+    @Test
+    fun `a scale doubles a master, and one that would leave the range answers SPEED_MASTER_RANGE`() = testApplication {
+        mountTestApp(state)
+        val m1 = state.show.speedMasterBank.master1Uuid()!!.toString()
+        state.show.speedMasterBank.setBpm(null, 100.0, uk.me.cormack.lighting7.models.SpeedMasterSource.MANUAL)
+        val client = createWsClient()
+
+        client.webSocket("/api") {
+            awaitOfType<SpeedMastersStateOutMessage>() // connect burst
+
+            sendSerialized<InMessage>(SpeedMastersScaleInMessage(factor = 2.0, masterUuid = m1))
+            val doubled = collectUntilOfType<SpeedMastersStateOutMessage>()
+            assertTrue(doubled.none { it is SpeedMasterErrorOutMessage })
+            assertEquals(200.0, (doubled.last() as SpeedMastersStateOutMessage).masters.first().bpm)
+
+            sendSerialized<InMessage>(SpeedMastersScaleInMessage(factor = 2.0))
+            val frames = collectUntilOfType<SpeedMastersStateOutMessage>()
+            assertEquals(CODE_SPEED_MASTER_RANGE, frames.filterIsInstance<SpeedMasterErrorOutMessage>().single().code)
+            assertEquals(200.0, (frames.last() as SpeedMastersStateOutMessage).masters.first().bpm)
         }
     }
 

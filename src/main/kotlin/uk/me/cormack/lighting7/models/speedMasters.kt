@@ -187,6 +187,9 @@ const val CODE_SPEED_MASTER_INVALID = "SPEED_MASTER_INVALID"
 /** Error code for a well-formed uuid that names no master (WS tempo writes). */
 const val CODE_SPEED_MASTER_UNKNOWN = "SPEED_MASTER_UNKNOWN"
 
+/** Error code for a ×½ or ×2 that would take a master's tempo outside 20–300 (WS tempo writes). */
+const val CODE_SPEED_MASTER_RANGE = "SPEED_MASTER_RANGE"
+
 /**
  * Canonicalise a client-supplied family string: trim, lowercase, `color` → `colour`. Blank (or
  * null) is null — "routes nothing". Validation against [SPEED_MASTER_FAMILIES] is separate, in

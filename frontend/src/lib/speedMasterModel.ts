@@ -1,4 +1,5 @@
 import { FX_FAMILY_INFO } from '@/components/fx/fxConstants'
+import { OWN_BPM_MAX, OWN_BPM_MIN } from '@/lib/fxTiming'
 
 /**
  * The client half of the speed-master routing/follow model — the mirror of lighting7's
@@ -296,4 +297,14 @@ export function bpmSlideFraction(bpm: number): number {
 export function bpmAtSlideFraction(fraction: number): number {
   const f = Math.min(1, Math.max(0, fraction))
   return Math.round(SLIDE_MIN_BPM + f * (SLIDE_MAX_BPM - SLIDE_MIN_BPM))
+}
+
+/**
+ * Whether ×[factor] keeps a master running at [bpm] inside the clock's range (the one Own tempo
+ * shares, [OWN_BPM_MIN]–[OWN_BPM_MAX]), as the desk's
+ * `SpeedMasterBank.scale` judges it (fx-speed plan D12): ×½ and ×2 are disabled where it would not.
+ */
+export function canScaleTempo(bpm: number, factor: 0.5 | 2): boolean {
+  const next = bpm * factor
+  return next >= OWN_BPM_MIN - 1e-9 && next <= OWN_BPM_MAX + 1e-9
 }

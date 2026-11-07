@@ -150,6 +150,26 @@ describe('BindingTargetPicker speed-master targets', () => {
     expect(onChange.mock.calls[0][0]).toMatchObject({ maxBpm: 180 })
   })
 
+  it('offers ×½ and ×2 on a button, with its master and its factor', () => {
+    const onChange = renderPicker(false, { type: 'speedMasterScale', masterUuid: null, factor: 2 })
+    expect(screen.getByText('Speed master — Tempo ×½ / ×2')).toBeInTheDocument()
+    expect(screen.getByText('Speed Master')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('combobox', { name: 'Tempo factor' }))
+    fireEvent.click(screen.getByRole('option', { name: /halve the tempo/ }))
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'speedMasterScale', masterUuid: null, factor: 0.5 })
+  })
+
+  it('offers the selection FX speed on a fader, and not on a button', () => {
+    renderPicker(true, { type: 'fxSpeed' })
+    expect(screen.getByText('Selection — FX speed')).toBeInTheDocument()
+    expect(screen.getByText(/quarter of an octave a detent/)).toBeInTheDocument()
+    cleanup()
+    renderPicker(false, { type: 'speedMasterTap', masterUuid: null })
+    fireEvent.click(screen.getAllByRole('combobox')[0]!)
+    expect(screen.queryByRole('option', { name: 'Selection — FX speed' })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Speed master — Tempo ×½ / ×2' })).toBeInTheDocument()
+  })
+
   it('renders only a master picker for a tap binding', () => {
     renderPicker(false, { type: 'speedMasterTap', masterUuid: 'm2' })
 
