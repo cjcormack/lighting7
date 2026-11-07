@@ -35,9 +35,10 @@ export function writeSheetPosition(
 /**
  * One head's whole position for a commit in the row's unit: the commit through
  * `clampCommitToResolution`, the untouched axis from the held `position` entry, else the wire.
- * Null when nothing resolves (a commit that names no axis).
+ * Null when nothing resolves (a commit that names no axis). What a sheet's write sends, so a
+ * recorder reads it to record the pair that was written.
  */
-function resolvePosition(
+export function resolvePosition(
   headKey: string,
   resolution: PositionResolution,
   commit: Extract<CellCommit, { kind: 'position' }>,

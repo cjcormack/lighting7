@@ -140,3 +140,41 @@ export function recentValueLabel(key: string, value: string): string | null {
   }
   return null
 }
+
+/**
+ * The `level:` key a slider records under, or null for one that is no level: a pan or a tilt (a
+ * position has its own list), as the desk's own rule drops it.
+ */
+export function recentLevelKeyFor(attribute: { name: string; category: string }): string | null {
+  return NOT_LEVELS.has(attribute.category) ? null : recentLevelKey(attribute.name)
+}
+
+const NOT_LEVELS = new Set(['pan', 'tilt', 'pan_fine', 'tilt_fine'])
+
+/**
+ * The `position` value for a pair of axes the editor's heads hold after a commit, centre-relative
+ * per head: the pair, or null while either axis is mixed across them (D15) — a pan set over heads
+ * whose tilts differ is no pair a tap could replay.
+ */
+export function recentPositionOf(heads: readonly { pan: number; tilt: number }[]): string | null {
+  if (heads.length === 0) return null
+  const [first] = heads
+  if (heads.some((head) => head.pan !== first.pan || head.tilt !== first.tilt)) return null
+  return serializeRecentPosition(first.pan, first.tilt)
+}
+
+/**
+ * A `#rgb` or `#rrggbb` hex — either case, `#` optional — as a colour with no emitter stated, or
+ * null. The FX and palette editors hold their colour as a hex.
+ */
+export function recentColourFromHex(hex: string): RecentColour | null {
+  const digits = hex.trim().replace(/^#/, '').toLowerCase()
+  const full = /^[0-9a-f]{3}$/.test(digits) ? digits.replace(/./g, (d) => d + d) : digits
+  if (!/^[0-9a-f]{6}$/.test(full)) return null
+  return { r: parseInt(full.slice(0, 2), 16), g: parseInt(full.slice(2, 4), 16), b: parseInt(full.slice(4, 6), 16) }
+}
+
+/** A colour's hex, `#rrggbb`. */
+export function recentColourHex(colour: RecentColour): string {
+  return serializeRecentColour({ r: colour.r, g: colour.g, b: colour.b })
+}

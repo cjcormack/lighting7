@@ -350,8 +350,8 @@ suites locally: no Gradle change, schema, sync or cross-package refactor.
 | 1 | The FX picker: one release and a close trace | merged | `claude/festive-faraday-m5qr2b` | [#369](https://github.com/cjcormack/lighting7/pull/369) | 8584e2e |
 | 2 | Element rows stay put | merged | `claude/determined-goodall-rw10tw` | [#370](https://github.com/cjcormack/lighting7/pull/370) | 993814b |
 | 3 | Cells with gaps | merged | `claude/lucid-johnson-fw56wn` | [#372](https://github.com/cjcormack/lighting7/pull/372) | a3325c3 |
-| 4 | Recent values on the desk | in review | `claude/optimistic-dijkstra-u99aaa` | | |
-| 5 | Recents in every value editor | planned | | | |
+| 4 | Recent values on the desk | merged | `claude/optimistic-dijkstra-u99aaa` | [#373](https://github.com/cjcormack/lighting7/pull/373) | 3a8458f |
+| 5 | Recents in every value editor | in review | `claude/programmer-fixes-3nje52` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -556,6 +556,31 @@ D20, D20a.
 - Docs: frontend `CLAUDE.md` §"The editor kit" (where the band is), §"The fixture sheet" rows, the
   palette editor's family controls.
 - Local: `check:quick`.
+
+**As built.** The grid's slider and position cells draw their editor body as an inner component
+(`SliderEditorBody`, `PositionEditorBody`): the recorder has to mount and unmount with the open
+editor, since a hook at the cell's level outlives the popover and would never send what a closed
+editor staged. A position's other axis is never read from the wire, which is not the scope the grid
+edits (Local, a focused Look, a cue's Values grid): the cell pairs a commit with what the open editor
+has set, else with its own scoped value where that is uniform over exactly the batch's heads, and
+records nothing otherwise; the fixture sheet records the pair its write resolves (`resolvePosition`,
+the held entry before the wire). Radix's `onValueCommit` skips a drag that ends where it began, so a
+slider's gesture also ends on the press's window release (`useSlideEnd`), and the recorder gained
+`slideEnd`, the microtask-later flush every slider shares. A key step on the FX picker records on its
+key-up, as `ColourEditor`'s does; a typed kelvin is held to the pair's range before it is recorded.
+The fixture sheet's level rows are always drawn, so a band under each would be a band
+per slider and a subscription per row (§4); a level row draws its band only while it is the row last
+pressed or focused (`recentRowId` in the sheet's context, one at a time), keeping one element tree
+either way so the press that shows the band keeps its slider and field; the Position and warmth rows
+draw theirs in their open editor, and the Position row's pad records open or closed. A dimmerless head's *Dimmer* row records nothing: it
+scales the colour and is no rig level, which the desk would drop. The busk sheets share
+`LevelControl` and `PickPositionControls` and keep them without recents (both are opt-in). The FX
+colour body takes its project from the route, as its palettes do, and stages a typed hex until the
+field is left, since `#ff0` is a valid hex on the way to `#ff0000`; the palette editor's colour does
+the same. The palette controls record their draft's gesture, before Save or Apply. "Over a batch of
+three: three writes" is a property of the container, which lands one commit on every selected cell
+(`FixturesListContainer.test.tsx`'s *cells with gaps* pins it over two cells); the cell's test pins that a tap is that one commit, the
+same as a typed percent. `useWindowRelease` is the window release `ColourControl` takes (D20a).
 
 ## 6. Operator checks
 

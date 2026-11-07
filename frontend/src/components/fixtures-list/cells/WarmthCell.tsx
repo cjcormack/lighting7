@@ -152,7 +152,7 @@ export const WarmthCell = memo(function WarmthCell({
             column={label}
             chip={sourceKeys != null ? <CellSourceChip keys={sourceKeys} label={label} /> : undefined}
           />
-          <WarmthEditor mix={mix} colour={colour} onColourChange={onColourChange} keyboardOpen={keyboardOpen} />
+          <WarmthEditor mix={mix} colour={colour} onColourChange={onColourChange} keyboardOpen={keyboardOpen} projectId={projectId} />
           {batch != null && (
             <EditorFooter
               save={

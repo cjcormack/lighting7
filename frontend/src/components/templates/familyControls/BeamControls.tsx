@@ -8,9 +8,12 @@ import type { PaletteValues } from './paletteRows'
 export function BeamControls({
   values,
   onChange,
+  projectId,
 }: {
   values: PaletteValues
   onChange: (attribute: string, intent: PaletteIntent | null) => void
+  /** The palette's project, for the Recent bands. */
+  projectId?: number
 }) {
   const prism = values.prism?.kind === 'switch' ? values.prism.on : null
 
@@ -20,6 +23,8 @@ export function BeamControls({
         <PercentControl
           key={role}
           label={role[0].toUpperCase() + role.slice(1)}
+          attribute={role}
+          projectId={projectId}
           value={values[role]}
           onChange={(i) => onChange(role, i)}
         />
