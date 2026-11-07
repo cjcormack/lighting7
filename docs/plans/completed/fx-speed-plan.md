@@ -1,6 +1,7 @@
 # FX speed: a Speed slider, an own tempo, and tempo in the programmer
 
-> **Document status: READY — written 2026-11-06 from the page Chris and Claude agreed that day.**
+> **Document status: DONE — sessions 1–4 merged (2026-11-07).** Written 2026-11-06 from the page
+> Chris and Claude agreed that day.
 > Four sessions, each one PR, each stacked on the one before while that one is unmerged, each run by
 > `/next-session` (§5). The page and the record are in
 > [`fx-speed-design/INDEX.md`](fx-speed-design/INDEX.md).
@@ -174,7 +175,7 @@ docs it names written, and its row marked *in review* with its branch. A session
 | 1 | Own tempo on the desk | merged | `claude/quirky-faraday-k08oa7` | [#374](https://github.com/cjcormack/lighting7/pull/374) | `0082602` |
 | 2 | Tempo in the programmer | merged | `claude/fx-speed-0zrqvu` | [#376](https://github.com/cjcormack/lighting7/pull/376) | `b3a9373` |
 | 3 | The Speed slider | merged | `claude/jolly-keller-rfs1c3` | [#379](https://github.com/cjcormack/lighting7/pull/379) | `21de4d2` |
-| 4 | Half, double and a speed fader | in review | `claude/determined-darwin-alf1b1` | | |
+| 4 | Half, double and a speed fader | merged | `claude/determined-darwin-alf1b1` | [#380](https://github.com/cjcormack/lighting7/pull/380) | `273cb1e` |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -376,15 +377,18 @@ the next; whoever merges the last fills its own.
 
 ## 6. Operator checks
 
-One row in `manual-validation.md` per merged session, at the desk:
+One row in [`manual-validation.md`](../manual-validation.md) per merged session, at the desk:
 
-- Session 1: a Look that held a Seconds breathe before the upgrade runs at the same rate after it, and
-  reads *Own tempo*.
-- Session 2: tap M2 on the rail and *Capture* it, GO a cue that sets M2: the chase keeps the tapped
-  tempo; Record into a new cue, Clear, GO it: M2 lands on the tapped tempo.
-- Session 3: drag Speed on a running chase: no jump; let go on ×2 and watch it settle on the beat. Tap
-  M2 in the FX editor: the rail shows it held.
-- Session 4: ×½ on a busked master mid-song, a fader on the selection's FX speed.
+- Session 1, [`FU-MANUAL-FX-SPEED-S1`](../manual-validation.md#fu-manual-fx-speed-s1): a Look that
+  held a Seconds breathe before the upgrade runs at the same rate after it, and reads *Own tempo*.
+- Session 2, [`FU-MANUAL-FX-SPEED-S2`](../manual-validation.md#fu-manual-fx-speed-s2): tap M2 on the
+  rail and *Capture* it, GO a cue that sets M2: the chase keeps the tapped tempo; Record into a new
+  cue, Clear, GO it: M2 lands on the tapped tempo.
+- Session 3, [`FU-MANUAL-FX-SPEED-S3`](../manual-validation.md#fu-manual-fx-speed-s3): drag Speed on
+  a running chase: no jump; let go on ×2 and watch it settle on the beat. Tap M2 in the FX editor:
+  the rail shows it held.
+- Session 4, [`FU-MANUAL-FX-SPEED-S4`](../manual-validation.md#fu-manual-fx-speed-s4): ×½ on a
+  busked master mid-song, a fader on the selection's FX speed.
 
 ## 7. Explicitly out of scope
 
