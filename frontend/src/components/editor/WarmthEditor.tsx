@@ -5,6 +5,10 @@ import { EditorField } from './EditorField'
 import { EditorLabel } from './EditorLabel'
 import { EditorReadout } from './EditorReadout'
 import { numericSeed } from './useEditorKeyboard'
+import { RecentValues } from './RecentValues'
+import { parseRecentWarmth, RECENT_WARMTH, serializeRecentWarmth } from './recentValueSpelling'
+import { useRecordRecent } from '@/store/recentValues'
+import { useSlideEnd } from './useSlideEnd'
 
 const toPct = (byte: number) => Math.round((byte / 255) * 100)
 
@@ -27,26 +31,46 @@ export function WarmthEditor({
   colour,
   onColourChange,
   keyboardOpen,
+  projectId,
 }: {
   mix: WhiteMix
   colour: Rgb
   onColourChange: (colour: Rgb) => void
   /** The editor was opened from the keyboard: Warmth takes the typed seed, as a cell's first field does. */
   keyboardOpen?: string | null
+  /** The project the host edits, for the Recent band; absent, the live one. */
+  projectId?: number
 }) {
   const levels = whiteLevelsFor(mix, colour)
   const level = Math.max(levels.warm, levels.cold)
   const kelvin = whiteMixKelvin(mix, levels.warm, levels.cold) ?? mix.warmKelvin
 
+  // A gesture's end records the kelvin and the level it made its colour from (D15, D17).
+  const recent = useRecordRecent(RECENT_WARMTH, projectId)
   const commit = useCallback(
     (nextKelvin: number, nextLevel: number) => {
       const next = whiteLevelsForKelvin(mix, nextKelvin, nextLevel)
       onColourChange(whiteMixColour(mix, next.warm, next.cold))
+      recent.stage(serializeRecentWarmth(nextKelvin, toPct(nextLevel)))
     },
-    [mix, onColourChange],
+    [mix, onColourChange, recent],
   )
-  // A warmth chosen with the level at 0 would be lost to black, so it lands at full.
-  const commitKelvin = useCallback((k: number) => commit(k, level > 0 ? level : 255), [commit, level])
+  const pickRecent = (value: string) => {
+    const warmth = parseRecentWarmth(value)
+    if (warmth == null) return
+    const next = whiteLevelsForKelvin(mix, warmth.kelvin, Math.round((warmth.pct / 100) * 255))
+    onColourChange(whiteMixColour(mix, next.warm, next.cold))
+    recent.now(value)
+  }
+  const slideEnd = useSlideEnd(recent.slideEnd)
+  const fieldDone = (raw: string | null) => raw === null && recent.flush()
+  // A warmth chosen with the level at 0 would be lost to black, so it lands at full. The typed
+  // field does not clamp, so the kelvin is held to the pair's own range here — what is recorded
+  // is the warmth the mix makes.
+  const commitKelvin = useCallback(
+    (k: number) => commit(Math.max(mix.warmKelvin, Math.min(mix.coldKelvin, k)), level > 0 ? level : 255),
+    [commit, level, mix.warmKelvin, mix.coldKelvin],
+  )
   const commitLevel = useCallback((pct: number) => commit(kelvin, Math.round((pct / 100) * 255)), [commit, kelvin])
 
   return (
@@ -60,6 +84,7 @@ export function WarmthEditor({
             step={50}
             value={[kelvin]}
             onValueChange={([next]) => commitKelvin(next)}
+            {...slideEnd}
             className="flex-1"
             aria-label="Warmth"
           />
@@ -70,6 +95,7 @@ export function WarmthEditor({
             max={mix.coldKelvin}
             value={kelvin}
             onCommit={commitKelvin}
+            onDraft={fieldDone}
             seed={numericSeed(keyboardOpen ?? null)}
             className="w-[84px] shrink-0"
           />
@@ -84,10 +110,11 @@ export function WarmthEditor({
             step={1}
             value={[toPct(level)]}
             onValueChange={([next]) => commitLevel(next)}
+            {...slideEnd}
             className="flex-1"
             aria-label="Level"
           />
-          <EditorField label="Level" unit="%" min={0} max={100} value={toPct(level)} onCommit={commitLevel} className="w-[72px] shrink-0" />
+          <EditorField label="Level" unit="%" min={0} max={100} value={toPct(level)} onCommit={commitLevel} onDraft={fieldDone} className="w-[72px] shrink-0" />
         </div>
       </div>
       <EditorReadout>
@@ -95,6 +122,7 @@ export function WarmthEditor({
           Warm {mix.warmKelvin} K · cold {mix.coldKelvin} K — any colour lands as their nearest mix
         </span>
       </EditorReadout>
+      <RecentValues listKey={RECENT_WARMTH} projectId={projectId} onPick={pickRecent} />
     </div>
   )
 }

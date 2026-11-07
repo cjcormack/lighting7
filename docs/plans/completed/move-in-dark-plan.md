@@ -1,6 +1,6 @@
 # Move in dark: dark heads moved ahead of the cue that lights them
 
-> **Document status: DONE — sessions 1–4 merged, session 5 the last, in review (2026-11-02).**
+> **Document status: DONE — sessions 1–5 merged (2026-11-02).**
 > Written 2026-10-31 from the page Chris and Claude agreed that day. Five sessions, each one PR, each stacked on the one before while that one is unmerged, each run by
 > `/next-session` (§5). The page and the record are in
 > [`move-in-dark-design/INDEX.md`](move-in-dark-design/INDEX.md).
@@ -144,7 +144,7 @@ is titled *Move in dark: session N — title*. Never merge a later session's PR 
 | 2 | Every edge: re-planning, catch-up, lit early, the key stack and the frame | merged | `claude/admiring-cannon-azpr8e` | [#322](https://github.com/cjcormack/lighting7/pull/322) | 1069003 |
 | 3 | The cue's setting, the static plan, MCP, and the row flag retired | merged | `claude/move-in-dark-s3` | [#324](https://github.com/cjcormack/lighting7/pull/324) | 3a67358 |
 | 4 | Screens: stack settings, the Cue tab and the cue list | merged | `claude/vigilant-noether-zvy1cy` | [#326](https://github.com/cjcormack/lighting7/pull/326) | e8d8ade |
-| 5 | Screens: the Stage view, the Timeline, and the docs closed | in review | `claude/focused-wozniak-v52mvo` | | |
+| 5 | Screens: the Stage view, the Timeline, and the docs closed | merged | `claude/focused-wozniak-v52mvo` | [#329](https://github.com/cjcormack/lighting7/pull/329) | 2b57207 |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts

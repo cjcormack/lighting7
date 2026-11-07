@@ -1,4 +1,4 @@
-import { memo, useCallback } from 'react'
+import { memo, useCallback, type ReactNode } from 'react'
 import { familyForCategory } from '@/lib/attributeFamily'
 import { Slider } from '@/components/ui/slider'
 import type { CellResolution } from '../columns'
@@ -10,12 +10,17 @@ import { EditorLabel } from '../../editor/EditorLabel'
 import { EditorLabelLine } from '../../editor/EditorLabelLine'
 import { CellSourceChip, type CellKey } from '../../fixtureSheet/CellSourceChip'
 import { EditorReadout } from '../../editor/EditorReadout'
+import { RecentValues } from '../../editor/RecentValues'
+import { parseRecentPercent, recentLevelKeyFor, serializeRecentPercent } from '../../editor/recentValueSpelling'
+import { useRecordRecent } from '@/store/recentValues'
+import { useSlideEnd } from '../../editor/useSlideEnd'
 import { PaletteBands, usePaletteSave } from '../../editor/PaletteBands'
 import { fromPct, toPct } from '../../editor/cellPercent'
 import { headsLine, skippedLine } from '../../editor/editorCopy'
 import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
 import { numericSeed, useEditorKeyboard } from '../../editor/useEditorKeyboard'
 import { useEditorOpen } from '../../editor/useEditorOpen'
+import type { CellClickEvent } from '../../sheet/cellSelectionModel'
 
 interface SliderCellOwnProps {
   value: Extract<CellValue, { kind: 'slider' }>
@@ -74,7 +79,7 @@ interface SliderCellOwnProps {
    */
   selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
-  onBeginEdit: () => void
+  onBeginEdit: (event?: CellClickEvent) => void
   /**
    * The cell's `(head, property)` keys, for the source chip on the editor's label line
    * (fixture-fx-sheets plan D19). Given by the programmer grid where it draws ownership; absent,
@@ -129,10 +134,6 @@ export const SliderCell = memo(function SliderCell({
     },
     [onCommit, range.min, range.max],
   )
-  // The field parses; this cell clamps, because its bounds come from its resolution rather than
-  // being a flat byte — and it converts, because the field is a percent (D13).
-  const commitPct = useCallback((pct: number) => commit(fromPct(pct)), [commit])
-
   // Controlled, because the container has to be able to open this from outside — Enter over a
   // selection, or the bar's Set — which an uncontrolled Radix popover offers no door for. The
   // field's draft lives inside the content and is dropped with it on close, so there is nothing
@@ -226,34 +227,20 @@ export const SliderCell = memo(function SliderCell({
           targets={bandTargets}
           onSave={save.onSave}
         >
-          <div className="space-y-1">
-            {/* The column's name, as `LevelCell` does: a Zoom editor's control is Zoom, not Level. */}
-            <EditorLabel>{label}</EditorLabel>
-            <div className="flex items-center gap-2.5">
-              <Slider
-                min={range.min}
-                max={range.max}
-                step={1}
-                value={[current]}
-                onValueChange={([next]) => commit(next)}
-                className="flex-1"
-              />
-              <EditorField
-                label={label}
-                unit="%"
-                min={0}
-                max={100}
-                value={toPct(current)}
-                onCommit={commitPct}
-                seed={numericSeed(keyboardOpen)}
-                className="w-[72px] shrink-0"
-              />
-            </div>
-          </div>
-          <EditorReadout>
-            <span>{rangeLine}</span>
-            {skipped && <span>{skipped}</span>}
-          </EditorReadout>
+          <SliderEditorBody
+            label={label}
+            range={range}
+            current={current}
+            commit={commit}
+            seed={numericSeed(keyboardOpen)}
+            recentKey={first.kind === 'slider' ? recentLevelKeyFor(first.attribute) : null}
+            projectId={projectId}
+          >
+            <EditorReadout>
+              <span>{rangeLine}</span>
+              {skipped && <span>{skipped}</span>}
+            </EditorReadout>
+          </SliderEditorBody>
         </PaletteBands>
       </div>
     </EditorSurface>
@@ -263,3 +250,86 @@ export const SliderCell = memo(function SliderCell({
 })
 
 const NO_TARGETS: NonNullable<CellBatch['targets']> = []
+
+/**
+ * The editor's slider and percent field, its read-out ([children]) and its Recent band — mounted
+ * with the open editor, so the recorder's gesture ends with it (D17). A drag records on its commit,
+ * a typed percent when its field is left, a tap at once; each as the percent the grid reads for the
+ * byte, replayed as that percent typed. [recentKey] null (no level) draws and records nothing.
+ */
+function SliderEditorBody({
+  label,
+  range,
+  current,
+  commit,
+  seed,
+  recentKey,
+  projectId,
+  children,
+}: {
+  label: string
+  range: { min: number; max: number }
+  current: number
+  commit: (raw: number) => void
+  seed: string | null
+  recentKey: string | null
+  projectId?: number
+  children: ReactNode
+}) {
+  const recent = useRecordRecent(recentKey ?? '', projectId)
+  const slideEnd = useSlideEnd(recent.slideEnd)
+  const stage = (byte: number) => {
+    if (recentKey != null) recent.stage(serializeRecentPercent(toPct(clampByte(byte, range))))
+  }
+  // The field parses; this cell clamps, because its bounds come from its resolution rather than
+  // being a flat byte — and it converts, because the field is a percent (D13).
+  const commitPct = (pct: number) => {
+    commit(fromPct(pct))
+    stage(fromPct(pct))
+  }
+  const pickRecent = (value: string) => {
+    const pct = parseRecentPercent(value)
+    if (pct == null) return
+    commit(fromPct(pct))
+    recent.now(value)
+  }
+  return (
+    <>
+      <div className="space-y-1">
+        {/* The column's name, as `LevelCell` does: a Zoom editor's control is Zoom, not Level. */}
+        <EditorLabel>{label}</EditorLabel>
+        <div className="flex items-center gap-2.5">
+          <Slider
+            min={range.min}
+            max={range.max}
+            step={1}
+            value={[current]}
+            onValueChange={([next]) => {
+              commit(next)
+              stage(next)
+            }}
+            {...slideEnd}
+            className="flex-1"
+          />
+          <EditorField
+            label={label}
+            unit="%"
+            min={0}
+            max={100}
+            value={toPct(current)}
+            onCommit={commitPct}
+            onDraft={(raw) => raw === null && recent.flush()}
+            seed={seed}
+            className="w-[72px] shrink-0"
+          />
+        </div>
+      </div>
+      {children}
+      {recentKey != null && <RecentValues listKey={recentKey} projectId={projectId} onPick={pickRecent} />}
+    </>
+  )
+}
+
+function clampByte(byte: number, range: { min: number; max: number }): number {
+  return Math.max(range.min, Math.min(range.max, Math.round(byte)))
+}

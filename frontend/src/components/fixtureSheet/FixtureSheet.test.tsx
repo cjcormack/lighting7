@@ -92,6 +92,7 @@ vi.mock('../stage/OwnerEditor', () => ({
 
 import { toast } from 'sonner'
 import { lightingApi } from '@/api/lightingApi'
+import type { RecentValuesState } from '@/api/recentValuesApi'
 import { programmerWs } from '@/test/backendMock'
 import { chan, makeActiveFx, makeFixture, positionProp, settingProp, sliderProp } from '@/test/fixtureFactories'
 import type { ProgrammerEntry, ProvenanceEntry } from '@/api/programmerWsApi'
@@ -522,5 +523,88 @@ describe('FixtureSheet — the phone host', () => {
     fireEvent.click(grabber)
     expect(content.dataset.height).toBe('peek')
     expect(content.contains(tray)).toBe(true)
+  })
+})
+
+describe('FixtureSheet — recent values (programmer-fixes plan D20)', () => {
+  let desk: RecentValuesState
+  let record: ReturnType<typeof vi.spyOn>
+  beforeEach(() => {
+    desk = { projectId: 1, lists: {} }
+    vi.spyOn(lightingApi.recentValues, 'get').mockImplementation(() => desk)
+    record = vi.spyOn(lightingApi.recentValues, 'record').mockImplementation(() => {})
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  const band = (id: string, key: string) => row(id).querySelector(`[data-recent-values="${key}"]`) as HTMLElement | null
+
+  it('draws a level row’s band only once the row is engaged, one row at a time', () => {
+    desk = { projectId: 1, lists: { 'level:dimmer': ['pct:50'], 'level:zoom': ['pct:20'] } }
+    render(<FixtureSheet fixture={SPOT} host="popup" />)
+    expect(band('dimmer', 'level:dimmer')).toBeNull()
+    fireEvent.pointerDown(row('dimmer'))
+    expect(band('dimmer', 'level:dimmer')).not.toBeNull()
+    fireEvent.focus(within(row('zoom')).getByLabelText('zoom percent'))
+    expect(band('dimmer', 'level:dimmer')).toBeNull()
+    expect(band('zoom', 'level:zoom')).not.toBeNull()
+  })
+
+  it('keeps the field and the slider it was pressed in when the band appears', () => {
+    desk = { projectId: 1, lists: { 'level:dimmer': ['pct:50'] } }
+    render(<FixtureSheet fixture={SPOT} host="popup" />)
+    const field = within(row('dimmer')).getByLabelText('dimmer percent')
+    const slider = within(row('dimmer')).getByRole('slider')
+    act(() => field.focus())
+    expect(band('dimmer', 'level:dimmer')).not.toBeNull()
+    expect(field.isConnected).toBe(true)
+    expect(document.activeElement).toBe(field)
+    expect(within(row('dimmer')).getByRole('slider')).toBe(slider)
+  })
+
+  it('records a typed level on Enter, once, and a slider step on its commit', async () => {
+    render(<FixtureSheet fixture={SPOT} host="popup" />)
+    const field = within(row('dimmer')).getByLabelText('dimmer percent')
+    fireEvent.change(field, { target: { value: '5' } })
+    fireEvent.change(field, { target: { value: '50' } })
+    expect(record).not.toHaveBeenCalled()
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(record).toHaveBeenCalledExactlyOnceWith('level:dimmer', 'pct:50')
+
+    fireEvent.keyDown(within(row('zoom')).getByRole('slider'), { key: 'ArrowRight' })
+    await act(async () => {})
+    expect(record).toHaveBeenCalledTimes(2)
+    expect(record).toHaveBeenLastCalledWith('level:zoom', 'pct:0')
+  })
+
+  it('a tap on a recent level writes it as a typed value, at the programmer fade', () => {
+    setProgrammerFade('2000')
+    desk = { projectId: 1, lists: { 'level:dimmer': ['pct:50'] } }
+    const set = vi.spyOn(lightingApi.programmer, 'set')
+    render(<FixtureSheet fixture={SPOT} host="popup" />)
+    fireEvent.pointerDown(row('dimmer'))
+    fireEvent.click(within(band('dimmer', 'level:dimmer')!).getByRole('button', { name: 'Recent 50%' }))
+    expect(set).toHaveBeenCalledExactlyOnceWith('fixture', 'spot-3', 'dimmer', '128', 2000, undefined)
+    expect(record).toHaveBeenCalledExactlyOnceWith('level:dimmer', 'pct:50')
+  })
+
+  it('records a typed position as the pair, and draws the band in the open editor', () => {
+    desk = { projectId: 1, lists: { position: ['pos:10,-5'] } }
+    ;(lightingApi as unknown as { channels: Record<string, unknown> }).channels = {
+      update: vi.fn(),
+      get: (universe: number, channelNo: number) => wire.values.get(`${universe}:${channelNo}`) ?? 0,
+    }
+    const setPosition = vi.spyOn(lightingApi.programmer, 'setPosition')
+    render(<FixtureSheet fixture={SPOT} host="popup" />)
+    expect(band('position', 'position')).toBeNull()
+    fireEvent.click(within(row('position')).getByRole('button', { name: 'Open the position editor' }))
+    const pan = within(row('position')).getByLabelText('Pan value')
+    fireEvent.change(pan, { target: { value: '-20' } })
+    fireEvent.keyDown(pan, { key: 'Enter' })
+    // Tilt is the wire's byte 64, centre-relative −64.
+    expect(record).toHaveBeenCalledExactlyOnceWith('position', 'pos:-20,-64')
+
+    fireEvent.click(within(band('position', 'position')!).getByRole('button', { name: 'Recent 10, −5' }))
+    expect(setPosition).toHaveBeenLastCalledWith('fixture', 'spot-3', 138, 123, expect.any(Number), undefined)
+    expect(record).toHaveBeenLastCalledWith('position', 'pos:10,-5')
   })
 })

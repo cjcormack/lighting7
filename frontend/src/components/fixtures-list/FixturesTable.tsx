@@ -54,7 +54,7 @@ import { LookLayerPill, ReferencePill } from './CellMarkPill'
 import { usePaletteNameByUuid } from '../fixtureSheet/fxLabels'
 import { cellSelectionClass } from '../sheet/cellSelection'
 import { useCellMarquee } from '../sheet/useCellMarquee'
-import { describeCellScope, type CellRef } from '../sheet/cellSelectionModel'
+import { describeCellScope, type CellClickEvent, type CellRef } from '../sheet/cellSelectionModel'
 import type { CellSelection } from '../sheet/useCellSelection'
 import { useRevealCell } from '../sheet/revealCell'
 
@@ -85,10 +85,10 @@ export interface FixturesTableProps {
   onToggleExpand: (row: GroupRow | FixtureRow, options?: { level?: boolean }) => void
   /**
    * A click landed on this cell, and that is the *whole* of what the click does: the caller
-   * selects the one cell, and the editor is opened by Set, by Enter, by a typed character or by a
-   * double click instead.
+   * selects by the click's modifiers (`CellSelection.click`), and the editor is opened by Set, by
+   * Enter, by a typed character or by a double click instead.
    */
-  onBeginCellEdit: (row: Row, col: ColumnKey) => void
+  onBeginCellEdit: (row: Row, col: ColumnKey, event?: CellClickEvent) => void
   onCellCommit: (row: Row, col: ColumnKey, commit: CellCommit) => void
   /**
    * What a commit from this row's cell in this column lands on (multi-head fixtures expand per
@@ -214,9 +214,12 @@ export interface FixturesTableProps {
    * way to drop a selection there was the bar's Deselect, and on a short list the empty space
    * under the rows is the larger target. Not fired for the click that ends a marquee — that one
    * is swallowed before it reaches here, or a drag released over empty space would clear the
-   * selection it just made.
+   * selection it just made. A blank cell passes its click, so the host can leave a selection being
+   * built with ⌘ or the Add latch alone.
    */
-  onBackgroundClick?: () => void
+  onBackgroundClick?: (event?: CellClickEvent) => void
+  /** The selection bar's *Add* latch (touch): a held drag accumulates as a ⌘-drag does. */
+  addLatch?: boolean
   /**
    * Draw the selection dimmed: this grid is not the key region (show-cue-editing plan §4.5) — two
    * cue editors on one page, and the other one has the keys.
@@ -257,6 +260,7 @@ export function FixturesTable({
   closeEditorCell,
   onMarqueeDragChange,
   onBackgroundClick,
+  addLatch,
   selectionDimmed = false,
 }: FixturesTableProps) {
   // A reference whose frame names only a uuid (a cue's, in Output) is named from the library — read
@@ -371,6 +375,7 @@ export function FixturesTable({
     isRowSelected: isSelected,
     onRowMarquee,
     onDragChange: onMarqueeDragChange,
+    addLatch,
   })
 
   const columnLabelFor = useCallback((col: ColumnKey) => columnLabel(col), [])
@@ -618,7 +623,7 @@ interface RowViewProps {
   tag: FixtureColour | null
   onRowClick: (id: RowId, e: React.MouseEvent) => void
   onToggleExpand: (row: GroupRow | FixtureRow, options?: { level?: boolean }) => void
-  onBeginCellEdit: (row: Row, col: ColumnKey) => void
+  onBeginCellEdit: (row: Row, col: ColumnKey, event?: CellClickEvent) => void
   onCellCommit: (row: Row, col: ColumnKey, commit: CellCommit) => void
   batchFor: (row: Row, col: ColumnKey) => CellBatch
   /**
@@ -679,7 +684,7 @@ interface RowViewProps {
    * A click on a column this row resolves nothing for. Stable, so the memo holds — see the
    * table's own `onEmptyCellClick`.
    */
-  onEmptyCellClick?: () => void
+  onEmptyCellClick?: (event?: CellClickEvent) => void
   /** See `FixturesTableProps.selectionDimmed`. */
   selectionDimmed: boolean
 }
@@ -1151,7 +1156,7 @@ const RowView = React.memo(function RowView({
                   // must keep click-to-open or lose every way in. See `CellClickBehaviour`.
                   clickSelects
                   editorAnchorRef={editorAnchorRef}
-                  onBeginEdit={() => onBeginCellEdit(row, col)}
+                  onBeginEdit={(event) => onBeginCellEdit(row, col, event)}
                   onCommit={(commit) => onCellCommit(row, col, commit)}
                   // The source chip on the editor's label line (D19) wherever ownership is drawn — Local
                   // scope on the programmer; Output's cells take no edit, and a focused Look layer's
@@ -1334,7 +1339,7 @@ function AttributeCell({
   keyboardSeed: string | null
   /** Nothing is selected, so an open editor here has lost what it was editing for. */
   selectionEmpty?: boolean
-  onBeginEdit: () => void
+  onBeginEdit: (event?: CellClickEvent) => void
   onCommit: (commit: CellCommit) => void
   /** The cell's keys for the editor's source chip (D19) — only where the grid draws ownership. */
   sourceKeys?: RowCell['keys']

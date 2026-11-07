@@ -70,6 +70,12 @@ export interface FixtureSheetContextValue {
   /** The row whose full editor is open (Colour, Position). One at a time — call 5. */
   openRowId: string | null
   setOpenRowId: (id: string | null) => void
+  /**
+   * The row last pressed or focused, which a level row draws its Recent band under — one band at a
+   * time, as one editor is open at a time. Absent where a host draws none.
+   */
+  recentRowId?: string | null
+  setRecentRowId?: (id: string | null) => void
   /** The Stage view's *Aim at point* body, for the Position row's *Aim…* popover (D14's half). */
   aim?: ReactNode
 }

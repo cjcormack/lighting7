@@ -172,6 +172,7 @@ fun Application.configureSockets(state: State) {
             setupProjectSubscriptions(scope)
             setupSurfaceSubscriptions(scope)
             setupGrandMasterSubscriptions(scope)
+            setupRecentValuesSubscriptions(scope)
             setupLocateSubscriptions(scope)
             setupStackFxAmountSubscriptions(scope)
             setupMoveInDarkSubscriptions(scope)
@@ -236,6 +237,7 @@ private suspend fun dispatch(scope: SocketScope, message: InMessage) {
         is WindowsInMessage -> handleWindows(scope, message)
         is BuskInMessage -> handleBusk(scope, message)
         is GrandMasterInMessage -> handleGrandMaster(scope, message)
+        is RecentValuesInMessage -> handleRecentValues(scope, message)
         is StackFxAmountInMessage -> handleStackFxAmount(scope, message)
     }
 }

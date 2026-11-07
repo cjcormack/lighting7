@@ -1,7 +1,7 @@
 # The programmer's toolbar: three doors, a tidier row C, and ⌘K
 
-> **Document status: READY — written 2026-10-25 from the boards Chris and Claude worked through that
-> day.** Three sessions, each one PR, each stacked on the one before, each run by `/next-session`
+> **Document status: DONE — sessions 1–3 merged (2026-10-26).** Written 2026-10-25 from the boards
+> Chris and Claude worked through that day. Three sessions, each one PR, each stacked on the one before, each run by `/next-session`
 > (§5). The boards and the record are in
 > [`programmer-toolbar-design/INDEX.md`](programmer-toolbar-design/INDEX.md).
 >
@@ -115,7 +115,7 @@ each session deletes or rewrites a test file another suite imports from. A sessi
 |---|---|---|---|---|---|
 | 1 | Row C: three clusters, the heads chip, Set on rows, Release, no strip | merged | claude/amazing-wozniak-7r87f8 | [#283](https://github.com/cjcormack/lighting7/pull/283) | f11be5db |
 | 2 | + Look in row A, and FX on row C with Replace · Stack | merged | claude/programmer-toolbar-s2 | [#285](https://github.com/cjcormack/lighting7/pull/285) | 637d6ae0 |
-| 3 | ⌘K's Programmer and Selection groups | in review | claude/jolly-albattani-gi8f0u | | |
+| 3 | ⌘K's Programmer and Selection groups | merged | claude/jolly-albattani-gi8f0u | [#286](https://github.com/cjcormack/lighting7/pull/286) | 67388010 |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts

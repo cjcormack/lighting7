@@ -1,4 +1,4 @@
-import type { RowId } from './cellSelectionModel'
+import type { CellClickEvent, RowId } from './cellSelectionModel'
 
 /**
  * The pure half of list selection: intent parsing and the state transitions.
@@ -23,6 +23,30 @@ export function listSelectionIntentFor(
   if (e.shiftKey) return 'range'
   if (cmd) return 'toggle'
   return 'replace'
+}
+
+/**
+ * The intent a press carries while the selection bar's *Add* latch is on (touch, D7): a plain
+ * press toggles and a ⇧ press adds its range, as if ⌘ were held.
+ */
+export function latchedIntent(intent: ListSelectIntent, addLatch: boolean): ListSelectIntent {
+  if (!addLatch) return intent
+  if (intent === 'replace') return 'toggle'
+  if (intent === 'range') return 'range-add'
+  return intent
+}
+
+/**
+ * What a cell's click asks of the selection: its modifiers' intent with the Add latch folded in,
+ * and its click count. A click with no pointer behind it (Enter or Space on a focused cell, whose
+ * `detail` is 0) is always a plain click.
+ */
+export function cellClickIntent(
+  event: CellClickEvent | undefined,
+  addLatch: boolean,
+): { intent: ListSelectIntent; detail: number } {
+  if (event == null || event.detail === 0) return { intent: 'replace', detail: 1 }
+  return { intent: latchedIntent(listSelectionIntentFor(event), addLatch), detail: event.detail }
 }
 
 export interface ListSelectionState {

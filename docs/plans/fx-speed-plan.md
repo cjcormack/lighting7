@@ -172,8 +172,8 @@ docs it names written, and its row marked *in review* with its branch. A session
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
 | 1 | Own tempo on the desk | merged | `claude/quirky-faraday-k08oa7` | [#374](https://github.com/cjcormack/lighting7/pull/374) | `0082602` |
-| 2 | Tempo in the programmer | in review | `claude/fx-speed-0zrqvu` | [#376](https://github.com/cjcormack/lighting7/pull/376) | `3b7fe92` |
-| 3 | The Speed slider | in review | `claude/jolly-keller-rfs1c3` | | |
+| 2 | Tempo in the programmer | merged | `claude/fx-speed-0zrqvu` | [#376](https://github.com/cjcormack/lighting7/pull/376) | `b3a9373` |
+| 3 | The Speed slider | in review | `claude/jolly-keller-rfs1c3` | [#379](https://github.com/cjcormack/lighting7/pull/379) | |
 | 4 | Half, double and a speed fader | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`

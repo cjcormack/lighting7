@@ -4,8 +4,10 @@ import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { describeCellScope, type CellRef } from '@/components/sheet/cellSelectionModel'
 import { cellFamilies, columnLabel, type ColumnKey } from '@/components/fixtures-list/columns'
 import { SelectionBar as SheetSelectionBar } from '@/components/sheet/SelectionBar'
+import type { AddLatchControl } from '@/components/sheet/useAddLatch'
 import { ToolbarPhoneContext } from '@/components/sheet/ToolbarMenu'
 import { useContainerBand } from '@/hooks/useContainerBand'
+import { useCoarsePointer } from '@/hooks/useCoarsePointer'
 import { usePressFamilies } from '@/store/selection'
 import { HeadsChip, type HeadsChipProps } from './HeadsChip'
 import { MaskRowFace, SelectionMaskPill } from './SelectionMaskPill'
@@ -48,6 +50,7 @@ export function SelectionBar({
   paletteTargets,
   marqueeDragging,
   onRemask = null,
+  addLatch = null,
 }: {
   /** The programmer's project. Absent — the plain lists — draws the kit's own left end. */
   projectId?: number
@@ -63,10 +66,13 @@ export function SelectionBar({
   marqueeDragging: boolean
   /** The desk bridge's mask write, which makes the mask its picker; null when the list does not bridge. */
   onRemask?: ((families: readonly AttributeFamily[] | null) => void) | null
+  /** The *Add* latch (touch), drawn by the kit's bar on a coarse pointer. */
+  addLatch?: AddLatchControl | null
 }) {
   const askedFamilies = useMemo(() => (cells.length > 0 ? cellFamilies(cells) : null), [cells])
   const pressFamilies = usePressFamilies(askedFamilies)
   const [measure, band] = useContainerBand(ROW_C_PHONE_FLOORS)
+  const coarse = useCoarsePointer()
 
   if (projectId == null || heads == null) {
     // The head count is `paletteTargets` — the heads a press lands on, which is the cells' heads
@@ -86,6 +92,7 @@ export function SelectionBar({
         hints={{ entry: cellEntryKey, clear: cellClearKey }}
         verbs={selection}
         marqueeDragging={marqueeDragging}
+        addLatch={addLatch}
       />
     )
   }
@@ -114,7 +121,7 @@ export function SelectionBar({
           hints={{ entry: false, clear: false }}
           leading={
             <>
-              <HeadsChip projectId={projectId} {...heads} />
+              <HeadsChip projectId={projectId} {...heads} addLatch={band === 1 && coarse ? addLatch : null} />
               {mask}
               {!hasSelection && (
                 <span className="hidden truncate text-xs text-muted-foreground @[800px]:inline">
@@ -136,6 +143,8 @@ export function SelectionBar({
           foldForStrip={false}
           verbs={selection}
           marqueeDragging={marqueeDragging}
+          // The phone's row has no room for it: there it is the heads chip's menu item.
+          addLatch={band === 1 ? null : addLatch}
         />
       </div>
     </ToolbarPhoneContext.Provider>

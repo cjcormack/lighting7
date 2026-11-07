@@ -1,7 +1,7 @@
 # Programmer fixes
 
-> **Document status: PLANNED. Design agreed 2026-11-06 (§3), corrected in review the same day
-> (§4).** No session started.
+> **Document status: DONE — sessions 1–5 merged (2026-11-07).** Design agreed 2026-11-06 (§3),
+> corrected in review the same day (§4).
 
 The design record is [`programmer-fixes-design/INDEX.md`](programmer-fixes-design/INDEX.md), and its
 one-page copy [`programmer-fixes.html`](programmer-fixes-design/programmer-fixes.html) holds the
@@ -347,11 +347,11 @@ suites locally: no Gradle change, schema, sync or cross-package refactor.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The FX picker: one release and a close trace | in review | `claude/festive-faraday-m5qr2b` | [#369](https://github.com/cjcormack/lighting7/pull/369) | 8584e2e |
-| 2 | Element rows stay put | in review | `claude/determined-goodall-rw10tw` | | |
-| 3 | Cells with gaps | planned | | | |
-| 4 | Recent values on the desk | planned | | | |
-| 5 | Recents in every value editor | planned | | | |
+| 1 | The FX picker: one release and a close trace | merged | `claude/festive-faraday-m5qr2b` | [#369](https://github.com/cjcormack/lighting7/pull/369) | 8584e2e |
+| 2 | Element rows stay put | merged | `claude/determined-goodall-rw10tw` | [#370](https://github.com/cjcormack/lighting7/pull/370) | 993814b |
+| 3 | Cells with gaps | merged | `claude/lucid-johnson-fw56wn` | [#372](https://github.com/cjcormack/lighting7/pull/372) | a3325c3 |
+| 4 | Recent values on the desk | merged | `claude/optimistic-dijkstra-u99aaa` | [#373](https://github.com/cjcormack/lighting7/pull/373) | 3a8458f |
+| 5 | Recents in every value editor | merged | `claude/programmer-fixes-3nje52` | [#375](https://github.com/cjcormack/lighting7/pull/375) | d851f71 |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -474,6 +474,30 @@ D1–D8, D4a.
   Timeline's cell paragraph and the programmer's row C.
 - Local: `check:quick`.
 
+**As built.** The latch is one hook, `sheet/useAddLatch.ts`, which the three hosts share; the cue
+editor's Values grid draws it too, on the kit's bar. "Turns off when the selection clears" is read as
+a clear (Chris, 2026-11-07): Escape, Deselect, a tap on the empty space under the rows, each through
+the host's `clearByLadder`. A tap that takes out the last cell leaves it on, so a double-tap on the one
+selected cell opens its editor with Add still on. It also turns off when the pointer stops being
+coarse, since its button is then gone. On the programmer's phone row C, which has no room for another
+button, it is the heads chip's menu item; elsewhere its word folds to the glyph below 600px. A
+modified click takes the focus off the cell trigger it landed on (`releaseCellTriggerFocus`), because
+a ⌘-click can leave that cell unselected, and the grid's key guards would then hand Enter to the
+focused trigger and select it alone. The double-click memory is dropped by an arrow, a marquee and a
+clear. The click's intent is one pure
+function, `cellClickIntent` in `listSelectionModel.ts`, beside `latchedIntent`: a click whose
+`detail` is 0 has no pointer behind it, so it is the keyboard's plain click, which means the
+Timeline's existing ⇧-click test now clicks with `detail: 1`, as a real click does. A stored anchor
+that has left the grid makes ⇧ a plain click rather than falling back to the derived one. Only a
+blank cell passes its click to the background clear: the empty space under the last row still
+clears whatever is held. `useSheet` exposes `clickCell`, the door the Timeline's modified click goes
+through, so the row clear happens there as well. The kit host is tested at `useSheet`'s door
+(`useSheet.test.ts`), which every kit sheet clicks through, rather than in `PatchSheet`; the Timeline's
+cases are in `StackTimeline.editing.test.tsx`, where its edit spy is. The selection bar's hover and
+the drag chip still say rows × columns (`describeCellScope`, `2 × Dimmer, Colour`), which overstates a
+selection with gaps; the cell count beside it is exact, and the wording is left for a follow-up
+(Chris, 2026-11-07).
+
 ### Session 4 — Recent values on the desk
 
 D14–D19.
@@ -499,6 +523,18 @@ D14–D19.
 - Local: `./gradlew compileTestKotlin`, `--tests 'uk.me.cormack.lighting7.state.*'`,
   `--tests 'uk.me.cormack.lighting7.plugins.*'` and `--tests 'uk.me.cormack.lighting7.telemetry.*'`,
   `check:quick`.
+- As built: the spellings and the colour serializer are `components/editor/recentValueSpelling.ts`
+  and `useRecordRecent` is `store/recentValues.ts`'s, beside `useRecentValues`, which reads the WS
+  layer through `useSyncExternalStore` because the kit's hosts provide no Redux store. A typed value
+  records when its field is left or the editor closes, not on each commit: `EditorField` commits per
+  keystroke, so recording each would list `2` and `20` on the way to `200`. A picker's release
+  sends 100 ms later, since react-colorful reports a drag's last move from an effect that can land
+  after it; a slider's commit sends a microtask later, since Radix commits a key's step before it
+  reports the step's value. A tap records the value as tapped, not the merged colour it writes, so
+  the desk moves it to the front (D17). `level:` takes only a slider that is not a pan or tilt, and
+  `palette-level:` only a palette attribute whose intent is a percent. The
+  backend's packages are run as `./gradlew :test --tests …`: a bare `test` also runs
+  `:launcher:test`, which the filters match nothing in, and fails.
 
 ### Session 5 — Recents in every value editor
 
@@ -521,9 +557,35 @@ D20, D20a.
   palette editor's family controls.
 - Local: `check:quick`.
 
+**As built.** The grid's slider and position cells draw their editor body as an inner component
+(`SliderEditorBody`, `PositionEditorBody`): the recorder has to mount and unmount with the open
+editor, since a hook at the cell's level outlives the popover and would never send what a closed
+editor staged. A position's other axis is never read from the wire, which is not the scope the grid
+edits (Local, a focused Look, a cue's Values grid): the cell pairs a commit with what the open editor
+has set, else with its own scoped value where that is uniform over exactly the batch's heads, and
+records nothing otherwise; the fixture sheet records the pair its write resolves (`resolvePosition`,
+the held entry before the wire). Radix's `onValueCommit` skips a drag that ends where it began, so a
+slider's gesture also ends on the press's window release (`useSlideEnd`), and the recorder gained
+`slideEnd`, the microtask-later flush every slider shares. A key step on the FX picker records on its
+key-up, as `ColourEditor`'s does; a typed kelvin is held to the pair's range before it is recorded.
+The fixture sheet's level rows are always drawn, so a band under each would be a band
+per slider and a subscription per row (§4); a level row draws its band only while it is the row last
+pressed or focused (`recentRowId` in the sheet's context, one at a time), keeping one element tree
+either way so the press that shows the band keeps its slider and field; the Position and warmth rows
+draw theirs in their open editor, and the Position row's pad records open or closed. A dimmerless head's *Dimmer* row records nothing: it
+scales the colour and is no rig level, which the desk would drop. The busk sheets share
+`LevelControl` and `PickPositionControls` and keep them without recents (both are opt-in). The FX
+colour body takes its project from the route, as its palettes do, and stages a typed hex until the
+field is left, since `#ff0` is a valid hex on the way to `#ff0000`; the palette editor's colour does
+the same. The palette controls record their draft's gesture, before Save or Apply. "Over a batch of
+three: three writes" is a property of the container, which lands one commit on every selected cell
+(`FixturesListContainer.test.tsx`'s *cells with gaps* pins it over two cells); the cell's test pins that a tap is that one commit, the
+same as a typed percent. `useWindowRelease` is the window release `ColourControl` takes (D20a).
+
 ## 6. Operator checks
 
-One row in `manual-validation.md` per merged session, at the desk:
+Recorded as [`FU-MANUAL-PROGRAMMER-FIXES`](../manual-validation.md#fu-manual-programmer-fixes),
+one check for all five sessions, at the desk:
 
 - Session 1: with `localStorage['lighting7.debug.fxPickerClose'] = '1'` set in the desk's window,
   row C → FX → Colour Cycle and a single-colour FX on a selected head, each colour's dot dragged

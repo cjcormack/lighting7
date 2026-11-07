@@ -45,6 +45,8 @@ export interface PaletteValueCellProps extends SheetCellProps<PaletteValueDraft>
    * Called only while the editor is open (the closure is fresh per render of the row).
    */
   landing: () => PaletteValueLanding
+  /** The sheet's project, for the controls' Recent bands (drawn only while it is the live one). */
+  projectId?: number
 }
 
 /**
@@ -87,6 +89,7 @@ export const PaletteValueCell = memo(function PaletteValueCell({
   onCommit,
   face,
   landing,
+  projectId,
 }: PaletteValueCellProps) {
   const { family } = value
   const [draft, setDraft] = useState<PaletteValues>(value.values)
@@ -198,7 +201,7 @@ export const PaletteValueCell = memo(function PaletteValueCell({
           column={`${label} · ${FAMILY_LABELS[family].singular}`}
         />
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
-          <FamilyControls family={family} values={draft} onChange={onChange} />
+          <FamilyControls family={family} values={draft} onChange={onChange} projectId={projectId} />
           <EditorReadout error={error}>
             <span>The intent — the desk resolves it per head</span>
             {skipped ? <span data-editor-skipped>{skipped}</span> : null}

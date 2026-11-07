@@ -4,8 +4,10 @@ import {
   applyCellSelection,
   cellArrowStep,
   cellKey,
+  cellRectangle,
   cellsByColumn,
   cursorOfSelection,
+  toggleCell,
   visibleCells,
   type CellArrow,
   type CellCursor,
@@ -15,7 +17,7 @@ import {
   type CellSelectionState,
   type RowId,
 } from './cellSelectionModel'
-import { orderedSelectedCells } from './cellEntry'
+import { orderedSelectedCells, releaseCellTriggerFocus } from './cellEntry'
 
 export interface CellSelection<C extends string = string> {
   /** Cells still on screen. Filtered rows drop out; the stored state keeps them. */
@@ -27,9 +29,19 @@ export interface CellSelection<C extends string = string> {
   select: (hits: readonly CellRef<C>[], intent: ListSelectIntent) => void
   clear: () => void
   /**
-   * The keyboard's anchor and head, set by [place] and dropped by every other change — a click, a
-   * marquee, a clear. Null means "derive it from the selection" (`cursorOfSelection`), which is
-   * what the arrows do after a pointer gesture.
+   * A click on one cell, by the row click's modifiers (`listSelectionIntentFor`): `replace` selects
+   * it alone, `toggle` takes it in or out, `range` selects the rectangle from the cursor's anchor to
+   * it and `range-add` adds that rectangle. Without an anchor on [grid] — nothing selected, or the
+   * anchor's row collapsed or filtered away — the two ranges act as `replace` and `toggle`. A second
+   * click of a double-click on the same cell ([detail] > 1) only makes sure it is selected, so a ⌘
+   * double-click opens the editor on a selected cell. Sets the cursor: see [cursor].
+   */
+  click: (cell: CellRef<C>, intent: ListSelectIntent, grid: CellGrid<C>, detail?: number) => void
+  /**
+   * The keyboard's anchor and head, set by [place] and [click] and dropped by a marquee and a clear.
+   * A plain or ⌘ click sets both to its cell, a ⇧ click keeps the anchor and moves the head. Null
+   * means "derive it from the selection" (`cursorOfSelection`), which is what the arrows and a ⇧
+   * click do after a marquee.
    */
   cursor: CellCursor<C> | null
   /** Replace the selection with [cells] and remember [cursor] — the arrow keys' door. */
@@ -69,7 +81,11 @@ export function useCellSelection<C extends string = string>(
 
   const cells = useMemo(() => visibleCells<C>(state.keys, visibleRowIds), [state.keys, visibleRowIds])
 
+  /** The cell the last click landed on, for the second click of a double-click. */
+  const lastClickRef = useRef<CellRef<C> | null>(null)
+
   const select = useCallback((hits: readonly CellRef<C>[], intent: ListSelectIntent) => {
+    lastClickRef.current = null
     setState((prev) => {
       const keys = applyCellSelection(prev.keys, hits, intent)
       // Unchanged keys keep the keys' identity — the same bail-out `applyCellSelection` makes for
@@ -82,6 +98,7 @@ export function useCellSelection<C extends string = string>(
   }, [])
 
   const place = useCallback((next: readonly CellRef<C>[], cursor: CellCursor<C>) => {
+    lastClickRef.current = null
     setState((prev) => {
       // An arrow held against an edge places the selection it already has on every repeat; keep
       // the state object then, as `select` and `clear` do, rather than re-render the grid per key.
@@ -99,10 +116,55 @@ export function useCellSelection<C extends string = string>(
     })
   }, [])
 
+  const visibleRowIdsRef = useRef(visibleRowIds)
+  visibleRowIdsRef.current = visibleRowIds
+
+  const click = useCallback(
+    (cell: CellRef<C>, intent: ListSelectIntent, grid: CellGrid<C>, detail = 1) => {
+      const repeat = detail > 1 && lastClickRef.current != null && sameCell(lastClickRef.current, cell)
+      lastClickRef.current = cell
+      setState((prev) => {
+        const key = cellKey(cell.rowId, cell.col)
+        if (repeat) {
+          if (prev.keys.has(key)) return prev
+          return { keys: new Set([...prev.keys, key]), cursor: { anchor: cell, head: cell } }
+        }
+        let effective = intent
+        let anchor: CellRef<C> | null = null
+        if (intent === 'range' || intent === 'range-add') {
+          const ordered = orderedSelectedCells(visibleCells<C>(prev.keys, visibleRowIdsRef.current), grid.rows, grid.cols)
+          anchor = prev.cursor?.anchor ?? cursorOfSelection(ordered)?.anchor ?? null
+          const rect = anchor == null ? null : cellRectangle(grid, anchor, cell)
+          if (rect == null || anchor == null) {
+            effective = intent === 'range' ? 'replace' : 'toggle'
+          } else {
+            const keys = intent === 'range' ? new Set<string>() : new Set(prev.keys)
+            for (const c of rect) keys.add(cellKey(c.rowId, c.col))
+            return { keys, cursor: { anchor, head: cell } }
+          }
+        }
+        if (effective === 'toggle') {
+          const keys = toggleCell(prev.keys, cell)
+          return { keys, cursor: keys.size === 0 ? null : { anchor: cell, head: cell } }
+        }
+        const keys = applyCellSelection(prev.keys, [cell], 'replace')
+        if (keys === prev.keys && prev.cursor != null && sameCell(prev.cursor.anchor, cell) && sameCell(prev.cursor.head, cell)) {
+          return prev
+        }
+        return { keys, cursor: { anchor: cell, head: cell } }
+      })
+      // A modified click can leave its own cell unselected with the focus still on its trigger,
+      // where the grid's keys would hand Enter to that trigger and select it alone.
+      if (intent !== 'replace') releaseCellTriggerFocus()
+    },
+    [],
+  )
+
   const clear = useCallback(() => {
+    lastClickRef.current = null
     // Bail out rather than allocate: `clear()` runs on every Escape and every click outside the
     // marquee, and a fresh empty Set would re-render the whole grid each time.
-    setState((prev) => (prev.keys.size === 0 ? prev : { keys: new Set<string>(), cursor: null }))
+    setState((prev) => (prev.keys.size === 0 && prev.cursor == null ? prev : { keys: new Set<string>(), cursor: null }))
   }, [])
 
   const isSelected = useCallback(
@@ -113,8 +175,18 @@ export function useCellSelection<C extends string = string>(
   const byColumn = useCallback(() => cellsByColumn<C>(stateRef.current.keys), [])
 
   return useMemo(
-    () => ({ cells, count: cells.length, isSelected, byColumn, select, clear, cursor: state.cursor, place }),
-    [cells, isSelected, byColumn, select, clear, state.cursor, place],
+    () => ({
+      cells,
+      count: cells.length,
+      isSelected,
+      byColumn,
+      select,
+      click,
+      clear,
+      cursor: state.cursor,
+      place,
+    }),
+    [cells, isSelected, byColumn, select, click, clear, state.cursor, place],
   )
 }
 

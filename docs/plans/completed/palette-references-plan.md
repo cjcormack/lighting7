@@ -1,6 +1,6 @@
 # Palette references: a palette is a value
 
-> **Document status: IN PROGRESS — sessions 1–3 merged, session 4 in review.** Calls decided 2026-11-04 (§3). Design
+> **Document status: DONE — sessions 1–4 merged (2026-11-05).** Calls decided 2026-11-04 (§3). Design
 > record: [`palette-references-design/`](palette-references-design/INDEX.md).
 
 ## 1. Context
@@ -223,7 +223,7 @@ checks"). Never merge a session's PR before the one before it.
 | 1 | References as values on the desk | merged | `claude/wizardly-ride-d2z3ns` | [#346](https://github.com/cjcormack/lighting7/pull/346) | `b0fcfe3` |
 | 2 | Presses write references | merged | `claude/palette-references-s2` | [#348](https://github.com/cjcormack/lighting7/pull/348) | `bfb81c0` |
 | 3 | The marks and the new palette sheet | merged | `claude/busy-wozniak-1kcdjg` | [#350](https://github.com/cjcormack/lighting7/pull/350) | `8db20e2` |
-| 4 | Looks and cues: the sheets and Copy the values | in review | `claude/zealous-hamilton-34v524` | | |
+| 4 | Looks and cues: the sheets and Copy the values | merged | `claude/zealous-hamilton-34v524` | [#351](https://github.com/cjcormack/lighting7/pull/351) | `9d9c889` |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -463,7 +463,8 @@ the next; whoever merges the last fills its own.
 
 ## 6. Operator checks
 
-One row in `manual-validation.md` per merged session:
+Recorded as [`FU-MANUAL-PALETTE-REFERENCES-S1-S3`](../manual-validation.md#fu-manual-palette-references-s1-s3)
+and [`FU-MANUAL-PALETTE-REFERENCES-S4`](../manual-validation.md#fu-manual-palette-references-s4):
 
 - **S1:** a Look row written as a reference through MCP, layered in a live cue, follows a palette
   retune on the rig without a GO.

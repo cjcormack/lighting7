@@ -1,6 +1,6 @@
 # Undo and history
 
-The desk keeps two histories behind one key (undo plan, `docs/plans/undo-plan.md`): the
+The desk keeps two histories behind one key (undo plan, `docs/plans/completed/undo-plan.md`): the
 **programmer's steps**, snapshots of the shared programmer (`history/ProgrammerHistory.kt`,
 `docs/lighting-composition-model.md` §"Programmer history"), and the **show history**, a journal of
 every stored record a request, frame, tool call or surface input changed. This document is the show

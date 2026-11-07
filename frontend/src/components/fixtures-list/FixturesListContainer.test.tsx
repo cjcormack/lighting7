@@ -9,6 +9,8 @@ import type { Row, RowId } from './rowModel'
 import type { ProgrammerScope } from '../programmer/ProgrammerScope'
 import { chan, colourProp, makeFixture, makePixelBar, sliderProp } from '../../test/fixtureFactories'
 import type { CellOpenRequest } from '../sheet/useCellEditorRequests'
+import type { CellClickEvent } from '../sheet/cellSelectionModel'
+import type { CellCommit } from './rowModel'
 
 /**
  * What the three lists now share, asserted at the seam where they used to differ.
@@ -151,10 +153,17 @@ vi.mock('@/store/selection', () => ({
 // The plain lists draw the kit's selection bar as their row C (CLAUDE.md §List shell), and it asks
 // the viewport's height; jsdom has no `matchMedia`, and a desk is tall.
 vi.mock('../../hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
+/** Every planned write the container applied, as `target key · commit kind`. */
+const writes = vi.hoisted(() => ({ list: [] as string[] }))
 vi.mock('./useCellWriters', () => ({
   useCellWriters: () => ({}),
-  applyPlannedWrite: () => {},
+  applyPlannedWrite: (_writers: unknown, planned: { target: { key: string }; commit: { kind: string } }) => {
+    writes.list.push(`${planned.target.key}·${planned.commit.kind}`)
+  },
 }))
+/** Whether the primary pointer is a finger, which is where the *Add* latch is drawn. */
+const pointer = vi.hoisted(() => ({ coarse: false }))
+vi.mock('@/hooks/useCoarsePointer', () => ({ useCoarsePointer: () => pointer.coarse }))
 /** The gate under test: `enabled`, which decides whether the FX subscription is mounted at all. */
 const clearCellFx = vi.hoisted(() => ({ enabled: undefined as boolean | undefined }))
 vi.mock('./useClearCellFx', () => ({
@@ -175,8 +184,12 @@ vi.mock('../sheet/CellSelectionActions', () => ({
 }))
 vi.mock('./SpreadPopover', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./SpreadPopover')>()),
-  SpreadPopover: ({ seed }: { seed?: { key: number } | null }) => (
-    <span data-testid="row-spread" data-seed={seed == null ? '' : JSON.stringify(seed)} />
+  SpreadPopover: ({ seed, columns }: { seed?: { key: number } | null; columns?: readonly { col: string; targets: readonly { key: string }[] }[] }) => (
+    <span
+      data-testid="row-spread"
+      data-seed={seed == null ? '' : JSON.stringify(seed)}
+      data-columns={JSON.stringify((columns ?? []).map((c) => [c.col, c.targets.map((t) => t.key)]))}
+    />
   ),
 }))
 // Row C's FX reads the window's pair and opens the picker; `ProgrammerAddFx.test.tsx` has it. The
@@ -238,14 +251,25 @@ const table = vi.hoisted(() => ({
   keyboardOpens: [] as CellOpenRequest<ColumnKey>[],
   /** The last cell the container asked the table to bring into view. */
   revealCell: null as { rowId: string; col: ColumnKey } | null,
+  /** The table's two cell doors and the commit, for a test that clicks any cell with any modifier. */
+  beginCellEdit: null as ((row: Row, col: ColumnKey, event?: CellClickEvent) => void) | null,
+  rowClick: null as ((id: RowId, e: React.MouseEvent) => void) | null,
+  /** The scroller's own empty-space clear, which passes no event. */
+  backgroundClear: null as (() => void) | null,
+  cellCommit: null as ((row: Row, col: ColumnKey, commit: CellCommit) => void) | null,
+  /** The *Add* latch the container handed the table's marquee. */
+  addLatch: undefined as boolean | undefined,
 }))
 vi.mock('./FixturesTable', () => ({
   FixturesTable: (props: {
     rows: readonly Row[]
     cellSelection: CellSelection<ColumnKey>
-    onBeginCellEdit: (row: Row, col: ColumnKey) => void
+    onBeginCellEdit: (row: Row, col: ColumnKey, event?: CellClickEvent) => void
+    onCellCommit: (row: Row, col: ColumnKey, commit: CellCommit) => void
+    onRowClick: (id: RowId, e: React.MouseEvent) => void
     onToggleExpand: (row: Row, options?: { level?: boolean }) => void
-    onBackgroundClick?: () => void
+    onBackgroundClick?: (event?: CellClickEvent) => void
+    addLatch?: boolean
     closeEditorCell?: { rowId: string; col: ColumnKey } | null
     keyboardOpen?: CellOpenRequest<ColumnKey> | null
     revealCell?: { rowId: string; col: ColumnKey } | null
@@ -254,20 +278,25 @@ vi.mock('./FixturesTable', () => ({
     if (props.revealCell) table.revealCell = props.revealCell
     table.rows = props.rows
     table.toggleExpand = props.onToggleExpand
+    table.beginCellEdit = props.onBeginCellEdit
+    table.cellCommit = props.onCellCommit
+    table.rowClick = props.onRowClick
+    table.backgroundClear = () => props.onBackgroundClick?.()
+    table.addLatch = props.addLatch
     if (props.closeEditorCell) table.closeEditorCell = props.closeEditorCell
     if (props.keyboardOpen) table.keyboardOpens.push(props.keyboardOpen)
     return (
       <>
         <button
           data-testid="cell"
-          onClick={() => props.onBeginCellEdit(props.rows[0], 'dimmer')}
+          onClick={(e) => props.onBeginCellEdit(props.rows[0], 'dimmer', e)}
         >
           {props.cellSelection.count} cells
         </button>
-        <button data-testid="colour-cell" onClick={() => props.onBeginCellEdit(props.rows[0], 'colour')} />
+        <button data-testid="colour-cell" onClick={(e) => props.onBeginCellEdit(props.rows[0], 'colour', e)} />
         {/* What the real table renders for a column a row resolves nothing for, and for the
             empty space under the last row: both call `onBackgroundClick`. */}
-        <button data-testid="blank-cell" onClick={() => props.onBackgroundClick?.()} />
+        <button data-testid="blank-cell" onClick={(e) => props.onBackgroundClick?.(e)} />
         {/* The real grid's addressing contract, which `openCellEditorTarget` reads to find the
             open editor: a `data-state="open"` anchor inside a `[data-cell]` inside a
             `[data-row-id]`. Rendered only when this stub is told an editor is open. */}
@@ -315,6 +344,13 @@ beforeEach(() => {
   table.editorOpen = false
   table.keyboardOpens = []
   table.revealCell = null
+  table.beginCellEdit = null
+  table.rowClick = null
+  table.backgroundClear = null
+  table.cellCommit = null
+  table.addLatch = undefined
+  writes.list = []
+  pointer.coarse = false
   currentProject.id = 1
   resetIncludeSelection()
   resetListExpansionStores()
@@ -1209,5 +1245,148 @@ describe('Lit under an open FX picker (programmer-fixes plan D21)', () => {
     fireEvent.change(screen.getByPlaceholderText('Filter fixtures…'), { target: { value: 'Wash 2' } })
     expect(rowKeys()).not.toContain('a')
     expect(screen.queryByTestId('row-fx')).toBeNull()
+  })
+})
+
+describe('cells with gaps (programmer-fixes plan D1–D8)', () => {
+  const rowOf = (id: string) => table.rows.find((row) => row.id === id)!
+  /** A pointer click on a cell: [detail] 1, as a real click is, with the modifiers given. */
+  const click = (id: string, col: ColumnKey, mods: Partial<CellClickEvent> = {}) =>
+    act(() => table.beginCellEdit!(rowOf(id), col, { metaKey: false, ctrlKey: false, shiftKey: false, detail: 1, ...mods }))
+  const cells = () => table.cellSelection!.cells.map((c) => `${c.rowId}·${c.col}`).sort()
+  const programmer = () => (
+    <FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership renderToolbar={programmerToolbar} />
+  )
+
+  it('⌘-clicks build a selection with gaps that a commit and Spread reach exactly', () => {
+    render(programmer())
+    click('fixture:a', 'dimmer')
+    click('fixture:d', 'dimmer', { metaKey: true })
+    click('fixture:a', 'colour', { metaKey: true })
+    expect(cells()).toEqual(['fixture:a·colour', 'fixture:a·dimmer', 'fixture:d·dimmer'])
+    // A level lands on the two dimmers and nowhere between them; the colour cell takes no level.
+    act(() => table.cellCommit!(rowOf('fixture:a'), 'dimmer', { kind: 'slider', value: 128 }))
+    expect(writes.list.sort()).toEqual(['a·slider', 'd·slider'])
+    // Spread runs each column over its selected heads in row order, skipping b and c.
+    const spread = JSON.parse(screen.getAllByTestId('row-spread').at(-1)!.getAttribute('data-columns')!)
+    expect(Object.fromEntries(spread)).toEqual({ dimmer: ['a', 'd'], colour: ['a'] })
+  })
+
+  it('⇧-click selects the rectangle from the last cell clicked', () => {
+    render(programmer())
+    click('fixture:a', 'dimmer')
+    click('fixture:c', 'colour', { shiftKey: true })
+    expect(cells()).toEqual([
+      'fixture:a·colour',
+      'fixture:a·dimmer',
+      'fixture:b·colour',
+      'fixture:b·dimmer',
+      'fixture:c·colour',
+      'fixture:c·dimmer',
+    ])
+    // ⌘ takes one out, leaving the gap; ⌘⇧ adds a rectangle beside the rest.
+    click('fixture:b', 'colour', { metaKey: true })
+    click('fixture:d', 'dimmer', { metaKey: true, shiftKey: true })
+    expect(cells()).toContain('fixture:d·dimmer')
+    expect(cells()).toContain('fixture:c·colour')
+  })
+
+  it('a ⌘-click on a cell drops a row selection first', () => {
+    rowSelection.ids = new Set(['fixture:a', 'fixture:b'])
+    render(programmer())
+    click('fixture:d', 'dimmer', { metaKey: true })
+    expect(rowSelection.clear).toHaveBeenCalled()
+    expect(cells()).toEqual(['fixture:d·dimmer'])
+  })
+
+  it('a ⌘-click on a blank cell keeps the selection, and a plain one clears it', () => {
+    render(programmer())
+    click('fixture:a', 'dimmer')
+    click('fixture:d', 'dimmer', { metaKey: true })
+    fireEvent.click(screen.getByTestId('blank-cell'), { metaKey: true })
+    fireEvent.click(screen.getByTestId('blank-cell'), { shiftKey: true })
+    expect(cells()).toHaveLength(2)
+    fireEvent.click(screen.getByTestId('blank-cell'))
+    expect(cells()).toHaveLength(0)
+  })
+
+  it('a click with no pointer behind it — Enter on a focused cell — stays a plain click', () => {
+    render(programmer())
+    click('fixture:a', 'dimmer')
+    click('fixture:d', 'dimmer', { metaKey: true, detail: 0 })
+    expect(cells()).toEqual(['fixture:d·dimmer'])
+  })
+
+  describe('the Add latch (D7)', () => {
+    const addButton = () => screen.queryByRole('button', { name: 'Add' })
+
+    it('is not drawn for a mouse', () => {
+      render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
+      expect(addButton()).toBeNull()
+    })
+
+    it('on a touch screen, turns a tap into a ⌘-click and a drag into an accumulating one', () => {
+      pointer.coarse = true
+      render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
+      click('fixture:a', 'dimmer')
+      fireEvent.click(addButton()!)
+      expect(addButton()).toHaveAttribute('aria-pressed', 'true')
+      expect(table.addLatch).toBe(true)
+      click('fixture:d', 'dimmer')
+      click('fixture:a', 'colour')
+      expect(cells()).toEqual(['fixture:a·colour', 'fixture:a·dimmer', 'fixture:d·dimmer'])
+      // A tap takes a cell back out, and a tap on a blank cell leaves the rest.
+      click('fixture:a', 'colour')
+      fireEvent.click(screen.getByTestId('blank-cell'))
+      expect(cells()).toEqual(['fixture:a·dimmer', 'fixture:d·dimmer'])
+    })
+
+    it('turns off on Escape and on a clear, and stays on when a tap takes out the last cell', () => {
+      pointer.coarse = true
+      render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
+      click('fixture:a', 'dimmer')
+      fireEvent.click(addButton()!)
+      fireEvent.keyDown(window, { key: 'Escape' })
+      expect(addButton()).toHaveAttribute('aria-pressed', 'false')
+      expect(cells()).toHaveLength(0)
+
+      click('fixture:a', 'dimmer')
+      fireEvent.click(addButton()!)
+      // A double-tap on the one selected cell: the first tap takes it out, the second puts it back
+      // (and opens its editor), with Add still on.
+      click('fixture:a', 'dimmer')
+      expect(cells()).toHaveLength(0)
+      expect(addButton()).toHaveAttribute('aria-pressed', 'true')
+      click('fixture:a', 'dimmer', { detail: 2 })
+      expect(cells()).toEqual(['fixture:a·dimmer'])
+      expect(addButton()).toHaveAttribute('aria-pressed', 'true')
+      // A tap on the empty space under the rows clears, latch and all.
+      act(() => table.backgroundClear!())
+      expect(cells()).toHaveLength(0)
+      expect(addButton()).toHaveAttribute('aria-pressed', 'false')
+    })
+
+    it('turns off when the primary pointer stops being a finger', () => {
+      pointer.coarse = true
+      const { rerender } = render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
+      click('fixture:a', 'dimmer')
+      fireEvent.click(addButton()!)
+      expect(table.addLatch).toBe(true)
+      pointer.coarse = false
+      rerender(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
+      expect(table.addLatch).toBe(false)
+      // A plain click is a plain click again, though nothing on screen said the latch was on.
+      click('fixture:d', 'dimmer')
+      expect(cells()).toEqual(['fixture:d·dimmer'])
+    })
+
+    it('makes a tap on a row’s name a ⌘-click on the row', () => {
+      pointer.coarse = true
+      render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
+      click('fixture:a', 'dimmer')
+      fireEvent.click(addButton()!)
+      act(() => table.rowClick!('fixture:b', { metaKey: false, ctrlKey: false, shiftKey: false } as React.MouseEvent))
+      expect(rowSelection.select).toHaveBeenCalledWith('fixture:b', 'toggle')
+    })
   })
 })

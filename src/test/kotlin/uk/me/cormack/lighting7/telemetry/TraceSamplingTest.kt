@@ -55,6 +55,7 @@ class TraceSamplingTest {
         assertEquals(1.0, rate("sync.run", "sync.run"))
         assertEquals(0.2, rate("http.server", "GET /api/rest/projects"))
         assertEquals(0.2, rate(TraceSampling.OP_WS_MESSAGE, "selection.set"))
+        assertEquals(0.2, rate(TraceSampling.OP_WS_MESSAGE, "recentValues.record"), "one send per committed gesture")
         assertEquals(0.0, rate(TraceSampling.OP_WS_MESSAGE, "updateChannel"))
         assertEquals(0.2, rate("project.switch", "project.switch"))
     }

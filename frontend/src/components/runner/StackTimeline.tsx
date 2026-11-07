@@ -83,6 +83,7 @@ import { CueStatePip, cueArmLabel } from '@/components/cues/CueRowParts'
 import { EditedSinceGoChip } from '@/components/cues/EditedSinceGo'
 import { SheetTable } from '@/components/sheet/SheetTable'
 import { useSheet } from '@/components/sheet/useSheet'
+import { cellClickIntent } from '@/components/sheet/listSelectionModel'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
 import { LegendSwatch, SheetPage } from '@/components/sheet/SheetPage'
 import { CHROME_ROW_CLASS } from '@/components/sheet/sheetFrame'
@@ -374,8 +375,13 @@ export function StackTimeline({
     [cueOrder, dragColumn, dragFrom, dragTo, grid],
   )
 
-  /** A cell's click: select it, or — when it is already the one selected cell — toggle it. */
-  const clickCellRef = useRef<(row: TimelineRow, column: TimelineColumn, select: () => void, extend: boolean) => void>(() => {})
+  /**
+   * A cell's click. ⌘, ⇧ and ⌘⇧ (or a tap under the Add latch) select by `CellSelection.click`; a
+   * plain click selects the cell, or — when it is already the one selected cell — toggles it.
+   */
+  const clickCellRef = useRef<
+    (row: TimelineRow, column: TimelineColumn, select: (e: React.MouseEvent) => void, e: React.MouseEvent) => void
+  >(() => {})
   const startDragRef = useRef<(column: TimelineColumn, entryId: number, e: React.PointerEvent) => void>(() => {})
   /** A tap on the *Dark* column: the cue its move is for, opened at its Cue tab's Move in dark. */
   const openDarkRef = useRef<(entryId: number) => void>(() => {})
@@ -446,7 +452,7 @@ export function StackTimeline({
         value: (row) => (isCueRow(row.entry) ? row.entry.entryId : undefined),
         cell: (row, props) => (
           <TimelineCellView
-            onClick={(e) => clickCellRef.current(row, column, props.onBeginEdit, e.shiftKey)}
+            onClick={(e) => clickCellRef.current(row, column, props.onBeginEdit, e)}
             swatch={swatch}
             column={column}
             cell={cellAt(grid, row.entry.entryId, column.id)}
@@ -576,25 +582,16 @@ export function StackTimeline({
   clearRef.current = () => gesture(verbState.off)
 
   const soleCell = cellCount === 1 ? `${cellSelection.cells[0].rowId}|${cellSelection.cells[0].col}` : null
-  clickCellRef.current = (row, column, select, extend) => {
-    const anchor = cellSelection.cursor?.anchor ?? cellSelection.cells[0]
-    if (extend && anchor != null) {
-      // Shift-click: the rectangle from the anchor to this cell, as a marquee would draw it.
-      const rowIds = rows.filter((r) => r.divider == null).map((r) => r.id)
-      const colIds = shown.map((c) => c.id)
-      const span = <T,>(list: T[], a: T, b: T) => {
-        const [i, j] = [list.indexOf(a), list.indexOf(b)]
-        return i < 0 || j < 0 ? [] : list.slice(Math.min(i, j), Math.max(i, j) + 1)
-      }
-      const head = { rowId: row.id, col: column.id }
-      cellSelection.place(
-        span(rowIds, anchor.rowId, row.id).flatMap((rowId) => span(colIds, anchor.col, column.id).map((col) => ({ rowId, col }))),
-        { anchor, head },
-      )
+  clickCellRef.current = (row, column, select, e) => {
+    // A modified click is the Timeline's own, never forwarded to `select` (which would apply it a
+    // second time), and never the sole cell's toggle: a ⌘-click there deselects, writing nothing.
+    const { intent, detail } = cellClickIntent(e, sheet.addLatch.on)
+    if (intent !== 'replace') {
+      sheet.clickCell({ rowId: row.id, col: column.id }, intent, detail)
       return
     }
     if (soleCell !== `${row.id}|${column.id}`) {
-      select()
+      select(e)
       return
     }
     if (!editsColumn(column)) return
@@ -946,6 +943,7 @@ export function StackTimeline({
             ) : null
           }
           marqueeDragging={sheet.marqueeDragging}
+          addLatch={sheet.addLatch}
         />
       </div>
       <div ref={sheetRef} className="flex min-h-0 flex-1 flex-col" data-timeline-body>

@@ -265,6 +265,7 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
           strip={scope.reason != null ? <ReadOnlyNote reason={scope.reason} /> : undefined}
           verbs={verbs}
           marqueeDragging={sheet.marqueeDragging}
+          addLatch={sheet.addLatch}
           foldForStrip={false}
         />
       </div>
