@@ -146,6 +146,14 @@ class CloudService(
         private set
 
     /**
+     * The desk's page at [path] (`/prompt-book`) as a cloud member opens it, through the remote shell
+     * at `<cloud.baseUrl>/r/<installId><path>`; null unless the desk is adopted with *Remote sessions*
+     * on, since the shell opens nothing otherwise. Memory only.
+     */
+    fun remoteShellUrl(path: String): String? =
+        trust?.takeIf { it.remoteAccess }?.let { "${config.baseUrl}/r/${it.installId}$path" }
+
+    /**
      * The command that launches the sidecar for a target and a build: the installed one, or the one
      * `cloud.link.binary` or `-Dlighting7.link` names ([LinkBinary]); none when there is none. Tests
      * replace it.

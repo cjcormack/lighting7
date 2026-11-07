@@ -62,7 +62,7 @@ class McpFixtureCommandToolTest : RouteIntegrationTest() {
         assertTrue("turned off for remote access" in refused.text(), refused.text())
         assertEquals(0u.toUByte(), state.show.outputSource.getParkedValue(0, 11), "nothing was held")
 
-        state.remoteAccess.update(allowCommands = true, hasAnyUser = true)
+        state.remotePolicy.update(allowCommands = true)
         try {
             val unknown = callTool(protocol, """{"fixtureKey":"vary","command":"lampOn"}""")
             assertTrue(unknown["isError"]!!.jsonPrimitive.boolean)
@@ -73,7 +73,7 @@ class McpFixtureCommandToolTest : RouteIntegrationTest() {
             assertTrue("\"completed\":true" in ran.text(), ran.text())
             assertEquals(0u.toUByte(), state.show.outputSource.getParkedValue(0, 11), "back to idle after the hold")
         } finally {
-            state.remoteAccess.update(allowCommands = false, hasAnyUser = true)
+            state.remotePolicy.update(allowCommands = false)
         }
     }
 

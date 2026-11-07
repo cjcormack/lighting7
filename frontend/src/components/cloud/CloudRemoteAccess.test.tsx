@@ -143,7 +143,7 @@ describe('CloudRemoteAccess', () => {
     expect(mocks.end).toHaveBeenCalledWith('sid-1')
   })
 
-  it('before adoption, shows only the switches that hold for the tunnel too', () => {
+  it('before adoption, shows only the switches for what a remote caller may do', () => {
     render(<CloudRemoteAccess state={cloud({ adopted: null })} />)
     expect(screen.queryByRole('switch')).toBeNull()
     expect(screen.queryByTestId('cloud-sessions')).toBeNull()

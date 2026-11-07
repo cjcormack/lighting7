@@ -43,8 +43,6 @@ val ALL_TABLES: List<Table> = listOf(
     DaoSyncLogEntries,
     DaoOAuthIdentities,
     DaoUsers, DaoUserSessions, DaoPasswordResetTokens,
-    // After DaoUsers, which a grant references.
-    DaoMcpOAuthClients, DaoMcpOAuthGrants,
     DaoRemoteAccessSettingsTable,
     // Machine-local: this desk's OSC listener and its allowlist (OSC plan D5).
     DaoOscSettingsTable, DaoOscSendersTable,

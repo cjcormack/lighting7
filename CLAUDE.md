@@ -665,7 +665,6 @@ Venue plan sessions 3–7; REST only, no WS operation (`venue.hold` is outbound 
 - `GET /api/rest/lanterns` - The lantern library a generic dimmer is hung with (§"Lanterns and focus" there)
 
 ### Remote Access Endpoints
-- `GET/PUT /api/rest/install/tunnel` - Remote access (the ngrok tunnel), admin only, machine-local. The authtoken is **write-only** (answers say `hasAuthtoken`); every PUT field is optional, an empty `authtoken` or `domain` clears it and turns remote access off; turning it on needs a desk account, a domain and a token (`REMOTE_ACCESS_INVALID`). The `PUT` is refused on the public listener, 403 `CLOUD_SETTINGS_LOCAL_ONLY` (cloud-p1 plan D6), since it holds the scripts, effects and commands switches. Live status streams as `tunnel.state`. See `docs/mcp-engineering.md` §"Remote access"
 - `GET /api/rest/install/cloud`, `POST/DELETE .../install/cloud/adoption`, `DELETE .../install/cloud[?force=true]` - This desk's adoption by Lighting7 Cloud (cloud-p0 plan D14), admin only, machine-local; every answer is the state `cloud.state` streams. Adopting is refused 403 `CLOUD_ADOPT_LOCAL_ONLY` on the public listener and 409 `CLOUD_NEEDS_ACCOUNT` on a desk with no accounts (D5); unadopt is 409 `CLOUD_UNREACHABLE` when the cloud cannot be told, unless `force`. `GET/PUT .../install/cloud/remote` `{remoteAccess?, mcpAccess?, approveSessions?, allowScripts?, allowEffects?, allowCommands?}` are what may come through the cloud (cloud-p1 plan D6, D13), off at adoption, and what any remote caller may do, the Cloud tab's *Remote access*; the `PUT` is 403 `CLOUD_SETTINGS_LOCAL_ONLY` on the public listener and 409 `CLOUD_NOT_ADOPTED` for a cloud switch before adoption. `GET .../install/cloud/sessions` lists the open and recent remote sessions and `DELETE .../sessions/{sid}` ends one, from either listener; with *Approve each new session* on, an offer waits up to 60 s for `POST .../sessions/{sid}/allow` or `…/deny`, refused on the public listener (403 `CLOUD_APPROVAL_LOCAL_ONLY`), else `REMOTE_SESSION_DENIED`; an *Allow* is 409 `CLOUD_SESSION_LINK_CHANGED` when the account's link moved while it waited, which shows it afresh. `cloud.state` carries the three cloud switches as `remoteSwitches`. See `docs/cloud-engineering.md`
 - `POST /api/rest/cloud/session/token` + `DELETE /api/rest/cloud/session` - A remote session's own refresh (the new token as the bearer, which must expire later or the session ends) and end, open to an unlinked session (cloud-p1 plan D4, D5). On the public listener a request with `Authorization: Bearer` and the sidecar's `Lighting7-Link` secret is judged as a remote session through the cloud (`cloud/RemoteSessions.kt`) by `resolveCaller`, the gate's, the WS upgrade's and `auth/status`'s one answer to who is calling; `auth/status` answers an unlinked one `{unlinked, email}`. See `docs/cloud-engineering.md` §"Remote sessions"
 - `POST /api/rest/users/{id}/cloud-invite` `{email}` + `DELETE .../cloud-invite`, `DELETE /api/rest/users/{id}/cloud-link`, `GET/DELETE /api/rest/cloud/link`, `POST /api/rest/cloud/link/prove` `{username, password}` - Links between cloud accounts and desk users (cloud-p1 plan D12, `cloud/CloudLinks.kt`): an admin's invite (sent as `link.invite`, mailed only once an owner or admin of the org approves it in the portal; 409 `CLOUD_OFFLINE` / `CLOUD_INVITE_PENDING` / `CLOUD_LINK_EXISTS`) and its cancel, an admin's unlink, the caller's own link and unlink, and an unlinked remote session's prove-once, under the public listener's lockout, after which that session is the user. Every unlink ends the account's remote sessions and tells the cloud `link.removed`; `UserDto` carries `cloudLink` and `cloudInvite`; each change is a `cloud_link_events` row. See `docs/cloud-engineering.md` §"Links"
@@ -814,7 +813,6 @@ session 5.
 - `recentValues.state` / `recentValues.record` - The value pop-ups' recent values (programmer-fixes plan D14–D16): `state {projectId, lists: {<key>: [value, …]}}`, the live project's lists newest first, at most 12, no repeats, `StateFlow`-backed and following the live show; `record {key, value}`, one per committed gesture, a `GESTURE` in `TraceSampling.WS_MESSAGES`. Keys `colour`, `level:<attribute>`, `palette-level:<attribute>`, `position`, `warmth`, each value checked against its spelling by `state/RecentValues.kt` and dropped otherwise. `RecentValuesService` keeps every project's lists while the desk runs: runtime only, no table, no sync, no REST, no MCP tool
 - `grandMaster.state` / `grandMaster.set` - The live project's grand master, 0–100 %: `state {projectId, level}` is `StateFlow`-backed and follows the live show, so the subscription is the snapshot; `set {level}` is the Grand Master panel's fader, clamped, `CONTINUOUS` in `TraceSampling.WS_MESSAGES`. `surfaceScaler.state`'s `grandMasterEnabled` is the same level read as `> 0`. See `docs/websocket-engineering.md` §"Grand master"
 - `surfaceControls.state` / `surfaceControls.changed` - Per-device control state as the hardware was told it (`value`, `physical`, `touched`, `led`, `ring`), from `ControlStateTracker`: a whole-device `.state` on connect and after every full resync, conflated `.changed` deltas at most every 50 ms per device. The Surfaces view draws exactly this and never recomputes from DMX
-- `tunnel.state` - Remote access's live status (`off | installing | starting | online | error | no-binary`, with download progress, the URL, ngrok's `ERR_NGROK_…` code and whether it is retrying). Machine-scoped, **admin sockets only** (a zero-user desk's socket counts), snapshot on connect; the frame carries the state, so the client patches rather than refetches
 - `osc.state` - OSC in (OSC plan §3 "Wire"): `{enabled, listening, port, error?, received, dropped, refused, refusedSenders: [{address, count, lastAt}], recent: [{at, sender, address, args, outcome, detail}]}`, `outcome` `DONE | NOT_FOUND | AMBIGUOUS | REFUSED | FAILED | BAD_MESSAGE`, the last 50 newest first. Machine-scoped, `StateFlow`-backed, at most four a second, to **every** socket on the desk's own listener, operators' included (D12), and none on the public one (D5); outbound only. See `docs/osc-engineering.md`
 - `remoteSession.pending` - The remote sessions waiting for an admin at the desk (cloud-p1 plan D13), `{sessions: [{sid, email, displayName, linkedUser?, expiresAt}]}`, `StateFlow`-backed, outbound only, to admin sockets on the desk's own listener alone; every such window toasts each with *Allow* and *Deny* (REST). On the public listener `channelState` and `provenanceState` are capped per socket (`cloud.remote.channelStateHz`, D14, `plugins/RemoteFrameCap.kt`). See `docs/cloud-engineering.md` §"Remote sessions"
 - `cloud.state` - Lighting7 Cloud's state (`CloudService.state`, cloud-p0 plan D14): adoption, the control channel's `connection` (`OFF | CONNECTING | ONLINE | RETRYING`, with `retryAt`, `lastOnlineAt`, `lastError`) and a revoke's `notice`. Machine-scoped, **admin sockets only**, `StateFlow`-backed, outbound only; on the public listener a pending adoption's code and links are left out. It changes per transition and per change of the channel's status, never per heartbeat. A change to what feeds it asks R6's question: does it still hold with the cloud down? See `docs/cloud-engineering.md` §"The control channel"
@@ -942,6 +940,14 @@ database with no column is only marked 12, one whose columns flag nothing loses 
 flags some is backed up first to `<db>.pre-own-tempo-<utc>.db`. The importer reads an older archive's
 `seconds` the same way. `OwnTempoMigrationTest` runs it over `src/test/resources/db/pre-own-tempo.sql`,
 a database at 11; never regenerate it.
+
+**Step 13 follows it**: `state/RetiredRemoteAccessMigration.kt` (cloud-p1 plan D18) drops what the ngrok
+tunnel and the desk's own OAuth server stored — `mcp_oauth_clients`, `mcp_oauth_grants` and
+`remote_access_settings`' `enabled` and `domain`, keeping its scripts, effects and commands switches — and,
+once the credential store exists, deletes the `ngrok:authtoken` credential and the agents downloaded under
+`<appDataDir>/ngrok`. A database holding no client or grant loses them unbacked; one that holds some is
+backed up first to `<db>.pre-retired-remote-access-<utc>.db`. `RetiredRemoteAccessMigrationTest` runs it
+over `src/test/resources/db/pre-retired-remote-access.sql`, a database at 12; never regenerate it.
 
 Otherwise the bet stands on there being exactly one database (the dev desk), and it
 expires the moment a second install exists — the Windows MSI ships an upgrade path.
@@ -1125,25 +1131,29 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
 
 - **DMX Hardware**: ArtNet protocol over network
 - **Philips Hue**: HTTP API via Ktor client
-- **MCP (Claude) and Remote access**: a second, **public listener** (`mcp.port`, default
-  `127.0.0.1:8414`) serving the whole desk (UI, REST, WS) plus MCP, OAuth and its sign-in page. It
-  is what a tunnel points at — the desk's own supervised ngrok (Install settings → Remote access,
-  the agent downloaded on first enable, never bundled: ngrok's licence) or one the operator runs,
-  named by `mcp.publicUrl`. The desk is its own OAuth server; grants are machine-local and die with
-  the user's sessions. The tools are the show-running tools (`ai/AiTools.kt` — no script tool),
+- **MCP (Claude) and remote access**, both **through Lighting7 Cloud** (the cloud-p1 plan): Claude calls
+  the MCP URL the cloud serves and authorises for the install, and the cloud relays each JSON-RPC call
+  over the control channel to `McpProtocol` (`cloud/McpRelay.kt`), run as the desk user the cloud
+  account is linked to. The desk runs no OAuth server and no `/mcp` of its own; the ngrok tunnel is gone
+  too. The tools are the show-running tools (`ai/AiTools.kt` — no script tool),
   `describe_rig` and the show-setup tools (`ai/SetupTools.kt`: projects, venues — list, extract,
   publish, a show on one, attach — and copying between projects (`ai/VenueSetupTools.kt`), the stored-data
   ones taking a `projectId` so a show is built without switching to it; patch, stage and
   rigging, the scene — its cloths' fabric and paint, and `upload_scene_image`, the one tool that
-  takes file bytes, a PNG or JPEG of at most 16 MB with no remote-access gate — cue stacks and
+  takes file bytes, a PNG or JPEG of at most 16 MB, about 5 MB through the cloud, with no remote-access gate — cue stacks and
   prompt-book markup, built from documents the model reads; Claude's own history, `list_history`
   and `undo_changes` (`ai/HistoryTools.kt`), which take back the grant's own show entries only — and
   `render_view`, a PNG of a stage viewpoint drawn offscreen by a signed-in desk window on the desk's
-  own listener, never a remote one, so Claude can check the model it built). **The port split is the security boundary**: everything on that listener is
-  remote, decided by port and never by a forwarded header, and `installRemoteHardening` applies
-  there — no remote bootstrap, a sign-in lockout, `Secure` cookies, an Origin check, no QR flows,
+  own listener, never a remote one, so Claude can check the model it built). A **remote session** — the
+  desk's own SPA opened from the portal — reaches a second, **public listener** (`mcp.port`, default
+  `127.0.0.1:8414`) serving the whole desk (UI, REST, WS) through the bundled sidecar
+  `lighting7-link`. **The port split is the security boundary**: everything on that listener is
+  remote, decided by port and never by a forwarded header, its one caller a remote session's bearer
+  token (no session cookie, no password sign-in, `REMOTE_PASSWORD_SIGN_IN`), and `installRemoteHardening`
+  applies there — no remote bootstrap, a lockout on prove-once, an Origin check, no QR flows,
   scripts refused unless an admin allows them, and arming, firing and fixture commands likewise
-  (`requireEffectsAccess`, `requireCommandsAccess` — MCP's `run_fixture_command` included). Anything mounted on it is reachable from the
+  (`requireEffectsAccess`, `requireCommandsAccess` — MCP's `run_fixture_command` included), the three
+  switches `cloud/RemotePolicy.kt`'s. Anything mounted on it is reachable from the
   internet, and a script-capable route must call `requireScriptAccess`. The browser's Sentry
   tunnel, `/api/sentry`, is mounted there too, signed out included: its DSN check, 1 MB cap and
   telemetry gate are all that keep it from being an open relay. See
@@ -1189,7 +1199,7 @@ For deeper technical details, see the docs in `docs/`:
 - [FX System](docs/fx-engineering.md) - Tempo-synchronized FX, Master Clock, FX types, blend modes
 - [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, Orders, multi-element fixtures
 - [OSC](docs/osc-engineering.md) - OSC in from QLab: the fixed address set and its slugs, the explicit forms that land the same state however often they arrive, the `osc-1` receive thread and its hand-off channel, the allowlist, `/install/osc`, `osc.state` and the log
-- [MCP Server](docs/mcp-engineering.md) - The public listener that carries the whole desk plus MCP, Remote access (the ngrok agent the desk downloads and supervises, and the domain as OAuth issuer), the remote hardening applied by port, the desk as its own OAuth server (PKCE, rotating refresh tokens, lockout, revocation with sessions), and why the script tool is left out
+- [MCP Server](docs/mcp-engineering.md) - MCP through Lighting7 Cloud's relay, adding a connector, the public listener that carries remote sessions, the remote hardening applied by port and the three policy switches, the protocol and its tools, and why the script tool is left out
 - [Cloud Sync](docs/sync-engineering.md) - Canonical JSON, UUID identity, machine-local overrides, per-project JGit working tree + snapshot flow, three-way diff + conflict sessions, GitHub OAuth + PAT auth (Phases 1–5 of the cloud-sync plan)
 - [Composition Model](docs/lighting-composition-model.md) - The five tiers, and §"Looks, palettes and layers" for the cook step: a cue's ordered layers plus its local rows flatten to one contributor per (fixture, attribute) before the resolver, which is what makes within-cue precedence one rule for every attribute. Its §"A palette holds a value *or* an FX" is the D7 reversal and the three rules that keep it narrow
 - [Desk Screens](docs/desk-screens.md) - The two desk screens: the launcher's tray items, the `?window=` naming contract, why a desk screen must be opened at `http://localhost:8413/` (installation, Keyboard Lock and Window Management are all secure-context), and kiosk mode as a note

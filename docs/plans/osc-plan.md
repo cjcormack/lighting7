@@ -84,11 +84,12 @@ What the code says, read at `8c35838`. `F/` is `frontend/src`, `K/` is
   GOs. `SurfaceFeedbackPublisher` does not listen to it.
 - **History.** `HistorySource.Kind` is `ACCOUNT | MCP | SURFACE | DESK` (`K/history/WriteOrigin.kt`),
   mirrored in `F/api/historyApi.ts`.
-- **Machine-local settings.** Remote access's `remote_access_settings` (`K/models/remoteAccess.kt`)
-  is recorded `MachineLocal` in `K/sync/SyncDispositions.kt`, served by `K/routes/installTunnel.kt`,
-  and drawn by `F/components/remoteAccess/RemoteAccessPanel.tsx` (`F/store/remoteAccess.ts`) on
-  `F/routes/InstallSettings.tsx`, whose tabs show only where `F/navigation.ts` shows their row
-  (remote access's is `adminOnly`, held by `F/navigation.test.ts`). `call.isRemote` is how a route
+- **Machine-local settings.** The remote policy switches' `remote_access_settings`
+  (`K/models/remoteAccess.kt`, read through `K/cloud/RemotePolicy.kt`) is recorded `MachineLocal` in
+  `K/sync/SyncDispositions.kt`, served by `K/routes/installCloud.kt` (`/install/cloud/remote`), and drawn
+  by `F/components/cloud/CloudRemoteAccess.tsx` (`F/store/cloud.ts`) on `F/routes/InstallSettings.tsx`,
+  whose tabs show only where `F/navigation.ts` shows their row (the Cloud tab's is `adminOnly`, held by
+  `F/navigation.test.ts`). `call.isRemote` is how a route
   refuses the public listener (`K/routes/installCloud.kt`); install routes are mounted on both.
 - **Machine-scoped frames.** `setupMachineSubscriptions` (`K/plugins/MachineSocket.kt`) serves the
   sockets of both listeners, and a frame for the desk's own listener only checks `scope.remote`.
@@ -399,6 +400,6 @@ One row in `manual-validation.md` per merged session, at the desk with QLab 5 on
 - Network MIDI (RTP-MIDI).
 - OSC address patterns (`*`, `?`, `[…]`, `{…}`) in received addresses.
 - Arming, firing triggers, fixture commands, Record, undo and project switching over OSC (D6).
-- OSC on the public listener or through the tunnel.
+- OSC on the public listener or through Lighting7 Cloud.
 - A second, exact-name argument form for addresses (D3).
 - Authenticating senders beyond their source address (D5).

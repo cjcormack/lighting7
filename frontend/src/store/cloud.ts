@@ -49,8 +49,8 @@ export interface CloudState {
 
 /**
  * Mirrors `RemoteAccessDto` in lighting7's `routes/installCloud.kt`: what may come through the cloud
- * (the first three, adopted desks only) and what any remote caller may do, through the cloud or the
- * ngrok tunnel alike. Changed only from the desk's own listener.
+ * (the first three, adopted desks only) and what any remote caller may do. Changed only from the
+ * desk's own listener.
  */
 export interface RemoteAccessSettings {
   remoteAccess: boolean
@@ -115,8 +115,6 @@ export const cloudApi = restApi.injectEndpoints({
     }),
     setRemoteAccess: build.mutation<RemoteAccessSettings, Partial<RemoteAccessSettings>>({
       query: (body) => ({ url: 'install/cloud/remote', method: 'PUT', body }),
-      // The scripts, effects and commands switches are the Remote access tab's settings too.
-      invalidatesTags: ['RemoteAccess'],
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled

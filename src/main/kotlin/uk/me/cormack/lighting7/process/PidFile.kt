@@ -6,9 +6,9 @@ import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 
 /**
- * The PID file of a child process the desk supervises (ngrok, lighting7-link), so the next start can
- * stop one a killed desk left running. A child must not outlive the desk: an orphaned ngrok holds the
- * domain, and an orphaned sidecar a peer the next one cannot know about.
+ * The PID file of a child process the desk supervises (lighting7-link), so the next start can stop one
+ * a killed desk left running. A child must not outlive the desk: an orphaned sidecar holds a peer the
+ * next one cannot know about.
  *
  * The file is the PID, the binary's path and, where the platform reports it, the process's start
  * time. [sweepOrphan] stops the recorded process only while it is alive, still running that binary

@@ -274,7 +274,7 @@ class ProgrammerHistoryRoutesTest : RouteIntegrationTest() {
     fun `a Claude tool call is one step of Claude's`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val claude = AuthenticatedUser(1, UUID.randomUUID(), "chris", "Chris", UserRole.ADMIN, "mcp-grant:7")
+        val claude = AuthenticatedUser(1, UUID.randomUUID(), "chris", "Chris", UserRole.ADMIN, "cloud-grant:7")
         val answer = runBlocking {
             McpProtocol(state).handle(
                 Json.parseToJsonElement(
@@ -287,7 +287,7 @@ class ProgrammerHistoryRoutesTest : RouteIntegrationTest() {
         assertEquals("false", answer!!["result"]!!.jsonObject["isError"]!!.jsonPrimitive.content, "$answer")
         val step = history.frame().undo.single()
         assertEquals("Claude: set_programmer", step.label)
-        assertEquals(HistorySource.mcp("mcp-grant:7"), step.source)
+        assertEquals(HistorySource.mcp("cloud-grant:7"), step.source)
 
         jsonClient().ok { undo() }
         assertTrue(store.entries().isEmpty())

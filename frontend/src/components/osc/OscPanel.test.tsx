@@ -5,7 +5,7 @@ import type { OscSettings } from '@/store/osc'
 import type { OscState } from '@/api/oscWsApi'
 
 // Store-connected: mocking the store keeps this a component test and the import graph away from
-// lightingApi's real WebSocket, as RemoteAccessPanel's test does.
+// lightingApi's real WebSocket.
 const mocks = vi.hoisted(() => ({
   save: vi.fn((args: unknown) => ({ unwrap: () => Promise.resolve(args) })),
   settings: undefined as unknown,

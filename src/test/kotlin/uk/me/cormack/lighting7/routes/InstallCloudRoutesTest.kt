@@ -33,6 +33,8 @@ import uk.me.cormack.lighting7.cloud.CloudStateDto
 import uk.me.cormack.lighting7.mcp.publicModule
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.testsupport.FakeCloud
+import uk.me.cormack.lighting7.testsupport.RemoteDesk
+import uk.me.cormack.lighting7.testsupport.remote
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.loginCookieHeader
@@ -180,44 +182,34 @@ class InstallCloudRoutesTest : RouteIntegrationTest() {
 
     @Test
     fun `adoption is refused on the public listener, and unadopt is not`() = testApplication {
-        seedUser(state, "admin")
+        val desk = RemoteDesk(state, fake)
+        desk.adopt(seedUser(state, "admin").userId)
         mountPublic()
         val http = jsonClient()
-        val cookie = http.loginCookieHeader("admin")
-        val refused = http.post("/api/rest/install/cloud/adoption") { header(HttpHeaders.Cookie, cookie) }
+        val admin = desk.caller("admin")
+        assertTrue(http.get("/api/rest/install/cloud") { remote(admin) }.body<CloudStateDto>().remote, "the state tells the Cloud tab it is remote")
+        val refused = http.post("/api/rest/install/cloud/adoption") { remote(admin) }
         assertEquals(HttpStatusCode.Forbidden, refused.status, refused.bodyAsText())
         assertEquals(CloudErrorCodes.ADOPT_LOCAL_ONLY, refused.code())
-        assertTrue(fake.adoptions.isEmpty())
+        assertTrue(fake.adoptions.size == 1, "only the adoption the desk made")
 
-        // Reaches the handler: refused only because nothing is adopted.
-        val unadopt = http.delete("/api/rest/install/cloud") { header(HttpHeaders.Cookie, cookie) }
-        assertEquals(CloudErrorCodes.NOT_ADOPTED, unadopt.code())
-        assertTrue(http.cloud(cookie).remote, "the state tells the Cloud tab it is remote")
+        // Reaches the handler: an unadopt only reduces what can reach the desk.
+        val unadopt = http.delete("/api/rest/install/cloud") { remote(admin) }
+        assertEquals(HttpStatusCode.OK, unadopt.status, unadopt.bodyAsText())
+        assertEquals(listOf(desk.installId), fake.unadopts.toList())
     }
 
     @Test
-    fun `a pending adoption's code reaches no one on the public listener`() = testApplication {
+    fun `a pending adoption's code is left out of what the public listener is sent`() {
         val admin = seedUser(state, "admin")
         runBlocking { state.cloud.startAdoption(admin.userId) }
         assertNotNull(state.cloud.state.value.adoption?.userCode)
-        mountPublic()
-        val client = createWsClient()
-        val cookie = client.loginCookieHeader("admin")
-
-        val remote = client.cloud(cookie).adoption
-        assertNotNull(remote, "a remote admin still sees that an adoption is pending")
-        assertNull(remote.userCode)
-        assertNull(remote.verificationUri)
-        assertNull(remote.verificationUriComplete)
-
-        client.webSocket("/api", request = { header(HttpHeaders.Cookie, cookie) }) {
-            val state = awaitOfType<CloudStateOutMessage>().state
-            assertTrue(state.remote, "the frame tells the Cloud tab it is remote, as the REST answer does")
-            val frame = state.adoption
-            assertNotNull(frame)
-            assertNull(frame.userCode)
-            assertNull(frame.verificationUriComplete)
-        }
+        val remote = state.cloud.state.value.forRemote()
+        assertTrue(remote.remote)
+        val adoption = assertNotNull(remote.adoption, "a remote admin still sees that an adoption is pending")
+        assertNull(adoption.userCode)
+        assertNull(adoption.verificationUri)
+        assertNull(adoption.verificationUriComplete)
     }
 
     @Test
@@ -248,33 +240,34 @@ class InstallCloudRoutesTest : RouteIntegrationTest() {
         val set = put("""{"allowScripts":true,"allowCommands":true}""")
         assertEquals(HttpStatusCode.OK, set.status, set.bodyAsText())
         assertEquals(RemoteAccessDto(false, false, false, allowScripts = true, allowEffects = false, allowCommands = true), set.body())
-        assertTrue(state.remoteAccess.allowRemoteScripts)
-        assertTrue(state.remoteAccess.allowRemoteCommands)
-        assertFalse(state.remoteAccess.allowRemoteEffects)
+        assertTrue(state.remotePolicy.allowScripts)
+        assertTrue(state.remotePolicy.allowCommands)
+        assertFalse(state.remotePolicy.allowEffects)
 
         val approve = put("""{"approveSessions":true,"allowEffects":true}""")
         assertEquals(HttpStatusCode.Conflict, approve.status)
         assertEquals(CloudErrorCodes.NOT_ADOPTED, approve.code())
-        assertFalse(state.remoteAccess.allowRemoteEffects, "a refused request changes nothing")
+        assertFalse(state.remotePolicy.allowEffects, "a refused request changes nothing")
         assertEquals(set.body<RemoteAccessDto>(), http.get("/api/rest/install/cloud/remote") { header(HttpHeaders.Cookie, cookie) }.body())
     }
 
     @Test
     fun `the switches are refused on the public listener, and the session routes are there`() = testApplication {
-        seedUser(state, "admin")
+        val desk = RemoteDesk(state, fake)
+        desk.adopt(seedUser(state, "admin").userId)
         mountPublic()
         val http = jsonClient()
-        val cookie = http.loginCookieHeader("admin")
+        val admin = desk.caller("admin")
         val put = http.put("/api/rest/install/cloud/remote") {
-            header(HttpHeaders.Cookie, cookie); contentType(ContentType.Application.Json); setBody("""{"allowScripts":true}""")
+            remote(admin); contentType(ContentType.Application.Json); setBody("""{"allowScripts":true}""")
         }
         assertEquals(HttpStatusCode.Forbidden, put.status)
         assertEquals(CloudErrorCodes.SETTINGS_LOCAL_ONLY, put.code())
-        assertFalse(state.remoteAccess.allowRemoteScripts)
+        assertFalse(state.remotePolicy.allowScripts)
 
-        val listing = http.get("/api/rest/install/cloud/sessions") { header(HttpHeaders.Cookie, cookie) }
+        val listing = http.get("/api/rest/install/cloud/sessions") { remote(admin) }
         assertEquals(HttpStatusCode.OK, listing.status, listing.bodyAsText())
-        val end = http.delete("/api/rest/install/cloud/sessions/nothing") { header(HttpHeaders.Cookie, cookie) }
+        val end = http.delete("/api/rest/install/cloud/sessions/nothing") { remote(admin) }
         assertEquals(CloudErrorCodes.NO_SESSION, end.code(), "End is open to either listener: it only reduces reach")
     }
 }
