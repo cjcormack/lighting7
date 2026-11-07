@@ -71,6 +71,43 @@ export function applyCellSelection(
 }
 
 /**
+ * A ⌘-click on one cell: take it out if it is selected, add it if it is not.
+ *
+ * Not the marquee's `'toggle'`, which only accumulates: a ⌘-drag that removed the cells it crossed
+ * would un-select under the pointer as its rectangle grew.
+ */
+export function toggleCell(current: CellSelectionState, cell: CellRef<string>): CellSelectionState {
+  const key = cellKey(cell.rowId, cell.col)
+  const next = new Set(current)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  return next
+}
+
+/**
+ * The rectangle from [anchor] to [head] over [grid], in reading order — the cells a ⇧-arrow and a
+ * ⇧-click select. It covers cells a row does not take, as the marquee's does. Null when either
+ * corner is not on the grid.
+ */
+export function cellRectangle<C extends string>(
+  grid: CellGrid<C>,
+  anchor: CellRef<C>,
+  head: CellRef<C>,
+): CellRef<C>[] | null {
+  const [ar, hr] = [grid.rows.indexOf(anchor.rowId), grid.rows.indexOf(head.rowId)]
+  const [ac, hc] = [grid.cols.indexOf(anchor.col), grid.cols.indexOf(head.col)]
+  if (ar === -1 || hr === -1 || ac === -1 || hc === -1) return null
+  const cells: CellRef<C>[] = []
+  for (let r = Math.min(ar, hr); r <= Math.max(ar, hr); r++) {
+    for (let c = Math.min(ac, hc); c <= Math.max(ac, hc); c++) cells.push({ rowId: grid.rows[r], col: grid.cols[c] })
+  }
+  return cells
+}
+
+/** What a cell click needs of its event: the modifiers, and how many clicks it is. */
+export type CellClickEvent = Pick<MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey' | 'detail'>
+
+/**
  * Group the selection by column.
  *
  * The write path is per-column — `planBatchWrites` takes one column and a target list — so a
@@ -273,9 +310,5 @@ export function cellArrowStep<C extends string>(
   }
   const anchor = at(anchorIdx)
   const head = at(to)
-  const cells: CellRef<C>[] = []
-  const [r0, r1] = [Math.floor(anchorIdx / width), Math.floor(to / width)].sort((a, b) => a - b)
-  const [c0, c1] = [anchorIdx % width, to % width].sort((a, b) => a - b)
-  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) cells.push(at(r * width + c))
-  return { cursor: { anchor, head }, cells }
+  return { cursor: { anchor, head }, cells: cellRectangle(grid, anchor, head) ?? [head] }
 }

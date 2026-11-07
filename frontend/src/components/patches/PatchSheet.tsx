@@ -1172,6 +1172,7 @@ export function PatchSheet({
           hints={{ entry: cellCount > 0 && sheet.permission.entry, clear: cellCount > 0 && sheet.permission.clear }}
           verbs={verbs}
           marqueeDragging={sheet.marqueeDragging}
+          addLatch={sheet.addLatch}
         />
       </div>
       <SheetTable<PatchSheetRow, PatchColumnKey>

@@ -88,6 +88,9 @@ import {
   usePublishRowTargets,
   usePublishSelectionTargets,
 } from './useListSelection'
+import { cellClickIntent, latchedIntent } from '../sheet/listSelectionModel'
+import type { CellClickEvent } from '../sheet/cellSelectionModel'
+import { blankClickKeepsSelection, useAddLatch, type AddLatchControl } from '../sheet/useAddLatch'
 import type { SelectionScope } from '../../store/selectionSlice'
 import { applyPlannedWrite, useCellWriters, type CellWriters } from './useCellWriters'
 import { useLitFixtureKeys } from './useLitFixtureKeys'
@@ -254,6 +257,8 @@ export interface FixturesListContainerProps {
      * bridge: the plain lists, and a tab that has unlinked from the desk.
      */
     remask: ((families: readonly AttributeFamily[] | null) => void) | null
+    /** The selection bar's *Add* latch (touch, D7), for row C to draw. */
+    addLatch: AddLatchControl
   }) => React.ReactNode
   /**
    * Replace nothing — *add* a footer strip under the table, receiving the two counts only this
@@ -539,10 +544,21 @@ export function FixturesListContainer({
   // this way throughout — so the refusal expired with the reason for it rather than being
   // overruled. Stated here because it is the one part of the unification that *removes* something
   // rather than adding it, and pinned in `FixturesListContainer.test.tsx`.
+  // The Add latch (D7), touch's ⌘, drawn on row C: the clear below — Escape, Deselect, a tap on
+  // blank space — turns it off.
+  const { control: addLatch, ref: addLatchRef, off: addLatchOff } = useAddLatch()
   const clearByLadder = useCallback(() => {
+    addLatchOff()
     if (cellCount > 0) clearCells()
     else clearRows()
-  }, [cellCount, clearCells, clearRows])
+  }, [addLatchOff, cellCount, clearCells, clearRows])
+  /** A click on a blank cell clears, unless it is building a selection (D1). */
+  const backgroundClick = useCallback(
+    (event?: CellClickEvent) => {
+      if (!blankClickKeepsSelection(event, addLatchRef.current)) clearByLadder()
+    },
+    [addLatchRef, clearByLadder],
+  )
 
   // Selected ids whose rows are hidden (collapsed group, active filter) are
   // inert everywhere below — every consumer intersects with `rows` — so no
@@ -654,9 +670,9 @@ export function FixturesListContainer({
 
   const handleRowClick = useCallback(
     (id: RowId, e: React.MouseEvent) => {
-      selectRow(id, listSelectionIntentFor(e))
+      selectRow(id, latchedIntent(listSelectionIntentFor(e), addLatchRef.current))
     },
-    [selectRow],
+    [addLatchRef, selectRow],
   )
 
   // Element rows open the PARENT fixture's sheet — FixtureDetailModal resolves
@@ -726,12 +742,14 @@ export function FixturesListContainer({
   // for the toolbar, `commitNow` and `batchCountFor` to read. They have one now, so the row rule
   // and its exception went with the gate: one gesture vocabulary across the three lists, which is
   // the whole point of their sharing this component.
+  //
+  // **⌘ and ⇧ shape it** (programmer-fixes plan D1): ⌘ toggles the one cell, ⇧ selects the rectangle
+  // from the cursor's anchor, ⌘⇧ adds that rectangle (`CellSelection.click`). A selected row goes
+  // first whichever it is, since rows and cells are one selection. Declared below the arrows' grid.
+  const clickCellRef = useRef<(row: Row, col: ColumnKey, event?: CellClickEvent) => void>(() => {})
   const handleBeginCellEdit = useCallback(
-    (row: Row, col: ColumnKey) => {
-      if (row.kind === 'divider') return
-      selectCells([{ rowId: row.id, col }], 'replace')
-    },
-    [selectCells],
+    (row: Row, col: ColumnKey, event?: CellClickEvent) => clickCellRef.current(row, col, event),
+    [],
   )
 
   /**
@@ -1409,6 +1427,12 @@ export function FixturesListContainer({
     }
     return { rows: selectableOrder, cols: visibleColumns, takes }
   }, [rowById, selectableOrder, visibleColumns])
+  clickCellRef.current = (row, col, event) => {
+    if (row.kind === 'divider') return
+    const { intent, detail } = cellClickIntent(event, addLatchRef.current)
+    if (rowCountRef.current > 0) clearRows()
+    cellSelection.click({ rowId: row.id, col }, intent, cellGrid, detail)
+  }
   const stepCells = useCallback(
     (direction: CellArrow, extend: boolean): boolean => {
       const head = stepCellSelection(cellSelection, cellGrid, 'grid', direction, extend, () => {
@@ -1782,6 +1806,7 @@ export function FixturesListContainer({
           paletteTargets,
           marqueeDragging,
           remask: remaskDesk,
+          addLatch,
         })
       ) : (
         <>
@@ -1808,6 +1833,7 @@ export function FixturesListContainer({
               cellClearKey={cellCount > 0 && keys.clear}
               paletteTargets={paletteTargets}
               marqueeDragging={marqueeDragging}
+              addLatch={addLatch}
             />
           </div>
         </>
@@ -1866,7 +1892,8 @@ export function FixturesListContainer({
           keyboardOpen={keyboardOpen}
           closeEditorCell={closeEditorCell}
           onMarqueeDragChange={setMarqueeDragging}
-          onBackgroundClick={clearByLadder}
+          onBackgroundClick={backgroundClick}
+          addLatch={addLatch.on}
         />
         </PositionFanContext.Provider>
       )}

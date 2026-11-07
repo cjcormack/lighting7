@@ -2,6 +2,9 @@
 import { act, fireEvent, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { COMMIT_INTERVAL_MS, useSheet } from './useSheet'
+
+// The Add latch is touch's; a finger is the primary pointer for these tests.
+vi.mock('@/hooks/useCoarsePointer', () => ({ useCoarsePointer: () => true }))
 import type { SheetColumn, SheetRow } from './sheetModel'
 
 /**
@@ -679,6 +682,76 @@ describe('useSheet cell keys', () => {
       chip.remove()
       editor.remove()
     }
+  })
+
+  // programmer-fixes plan D1–D5, through the kit's door every sheet's cells click through.
+  const click = (r: Result, rowId: string, col: Col, mods: Partial<MouseEvent> = {}) => {
+    const row = keyRows.find((k) => k.id === rowId)!
+    act(() => r.current.tableProps.onBeginCellEdit(row, col, { metaKey: false, ctrlKey: false, shiftKey: false, detail: 1, ...mods }))
+  }
+
+  it('⌘-click toggles one cell, ⇧-click selects the rectangle from the last click', () => {
+    const { result } = sheet()
+    click(result, 'a', 'x')
+    click(result, 'c', 'y', { metaKey: true })
+    expect(cells(result)).toEqual(['a·x', 'c·y'])
+    click(result, 'b', 'y', { shiftKey: true })
+    // From c·y, the last cell clicked, not from a·x.
+    expect(cells(result)).toEqual(['b·y', 'c·y'])
+    click(result, 'b', 'y', { metaKey: true })
+    expect(cells(result)).toEqual(['c·y'])
+  })
+
+  it('a plain arrow steps from the last cell clicked, and ⇧-arrow grows a rectangle with no gaps', () => {
+    const { result } = sheet()
+    click(result, 'a', 'x')
+    click(result, 'c', 'x', { metaKey: true })
+    press('ArrowUp', { shiftKey: true })
+    expect(cells(result)).toEqual(['b·x', 'c·x'])
+    click(result, 'a', 'y', { ctrlKey: true })
+    press('ArrowDown')
+    expect(cells(result)).toEqual(['b·y'])
+  })
+
+  it('drops a row selection before a ⌘-click selects a cell', () => {
+    const { result } = sheet()
+    act(() => result.current.selectRow('a'))
+    expect(result.current.rowSelection.count).toBe(1)
+    click(result, 'b', 'x', { metaKey: true })
+    expect(result.current.rowSelection.count).toBe(0)
+    expect(cells(result)).toEqual(['b·x'])
+  })
+
+  it('leaves the selection to a modified click on a blank cell, and clears it on a plain one', () => {
+    const { result } = sheet()
+    click(result, 'a', 'x')
+    click(result, 'b', 'y', { metaKey: true })
+    act(() => result.current.tableProps.onBackgroundClick({ metaKey: true, ctrlKey: false, shiftKey: false, detail: 1 }))
+    expect(cells(result)).toEqual(['a·x', 'b·y'])
+    act(() => result.current.tableProps.onBackgroundClick({ metaKey: false, ctrlKey: false, shiftKey: false, detail: 1 }))
+    expect(cells(result)).toEqual([])
+  })
+
+  it('under the Add latch a tap toggles, and Escape turns the latch off', () => {
+    const { result } = sheet()
+    click(result, 'a', 'x')
+    act(() => result.current.addLatch.onToggle())
+    expect(result.current.tableProps.addLatch).toBe(true)
+    click(result, 'c', 'y')
+    expect(cells(result)).toEqual(['a·x', 'c·y'])
+    press('Escape')
+    expect(result.current.addLatch.on).toBe(false)
+    expect(cells(result)).toEqual([])
+  })
+
+  it('under the Add latch a blank cell keeps the selection and the space under the rows still clears it', () => {
+    const { result } = sheet()
+    click(result, 'a', 'x')
+    act(() => result.current.addLatch.onToggle())
+    act(() => result.current.tableProps.onBackgroundClick({ metaKey: false, ctrlKey: false, shiftKey: false, detail: 1 }))
+    expect(cells(result)).toEqual(['a·x'])
+    act(() => result.current.tableProps.onBackgroundClick())
+    expect(cells(result)).toEqual([])
   })
 })
 

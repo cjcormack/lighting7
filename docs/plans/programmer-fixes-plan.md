@@ -347,9 +347,9 @@ suites locally: no Gradle change, schema, sync or cross-package refactor.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The FX picker: one release and a close trace | in review | `claude/festive-faraday-m5qr2b` | [#369](https://github.com/cjcormack/lighting7/pull/369) | 8584e2e |
-| 2 | Element rows stay put | in review | `claude/determined-goodall-rw10tw` | | |
-| 3 | Cells with gaps | planned | | | |
+| 1 | The FX picker: one release and a close trace | merged | `claude/festive-faraday-m5qr2b` | [#369](https://github.com/cjcormack/lighting7/pull/369) | 8584e2e |
+| 2 | Element rows stay put | merged | `claude/determined-goodall-rw10tw` | [#370](https://github.com/cjcormack/lighting7/pull/370) | 993814b |
+| 3 | Cells with gaps | in review | `claude/lucid-johnson-fw56wn` | | |
 | 4 | Recent values on the desk | planned | | | |
 | 5 | Recents in every value editor | planned | | | |
 
@@ -473,6 +473,30 @@ D1–D8, D4a.
 - Docs: frontend `CLAUDE.md` §Sheet kit's selection paragraphs (the click, ⌘ / ⇧, the cursor), the
   Timeline's cell paragraph and the programmer's row C.
 - Local: `check:quick`.
+
+**As built.** The latch is one hook, `sheet/useAddLatch.ts`, which the three hosts share; the cue
+editor's Values grid draws it too, on the kit's bar. "Turns off when the selection clears" is read as
+a clear (Chris, 2026-11-07): Escape, Deselect, a tap on the empty space under the rows, each through
+the host's `clearByLadder`. A tap that takes out the last cell leaves it on, so a double-tap on the one
+selected cell opens its editor with Add still on. It also turns off when the pointer stops being
+coarse, since its button is then gone. On the programmer's phone row C, which has no room for another
+button, it is the heads chip's menu item; elsewhere its word folds to the glyph below 600px. A
+modified click takes the focus off the cell trigger it landed on (`releaseCellTriggerFocus`), because
+a ⌘-click can leave that cell unselected, and the grid's key guards would then hand Enter to the
+focused trigger and select it alone. The double-click memory is dropped by an arrow, a marquee and a
+clear. The click's intent is one pure
+function, `cellClickIntent` in `listSelectionModel.ts`, beside `latchedIntent`: a click whose
+`detail` is 0 has no pointer behind it, so it is the keyboard's plain click, which means the
+Timeline's existing ⇧-click test now clicks with `detail: 1`, as a real click does. A stored anchor
+that has left the grid makes ⇧ a plain click rather than falling back to the derived one. Only a
+blank cell passes its click to the background clear: the empty space under the last row still
+clears whatever is held. `useSheet` exposes `clickCell`, the door the Timeline's modified click goes
+through, so the row clear happens there as well. The kit host is tested at `useSheet`'s door
+(`useSheet.test.ts`), which every kit sheet clicks through, rather than in `PatchSheet`; the Timeline's
+cases are in `StackTimeline.editing.test.tsx`, where its edit spy is. The selection bar's hover and
+the drag chip still say rows × columns (`describeCellScope`, `2 × Dimmer, Colour`), which overstates a
+selection with gaps; the cell count beside it is exact, and the wording is left for a follow-up
+(Chris, 2026-11-07).
 
 ### Session 4 — Recent values on the desk
 

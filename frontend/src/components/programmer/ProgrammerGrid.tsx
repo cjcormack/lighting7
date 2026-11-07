@@ -160,6 +160,7 @@ function ProgrammerGridBody({
           paletteTargets,
           marqueeDragging,
           remask,
+          addLatch,
         }) => (
           <div className="flex flex-col">
             {/* Row B. Its own `@container`, with every query on the child — the wrapper can never
@@ -507,6 +508,7 @@ function ProgrammerGridBody({
                 paletteTargets={paletteTargets}
                 marqueeDragging={marqueeDragging}
                 onRemask={remask}
+                addLatch={addLatch}
               />
               <PublishRemask remask={remask} />
             </div>

@@ -16,6 +16,7 @@ import { headsLine, skippedLine } from '../../editor/editorCopy'
 import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
 import { numericSeed, useEditorKeyboard } from '../../editor/useEditorKeyboard'
 import { useEditorOpen } from '../../editor/useEditorOpen'
+import type { CellClickEvent } from '../../sheet/cellSelectionModel'
 
 interface SliderCellOwnProps {
   value: Extract<CellValue, { kind: 'slider' }>
@@ -74,7 +75,7 @@ interface SliderCellOwnProps {
    */
   selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
-  onBeginEdit: () => void
+  onBeginEdit: (event?: CellClickEvent) => void
   /**
    * The cell's `(head, property)` keys, for the source chip on the editor's label line
    * (fixture-fx-sheets plan D19). Given by the programmer grid where it draws ownership; absent,

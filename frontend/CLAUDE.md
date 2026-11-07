@@ -3117,7 +3117,10 @@ never means two things where a finger lands. The other phone rules on row C: bel
 the heads chip counting cells · the mask's glyph · Set · Fan · FX · Release ▾ (`SelectionBar.tsx`, §The
 programmer's scoped grid), Deselect in the chip's menu, and a tap on the grid's empty background
 runs the same cells-then-rows ladder Escape does — only on the grid's own DOM, since React bubbles a
-click inside a portalled cell editor up the same tree.
+click inside a portalled cell editor up the same tree. On a touch screen row C also offers ***Add***,
+touch's ⌘ (programmer-fixes plan D7, §Sheet kit) — a button, or on the phone arm the heads chip's
+menu item: while it is on, a tap adds or takes out one cell or row and a hold's marquee accumulates,
+so a selection with gaps can be built by finger.
 
 `useTemplatePress` and `useTemplatePressHandlers` are gone; `usePress.test.tsx` pins the routes, the
 pair and the scope.
@@ -3571,9 +3574,41 @@ no notion of an address. ↑ / ↓ are one row in both, stopping at the first an
 `linear` sheet extended a run of addresses until the desk tried it (2026-09-24): a block starting
 mid-row took the whole of every row in between, when the gesture on screen was a rectangle.
 
+**A cell click takes the row click's modifiers** (programmer-fixes plan D1–D5; `CellSelection.click`,
+by `listSelectionIntentFor`): plain selects the cell alone, **⌘ / Ctrl toggles that one cell**, **⇧
+selects the rectangle** from the cursor's anchor to it, replacing the selection, and **⌘⇧ adds that
+rectangle** — so a selection can have gaps. The rectangle is `cellRectangle`, the one a ⇧-arrow
+walks; the toggle is `toggleCell`, never the marquee's `'toggle'`, which only adds (a ⌘-drag never
+subtracts). With no anchor on the grid (nothing selected, or its row collapsed or filtered away) ⇧
+and ⌘⇧ act as a plain and a ⌘ click. A second click of a double click on the same cell
+(`event.detail > 1`) only makes sure it is selected, so a ⌘ double click opens the editor on a
+selected cell; a click with no pointer behind it (`detail` 0: Enter or Space on a focused cell) is
+always plain (`cellClickIntent`). The event comes from the cell's trigger through `onBeginEdit(event)`
+and the tables' `onBeginCellEdit(row, col, event)`; each host — `useSheet`, `FixturesListContainer`,
+`CueValuesGrid` — clears a row selection first and calls `click`. A blank cell passes its click to
+the host's background clear, which leaves the selection alone when ⌘, Ctrl or ⇧ is held or the
+latch is on (`blankClickKeepsSelection`); a plain click there still clears. Nothing downstream
+assumes a rectangle: the writes, ⌫ and Spread are per column (`cellsByColumn`), so they reach exactly
+the selected cells, and the desk selection stays heads × the cells' families.
+
+**On a touch screen the selection bar draws *Add*** (D7; `AddLatchToggle`, `useAddLatch`), on a coarse
+pointer only: a toggle (`aria-pressed`, ＋) under which a tap on a cell is a ⌘-click, a tap on a row's
+name a ⌘-click on the row, and a held drag accumulates (`latchedIntent`, the marquee's `addLatch`).
+It is the host's state, never stored, and turns off on a clear — Escape, Deselect, a tap on the empty
+space under the rows — and when the pointer stops being coarse, but not when a tap takes out the last
+cell, so a double-tap on the one selected cell opens its editor with Add still on. Every kit surface
+passes `sheet.addLatch` to its bar, whose word folds to the glyph below `@[600px]`; the programmer's
+container hands its own to row C through `renderToolbar`'s `addLatch`, and on the phone arm it is the
+heads chip's menu item (*Add*) rather than a button, since that row has no room. A modified click
+takes the focus off the cell trigger it landed on (`releaseCellTriggerFocus`), since a ⌘-click can
+leave that cell unselected and a focused trigger would take Enter, a character and ⌫ for itself.
+
 **The anchor rides in the cell selection** (`useCellSelection`'s `cursor`, beside the keys in one
 state object so they cannot describe two different selections): the keys' door, `place`, sets it,
-and every pointer change and clear drops it. With none stored, a selection's cursor is derived —
+and so does a click — a plain or ⌘ click puts anchor and head on its cell, a ⇧ click keeps the anchor
+and moves the head, so the arrows step from the last cell clicked and a ⇧-arrow after ⌘-clicks
+replaces them with its rectangle. A ⌘-click that empties the selection drops the cursor, and a
+marquee and a clear drop it too. With none stored, a selection's cursor is derived —
 its first cell in reading order as the anchor and its last as the head (`cursorOfSelection`) — so a
 marquee dragged either way is anchored at its top-left. A step asks the table to **reveal** the
 head (`revealCell` on `SheetTable` and `FixturesTable`, through `sheet/revealCell.ts`): the least
@@ -4552,9 +4587,9 @@ an inline width, so `maxWidth: 'none'` goes with it — the symptom of forgettin
 stays narrow and scrolls, which looks exactly like the width never being applied.
 
 **On the programmer's grid a single click on a cell selects it, and a double click opens its
-editor.** The whole of a single click is the selection: one cell, replacing whatever was there —
-including when the cell is already in the marquee, which is how a rectangle is narrowed to one of
-its own cells, the one thing a rectangle cannot say. The editor is opened by the selection bar's
+editor.** The whole of a single click is the selection: a plain click is one cell, replacing whatever
+was there — including when the cell is already in the marquee, which is how a rectangle is narrowed
+to one of its own cells — and ⌘ and ⇧ shape it as on every sheet (§Sheet kit). The editor is opened by the selection bar's
 **Set**, by Enter, by typing (§The programmer's keyboard), or by a **double** click, so the drag,
 the single click and the keys all say *what* to edit and one gesture says *edit it*.
 
@@ -7180,8 +7215,10 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
   left on top, and `StackDetail` keys the Timeline by stack, so one stack's toast cannot undo another's. Every gesture toasts what it did, in one id per stack, the
   press's knock-on named from the answer's `released` (*Amber on LX1 Orbits in Q5. Lavender released
   there.*). The gestures:
-  - **One cell.** A click selects, a shift-click extends the selection to the rectangle from its
-    anchor; a second click on the one selected cell toggles it — a Look or
+  - **One cell.** A click selects; ⌘, ⇧ and ⌘⇧ (or a tap under *Add*) select as on every sheet
+    (§Sheet kit), through `useSheet`'s `clickCell` and never the toggle below, so a ⌘-click on the one
+    selected cell deselects it and writes nothing; a plain second click on the one selected cell
+    toggles it — a Look or
     palette cell on is `layerOn` with `settingsFrom` the nearest filled cell above in its column, else
     below (D6, `nearestFilled`), off is `layerOff` — and a scenery cell's second click opens
     `TimelineSceneryPopover` instead, through `EditorSurface`: `SceneryControl` (`commit="release"`, so one write per gesture),

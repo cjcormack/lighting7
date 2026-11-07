@@ -281,6 +281,7 @@ export function CueLibrarySheet({
           strip={otherProject && readOnlyReason != null ? <ReadOnlyNote reason={readOnlyReason} /> : undefined}
           verbs={verbs}
           marqueeDragging={sheet.marqueeDragging}
+          addLatch={sheet.addLatch}
           foldForStrip={false}
         />
       </div>

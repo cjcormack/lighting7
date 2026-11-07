@@ -891,6 +891,7 @@ export function CueSheet({
           }
           verbs={verbs}
           marqueeDragging={sheet.marqueeDragging}
+          addLatch={sheet.addLatch}
           // The cue action set rides the bar with the cell verbs, so the bar folds their words and
           // its hints as any loaded bar does. With only markers selected there is no action set,
           // and the lock note alone needs no room.

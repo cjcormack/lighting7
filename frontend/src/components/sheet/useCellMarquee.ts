@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useLongPress } from '@/hooks/useLongPress'
 import { columnRange, rectFrom, rowIndexRange, type ColumnBand } from './cellMarquee'
-import { listSelectionIntentFor } from './listSelectionModel'
+import { latchedIntent, listSelectionIntentFor } from './listSelectionModel'
 import type { CellRef, RowId } from './cellSelectionModel'
 import type { CellSelection } from './useCellSelection'
 
@@ -96,6 +96,7 @@ export function useCellMarquee<C extends string, R extends MarqueeRow = MarqueeR
   isRowSelected,
   onRowMarquee,
   onDragChange,
+  addLatch = false,
 }: {
   scrollRef: React.RefObject<HTMLDivElement | null>
   /** Every row the sheet draws, in display order, dividers included — one `rowHeight` box each. */
@@ -115,6 +116,8 @@ export function useCellMarquee<C extends string, R extends MarqueeRow = MarqueeR
   onRowMarquee?: (ids: RowId[]) => void
   /** A drag started or ended — twice per gesture, never per move. See the table's `onMarqueeDragChange`. */
   onDragChange?: (dragging: boolean) => void
+  /** The selection bar's *Add* latch is on: a drag accumulates as a ⌘-drag does. */
+  addLatch?: boolean
 }) {
   const [band, setBand] = useState<React.CSSProperties | null>(null)
   const [chip, setChip] = useState<{ x: number; y: number } | null>(null)
@@ -155,6 +158,8 @@ export function useCellMarquee<C extends string, R extends MarqueeRow = MarqueeR
   onRowMarqueeRef.current = onRowMarquee
   const isRowSelectedRef = useRef(isRowSelected)
   isRowSelectedRef.current = isRowSelected
+  const addLatchRef = useRef(addLatch)
+  addLatchRef.current = addLatch
 
   /**
    * Whether a marquee is live, mirrored outside React state so the handlers keep their identity.
@@ -414,7 +419,7 @@ export function useCellMarquee<C extends string, R extends MarqueeRow = MarqueeR
         el: e.currentTarget as HTMLElement,
         start: { x, y: e.clientY - origin.top },
         client: { x: e.clientX, y: e.clientY },
-        intent: listSelectionIntentFor(e),
+        intent: latchedIntent(listSelectionIntentFor(e), addLatchRef.current),
         hold: isHold,
         dragged: false,
         mode,

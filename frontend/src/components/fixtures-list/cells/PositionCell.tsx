@@ -18,6 +18,7 @@ import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
 import { numericSeed, useEditorKeyboard } from '../../editor/useEditorKeyboard'
 import { useEditorOpen } from '../../editor/useEditorOpen'
 import { ValueFieldRow } from '../../editor/ValueFieldRow'
+import type { CellClickEvent } from '../../sheet/cellSelectionModel'
 
 interface PositionCellOwnProps {
   value: Extract<CellValue, { kind: 'position' }>
@@ -59,7 +60,7 @@ interface PositionCellOwnProps {
    */
   selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
-  onBeginEdit: () => void
+  onBeginEdit: (event?: CellClickEvent) => void
   /**
    * The cell's `(head, property)` keys, for the source chip on the editor's label line
    * (fixture-fx-sheets plan D19). Given by the programmer grid where it draws ownership; absent,
