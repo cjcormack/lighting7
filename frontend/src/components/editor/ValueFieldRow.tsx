@@ -1,6 +1,9 @@
 import { Slider } from '@/components/ui/slider'
 import { EditorField } from './EditorField'
 import { EditorLabel } from './EditorLabel'
+import { useSlideEnd } from './useSlideEnd'
+
+const noop = () => {}
 
 /**
  * One named value, said twice: a typed box and a slider that drive the same number, under an
@@ -31,6 +34,8 @@ export function ValueFieldRow({
   value,
   onChange,
   seed,
+  onFieldDone,
+  onSlideEnd,
 }: {
   /** Names the row, and is the field's accessible name. */
   label: string
@@ -43,12 +48,26 @@ export function ValueFieldRow({
   onChange: (next: number) => void
   /** The character that opened the editor, for the first row only. See `EditorField`. */
   seed?: string | null
+  /** The box left: its typed value is done (a recorder's gesture end, D17). */
+  onFieldDone?: () => void
+  /** The slider let go (`useSlideEnd`). */
+  onSlideEnd?: () => void
 }) {
+  const slideEnd = useSlideEnd(onSlideEnd ?? noop)
   return (
     <div className="space-y-1">
       <EditorLabel>{label}</EditorLabel>
-      <EditorField label={label} unit={unit} min={min} max={max} value={value} onCommit={onChange} seed={seed} />
-      <Slider min={min} max={max} step={1} value={[value]} onValueChange={([next]) => onChange(next)} />
+      <EditorField
+        label={label}
+        unit={unit}
+        min={min}
+        max={max}
+        value={value}
+        onCommit={onChange}
+        onDraft={onFieldDone && ((raw) => raw === null && onFieldDone())}
+        seed={seed}
+      />
+      <Slider min={min} max={max} step={1} value={[value]} onValueChange={([next]) => onChange(next)} {...slideEnd} />
     </div>
   )
 }

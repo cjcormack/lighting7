@@ -48,8 +48,13 @@ export const RECENT_RELEASE_SETTLE_MS = 100
 export interface RecentRecorder {
   /** A commit inside a gesture: held, so only the gesture's last is sent. */
   stage(value: string): void
-  /** The gesture ended — a slider's commit, a field left: send what is staged now. */
+  /** The gesture ended — a field left, Enter: send what is staged now. */
   flush(): void
+  /**
+   * A slider let go — Radix's `onValueCommit`, or the press's window release (`useSlideEnd`): send
+   * what is staged a microtask on, since Radix commits a key's step before it reports the step.
+   */
+  slideEnd(): void
   /** A picker let go: send what is staged once its last report has landed. */
   release(): void
   /** A commit that is a gesture of its own — a tap on a recent: anything staged first, then this. */
@@ -93,6 +98,7 @@ export function useRecordRecent(key: string, projectId?: number): RecentRecorder
         staged.current = live == null ? null : { key: target.current.key, projectId: live, value }
       },
       flush,
+      slideEnd: () => queueMicrotask(flush),
       release: () => {
         if (timer.current != null) clearTimeout(timer.current)
         timer.current = setTimeout(flush, RECENT_RELEASE_SETTLE_MS)

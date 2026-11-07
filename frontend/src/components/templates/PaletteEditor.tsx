@@ -486,7 +486,7 @@ export function PaletteEditor({
               onAttribute={setFxAttribute}
             />
           ) : isGeneric ? (
-            <FamilyControls family={family} values={values} onChange={setIntent} />
+            <FamilyControls family={family} values={values} onChange={setIntent} projectId={projectId} />
           ) : (
             <PerFixtureValues palette={template} />
           )}

@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HexColorPicker } from 'react-colorful'
+import { useParams } from 'react-router'
+import { useRecordRecent } from '@/store/recentValues'
+import { RecentValues } from '../editor/RecentValues'
+import {
+  parseRecentColour,
+  RECENT_COLOUR,
+  recentColourFromHex,
+  recentColourHex,
+  serializeRecentColour,
+} from '../editor/recentValueSpelling'
 import { ExtendedChannelSlider } from '../fixtures/ExtendedChannelSlider'
 import {
   isValidHexColour,
@@ -60,7 +70,7 @@ interface ColourEditorBodyProps {
  */
 export function ColourEditorBody({
   colour,
-  onColourChange,
+  onColourChange: hostColourChange,
   rawValue,
   onPickPalette,
   palettes: templates,
@@ -68,6 +78,53 @@ export function ColourEditorBody({
   onRelease,
 }: ColourEditorBodyProps) {
   const [hexInput, setHexInput] = useState(colour.hex)
+
+  // Every edit stages its colour in the Recent list, and a gesture's end sends it (D17): a release
+  // at once, a drag on the picker's release. The live project's lists, as the route names it.
+  const { projectId: routeProjectId } = useParams<{ projectId: string }>()
+  const projectId = routeProjectId != null && Number.isFinite(Number(routeProjectId)) ? Number(routeProjectId) : undefined
+  const recent = useRecordRecent(RECENT_COLOUR, projectId)
+  const recentOf = useCallback(
+    (next: ExtendedColour) => {
+      const rgb = recentColourFromHex(next.hex)
+      if (rgb == null) return null
+      return serializeRecentColour({
+        ...rgb,
+        w: extendedChannels?.white ? next.white : undefined,
+        a: extendedChannels?.amber ? next.amber : undefined,
+        uv: extendedChannels?.uv ? next.uv : undefined,
+      })
+    },
+    [extendedChannels?.white, extendedChannels?.amber, extendedChannels?.uv],
+  )
+  // [record] says when the recent goes: `'flush'` now, `'slide'` a slider's commit (a microtask on,
+  // since Radix commits a key's step before it reports it), `'stage'` later — a picker's drag on its
+  // release, a key step on its key-up, a typed hex once the field is left (`#ff0` on the way to
+  // `#ff0000` is not a recent of its own).
+  const onColourChange = useCallback(
+    (next: ExtendedColour, release: boolean, record: 'flush' | 'slide' | 'stage' = release ? 'flush' : 'stage') => {
+      hostColourChange(next, release)
+      const recorded = recentOf(next)
+      if (recorded == null) return
+      recent.stage(recorded)
+      if (record === 'flush') recent.flush()
+      if (record === 'slide') recent.slideEnd()
+    },
+    [hostColourChange, recentOf, recent],
+  )
+  /** A tap on a recent: its colour as if typed, an emitter it does not name left where it is. */
+  const pickRecent = (value: string) => {
+    const parsed = parseRecentColour(value)
+    if (parsed == null) return
+    const next: ExtendedColour = {
+      hex: recentColourHex(parsed),
+      white: extendedChannels?.white && parsed.w !== undefined ? parsed.w : colour.white,
+      amber: extendedChannels?.amber && parsed.a !== undefined ? parsed.a : colour.amber,
+      uv: extendedChannels?.uv && parsed.uv !== undefined ? parsed.uv : colour.uv,
+    }
+    hostColourChange(next, true)
+    recent.now(value)
+  }
 
   // The hex field mirrors the colour except while a half-typed value sits in it, and the mirror is
   // adjusted **during render** rather than in an effect. It has to be: `FxColourPicker` resolves a
@@ -95,8 +152,11 @@ export function ColourEditorBody({
   const landRef = useRef<(() => void) | null>(null)
   // Lands a release still settling at once; null unless one is.
   const settleNowRef = useRef<(() => void) | null>(null)
-  const onReleaseRef = useRef(onRelease)
-  onReleaseRef.current = onRelease
+  const onReleaseRef = useRef<() => void>(() => {})
+  onReleaseRef.current = () => {
+    onRelease?.()
+    recent.flush()
+  }
   const holdPicker = (event: { button: number }) => {
     // A secondary button's release can be swallowed by a context menu, which would hold for good.
     if (event.button !== 0) return
@@ -132,16 +192,16 @@ export function ColourEditorBody({
   useEffect(() => () => landRef.current?.(), [])
 
   const setHex = useCallback(
-    (hex: string, release: boolean) => {
+    (hex: string, release: boolean, record?: 'flush' | 'stage') => {
       setHexInput(hex)
-      onColourChange({ ...colour, hex }, release)
+      onColourChange({ ...colour, hex }, release, record)
     },
     [colour, onColourChange],
   )
 
   const pickerMoved = (hex: string) => {
     if (holdingRef.current) movedRef.current = true
-    setHex(hex.toLowerCase(), !holdingRef.current)
+    setHex(hex.toLowerCase(), !holdingRef.current, 'stage')
   }
 
   // Typed hex is committed only once it parses, so the intermediate states of typing `#ff0000`
@@ -151,7 +211,7 @@ export function ColourEditorBody({
       setHexInput(hex)
       const normalized = hex.startsWith('#') ? hex : `#${hex}`
       if (isValidHexColour(normalized)) {
-        onColourChange({ ...colour, hex: normalized.toLowerCase() }, true)
+        onColourChange({ ...colour, hex: normalized.toLowerCase() }, true, 'stage')
       }
     },
     [colour, onColourChange],
@@ -159,7 +219,7 @@ export function ColourEditorBody({
 
   const handleExtendedChange = useCallback(
     (channel: 'white' | 'amber' | 'uv', val: number, release: boolean) => {
-      onColourChange({ ...colour, [channel]: val }, release)
+      onColourChange({ ...colour, [channel]: val }, release, release ? 'slide' : 'stage')
     },
     [colour, onColourChange],
   )
@@ -172,6 +232,10 @@ export function ColourEditorBody({
         onPointerDownCapture={holdPicker}
         onMouseDownCapture={holdPicker}
         onTouchStartCapture={() => holdPicker({ button: 0 })}
+        // A key's step on the picker is a gesture of its own, and ends with its key.
+        onKeyUpCapture={() => {
+          if (!holdingRef.current) recent.flush()
+        }}
       >
         <HexColorPicker color={colour.hex} onChange={pickerMoved} />
       </div>
@@ -180,6 +244,7 @@ export function ColourEditorBody({
         type="text"
         value={hexInput}
         onChange={(e) => handleHexChange(e.target.value)}
+        onBlur={recent.flush}
         className="w-full h-7 px-2 text-xs font-mono rounded border border-input bg-background"
         spellCheck={false}
       />
@@ -242,6 +307,8 @@ export function ColourEditorBody({
           )}
         </div>
       )}
+
+      <RecentValues listKey={RECENT_COLOUR} projectId={projectId} onPick={pickRecent} />
     </div>
   )
 }

@@ -12,6 +12,10 @@ import { ColourEditor } from '../editor/ColourEditor'
 import { WarmthEditor, warmthReading } from '../editor/WarmthEditor'
 import { whiteMixColour, type Rgb } from '@/lib/whiteMix'
 import { SettingCell } from '../fixtures-list/cells/SettingCell'
+import { RecentValues } from '../editor/RecentValues'
+import { parseRecentPosition, RECENT_POSITION, recentLevelKeyFor } from '../editor/recentValueSpelling'
+import { useRecordRecent } from '@/store/recentValues'
+import { sheetPositionRecent } from './sheetRecents'
 import type { CellCommit } from '../fixtures-list/rowModel'
 import { AxisControl, JOG_OPEN_SIZE, LevelControl, OpenToggle, openKey, PositionPad, READ_ONLY_JOG } from './AttributeRow'
 import { LiveJogPad, PadModeSwitch } from '../editor/StageJog'
@@ -124,13 +128,16 @@ function PickFrame({
   note?: string | null
   children: ReactNode
 }) {
-  const { openRowId, connected } = useFixtureSheet()
+  const { openRowId, connected, setRecentRowId } = useFixtureSheet()
   const finger = useFingerSized()
   const { row } = pickRow
   const name = row.label
   const heads = useMemo(() => pickRow.heads.map((h) => ({ key: h.key, name: h.name })), [pickRow])
+  const engage = () => setRecentRowId?.(openKey(PICK_HEAD, row))
   return (
     <div
+      onPointerDownCapture={engage}
+      onFocusCapture={engage}
       data-row={row.id}
       data-kind={row.kind}
       data-source={source.kind}
@@ -200,6 +207,7 @@ function SliderPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: Hea
   const attribute = heads[0].row.attribute
   const refs = useMemo(() => heads.map((h) => h.row.attribute.channel), [heads])
   const { low, high } = lowHigh(useChannelValues(refs))
+  const { recentRowId } = useFixtureSheet()
   return (
     <PickFrame pickRow={pickRow} write={write} source={source} readOnly={readOnly} parked={parked}>
       <LevelControl
@@ -209,6 +217,8 @@ function SliderPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: Hea
         min={attribute.min}
         max={attribute.max}
         readOnly={readOnly}
+        recentKey={recentLevelKeyFor(attribute)}
+        showRecents={recentRowId === openKey(PICK_HEAD, pickRow.row)}
         onDrag={(v) => writePickLevel(write, attribute.name, v)}
         onTyped={(v) => writePickLevel(write, attribute.name, v, getProgrammerFadeMs())}
       />
@@ -481,7 +491,7 @@ function PositionPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: H
       parked={parked}
       trailing={<OpenToggle row={pickRow.row} headKey={PICK_HEAD} label={pickRow.row.label} />}
     >
-      <PickPositionControls heads={targets} groups={pickGroups(write)} open={open} readOnly={readOnly} onCommit={onCommit} />
+      <PickPositionControls heads={targets} groups={pickGroups(write)} open={open} readOnly={readOnly} onCommit={onCommit} recents />
     </PickFrame>
   )
 }
@@ -506,6 +516,7 @@ export function PickPositionControls({
   open,
   readOnly,
   onCommit,
+  recents = false,
 }: {
   heads: readonly { key: string; resolution: PositionResolution }[]
   /** The groups the pick is from, for the stage jog's writes (`pickGroups`). */
@@ -513,11 +524,30 @@ export function PickPositionControls({
   open: boolean
   readOnly: boolean
   onCommit: (commit: PositionCommit | ((r: PositionResolution) => PositionCommit), typed: boolean) => void
+  /**
+   * Record into the `position` list and, [open], draw its Recent band (D20): the pair the heads hold
+   * once a commit lands, and nothing while the other axis differs across them (D15).
+   */
+  recents?: boolean
 }) {
   const refs = useMemo(() => heads.flatMap((h) => [h.resolution.pan, h.resolution.tilt]), [heads])
   const values = useChannelValues(refs)
   const pans = heads.map((_, i) => values[i * 2] ?? 0)
   const tilts = heads.map((_, i) => values[i * 2 + 1] ?? 0)
+  const recent = useRecordRecent(RECENT_POSITION)
+  const commit = (next: PositionCommit | ((r: PositionResolution) => PositionCommit), typed: boolean) => {
+    const pair = recents ? sheetPositionRecent(heads, next) : null
+    onCommit(next, typed)
+    if (pair == null) return
+    recent.stage(pair)
+    if (typed) recent.flush()
+  }
+  const pickRecent = (value: string) => {
+    const pair = parseRecentPosition(value)
+    if (pair == null) return
+    onCommit({ kind: 'position', panCentre: pair.pan, tiltCentre: pair.tilt }, true)
+    recent.now(value)
+  }
   const lead = heads[0].resolution
   const mixed = new Set(pans).size > 1 || new Set(tilts).size > 1
   const padMode = usePositionPadMode()
@@ -529,8 +559,9 @@ export function PickPositionControls({
         pan={norm(pans[0], lead.panMin, lead.panMax)}
         tilt={norm(tilts[0], lead.tiltMin, lead.tiltMax)}
         readOnly={readOnly}
+        onRelease={recent.flush}
         onMove={(x, y) =>
-          onCommit(
+          commit(
             (r) => ({
               kind: 'position',
               pan: Math.round(r.panMin + x * (r.panMax - r.panMin)),
@@ -569,8 +600,8 @@ export function PickPositionControls({
         )}
         {open ? (
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <AxisControl label="Pan" byte={pans[0]} min={lead.panMin} max={lead.panMax} readOnly={readOnly} onCommit={onCommit} axis="pan" />
-            <AxisControl label="Tilt" byte={tilts[0]} min={lead.tiltMin} max={lead.tiltMax} readOnly={readOnly} onCommit={onCommit} axis="tilt" />
+            <AxisControl label="Pan" byte={pans[0]} min={lead.panMin} max={lead.panMax} readOnly={readOnly} onCommit={commit} onSlideEnd={recent.slideEnd} axis="pan" />
+            <AxisControl label="Tilt" byte={tilts[0]} min={lead.tiltMin} max={lead.tiltMax} readOnly={readOnly} onCommit={commit} onSlideEnd={recent.slideEnd} axis="tilt" />
             {mixed && <p className="text-[10.5px] text-muted-foreground">The heads differ; a value set here lands on all {heads.length}.</p>}
           </div>
         ) : (
@@ -586,6 +617,7 @@ export function PickPositionControls({
           </div>
         )}
       </div>
+      {recents && open && <RecentValues listKey={RECENT_POSITION} onPick={pickRecent} readOnly={readOnly} />}
     </div>
   )
 }

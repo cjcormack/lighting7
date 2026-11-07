@@ -689,6 +689,16 @@ Release folds to its glyph and the scope line drops the fade.
   docks `ColourEditor` with its typed channels, the position row grows its pad and Pan / Tilt fields.
   The colour row's swatch is how the head **looks** — dimmed by its dimmer (a head's own, else the
   fixture's), with the UV dot — and the text beside it is the value.
+- **Recent values** (programmer-fixes plan D20, §The editor kit's `RecentValues`): a level row
+  records `level:<attribute>` (a drag on its commit, Enter at once) and draws its band only while
+  it is the row last pressed or focused — the sheet's `recentRowId`, one band at a time, so a sheet
+  of sliders is not a sheet of bands and an unengaged row subscribes to nothing. `LevelControl`
+  keeps one element tree whether or not the band shows, since the band appears in the very press
+  that engages the row. The Position row records the pair — a pad drag on its release, open or
+  closed, and a typed axis on Enter — and draws its band in the open editor, under the pad; over a pick (`PickPositionControls` with `recents`; the busk Position tab leaves
+  it off) nothing is recorded while the other axis differs across the heads. The open warmth row's
+  `WarmthEditor` records `warmth`, the open colour row's `ColourEditor` `colour`. A dimmerless
+  head's *Dimmer* scales a colour and is no rig level, so it records nothing.
 - **Position writes `programmer.setPosition`, never raw channels** (D8; `sheetWrites.ts`): the commit
   goes through `clampCommitToResolution`'s centre rule, so `-20` lands where the programmer's position
   cell would land it, and a one-axis commit takes the other axis from the held `position` entry, else
@@ -4150,6 +4160,11 @@ Palettes sheet's Value column. What it is and what it learned:
   other way could send the pair the write boundary refuses by name. The hex field gained
   `type="text"` and an `aria-label` (*Hex colour*) in the move — `useEditorKeyboard`'s selector
   names the type, so without it Enter in the field did nothing in the cell.
+- **Their Recent bands are the live project's** (programmer-fixes plan D20, D20a): both hosts pass
+  the palette's `projectId`, and a palette of another project draws none and records nothing. A
+  percent is the palette's own `palette-level:` list, never the grid's `level:`; a colour is its hex
+  alone, a tap keeping the policy and the emitter rows. They record a draft's gesture, before Save
+  or Apply.
 - **Generic value palettes only.** A per-fixture palette's values were recorded per head and an
   FX palette holds no value, so both keep the read-out — `value: undefined`, blank of any
   editor, named when a marquee sweeps them up (*Pulse runs an FX — open to change · skipped*) —
@@ -4389,7 +4404,30 @@ each was:
   nothing, and the recorder sends nothing, while the list is empty, before the desk's first frame
   (an older desk sends none), or in an editor whose `projectId` is not the live project. Session 4
   mounts it in `ColourEditor` under the controls and read-out, above the footer, in every host
-  (read-only takes it out of reach with the controls); session 5 the other value editors.
+  (read-only takes it out of reach with the controls). Session 5 mounts it in the other value
+  editors, each recording its own list and replaying a tap through its own commit:
+  - the programmer's cells — `SliderCell` (`level:<attribute>`, never for a pan or tilt:
+    `recentLevelKeyFor`), `PositionCell` (`position`) and `WarmthEditor` under `WarmthCell`
+    (`warmth`). The two cells draw their editor body as an inner component (`SliderEditorBody`,
+    `PositionEditorBody`) so the recorder mounts and unmounts with the open editor: a hook at the
+    cell's level would outlive the popover and never send what a closed editor staged.
+  - `ColourEditorBody`, under both FX colour pickers (each colour of a list too): a typed hex is
+    staged until its field is left, a drag sends on the body's `onRelease`, a slider's commit and a
+    preset at once; the project is the route's, as the pickers' palettes are.
+  - the palette editor's `FamilyControls`, given the palette's `projectId` by `PaletteEditor` and
+    the palette sheet's Value cell: `PercentControl` records `palette-level:<attribute>`,
+    `PositionControl` the pair, and `ColourControl` its hex alone (D20a) on the window's release
+    (`useWindowRelease`), a tap setting the hex and keeping the policy and the emitter rows.
+  - the fixture sheet's rows (§The fixture sheet).
+
+  A **position** records only a pair, and nothing while the other axis is not one value over the
+  heads: the cell takes it from what the open editor has set, else from its own scoped value where
+  that is uniform over exactly the batch's heads — never the wire, which is not the scope being
+  edited; the fixture sheet takes the pair its write resolves (`sheetPositionRecent` over
+  `sheetWrites.ts`' `resolvePosition`: the held entry, else the wire). A slider's gesture ends on
+  `useSlideEnd` — Radix's `onValueCommit` and the press's window release, since Radix sends no
+  commit for a drag back to where it began — and the recorder's `slideEnd` sends a microtask on.
+  A key's step on a picker records on its key-up.
 - **`useLivePush`** — `hooks/useLivePush.ts` moved beside its callers, and **`useSheet`'s ~30 Hz
   commit throttle is that hook with `floorMs: 33`** (D16): the busk tabs' hook and the sheet's
   throttle were two copies of one rule — a floor, a dedupe, a release that always lands. Two things
