@@ -67,6 +67,8 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // The programmer's scenery (scenery-programmer plan D1), a StateFlow: an empty overlay is
         // still a real state — "nothing held" — and the rail's Scenery band starts from it.
         ProgrammerSceneryStateOutMessage::class,
+        // The programmer's tempos, likewise: an empty list is "nothing held", and the rail starts from it.
+        ProgrammerTempoStateOutMessage::class,
         // The arm, in the show band: on a fresh desk it is disarmed with nothing spent, and that is
         // still the frame every window's ARMED chip and cannon panel start from (stage-view session 9).
         EffectsArmedOutMessage::class,

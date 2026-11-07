@@ -484,7 +484,7 @@ one cue's list. No tool arms or fires (`docs/mcp-engineering.md`).
 
 ## Speed masters on a cue
 
-**A cue may set speed masters' tempo as it comes on** (venue-visit plan S16, D15, D20): a list of
+**A cue may set speed masters' tempo as it comes on** — its *Tempo on GO* on screen (venue-visit plan S16, D15, D20): a list of
 `{speedMasterUuid, bpm}` pairs, `CueDetails.speedMasters`, stored as a JSON column on the cue
 (`cues.speed_masters`, `models/cueSpeedMasters.kt`). It is the cue's, not its entries', so a shared
 cue sets the same tempo from every stack, and it never tracks: a later cue sets nothing an earlier
@@ -503,11 +503,23 @@ one set. Unlike events it is state the cue **re-asserts**:
   fires no events and still sets tempo. So a tap since the cue went (D15: a tap wins until the next
   cue that sets that master) survives a sync pull or a venue Update.
 - **A follower or a missing master is skipped, never fatal.** `fx/CueTempo.kt` writes each pair
-  through `SpeedMasterBank.setBpm` as a `MANUAL` write; one the bank refuses as a follower
+  through `SpeedMasterBank.setLiveBpm` as a `MANUAL` write; one the bank refuses as a follower
   (`SPEED_MASTER_FOLLOWER`) or does not know (deleted under the cue with `?force=true`, or an import
   naming a master the archive lacked) is named in the log and passed over, and the GO goes on. A
-  master already at the pair's tempo is left alone, so a GO that changes nothing sends no
+  master whose live tempo is already the pair's is left alone, so a GO that changes nothing sends no
   `speedMasters.changed` frame and leaves a tap's source as it was.
+- **It moves the live tempo** (fx-speed plan D9): a master the programmer holds keeps running its
+  hold, and its release lands the tempo the GO gave it (`docs/fx-engineering.md` §"Live and held tempo").
+
+**Record is the way in** (fx-speed plan D10). The programmer holds tempos — the FX editor's Tap, a
+rail card's *Capture*, MCP's `set_bpm` with `hold` — and Record writes them into the cue's list
+(`routes/programmerTempoRecord.kt`): a new cue takes the held list, a MERGE replaces the rows of the
+held masters and keeps the rest, a REMOVE deletes them, and UPDATE_EXISTING acts as a merge, as the
+scenery Record does. Neither the attribute mask nor *Selected fixtures only* narrows them, since a
+tempo names no fixture; `tempo: false` (Record's sheet's Tempo row) leaves them out. Include holds the
+cue's list in the programmer and sets the baseline `programmer.tempoState`'s `changedSinceInclude`
+counts against; Update (Mode A) writes the holds back. Record into a Look or a palette records no
+tempo, and a Look as the include target counts none.
 
 The write is the cue's own: `POST /cues`, `PUT` and `PATCH /cues/{id}` take `speedMasters` as the
 whole list (a PATCH without it leaves it alone, a PUT without it clears it), every problem at once —

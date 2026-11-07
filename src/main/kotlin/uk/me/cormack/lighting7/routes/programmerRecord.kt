@@ -93,6 +93,8 @@ data class CueWriteOutcome(
     val warnings: List<String>,
     /** The programmer's held scenery written into the cue (scenery-programmer plan D7). */
     val scenery: SceneryRecordOutcome = SceneryRecordOutcome(),
+    /** The programmer's held tempos written into the cue's *Tempo on GO* (fx-speed plan D10). */
+    val tempo: TempoRecordOutcome = TempoRecordOutcome(),
     /**
      * The uuid of the child each of the recording's ad-hoc FX was written onto, by index; null for
      * one left out. Empty when the write wrote no ad-hoc FX.

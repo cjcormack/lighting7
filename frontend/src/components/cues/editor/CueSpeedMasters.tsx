@@ -27,7 +27,7 @@ function skipReason(master: SpeedMaster | undefined, byUuid: Map<string, SpeedMa
 }
 
 /**
- * The Cue tab's **Speed masters** (venue-visit plan S16, D20): the masters this cue sets on every GO
+ * The Cue tab's **Tempo on GO** (venue-visit plan S16, D20; fx-speed plan D7): the masters this cue sets on every GO
  * into it and every press of it, each a master and a BPM. Every gesture saves the **whole list**
  * through the cue's PATCH; the rows are a draft held here, so a refetch landing while a save is in
  * flight cannot put an older list back under the operator, and the last save's answer is what they
@@ -79,7 +79,7 @@ export function CueSpeedMasters({
   if (locked) {
     return (
       <div className="space-y-1.5" data-cue-speed-masters="read">
-        <EditorLabel>Speed masters</EditorLabel>
+        <EditorLabel>Tempo on GO</EditorLabel>
         {speedMasters.length === 0 ? (
           <p className="text-sm italic text-muted-foreground">None.</p>
         ) : (
@@ -111,7 +111,7 @@ export function CueSpeedMasters({
   return (
     <div className="space-y-1.5" data-cue-speed-masters="edit">
       <div className="flex items-center justify-between gap-2">
-        <EditorLabel>Speed masters</EditorLabel>
+        <EditorLabel>Tempo on GO</EditorLabel>
         <Button
           variant="outline"
           size="sm"
@@ -126,7 +126,7 @@ export function CueSpeedMasters({
       </div>
       {rows.length === 0 ? (
         <p className="text-[11px] text-muted-foreground">
-          None. A cue can set masters&rsquo; tempo on every GO into it; a tap afterwards wins until the next cue.
+          None. A cue can set masters&rsquo; tempo on every GO into it; Record writes the tempos the programmer holds here. A tap afterwards wins until the next cue.
         </p>
       ) : (
         <div className="space-y-1.5">
@@ -161,7 +161,7 @@ export function CueSpeedMasters({
                   <BpmField
                     id={`${idBase}-bpm-${index}`}
                     bpm={row.bpm}
-                    label={`${masterLabel(master)} BPM`}
+                    label={`${masterLabel(master)} tempo`}
                     onCommit={(bpm) => update(index, { bpm })}
                   />
                   <Button

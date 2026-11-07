@@ -532,6 +532,7 @@ internal fun performProgrammerRecordLook(
             project.id.value,
             written = scenery && mode != RecordMode.REMOVE && sceneryOutcome.warnings.isEmpty(),
         )
+        state.programmerTempo.forgetBaseline(project.id.value)
     }
 
     val details = transaction(state.database) {

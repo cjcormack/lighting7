@@ -205,6 +205,14 @@ silently miss heads. Omitting the mask, or naming all four families, means "ever
   MARKER records none and warns. `routes/programmerSceneryRecord.kt` holds the rules. Recording a
   **Look** (`record-look`) writes **every** held state, since a Look asserts rather than tracks — so
   a Look recorded with only the moon held is a scenery Look, the busk pad that flies it.
+- **Tempo** — `tempo` (default true) records the speed masters the programmer **holds** at a tempo of
+  their own (`state/ProgrammerTempo.kt`, fx-speed plan D8, D10) into the cue's *Tempo on GO*, again
+  whatever the `source`, `mask` or `targets` say: a tempo names a master, never a fixture. A new cue
+  takes the held list; `MERGE` and `UPDATE_EXISTING` replace the rows of the held masters and keep the
+  rest; `REMOVE` deletes them (`routes/programmerTempoRecord.kt`). A Look or a palette records none.
+  Include holds a cue's list, which Update (Mode A) writes back. The holds run on stage at once over
+  each master's live tempo, a GO moving only the live tempo underneath, and Blind stages them as it
+  stages the rest of the programmer (`docs/fx-engineering.md` §"Live and held tempo").
 
 **`record-look { mode: CREATE, asLayer: true, ... }`** is *Record → A new Look* and the Stack tab's
 *Make layer*, one call: the Look is written, then goes on top of the programmer's layer stack

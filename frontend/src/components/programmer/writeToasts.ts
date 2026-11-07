@@ -7,6 +7,7 @@ import type {
 } from '@/store/programmerOps'
 import { describeSkips } from './maskPicker'
 import { describeSceneryWrite } from './RecordSceneryRow'
+import { describeTempoWrite } from '@/lib/heldTempo'
 
 /**
  * What a programmer write landed, said as a toast once its sheet has closed: Record, Record look,
@@ -44,6 +45,7 @@ export function recordNote(result: RecordResponse): WriteNote {
   if (result.groupRowsEmitted > 0) notes.push(plural(result.groupRowsEmitted, 'group row'))
   if (result.fxWritten > 0) notes.push(`${result.fxWritten} FX`)
   notes.push(...describeSceneryWrite(result.sceneryWritten, result.sceneryRemoved, result.sceneryAlreadyTracked))
+  notes.push(...describeTempoWrite(result.tempoWritten, result.tempoRemoved))
   const triggersKept = preserved.triggers ?? 0
   // One sentence for both kinds of timed child: what the operator needs to know is that a timed
   // thing was preserved rather than dropped, not which shape it had.
@@ -104,6 +106,7 @@ export function recordLookNote(result: RecordLookResponse): WriteNote {
  */
 export function includeNote(result: IncludeResponse): WriteNote {
   const scenery = result.sceneryIncluded ?? 0
+  const tempo = result.tempoIncluded ?? 0
   const timedSkipped = result.fxTimedSkipped ?? 0
   const skipNote = describeSkips(result.skipped ?? [])
   return {
@@ -111,6 +114,7 @@ export function includeNote(result: IncludeResponse): WriteNote {
       `Included “${result.name}” — ${plural(result.entriesWritten, 'value')}` +
       (result.fxSpawned > 0 ? `, ${result.fxSpawned} FX` : '') +
       (scenery > 0 ? `, ${plural(scenery, 'scenery change')}` : '') +
+      (tempo > 0 ? `, ${plural(tempo, 'tempo')}` : '') +
       '.',
     description: joined(
       [
@@ -145,6 +149,7 @@ export function updateNote(result: UpdateResponse): WriteNote {
       `Updated “${r.cueName}” — ${plural(r.assignmentsWritten, 'value')} written` +
       (r.assignmentsRemoved ? `, ${r.assignmentsRemoved} removed` : '') +
       (r.sceneryWritten ? `, ${plural(r.sceneryWritten, 'scenery change')}` : '') +
+      (r.tempoWritten ? `, ${plural(r.tempoWritten, 'tempo')}` : '') +
       (r.republishedLive ? ' (live cue republished)' : '') +
       '.',
   )

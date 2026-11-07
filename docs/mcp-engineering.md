@@ -555,6 +555,15 @@ so, and that neither the mask nor `targets` narrows scenery. **It needs no remot
 commands: scenery is drawn and never output, so moving it reaches nothing physical — no channel, no
 motor, nothing in a room the model cannot see.
 
+**Held tempos** (fx-speed plan D8, D10). `set_bpm` moves a master's live tempo, or, on a master the
+programmer holds, its hold; with `hold: true` it holds the master in the programmer instead, the same
+`ProgrammerTempo.set` the desk's `programmer.setTempo` writes, staged while blind and released by
+`clear_programmer`. `get_current_state`'s `programmer` section lists the holds as `tempos:
+[{speedMaster, speedMasterUuid, bpm, staged?}]`. `record_cue` takes `tempo` (default true) and writes
+them into the cue's *Tempo on GO* (`tempoWritten`, `tempoRemoved`), unnarrowed by the mask or targets;
+`include_into_programmer` holds a cue's list and `update_from_programmer` with no targets writes it back.
+A tempo moves FX, a channel's output, as `set_bpm` always has; it takes no gate `set_bpm` did not.
+
 **Events** (stage-view plan session 9). `create_cue` and `build_cue_stack` (per cue) carry an
 `events` list, and `set_cue_events` replaces one cue's whole list (`cueId`, `events`; `[]` clears),
 so "both cannons at the curtain call, 0.6 and 0.9 s after GO" is one call. One item is `{fixture,

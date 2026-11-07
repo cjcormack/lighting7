@@ -38,6 +38,7 @@ import type {
 } from '@/store/programmerOps'
 import { MaskPicker, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
 import { RecordSceneryRow } from './RecordSceneryRow'
+import { RecordTempoRow } from './RecordTempoRow'
 import { RecordReferencesNote } from './RecordReferencesNote'
 import { announceWrite, recordNote } from './writeToasts'
 import { RecordCuePicker, usePickedCueName } from './RecordCuePicker'
@@ -135,6 +136,7 @@ export function RecordSheet({
   const [mask, setMask] = useState<MaskValue>(null)
   const [includeFx, setIncludeFx] = useState(true)
   const [includeScenery, setIncludeScenery] = useState(true)
+  const [includeTempo, setIncludeTempo] = useState(true)
   const [selectedOnly, setSelectedOnly] = useState(false)
   const [stackId, setStackId] = useState<string>('')
   const [newStackName, setNewStackName] = useState('')
@@ -173,6 +175,7 @@ export function RecordSheet({
     // On whenever anything is held (the row is absent otherwise): held scenery is part of what the
     // operator busked, and the cue writes only the pieces it would not already show (D7).
     setIncludeScenery(true)
+    setIncludeTempo(true)
     // Off on every open, even with heads selected. Narrowing is the surprising outcome, so it
     // should be something the operator asked for on this Record, not a setting that persisted.
     setSelectedOnly(false)
@@ -260,6 +263,7 @@ export function RecordSheet({
       mask: maskToWire(mask),
       includeFx,
       scenery: includeScenery,
+      tempo: includeTempo,
       targets: scoped
         ? selectedKeys.map((key) => ({ type: 'fixture' as const, key }))
         : undefined,
@@ -445,6 +449,8 @@ export function RecordSheet({
             onCheckedChange={setIncludeScenery}
             destination="cue"
           />
+
+          <RecordTempoRow projectId={projectId} checked={includeTempo} onCheckedChange={setIncludeTempo} />
 
           {error != null && (
             <Alert variant="destructive">

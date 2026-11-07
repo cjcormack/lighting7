@@ -492,6 +492,31 @@ interface ProgrammerClearSceneryOutgoing {
   fadeMs?: number
 }
 
+/** Hold a master at [bpm] (20–300), or move its hold (fx-speed plan D8). */
+interface ProgrammerSetTempoOutgoing {
+  type: 'programmer.setTempo'
+  speedMasterUuid: string
+  bpm: number
+}
+
+/** A tap the desk counts; the first on an unheld master holds it at its running tempo. */
+interface ProgrammerTapTempoOutgoing {
+  type: 'programmer.tapTempo'
+  speedMasterUuid: string
+}
+
+/** *Capture*: hold a master at the tempo it is running at now. */
+interface ProgrammerHoldTempoOutgoing {
+  type: 'programmer.holdTempo'
+  speedMasterUuid: string
+}
+
+/** Release one hold, or every one with no uuid. */
+interface ProgrammerClearTempoOutgoing {
+  type: 'programmer.clearTempo'
+  speedMasterUuid?: string
+}
+
 interface ProgrammerKeyStackOutgoing {
   type: 'programmer.keyStack'
   targetType: ProgrammerTargetType
@@ -524,6 +549,10 @@ export type ProgrammerOutgoingMessage =
   | ProgrammerPatchLayerOutgoing
   | ProgrammerSetSceneryOutgoing
   | ProgrammerClearSceneryOutgoing
+  | ProgrammerSetTempoOutgoing
+  | ProgrammerTapTempoOutgoing
+  | ProgrammerHoldTempoOutgoing
+  | ProgrammerClearTempoOutgoing
 
 // ── Incoming ────────────────────────────────────────────────────────────────
 
@@ -602,6 +631,14 @@ interface ProgrammerSceneryStateIncoming {
   elements?: unknown
 }
 
+/** The programmer's held tempos, whole: a `StateFlow` on the desk, so a broadcast and the connect snapshot. */
+interface ProgrammerTempoStateIncoming {
+  type: 'programmer.tempoState'
+  projectId?: number | null
+  masters?: unknown
+  changedSinceInclude?: number
+}
+
 interface ProvenanceStateIncoming {
   type: 'provenanceState'
   entries: ProvenanceEntry[]
@@ -647,7 +684,55 @@ type ProgrammerIncomingMessage =
   | ProgrammerBlindStateIncoming
   | ProgrammerErrorIncoming
   | ProgrammerSceneryStateIncoming
+  | ProgrammerTempoStateIncoming
   | ProvenanceStateIncoming
+
+// ── Held tempo ──────────────────────────────────────────────────────────────
+
+/**
+ * One master the programmer lists (fx-speed plan D8, D11). In Blind, `staged` marks a hold whose
+ * tempo is not yet what runs on stage; `staged` with `released` is a hold let go in Blind that still
+ * runs, at [bpm], until Blind is left — listed, but no longer held.
+ */
+export interface ProgrammerTempoEntry {
+  speedMasterUuid: string
+  bpm: number
+  staged?: boolean
+  released?: boolean
+}
+
+export interface ProgrammerTempo {
+  projectId: number | null
+  /** In the order first held — what Record captures, less the released. */
+  masters: readonly ProgrammerTempoEntry[]
+  /** How many held tempos the included cue does not say; absent until an Include, Record or Update set a baseline. */
+  changedSinceInclude?: number
+}
+
+export const NO_PROGRAMMER_TEMPO: ProgrammerTempo = { projectId: null, masters: [] }
+
+/** A `programmer.tempoState` frame. An entry without a uuid or a finite bpm is dropped. */
+export function parseProgrammerTempoFrame(raw: unknown): ProgrammerTempo {
+  if (raw == null || typeof raw !== 'object') return NO_PROGRAMMER_TEMPO
+  const r = raw as Record<string, unknown>
+  const masters: ProgrammerTempoEntry[] = []
+  for (const item of Array.isArray(r.masters) ? r.masters : []) {
+    if (item == null || typeof item !== 'object') continue
+    const m = item as Record<string, unknown>
+    if (typeof m.speedMasterUuid !== 'string' || typeof m.bpm !== 'number' || !Number.isFinite(m.bpm)) continue
+    masters.push({
+      speedMasterUuid: m.speedMasterUuid,
+      bpm: m.bpm,
+      ...(m.staged === true ? { staged: true } : {}),
+      ...(m.released === true ? { released: true } : {}),
+    })
+  }
+  return {
+    projectId: typeof r.projectId === 'number' ? r.projectId : null,
+    masters,
+    ...(typeof r.changedSinceInclude === 'number' ? { changedSinceInclude: r.changedSinceInclude } : {}),
+  }
+}
 
 // ── Public surface ──────────────────────────────────────────────────────────
 
@@ -670,6 +755,8 @@ export interface ProgrammerApi {
    * own subscription, because nothing that reads the values grid cares about it.
    */
   scenery(): ProgrammerScenery
+  /** The programmer's held tempos — the last `programmer.tempoState`, or none before the first. */
+  tempo(): ProgrammerTempo
 
   set(
     targetType: ProgrammerTargetType,
@@ -718,6 +805,14 @@ export interface ProgrammerApi {
   setScenery(elementUuid: string, state: SceneryState, fadeMs?: number): void
   /** Let one element go, or — with no uuid — every one the programmer holds. */
   clearScenery(elementUuid?: string, fadeMs?: number): void
+  /** Hold a master at [bpm], or move its hold; answered by `programmer.tempoState` or `programmer.error`. */
+  setTempo(speedMasterUuid: string, bpm: number): void
+  /** A tap into the programmer, counted by the desk. */
+  tapTempo(speedMasterUuid: string): void
+  /** *Capture*: hold a master at its running tempo. */
+  holdTempo(speedMasterUuid: string): void
+  /** Release one hold, or every one with no uuid. */
+  clearTempo(speedMasterUuid?: string): void
 
   removeLayer(layerId: number, fadeMs?: number): void
   /** Detach: the layer's values and effects become Local, and nothing on stage moves. */
@@ -776,6 +871,8 @@ export interface ProgrammerApi {
   subscribeToErrors(fn: (message: string) => void): Subscription
   /** Every `programmer.sceneryState`. The desk pushes one on connect, so a late subscriber is told the last one. */
   subscribeToScenery(fn: (scenery: ProgrammerScenery) => void): Subscription
+  /** Every `programmer.tempoState`, the last one told to a late subscriber. */
+  subscribeToTempo(fn: (tempo: ProgrammerTempo) => void): Subscription
 }
 
 /** Cache/subscription key for a (target, property) pair. */
@@ -925,6 +1022,8 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   let heldOutsideSource = 0
   let scenery: ProgrammerScenery = NO_PROGRAMMER_SCENERY
   let sceneryKnown = false
+  let tempo: ProgrammerTempo = NO_PROGRAMMER_TEMPO
+  let tempoKnown = false
   let snapshotSeq = 0
 
   const buildSnapshot = (): ProgrammerState => ({
@@ -949,6 +1048,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   const keySubscriptions = new Map<string, Map<number, (state: ProgrammerKeyState) => void>>()
   const errorSubscriptions = new Map<number, (message: string) => void>()
   const scenerySubscriptions = new Map<number, (scenery: ProgrammerScenery) => void>()
+  const tempoSubscriptions = new Map<number, (tempo: ProgrammerTempo) => void>()
 
   const keyStateFor = (key: string): ProgrammerKeyState => {
     const entry = entries.get(key)
@@ -1203,6 +1303,12 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
         sceneryKnown = true
         scenerySubscriptions.forEach((fn) => fn(scenery))
         break
+      case 'programmer.tempoState':
+        // Its own channel, as the scenery's: no cell reads it.
+        tempo = parseProgrammerTempoFrame(message)
+        tempoKnown = true
+        tempoSubscriptions.forEach((fn) => fn(tempo))
+        break
     }
   }
 
@@ -1234,6 +1340,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     layers: () => layers,
     applied: () => applied,
     scenery: () => scenery,
+    tempo: () => tempo,
 
     set(targetType, targetKey, attribute, value, fadeMs, sourceGroup) {
       send({
@@ -1291,6 +1398,18 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     clearScenery(elementUuid, fadeMs) {
       send({ type: 'programmer.clearScenery', elementUuid, fadeMs })
     },
+    setTempo(speedMasterUuid, bpm) {
+      send({ type: 'programmer.setTempo', speedMasterUuid, bpm })
+    },
+    tapTempo(speedMasterUuid) {
+      send({ type: 'programmer.tapTempo', speedMasterUuid })
+    },
+    holdTempo(speedMasterUuid) {
+      send({ type: 'programmer.holdTempo', speedMasterUuid })
+    },
+    clearTempo(speedMasterUuid) {
+      send({ type: 'programmer.clearTempo', speedMasterUuid })
+    },
 
     removeLayer(layerId, fadeMs) {
       send({ type: 'programmer.removeLayer', layerId, fadeMs })
@@ -1340,6 +1459,12 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       scenerySubscriptions.set(id, fn)
       if (sceneryKnown) fn(scenery)
       return { unsubscribe: () => { scenerySubscriptions.delete(id) } }
+    },
+    subscribeToTempo(fn) {
+      const id = nextSubscriptionId++
+      tempoSubscriptions.set(id, fn)
+      if (tempoKnown) fn(tempo)
+      return { unsubscribe: () => { tempoSubscriptions.delete(id) } }
     },
   }
 }

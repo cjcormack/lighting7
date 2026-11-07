@@ -1,6 +1,6 @@
 # Undo and history — programmer steps and a journal of record changes, behind one key
 
-> **Document status: AGREED 2026-10-20, not started.** The questions asked and their answers are
+> **Document status: DONE — sessions 1–6 merged (2026-11-04).** Agreed 2026-10-20. The questions asked and their answers are
 > in §11 and in the design record, [`undo-design/INDEX.md`](undo-design/INDEX.md). A one-page copy
 > for human readers is [`undo-design/undo.html`](undo-design/undo.html), with a live copy at
 > <https://claude.ai/artifact/J9PPZacmX1RdV8YTbqAgCZ> (the checked-in file is the authority). Where
@@ -394,7 +394,7 @@ names written, and its row marked *in review* with its branch. A session's PR is
 | 3 | origin and journal, read-only (backend + sheet) | merged | `claude/gracious-wozniak-i6mim5` | [#333](https://github.com/cjcormack/lighting7/pull/333) | `0b1ac3f` |
 | 4 | putting records back: the cue side (backend) | merged | `claude/pensive-curie-096obw` | [#335](https://github.com/cjcormack/lighting7/pull/335) | `4f1542d` |
 | 5 | putting records back: the rest (backend) | merged | `claude/keen-ritchie-1y5b98` | [#339](https://github.com/cjcormack/lighting7/pull/339) | `eed6893` |
-| 6 | the controls (frontend + MCP + surfaces) | in review | `claude/nifty-hopper-9imfn2` | | |
+| 6 | the controls (frontend + MCP + surfaces) | merged | `claude/nifty-hopper-9imfn2` | [#342](https://github.com/cjcormack/lighting7/pull/342) | `6e48e32` |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -744,7 +744,7 @@ structured, not one byte of what it writes.
 
 ## 9. Follow-ups to record
 
-In [`followups.md`](followups.md), when the session that creates them lands:
+In [`followups.md`](../followups.md), when the session that creates them lands:
 
 - `FU-HISTORY-EMBEDDED-CHILD-IDS`: an embedded child restored by undo takes a new integer id; if
   anything ever names one by id, keep them (session 4).
@@ -753,7 +753,8 @@ In [`followups.md`](followups.md), when the session that creates them lands:
 
 ## 10. Verification
 
-Beyond the suites, at the desk on Sleeping Beauty:
+Beyond the suites, at the desk on Sleeping Beauty, recorded as
+[`FU-MANUAL-UNDO`](../manual-validation.md#fu-manual-undo):
 
 - **Session 1.** Busk a Look, fan pan, Clear at 1 s; Undo brings everything back over 1 s with the
   Look's FX mid-phase; Undo again takes back the fan.

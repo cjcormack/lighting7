@@ -146,7 +146,7 @@ describe('SpeedMasterSheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
     // The read-out names the followers the kit dropped (D12) — the board's own sentence.
     expect(await screen.findByText('M2 and M4 follow M1 · skipped')).toBeInTheDocument()
-    const field = screen.getByLabelText('BPM')
+    const field = screen.getByLabelText('Tempo')
     fireEvent.change(field, { target: { value: '90' } })
     fireEvent.keyDown(field, { key: 'Enter' })
     expect(setBpm.mock.calls).toEqual([

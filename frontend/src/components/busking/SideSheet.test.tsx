@@ -128,7 +128,7 @@ describe('docked, on the desk board', () => {
     setBuskSheet('speed')
     render(<SideSheet {...props} />)
     const tabs = within(screen.getByRole('tablist', { name: 'Side sheet' })).getAllByRole('tab')
-    expect(tabs.map((t) => t.textContent)).toEqual(['Level', 'Colour', 'Position', 'Beam', 'Fan', 'FX', 'Speed', 'Show'])
+    expect(tabs.map((t) => t.textContent)).toEqual(['Level', 'Colour', 'Position', 'Beam', 'Fan', 'FX', 'Tempo', 'Show'])
     expect(tabs[6]).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByTestId('speed-rail')).toBeInTheDocument()
     expect(sideSheetTabs('docked').map((t) => t.id)).toEqual(['level', 'colour', 'position', 'beam', 'spread', 'fx', 'speed', 'show'])
@@ -189,7 +189,7 @@ describe('docked, on the desk board', () => {
     expect(screen.getByRole('tab', { name: 'Colour' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByTestId('colour-sheet')).toHaveAttribute('data-compact', 'false')
     expect(screen.queryByTestId('speed-rail')).toBeNull()
-    fireEvent.click(screen.getByRole('tab', { name: 'Speed' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Tempo' }))
     expect(getBuskSheet()).toBe('speed')
   })
 
@@ -256,7 +256,7 @@ describe('docked, on the desk board', () => {
       expect(show.querySelector('[data-busk-blind-dot]')).toHaveAttribute('aria-hidden')
       expect(show.textContent).toBe('Show')
       expect(tabs.filter((t) => t.querySelector('[data-busk-blind-dot]') != null)).toHaveLength(1)
-      expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['Level', 'Colour', 'Position', 'Beam', 'Fan', 'FX', 'Speed', 'Show — programmer blind, values and FX held'])
+      expect(tabs.map((t) => t.getAttribute('aria-label'))).toEqual(['Level', 'Colour', 'Position', 'Beam', 'Fan', 'FX', 'Tempo', 'Show — programmer blind, values and FX held'])
       // The glyph's hover says it too, as the fold's does: below 380 the word is hidden.
       expect(show).toHaveAttribute('title', 'Show — programmer blind, values and FX held')
       // A mark, not a control: the dot is inert and the tab still opens Show.
@@ -470,7 +470,7 @@ describe('the overlay, off the desk board', () => {
     render(<SideSheetOverlay {...props} />)
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByRole('tab', { name: 'Colour' })).toHaveAttribute('aria-selected', 'true')
-    expect(within(dialog).queryByRole('tab', { name: 'Speed' })).toBeNull()
+    expect(within(dialog).queryByRole('tab', { name: 'Tempo' })).toBeNull()
     expect(within(dialog).getByTestId('colour-sheet')).toHaveAttribute('data-compact', 'false')
     fireEvent.keyDown(dialog, { key: 'Escape' })
     expect(getBuskSheet()).toBe('none')
@@ -482,7 +482,7 @@ describe('the overlay, off the desk board', () => {
     render(<SideSheetOverlay {...props} />)
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByTestId('colour-sheet')).toHaveAttribute('data-compact', 'true')
-    expect(within(dialog).queryByRole('tab', { name: 'Speed' })).toBeNull()
+    expect(within(dialog).queryByRole('tab', { name: 'Tempo' })).toBeNull()
   })
 
   it('never opens on speed off the desk board, having no Speed tab to open onto', () => {

@@ -1,6 +1,6 @@
 # Show view editing fixes
 
-> **Document status: IN PROGRESS — calls decided 2026-11-06 (§3).** Sessions 1–4 merged; session 5 in review.
+> **Document status: DONE — sessions 1–5 merged (2026-11-06).** Calls decided 2026-11-06 (§3).
 
 The design record is [`show-view-fixes-design/INDEX.md`](show-view-fixes-design/INDEX.md), and its
 one-page copy [`show-view-fixes.html`](show-view-fixes-design/show-view-fixes.html) holds the
@@ -174,7 +174,7 @@ touched packages' tests where they touch the backend, and `npm run check:quick` 
 | 2 | In production | merged | `claude/stoic-babbage-zbutzf` | [#360](https://github.com/cjcormack/lighting7/pull/360) | 9e51a1a |
 | 3 | The editor pane toggle | merged | `claude/gallant-faraday-nxc79c` | [#362](https://github.com/cjcormack/lighting7/pull/362) | 68abe96 |
 | 4 | The row head: Cue # cells and arming from the pip | merged | `claude/lucid-bell-dkik4e` | [#363](https://github.com/cjcormack/lighting7/pull/363) | 99aa159 |
-| 5 | Dragging a selection | in review | `claude/busy-fermi-v71afs` | | |
+| 5 | Dragging a selection | merged | `claude/busy-fermi-v71afs` | [#365](https://github.com/cjcormack/lighting7/pull/365) | 616bdc1 |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -321,7 +321,8 @@ D22–D24.
 
 ## 6. Operator checks
 
-One row in `manual-validation.md` per merged session, at the desk: a duplicated follow cue firing
+Recorded as [`FU-MANUAL-SHOW-VIEW-FIXES`](../manual-validation.md#fu-manual-show-view-fixes),
+one check for all five sessions, at the desk: a duplicated follow cue firing
 its follower; a marquee down the bottom of a long stack with the pane on; four numbers renumbered
 from the cells; a cue armed from its pip while unlocked mid-show; a tech run with *In production*
 off showing no lock and no amber, then switched on mid-run locking; a block of three cues dragged.

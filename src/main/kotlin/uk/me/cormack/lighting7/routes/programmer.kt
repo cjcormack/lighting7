@@ -68,6 +68,8 @@ internal fun clearProgrammerCompletely(state: State, fadeMs: Long = 0): Programm
     // plan D1). Here rather than in `ProgrammerStore.clearAll`, which takes no fade and which
     // `ProgrammerWriter.clearAll` skips when no value is held — a programmer holding only scenery.
     state.programmerScenery.clear(fadeMs)
+    // And its tempos: each held master lands its live tempo (fx-speed plan D8).
+    state.programmerTempo.clear()
     // And the include target, which `ProgrammerStore.clearAll` drops only when a value was held. A
     // cue Included for its scenery or its layers alone left it set while every client's
     // `programmer.cleared` dropped its copy — so Including that cue again changed nothing the

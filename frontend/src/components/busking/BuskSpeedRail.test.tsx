@@ -33,6 +33,21 @@ vi.mock('@/store/speedMasters', () => ({
   useSpeedMasterBpm: (uuid: string | null) =>
     liveMasters.find((m) => m.uuid === uuid)?.bpm ?? null,
 }))
+const tempoState = vi.hoisted(() => ({
+  current: { projectId: 7, masters: [] } as {
+    projectId: number | null
+    masters: { speedMasterUuid: string; bpm: number; staged?: boolean; released?: boolean }[]
+  },
+  blind: false,
+}))
+const programmerHoldTempo = vi.fn()
+const programmerClearTempo = vi.fn()
+vi.mock('@/store/programmer', () => ({
+  useProgrammerTempo: () => tempoState.current,
+  programmerHoldTempo: (...a: unknown[]) => programmerHoldTempo(...a),
+  programmerClearTempo: (...a: unknown[]) => programmerClearTempo(...a),
+}))
+vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => tempoState.blind }))
 const deskConnected = { current: true }
 vi.mock('@/store/status', () => ({
   useIsDeskConnected: () => deskConnected.current,
@@ -52,6 +67,8 @@ afterEach(() => {
   vi.clearAllMocks()
   vi.useRealTimers()
   deskConnected.current = true
+  tempoState.current = { projectId: 7, masters: [] }
+  tempoState.blind = false
 })
 
 function cardFor(name: string): HTMLElement {
@@ -174,7 +191,7 @@ describe('BuskSpeedRail — the three arms', () => {
 
     // The bpm is a readout, not a draft opener.
     fireEvent.click(screen.getByText('60'))
-    expect(screen.queryByLabelText('Master 2 BPM')).toBeNull()
+    expect(screen.queryByLabelText('Master 2 tempo')).toBeNull()
   })
 })
 
@@ -539,5 +556,79 @@ describe('BuskSpeedRail — the detail sheet', () => {
     rerender(<BuskSpeedRail />)
 
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+})
+
+describe('BuskSpeedRail — held tempo (fx-speed plan D8, D11)', () => {
+  const M2 = 'aaaaaaaa-0000-0000-0000-000000000002'
+
+  it('offers Capture on an unheld master, which holds it at its running tempo', () => {
+    liveMasters = [live(1), live(2, { name: 'Chase' })]
+    rows = [row(1), row(2, { name: 'Chase' })]
+    render(<BuskSpeedRail />)
+
+    expect(screen.queryByText('Held')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Capture master 2' }))
+    expect(programmerHoldTempo).toHaveBeenCalledWith(M2)
+    expect(screen.getByRole('button', { name: 'Capture master 1' })).toBeInTheDocument()
+  })
+
+  it('says Held and offers Release on a master the programmer holds', () => {
+    liveMasters = [live(1), live(2, { name: 'Chase', bpm: 132 })]
+    rows = [row(1), row(2, { name: 'Chase' })]
+    tempoState.current = { projectId: 7, masters: [{ speedMasterUuid: M2, bpm: 132 }] }
+    render(<BuskSpeedRail />)
+
+    const card = cardFor('M2 · Chase')
+    expect(within(card).getByText('Held')).toBeInTheDocument()
+    expect(card.className).toContain('border-amber-500')
+    fireEvent.click(within(card).getByRole('button', { name: 'Release master 2' }))
+    expect(programmerClearTempo).toHaveBeenCalledWith(M2)
+    expect(within(cardFor('M1 · Master 1')).queryByText('Held')).toBeNull()
+  })
+
+  it('shows a staged hold beside the running tempo in Blind', () => {
+    liveMasters = [live(1), live(2, { name: 'Chase', bpm: 120 })]
+    rows = [row(1), row(2, { name: 'Chase' })]
+    tempoState.current = { projectId: 7, masters: [{ speedMasterUuid: M2, bpm: 140, staged: true }] }
+    tempoState.blind = true
+    render(<BuskSpeedRail />)
+
+    const card = cardFor('M2 · Chase')
+    expect(within(card).getByRole('button', { name: /^120$/ })).toBeInTheDocument()
+    expect(card.querySelector('[data-tempo-staged]')?.textContent).toBe('→ 140')
+    expect(within(card).getByText('Held')).toBeInTheDocument()
+  })
+
+  it('reads a release in Blind as releasing, and offers Capture again', () => {
+    liveMasters = [live(1), live(2, { name: 'Chase', bpm: 132 })]
+    rows = [row(1), row(2, { name: 'Chase' })]
+    tempoState.current = { projectId: 7, masters: [{ speedMasterUuid: M2, bpm: 132, staged: true, released: true }] }
+    tempoState.blind = true
+    render(<BuskSpeedRail />)
+
+    const card = cardFor('M2 · Chase')
+    expect(within(card).queryByText('Held')).toBeNull()
+    expect(within(card).getByText('releasing')).toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Capture master 2' })).toBeInTheDocument()
+  })
+
+  it('disables Capture on a follower', () => {
+    liveMasters = [live(1), live(2, { name: 'Half', followNum: 1, followDen: 2 })]
+    rows = [row(1), row(2, { name: 'Half', followNum: 1, followDen: 2 })]
+    render(<BuskSpeedRail />)
+
+    const capture = screen.getByRole('button', { name: 'Capture master 2' })
+    expect(capture).toBeDisabled()
+    fireEvent.click(capture)
+    expect(programmerHoldTempo).not.toHaveBeenCalled()
+  })
+
+  it("ignores another project's holds", () => {
+    liveMasters = [live(1), live(2, { name: 'Chase' })]
+    rows = [row(1), row(2, { name: 'Chase' })]
+    tempoState.current = { projectId: 9, masters: [{ speedMasterUuid: M2, bpm: 132 }] }
+    render(<BuskSpeedRail />)
+    expect(screen.queryByText('Held')).toBeNull()
   })
 })

@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.show.LocateManager
 import uk.me.cormack.lighting7.state.ProgrammerScenery
+import uk.me.cormack.lighting7.state.ProgrammerTempo
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -18,6 +19,7 @@ data class ProgrammerSnapshot(
     val localFx: List<FxEngine.LocalFxSpec>,
     val locate: LocateManager.Snapshot,
     val scenery: ProgrammerScenery.Snapshot,
+    val tempo: ProgrammerTempo.Snapshot = ProgrammerTempo.Snapshot(null, emptyMap()),
 )
 
 /** The programmer's holders, as the show that owns them reads and restores them. */

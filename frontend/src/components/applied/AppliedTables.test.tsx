@@ -62,6 +62,7 @@ vi.mock('@tanstack/react-virtual', () => ({
   }),
 }))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
+vi.mock('@/components/programmer/ProgrammerTempoList', () => ({ ProgrammerTempoList: () => null, useHeldTempoCount: () => 0 }))
 vi.mock('@/store/programmer', () => ({
   useProgrammerLayersQuery: () => ({ data: mocks.layers }),
   useProgrammerAppliedQuery: () => ({ data: undefined }),

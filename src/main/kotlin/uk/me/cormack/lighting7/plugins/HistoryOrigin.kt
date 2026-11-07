@@ -150,6 +150,10 @@ internal fun socketHistoryLabel(message: InMessage): String = when (message) {
     is ProgrammerPatchLayerInMessage -> "Change layer"
     is ProgrammerSetSceneryInMessage -> "Move scenery"
     is ProgrammerClearSceneryInMessage -> "Release scenery"
+    is ProgrammerSetTempoInMessage -> "Hold tempo"
+    is ProgrammerTapTempoInMessage -> "Tap tempo"
+    is ProgrammerHoldTempoInMessage -> "Capture tempo"
+    is ProgrammerClearTempoInMessage -> "Release tempo"
     is UpdateChannelInMessage -> "Channel ${message.universe}/${message.id}"
     is UpdateFxInMessage -> "Change FX"
     is RemoveFxInMessage -> "Stop FX"
@@ -168,6 +172,8 @@ internal fun socketCoalesceKey(message: InMessage): String? = when (message) {
     is UpdateChannelInMessage -> "updateChannel|${message.universe}:${message.id}"
     is ProgrammerPatchLayerInMessage -> "patchLayer|${message.layerId}"
     is ProgrammerSetSceneryInMessage -> "setScenery|${message.elementUuid}"
+    is ProgrammerSetTempoInMessage -> "setTempo|${message.speedMasterUuid}"
+    is ProgrammerTapTempoInMessage -> "tapTempo|${message.speedMasterUuid}"
     // The REST door says the same for `PUT /fx/{id}`, so a slider's frames fold whichever door they take.
     is UpdateFxInMessage -> "updateFx|${message.fxId}"
     else -> null

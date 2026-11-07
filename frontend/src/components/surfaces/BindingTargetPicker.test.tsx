@@ -117,11 +117,11 @@ describe('BindingTargetPicker speed-master targets', () => {
         onPolicyChange={() => {}}
       />,
     )
-    expect(screen.getByText('Speed master — BPM')).toBeInTheDocument()
+    expect(screen.getByText('Speed master — Tempo')).toBeInTheDocument()
     unmount()
 
     renderPicker(false, { type: 'speedMasterTap', masterUuid: null })
-    expect(screen.getByText('Speed master — Tap')).toBeInTheDocument()
+    expect(screen.getByText('Speed master — Tap tempo')).toBeInTheDocument()
   })
 
   it('renders the BPM range inputs with the configured window', () => {
