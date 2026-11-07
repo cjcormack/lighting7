@@ -15,8 +15,12 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-PROGRAMMER-FIXES`](#fu-manual-programmer-fixes) | the programmer's four fixes at the desk — the FX picker stays open through a colour drag and a dimmer through 0 with Lit on, or the close trace names its door; expanded element rows survive a trip to Show and back; ⌘-clicked cells with gaps take one value, *Add* doing it on the tablet; a recent set on one window lands from another's pop-up over three cells | Programmer fixes S1–S5, 2026-11-07 |
+| [`FU-MANUAL-SHOW-VIEW-FIXES`](#fu-manual-show-view-fixes) | the Show view's editing fixes on a real stack — a duplicated follow cue fires its follower, the editor pane toggled and a marquee at the bottom of a long stack, four numbers renumbered from their cells, a cue armed from its pip mid-show, *In production* off and on mid-run, a block of three cues dragged | Show view fixes S1–S5, 2026-11-06 |
+| [`FU-MANUAL-UNDO`](#fu-manual-undo) | undo and history on Sleeping Beauty — a Clear undone brings the busk back over its fade with the FX mid-phase, the store round trip is byte-for-byte, History names each window and Claude, a deleted cue comes back with its pad and anchor, a re-address undone asks first, and ⌘Z, ⇧⌘Z and the X-Touch's Undo walk both histories in order | Undo S1–S6, 2026-11-04 |
 | [`FU-MANUAL-CLOUD-P1-S5`](#fu-manual-cloud-p1-s5) | an installed MSI and Mac pkg carry the sidecar for their machine and the desk runs it: `link` reads `RUNNING` with *Remote sessions* on, the installers' sizes against the build before | Cloud P1 S5, 2026-11-06 |
 | [`FU-MANUAL-PALETTE-REFERENCES-S4`](#fu-manual-palette-references-s4) | a Look recorded from heads that follow a palette still follows it on the rig — retuned live with no GO, a tap in the focused Look writing references and a second taking them off — and *Copy the values* on the Look sheet and in the cue editor turns them to literals with nothing moving | Palette references S4, 2026-11-05 |
+| [`FU-MANUAL-PALETTE-REFERENCES-S1-S3`](#fu-manual-palette-references-s1-s3) | a palette reference on the rig — a Look row written as one through MCP follows a retune in a live cue with no GO, a press on two of four heads writes references, an existing show's plain palette layers migrate with nothing moving, and four heads made a per-fixture palette move nothing and show their marks | Palette references S1–S3, 2026-11-05 |
 | [`FU-MANUAL-CLOUD-P1A`](#fu-manual-cloud-p1a) | Lighting7 Cloud's P1a gate: the desk's SPA opened from the portal is usable through the shell on desktop Chrome, Firefox and Safari and iOS Safari, Direct and Relayed (TURN on 443 too), within NFR-PERF-1's times, a 100 MB upload, two token refreshes, *End* closing it within 5 s, ten minutes of fades relayed and a cached second visit under 2 s — **passed 2026-11-06 but for the performance checks**, steps 2 and 7, which are deferred | Cloud P1 S4, 2026-11-06 |
 | [`FU-MANUAL-CLOUD-P0`](#fu-manual-cloud-p0) | Lighting7 Cloud's P0 exit: each desk adopted from its Cloud tab shows Online in the portal, a running fade and FX see nothing of the cloud's app stopping and the desk is back within 30 s of its return, unadopt from either side lands on the other, and `cloud.enabled = false` connects nowhere — **adoption, Online and a portal removal seen 2026-11-05**; the outage, a desk unadopt and `enabled = false` still unseen | Cloud P0 S6, 2026-11-05 |
 | [`FU-MANUAL-ARTNET-TRANSPORT`](#fu-manual-artnet-transport) | a real Art-Net node lights from the desk's own ArtDMX transport as it did from artnet4j: broadcast and unicast universes, a node's status page showing the frames arriving, and a second program on the desk machine still hearing them | Cloud P0 S2, 2026-11-02 |
@@ -148,6 +152,101 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 ---
 
+## `FU-MANUAL-PROGRAMMER-FIXES`
+
+**What it proves**: *the programmer's four fixes* — programmer-fixes plan D1–D25, sessions 1–5
+together: the add-FX picker is not closed by its own colour drag or by Lit dropping a row under it,
+expansion is kept per window and a select request lands once, a cell click takes ⌘ and ⇧ (and the
+*Add* latch on touch), and the value pop-ups show the live show's recent values.
+
+**Why it is here**: the reported picker close was never reproduced (plan §1, item 4); the tests close
+the paths they could find, and only the desk shows whether it still happens. Radix's outside press and
+the sheet's focus outside never reach jsdom. The recents are a desk-wide list, so only two real
+windows show one window's value reaching the other.
+
+**Test**, on the dev rig, the desk's window and the tablet both on the programmer:
+
+1. **The picker.** In the desk's window run `localStorage['lighting7.debug.fxPickerClose'] = '1'` in
+   the console. Select a head, row C → *FX* → Colour Cycle, open a colour and drag its dot round,
+   letting go inside the popover and then outside it; the same on a single-colour FX. Do it with
+   **Lit on and Lit off**: the picker stays open every time. If it closes, copy the console's warning
+   (it names the door) into the plan's §1 item 4 and promote a follow-up. Then, Lit on, run a dimmer
+   Wave on the selected head with the picker open: the row, row C and the picker stay while the
+   dimmer passes 0. Once this has passed, `lib/fxPickerCloseTrace.ts` is due to go (D25).
+2. **Rows stay put.** Expand two multi-head bars, go to Show and back: both still expanded, nothing
+   re-selected, the filter kept, Lit as left. Select one bar's element, press *Collapse all* (row B's
+   glyph): every row folds but the one holding the selection. ⌥-click a fixture's chevron: every
+   multi-head fixture opens.
+3. **Cells with gaps.** ⌘-click three scattered colour cells on different heads and set one colour:
+   exactly those three change on the rig. ⇧-click from one to another selects the rectangle. On the
+   tablet turn on *Add* in the selection bar and tap the same three cells; set a colour; it lands on
+   the three. Escape turns *Add* off.
+4. **Recents.** Set a colour, a dimmer level and a position on the desk's window. On the tablet open a
+   colour cell's pop-up: *Recent* shows the colour; the same for the level and position cells. Select
+   three cells on the tablet and tap the recent colour: all three take it. Switch to another show and
+   back: each show keeps its own list.
+
+---
+
+## `FU-MANUAL-SHOW-VIEW-FIXES`
+
+**What it proves**: *the Show view's editing fixes* — show-view-fixes plan D1–D24, sessions 1–5
+together: *Duplicate* keeps the place's follow, the editor pane is a per-window toggle and a marquee
+keeps it still, Cue # is a cell column that renumbers over a batch, the pip arms, *In production*
+decides whether a running show locks, and a selected block drags as one.
+
+**Why it is here**: the tests run each against a mocked stack. Only a real stack running on the rig
+shows a duplicated follower firing, the pane holding still through a long marquee, an arm taken
+mid-show and the lock coming on as *In production* is switched.
+
+**Test**, on a show with a stack of at least twenty cues, Q5 set to follow Q4:
+
+1. **Duplicate.** Duplicate Q5 from its place in the stack: the copy lands at the end, unnumbered, and
+   follows. GO into the cue before it: the copy's follower fires after its delay.
+2. **The pane.** On the Table turn *Editor* off and on: the pane goes and comes back at its height,
+   and a second window keeps its own choice. With it on, marquee down the bottom of the stack: the
+   pane holds what it showed until release, then shows *n cues selected*.
+3. **Cue #.** Select four Cue # cells and type 10: the form previews 10, 11, 12, 13; confirm and the
+   four land in stack order. A decimal is refused with a reason. Clear one: it returns to auto.
+4. **The pip.** With the show running and unlocked, click a later cue's pip: it is armed as the next
+   GO, and no row is selected.
+5. **In production.** In Settings › General turn *In production* off; run a stack: no lock, no amber,
+   and the header reads *Not in production*. Switch it on while the stack runs: Show locks at once.
+6. **Drag a block.** Select three cues, two adjacent and one apart, and drag one of them: the others
+   dim and the row carries *+2*; drop it: the three land together in their order, still selected.
+
+---
+
+## `FU-MANUAL-UNDO`
+
+**What it proves**: *undo and history* — undo plan sessions 1–6: the programmer's steps put back
+every holder at the fade, the show's record journal names who changed what from where, an entry's
+records come back exactly with what they set off, and every door (⌘Z, History, the X-Touch, Claude)
+walks the same history.
+
+**Why it is here**: the tests restore records against a seeded project and a mock rig. Only the rig
+shows a Clear undone fading back with its FX mid-phase, a restore under a live cue asking first, and
+two windows and Claude each named in History. This is the plan's §10.
+
+**Test**, at the desk on Sleeping Beauty:
+
+1. **Programmer.** Busk a Look, fan pan, Clear at 1 s. Undo: everything comes back over 1 s, the Look's
+   FX mid-phase. Undo again: the fan is taken back.
+2. **The store.** Export Sleeping Beauty before and after a session of edits and their undos; `diff -r`
+   of the two exports is empty.
+3. **The journal.** Edit a cue, a Look and a park from two windows and ask Claude to rename a group:
+   History lists four entries with the right sources and windows.
+4. **The cue side.** Delete Act 1 Q12 (it has a busk pad and a prompt-book anchor); Undo: Q12 is back
+   in its place with its pad and anchor, and `/show/stacks/{id}` still opens. Edit *Warm wash* while
+   Q11 is live; Undo asks to confirm and the stage moves over Q11's fade.
+5. **The rest.** Re-address a Spot, then Undo while the show runs: the confirm names it and the rig
+   follows.
+6. **The controls.** ⌘Z across a Record and two programmer steps takes them in order; ⇧⌘Z brings them
+   back; the X-Touch's Undo key does the same. Ask Claude to undo its own rename: `undo_changes` takes
+   it, and refuses an entry another window made.
+
+---
+
 ## `FU-MANUAL-PALETTE-REFERENCES-S4`
 
 **What it proves**: *a Look follows a palette* — palette-references plan D16, D22 and D23: a Look
@@ -176,6 +275,38 @@ bytes already on stage.
    *DSR Focus* again and Spot 3 stays put while Spot 2 moves. In a cue holding a reference, *Copy the
    values…* in the Values tab with no selection copies every one, and the editor's Undo puts them
    back.
+
+---
+
+## `FU-MANUAL-PALETTE-REFERENCES-S1-S3`
+
+**What it proves**: *a palette reference is a value* — palette-references plan sessions 1–3: a
+`pal:` row resolves per head and follows the palette, a value palette's press writes references
+rather than a layer, step 10 migrates an existing show's plain palette layers into references, and
+the marks show where a value follows a palette. The plan's §6 asked one row per session; they share
+a rig, so they are one check here, run before `FU-MANUAL-PALETTE-REFERENCES-S4`.
+
+**Why it is here**: the tests resolve references on a mock rig and run the migration on a frozen
+database. Only the rig shows a retune moving a live cue with no GO, and only the desk's own database
+shows the migration moving nothing on stage.
+
+**Test**, on the dev rig, four movers and a per-fixture position palette *DSR Focus* holding all four:
+
+1. **Through MCP (S1).** Ask Claude to write a Look row as `pal:` *DSR Focus* on Spot 2
+   (`update_look`), and layer the Look in a live cue. Retune *DSR Focus*'s Spot 2 row: Spot 2 moves
+   with no GO.
+2. **A press (S2).** Select Spot 1 and Spot 2 and press *DSR Focus*: the two take references (their
+   cells read the palette), no layer is added to the programmer's Stack, and Spot 3 and Spot 4 do not
+   move. Press again: the references come off.
+3. **The migration (S2).** Before upgrading the desk to the build that carries step 10, note a show
+   with a cue that layers a value palette plainly. After the upgrade, run that cue: nothing on stage
+   moves against before, the cue's Values show `pal:` rows, the log names each cue converted, and
+   `<db>.pre-palette-references-<utc>.db` is beside the database.
+4. **The new palette and the marks (S3).** Focus four heads by hand and make them a per-fixture
+   palette from the programmer's *New palette* sheet with *Use it on these heads* on: nothing on the
+   rig moves, and the four cells take the teal edge and the palette's pill, and the source chip names
+   it. Select two of them: the palette's chip reads *2 of 4*. Delete one head's row from
+   the palette: that cell's pill turns dashed (unresolved) and keeps its value.
 
 ---
 

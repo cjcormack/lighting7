@@ -1,6 +1,6 @@
 # A show's order for a venue group
 
-> **Document status: READY — calls decided 2026-10-27 (§3).** Sessions 1 and 2 in review.
+> **Document status: DONE — sessions 1–2 merged (2026-10-27).** Calls decided 2026-10-27 (§3).
 
 ## 1. Context
 
@@ -123,8 +123,8 @@ session's PR is titled *Group order: session N — title*. Never merge session 2
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The overlay on the desk | in review | claude/zealous-fermi-lcmwzb | [#311](https://github.com/cjcormack/lighting7/pull/311) | 6d325b03 |
-| 2 | The sheets and the reviews | in review | claude/wonderful-pascal-kdttrl | | |
+| 1 | The overlay on the desk | merged | claude/zealous-fermi-lcmwzb | [#311](https://github.com/cjcormack/lighting7/pull/311) | 6d325b03 |
+| 2 | The sheets and the reviews | merged | claude/wonderful-pascal-kdttrl | [#312](https://github.com/cjcormack/lighting7/pull/312) | 8adc5bc1 |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts

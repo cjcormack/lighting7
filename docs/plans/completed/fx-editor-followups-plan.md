@@ -1,6 +1,7 @@
 # FX editor follow-ups: the list's head, the graph's rows and controls, aligned steps, and Fixtures
 
-> **Document status: READY — written 2026-10-26 from the page Chris and Claude agreed that day.**
+> **Document status: DONE — sessions 1–4 merged (2026-10-26).** Written 2026-10-26 from the page
+> Chris and Claude agreed that day.
 > Four sessions, each one PR, each stacked on the one before while that one is unmerged, each run by
 > `/next-session` (§5). The page and the record are in
 > [`fx-editor-followups-design/INDEX.md`](fx-editor-followups-design/INDEX.md).
@@ -10,7 +11,7 @@
 
 ## 1. Context
 
-Chris's brief, 2026-10-26, after using the FX editor ([`completed/fx-editor-plan.md`](completed/fx-editor-plan.md)) on the rig:
+Chris's brief, 2026-10-26, after using the FX editor ([`fx-editor-plan.md`](fx-editor-plan.md)) on the rig:
 
 1. With nothing selected the list is verbose, its button runs out of the 248px column, and it does
    not help the operator get anywhere.
