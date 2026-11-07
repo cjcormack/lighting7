@@ -361,6 +361,10 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `CueStackBack(stackId)` | Button | `CueStackManager.advanceStack(BACKWARD)` |
 | `CueStackPause(stackId)` | Button | `CueStackManager.pauseAutoAdvance(stackId)` |
 | `FireCue(cueId)` | Button | `CueHolds.toggleLooseCue` — a loose hold on the cue, taken or let go (cue model plan D6) |
+| `CueStackGoTo(stackUuid, entryUuid)` | Button | `CueStackManager.goToEntry` — GO TO one entry, starting the stack if it is stopped (OSC plan D4). A press onto the entry already live does **nothing** (`already live`): no re-fire, no second *Tempo on GO*, no second events, unlike a bare GO onto the live entry. Health: the stack's `checkStack`, then `missingCue` (with no id) for an entry the stack no longer has |
+| `CueStackStandby(stackUuid, entryUuid)` | Button | `CueRunStateTracker.setStandby`. Health as `CueStackGoTo` |
+| `CueStackStop(stackUuid)` | Button | `CueStackManager.deactivateStack` — which drops the desk's arm, as every stack stop does, running or not |
+| `LooseCueSet(cueUuid, on)` | Button | `FireCue`'s explicit forms (D4): `on` takes a loose hold (`takeLooseCue`), `off` lets it go (`dropLoose`), and either finding the cue already so does nothing. Health `checkCue` |
 | `FireTrigger(fixtureKey, trigger)` | Button | Fire one tube of a one-shot fixture — the Twin Shot's `output1`, or its label `A` — through `EffectsService.fireFromSurface` (stage-view plan session 9). **Needs the desk's arm**, like every fire: an unarmed press sends nothing and is announced on every window (`effects.skipped`, source `surface`), as is a spent tube; a blind programmer rehearses it. Fixture-keyed, as `FixtureAttribute` is. Health: `missingFixture` with no such patch, `missingAttribute` when the fixture has no such trigger — the arm is a fact about this second, never a dead binding. No LED |
 | `Flash(target, max)` | Button (momentary) | Press: programmer write (owner `flash`) at `minOf(max, sliderMax)`. Release: clear the `flash` slot — the attribute cascades to the surviving owner / cue layer / baseline in one publish |
 | `Blackout` | Button | `GlobalScalerState.toggleBlackout()` |
@@ -379,6 +383,7 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `LocateSelection` | Button | `toggleLocate` (the `POST /locate/toggle` path) once per selected target: all located → all released, else the unlocated ones come up; LED lit while the selection is non-empty and every target is located |
 | `Strip(target)` | — (a strip slot) | Never dispatched: `resolve` derives it to the target of the control the event arrived on. See [Strips](#strips) |
 | `EncoderBankSet(attribute, colourAxis?)` | Button | `EncoderBankState.set` for the device the button is on; LED lit while that attribute **and** axis are the device's encoder bank. Health `unknownAttribute` when no patched fixture can take it |
+| `LookSet(lookUuid, on)` | Button | `ApplyLook`'s explicit forms (D4): `on` puts the Look on whole through `toggle`, `off` takes every layer of it off through `ProgrammerLayerStack.release`, and either finding it already so does nothing. LED lit while the Look is on, as `ApplyLook`'s. Health `missingLook` |
 | `ApplyLook(lookUuid)` | Button | `ProgrammerLayerStack.toggle` of the Look **whole** — no targets, never the desk selection (absolute-looks plan P1): on puts one layer of it on, off takes every layer of it off. LED lit while the Look has any layer on the stack, whatever is selected (P4). Health `missingLook` for a Look that has gone |
 | `PressPalette(paletteUuid)` | Button | `ProgrammerLayerStack.toggle` on the **desk selection**, masked to the palette's own derived family, with no solo siblings (the family replacement is `toggle`'s own). A *generic* palette with an empty selection is dropped — its rows take their targets from the press; a per-fixture one names its own heads. LED lit while it covers every selected target |
 | `PressPad(padUuid)` | Button | The pad's own press through `BuskPressService`, solo siblings included, with the desk selection as the targets (a Look pad's press ignores them and lands whole). LED is the pad's ring: a palette pad's covers the selection; a Look pad's is on or off, lit while a layer of it is on, whatever is selected (P4); for a cue pad, lit while a press holds the cue loose (`CueHolds.looseHeld`, `cueLooseHeldProvider`) — what the next press lets go of — and dark while only a stack holds it |
@@ -403,6 +408,11 @@ resolves to nothing in the current project is dead, and the press is dropped rat
 back to an int that may name another project's row. Only a pre-v11 row with no uuid is dispatched
 by its int. This is what makes a cloned or imported project keep its cue bindings
 (`docs/sync-engineering.md` §"Version 11"; `FU-SYNC-BINDING-PAYLOAD-UUIDS`, first half).
+
+The five the OSC plan adds — `CueStackGoTo`, `CueStackStandby`, `CueStackStop`, `LooseCueSet` and
+`LookSet` — are **uuid-only**, like the record variants: minted after v11, they have no pre-uuid form.
+The stack list's `CueStackDetails.uuid`, each entry's `uuid` and `cueUuid`, and `CueDetails.uuid` are
+what the picker names them by.
 
 The **record** variants are uuid-addressed for the same reason and with no int beside them: they
 were minted after v11, so there is no pre-uuid form to fall back to. Each has **exactly one
@@ -505,9 +515,21 @@ Motor faders default to `IMMEDIATE` policy (they're driven to the logical value,
 
 `ControlSurfaceBindingService.resolve(projectId, deviceTypeKey, controlId, activeBank) → ResolvedBinding?`. Returns null for unbound controls.
 
-### 5. Dispatch via SurfaceActions
+### 5. Dispatch via SurfaceDispatch
 
-See the `BindingTarget variants` table above. `DefaultSurfaceActions` is a fire-and-forget port — it handles its own thread coordination:
+`SurfaceDispatch` (`midi/SurfaceDispatch.kt`) turns a resolved target into a `SurfaceActions` call and
+answers an `ActionOutcome` — `Done(detail?)`, `Refused(code, message)`, `NotFound(message)` or
+`Failed(message)`. The router and the OSC collector share it (OSC plan D2), so a button and an OSC
+message naming one target do one thing: `press` for a button, `continuous` for a 7-bit move, `level`
+for a value taken whole (a stack's FX amount from an OSC float, D10) and `release` for a flash. A
+target given the wrong kind of input is `Refused(WRONG_KIND)`. The router logs at debug what is not
+`Done`, since a MIDI press has no reply channel; the OSC log shows it.
+
+Every input runs inside `SurfaceDispatch.guarded`, which turns a throw — `state.show` mid-switch
+among the causes — into `Failed`, so one bad input never ends a device's collector
+(`FU-MIDI-SHOW-GUARD`).
+
+See the `BindingTarget variants` table above. `DefaultSurfaceActions` handles its own thread coordination:
 - `ProgrammerStore` is lock-free (`ConcurrentHashMap`)
 - Cue stack operations dispatch onto `GlobalScope` with `OptIn(DelicateCoroutinesApi)` — the router thread never blocks on show services
 - Dependencies are resolved through `state.show.*` on every call, so `ProjectManager.switchProject` doesn't leak stale references
@@ -840,7 +862,9 @@ From `State.kt`:
 
 ## Not implemented (architecture accommodates)
 
-- OSC transport
+OSC in is implemented as a fixed address set over UDP (`docs/osc-engineering.md`); learnable OSC
+addresses and feedback are the OSC plan's session 3.
+
 - Network MIDI / RTP-MIDI
 - MSC (MIDI Show Control)
 - USB HID / vendor protocols (Stream Deck, Loupedeck)

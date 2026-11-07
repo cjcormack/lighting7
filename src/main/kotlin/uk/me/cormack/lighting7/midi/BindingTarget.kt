@@ -20,8 +20,9 @@ import uk.me.cormack.lighting7.state.SubselectMode
  *     [StackFxAmount], [FxSpeed]) — fader / encoder movements map to a Layer 2 property write
  *     (Phase 3), a tempo write, the grand master's level, a cue stack's FX amount or the selection's
  *     FX speed.
- *   - **Discrete** ([CueStackGo], [CueStackBack], [CueStackPause], [FireCue],
- *     [SpeedMasterTap], [SpeedMasterScale], [FireTrigger]) — button press invokes a service call.
+ *   - **Discrete** ([CueStackGo], [CueStackBack], [CueStackPause], [CueStackGoTo], [CueStackStandby],
+ *     [CueStackStop], [FireCue], [LooseCueSet], [SpeedMasterTap], [SpeedMasterScale], [FireTrigger]) —
+ *     button press invokes a service call.
  *   - **Momentary / global / meta** ([Flash], [Blackout], [GrandMasterToggle], [SetBank]) —
  *     press / release change transport-level state.
  *   - **Selection-relative** ([SelectionAttribute], [SelectionFan], [SelectTarget], [ClearSelection],
@@ -32,7 +33,7 @@ import uk.me.cormack.lighting7.state.SubselectMode
  *     between screens (multi-screen plan §3.5)
  *   - **History** ([Undo], [Redo], [ProgrammerUndo]) — the undo key, as the surface's own source
  *     (undo plan §4.8)
- *   - **Records** ([ApplyLook], [PressPalette], [PressPad]) — a named thing from the library on a
+ *   - **Records** ([ApplyLook], [LookSet], [PressPalette], [PressPad]) — a named thing from the library on a
  *     button, uuid-addressed, **each with exactly one behaviour** (§D6): a Look always onto its own
  *     fixtures, a template always onto the selection, a pad always its own bank's plan.
  *   - **Busk pages** ([BuskPageNext], [BuskPagePrev], [BuskPageSet]) — move the desk's showing busk
@@ -102,10 +103,37 @@ sealed class BindingTarget {
     @SerialName("cueStackPause")
     data class CueStackPause(val stackId: Int, val stackUuid: String? = null) : BindingTarget()
 
+    /**
+     * GO TO one entry of a stack on press, starting the stack if it is stopped (OSC plan D4). A press
+     * onto the entry already live does nothing, so a cue sent twice is not re-fired. Uuid-only: the
+     * variant postdates v11, so no row of it carries an int.
+     */
+    @Serializable
+    @SerialName("cueStackGoTo")
+    data class CueStackGoTo(val stackUuid: String, val entryUuid: String) : BindingTarget()
+
+    /** Arm one entry of a stack as its next GO on press. */
+    @Serializable
+    @SerialName("cueStackStandby")
+    data class CueStackStandby(val stackUuid: String, val entryUuid: String) : BindingTarget()
+
+    /** Stop a stack on press — which drops the desk's arm, as every stack stop does. */
+    @Serializable
+    @SerialName("cueStackStop")
+    data class CueStackStop(val stackUuid: String) : BindingTarget()
+
     /** Fire a specific cue on button press. [cueUuid] wins over [cueId] when set. */
     @Serializable
     @SerialName("fireCue")
     data class FireCue(val cueId: Int, val cueUuid: String? = null) : BindingTarget()
+
+    /**
+     * Take ([on]) or let go of a cue's loose hold on press — [FireCue]'s explicit forms (D4): `on`
+     * for a cue already loose-held, or `off` for one that is not, does nothing.
+     */
+    @Serializable
+    @SerialName("looseCueSet")
+    data class LooseCueSet(val cueUuid: String, val on: Boolean) : BindingTarget()
 
     /**
      * Fire one tube of a one-shot fixture on button press (stage-view plan session 9, D16): the
@@ -323,6 +351,14 @@ sealed class BindingTarget {
     @Serializable
     @SerialName("applyLook")
     data class ApplyLook(val lookUuid: String) : BindingTarget()
+
+    /**
+     * Put a Look on whole ([on]) or take every layer of it off, on press — [ApplyLook]'s explicit
+     * forms (D4): `on` for a Look already applied, or `off` for one that is not, does nothing.
+     */
+    @Serializable
+    @SerialName("lookSet")
+    data class LookSet(val lookUuid: String, val on: Boolean) : BindingTarget()
 
     /**
      * Press a **template** onto the desk selection on button press.

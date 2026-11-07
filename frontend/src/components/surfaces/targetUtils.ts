@@ -89,6 +89,16 @@ export function describeTarget(target: BindingTarget): string {
       return `Pause · stack ${target.stackId}`
     case "fireCue":
       return `Fire cue #${target.cueId}`
+    // The OSC plan's explicit forms name uuids, which this pure function does not resolve (the
+    // record variants' rule below).
+    case "cueStackGoTo":
+      return `Go to cue ${shortUuid(target.entryUuid)} · stack ${shortUuid(target.stackUuid)}`
+    case "cueStackStandby":
+      return `Standby cue ${shortUuid(target.entryUuid)} · stack ${shortUuid(target.stackUuid)}`
+    case "cueStackStop":
+      return `Stop · stack ${shortUuid(target.stackUuid)}`
+    case "looseCueSet":
+      return `Cue ${shortUuid(target.cueUuid)} ${target.on ? "on" : "off"}`
     case "fireTrigger":
       return `Fire ${target.fixtureKey} · ${target.trigger}`
     case "flash":
@@ -143,6 +153,8 @@ export function describeTarget(target: BindingTarget): string {
     // between two bindings of the same kind without pretending to be a name.
     case "applyLook":
       return `Apply Look ${shortUuid(target.lookUuid)}`
+    case "lookSet":
+      return `Look ${shortUuid(target.lookUuid)} ${target.on ? "on" : "off"}`
     case "pressPalette":
       return `Press palette ${shortUuid(target.paletteUuid)}`
     case "pressPad":

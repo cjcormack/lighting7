@@ -50,6 +50,8 @@ import uk.me.cormack.lighting7.models.DaoPromptBookAnchors
 import uk.me.cormack.lighting7.models.DaoPromptBookAnnotations
 import uk.me.cormack.lighting7.models.DaoPromptBooks
 import uk.me.cormack.lighting7.models.DaoRemoteAccessSettingsTable
+import uk.me.cormack.lighting7.models.DaoOscSettingsTable
+import uk.me.cormack.lighting7.models.DaoOscSendersTable
 import uk.me.cormack.lighting7.models.DaoRiggings
 import uk.me.cormack.lighting7.models.DaoScripts
 import uk.me.cormack.lighting7.models.DaoShowColours
@@ -184,6 +186,8 @@ object SyncDispositions {
         DaoMcpOAuthClients to SyncDisposition.MachineLocal("OAuth clients registered with this desk's MCP server"),
         DaoMcpOAuthGrants to SyncDisposition.MachineLocal("MCP OAuth grants: per-desk credentials, like sessions"),
         DaoRemoteAccessSettingsTable to SyncDisposition.MachineLocal("this desk's ngrok tunnel: its public domain and whether it is on"),
+        DaoOscSettingsTable to SyncDisposition.MachineLocal("this desk's OSC listener: whether it is on, its port and its interface"),
+        DaoOscSendersTable to SyncDisposition.MachineLocal("the senders this desk hears OSC from, by their LAN addresses"),
         DaoTelemetrySettingsTable to SyncDisposition.MachineLocal("this install's consent to send errors and logs to Sentry"),
         DaoPasswordResetTokens to SyncDisposition.MachineLocal("short-lived local password reset tokens"),
         DaoEffectTubeStates to SyncDisposition.MachineLocal("which confetti tubes on this rig are spent: the physical cannon, not the show"),

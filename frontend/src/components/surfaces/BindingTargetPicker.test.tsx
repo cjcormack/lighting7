@@ -46,10 +46,19 @@ vi.mock('@/store/windows', () => ({
   ],
 }))
 const stacks = vi.hoisted(() => [
-  { id: 4, name: 'Act 1', type: 'STACK' },
-  { id: 9, name: 'Act 2', type: 'STACK' },
+  {
+    id: 4, uuid: 'stack-act-1', name: 'Act 1', type: 'STACK',
+    cues: [
+      { id: 21, entryId: 31, uuid: 'entry-q5', cueUuid: 'cue-storm', name: 'Storm', cueNumber: '5' },
+      { id: null, entryId: 32, uuid: 'entry-marker', name: 'Interval', cueType: 'MARKER' },
+    ],
+  },
+  { id: 9, uuid: 'stack-act-2', name: 'Act 2', type: 'STACK', cues: [] },
 ])
 vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: stacks }) }))
+vi.mock('@/store/cues', () => ({
+  useProjectCueListQuery: () => ({ data: [{ id: 21, uuid: 'cue-storm', name: 'Storm' }] }),
+}))
 // The three record libraries, behind `useRecordBindingOptions`.
 vi.mock('@/store/looks', () => ({
   useLookListQuery: () => ({
@@ -195,6 +204,29 @@ describe('BindingTargetPicker record targets', () => {
     renderPicker(false, value)
     expect(screen.getByText(kindLabel)).toBeInTheDocument()
     expect(screen.getByText(fieldLabel)).toBeInTheDocument()
+  })
+
+  it.each([
+    ['Cue stack — Go to cue', 'Cue', { type: 'cueStackGoTo', stackUuid: 'stack-act-1', entryUuid: 'entry-q5' } as BindingTarget],
+    ['Cue stack — Standby cue', 'Cue', { type: 'cueStackStandby', stackUuid: 'stack-act-1', entryUuid: 'entry-q5' } as BindingTarget],
+    ['Cue stack — Stop', 'Cue stack', { type: 'cueStackStop', stackUuid: 'stack-act-1' } as BindingTarget],
+    ['Cue — on / off', 'Press', { type: 'looseCueSet', cueUuid: 'cue-storm', on: true } as BindingTarget],
+    ['Look — on / off', 'Press', { type: 'lookSet', lookUuid: 'look-warm', on: false } as BindingTarget],
+  ])('offers %s and renders its body (OSC plan D4)', (kindLabel, fieldLabel, value) => {
+    renderPicker(false, value)
+    expect(screen.getByText(kindLabel)).toBeInTheDocument()
+    expect(screen.getByText(fieldLabel)).toBeInTheDocument()
+  })
+
+  it('a GO TO names the cue by number, offers no marker, and a change of stack lets the cue go', () => {
+    const onChange = renderPicker(false, { type: 'cueStackGoTo', stackUuid: 'stack-act-1', entryUuid: 'entry-q5' })
+    expect(screen.getByText('5 · Storm')).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('combobox')[2]!)
+    expect(screen.queryByRole('option', { name: 'Interval' })).toBeNull()
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    fireEvent.click(screen.getAllByRole('combobox')[1]!)
+    fireEvent.click(screen.getByRole('option', { name: 'Act 2' }))
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'cueStackGoTo', stackUuid: 'stack-act-2', entryUuid: '' })
   })
 
   it.each([

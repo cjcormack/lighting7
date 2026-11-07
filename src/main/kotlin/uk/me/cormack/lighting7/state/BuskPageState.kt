@@ -36,10 +36,11 @@ class BuskPageState(private val pages: () -> List<Pair<Int, UUID>>) {
         _pageId.update { if (it == pageId) it else pageId }
     }
 
-    /** Show the page a binding names. A uuid that resolves to nothing is ignored. */
-    fun setByUuid(pageUuid: UUID) {
-        val id = pages().firstOrNull { it.second == pageUuid }?.first ?: return
+    /** Show the page [pageUuid] names; false when the project has none. */
+    fun setByUuid(pageUuid: UUID): Boolean {
+        val id = pages().firstOrNull { it.second == pageUuid }?.first ?: return false
         _pageId.update { if (it == id) it else id }
+        return true
     }
 
     fun clear() = _pageId.update { null }

@@ -625,45 +625,9 @@ class SurfaceFeedbackPublisherTest {
             h.recordingController.feedback.clear()
             h.recordingController.invalidations.clear()
 
-            val scalerActions = object : SurfaceActions {
-                override fun writeFixtureAttribute(fixtureKey: String, attribute: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {}
-                override fun writeGroupAttribute(groupName: String, attribute: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {}
-                override fun flashFixtureAttributePress(fixtureKey: String, attribute: String, max: UByte) {}
-                override fun flashGroupAttributePress(groupName: String, attribute: String, max: UByte) {}
-                override fun flashFixtureAttributeRelease(fixtureKey: String, attribute: String) {}
-                override fun flashGroupAttributeRelease(groupName: String, attribute: String) {}
-                override fun cueStackGo(stackId: Int, stackUuid: String?) {}
-                override fun cueStackBack(stackId: Int, stackUuid: String?) {}
-                override fun cueStackPause(stackId: Int, stackUuid: String?) {}
-                override fun fireCue(cueId: Int, cueUuid: String?) {}
-                override fun writeSelectionAttribute(attribute: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {}
-                override fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte) {}
-                override fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode) {}
-                override fun clearSelection() {}
-                override fun locateSelection() {}
+            val scalerActions = object : uk.me.cormack.lighting7.testsupport.RecordingSurfaceActions() {
                 override fun toggleBlackout(): Boolean = h.scaler.toggleBlackout()
                 override fun toggleGrandMaster(): Boolean = h.scaler.toggleGrandMaster()
-                override fun writeGrandMaster(midiValue7Bit: UByte) {}
-                override fun writeSpeedMasterBpm(
-                    masterUuid: String?,
-                    minBpm: Double,
-                    maxBpm: Double,
-                    midiValue7Bit: UByte,
-                ) {}
-                override fun tapSpeedMaster(masterUuid: String?) {}
-                override fun applyLook(lookUuid: String) {}
-                override fun pressPalette(paletteUuid: String) {}
-                override fun pressPad(padUuid: String) {}
-                override fun pickUpPad(padUuid: String) {}
-                override fun handPlaceInBank(bankUuid: String) {}
-                override fun handDrop() {}
-                override fun historyMove(source: uk.me.cormack.lighting7.history.HistorySource, undo: Boolean, programmerOnly: Boolean) {}
-                override fun buskPageStep(delta: Int) {}
-                override fun buskPageSet(pageUuid: String) {}
-                override fun buskFocusSet(windowName: String, focus: String) {}
-                override fun buskSheetToggle(windowName: String) {}
-                override fun selectionStep(delta: Int) {}
-                override fun selectionCells(mode: uk.me.cormack.lighting7.state.SubselectMode) {}
             }
             val router = SurfaceInputRouter(
                 deviceMatcher = h.matcher,

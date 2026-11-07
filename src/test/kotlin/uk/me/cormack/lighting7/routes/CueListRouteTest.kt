@@ -69,6 +69,14 @@ class CueListRouteTest : RouteIntegrationTest() {
                 targetPayload = """{"type":"fireCue","cueId":$storm,"cueUuid":"${DaoCue[storm].uuid}"}"""
                 sortOrder = 0
             }
+            // A loose cue's explicit form (OSC plan D4) names its cue too.
+            DaoControlSurfaceBinding.new {
+                this.project = project
+                deviceTypeKey = "xtouch-mini"; controlId = "button-8"
+                targetType = "looseCueSet"
+                targetPayload = """{"type":"looseCueSet","cueUuid":"${DaoCue[loose].uuid}","on":true}"""
+                sortOrder = 1
+            }
         }
 
         val response = client.get("$base/cues")
@@ -91,7 +99,7 @@ class CueListRouteTest : RouteIntegrationTest() {
         val looseUses = looseCue.usedBy!!
         assertEquals(listOf("Page 1"), looseUses.pads.map { it.pageName })
         assertEquals(listOf("Page 1, slot 3"), looseUses.slots.map { it.label })
-        assertTrue(looseUses.bindings.isEmpty())
+        assertEquals(listOf("xtouch-mini · button-8"), looseUses.bindings.map { it.label })
 
         // One cue's read leaves *Used by* to the list.
         assertNull(client.get("$base/cues/$loose").body<CueDetails>().usedBy)

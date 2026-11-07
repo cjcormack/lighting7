@@ -8,18 +8,19 @@ import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 
 /**
- * Who a change belongs to (undo plan §3.1, D1): an account, a Claude grant, a control surface, or
- * the desk itself when no one is signed in. [key] is what two writes compare to be one source; [name]
+ * Who a change belongs to (undo plan §3.1, D1): an account, a Claude grant, a control surface, an
+ * OSC sender, or the desk itself when no one is signed in. [key] is what two writes compare to be one source; [name]
  * is what the History sheet and a step's tooltip show.
  */
 data class HistorySource(val kind: Kind, val id: String?, val name: String) {
-    enum class Kind { ACCOUNT, MCP, SURFACE, DESK }
+    enum class Kind { ACCOUNT, MCP, SURFACE, OSC, DESK }
 
     val key: String
         get() = when (kind) {
             Kind.ACCOUNT -> "account:$id"
             Kind.MCP -> "mcp:$id"
             Kind.SURFACE -> "surface:$id"
+            Kind.OSC -> "osc:$id"
             Kind.DESK -> "desk"
         }
 
@@ -42,6 +43,9 @@ data class HistorySource(val kind: Kind, val id: String?, val name: String) {
         )
 
         fun surface(deviceKey: String) = HistorySource(Kind.SURFACE, deviceKey, deviceKey)
+
+        /** An allowlisted OSC sender, by its row id and named as the allowlist names it (OSC plan §3 "History"). */
+        fun osc(senderId: Int, name: String) = HistorySource(Kind.OSC, senderId.toString(), name)
     }
 }
 

@@ -113,6 +113,7 @@ export function recordTargetName(
     list.find((o) => o.uuid === uuid)?.label ?? "(deleted)"
   switch (target.type) {
     case "applyLook":
+    case "lookSet":
       return find(options.looks, target.lookUuid)
     case "pressPalette":
       return find(options.palettes, target.paletteUuid)
@@ -149,6 +150,8 @@ export function describeBindingTarget(target: BindingTarget, records: RecordBind
   switch (target.type) {
     case "applyLook":
       return `Apply ${name}`
+    case "lookSet":
+      return `${name} ${target.on ? "on" : "off"}`
     case "pressPalette":
       return `Press ${name}`
     case "pressPad":

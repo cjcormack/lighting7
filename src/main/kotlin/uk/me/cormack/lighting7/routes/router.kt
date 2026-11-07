@@ -78,6 +78,7 @@ fun Application.configureRouting(state: State) {
                     routeApiRestPerf(state)
                     routeApiRestInstall(state)
                     routeApiRestInstallTunnel(state)
+                    routeApiRestInstallOsc(state)
                     routeApiRestInstallTelemetry(state)
                     routeApiRestInstallOnboarding(state)
                     routeApiRestInstallQuit(state)

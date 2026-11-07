@@ -14,6 +14,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.slf4j.LoggerFactory
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
@@ -33,6 +34,7 @@ import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
 import uk.me.cormack.lighting7.midi.DefaultSurfaceActions
 import uk.me.cormack.lighting7.midi.DeviceMatcher
 import uk.me.cormack.lighting7.midi.FlashStateTracker
+import uk.me.cormack.lighting7.midi.SurfaceDispatch
 import uk.me.cormack.lighting7.midi.GlobalScalerStateHolder
 import uk.me.cormack.lighting7.midi.CoreMidiHotPlug
 import uk.me.cormack.lighting7.midi.HotPlugFallback
@@ -634,8 +636,12 @@ class State(val config: ApplicationConfig) {
         // bank, for the same reason the stack / cue ids are: this context is built for an
         // arbitrary project, which may not be the one currently loaded.
         val snapshot = transaction(database) {
-            val stacks = DaoCueStack.find { DaoCueStacks.project eq projectId }
-                .map { it.id.value to it.uuid }
+            val stackRows = DaoCueStack.find { DaoCueStacks.project eq projectId }.toList()
+            val stacks = stackRows.map { it.id.value to it.uuid }
+            val stackUuidById = stackRows.associate { it.id.value to it.uuid }
+            val entries = DaoCueStackEntry.find { DaoCueStackEntries.stack inList stackUuidById.keys.toList() }
+                .filter { it.cueId != null }
+                .associate { it.uuid to stackUuidById.getValue(it.stackId) }
             val cues = DaoCue.find { DaoCues.project eq projectId }
                 .map { it.id.value to it.uuid }
             val masters = DaoSpeedMaster.find { DaoSpeedMasters.project eq projectId }
@@ -667,6 +673,7 @@ class State(val config: ApplicationConfig) {
                 padUuids = pads,
                 bankUuids = banks,
                 pageUuids = pages.mapTo(HashSet()) { it.second },
+                entryUuids = entries,
             )
         }
         return BindingHealthEvaluator.Context(
@@ -687,6 +694,7 @@ class State(val config: ApplicationConfig) {
             // The registry, not the database: a window-addressed binding is judged against who is
             // connected *now*, and the publisher re-runs this on every registry change.
             connectedWindowNames = windowRegistry.windows.value.mapTo(HashSet()) { it.name },
+            validEntryUuids = snapshot.entryUuids,
         )
     }
 
@@ -700,6 +708,7 @@ class State(val config: ApplicationConfig) {
         val padUuids: Set<java.util.UUID>,
         val bankUuids: Set<java.util.UUID>,
         val pageUuids: Set<java.util.UUID>,
+        val entryUuids: Map<java.util.UUID, java.util.UUID>,
     )
 
     /**
@@ -1048,6 +1057,30 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
+     * OSC in (OSC plan): the listener, its allowlist and `osc.state`. Lazy, like [remoteAccess], and
+     * started only by `Application.module()`, so a test's `State` opens no socket. Its messages go
+     * through the same [SurfaceDispatch] a MIDI surface's do (D2).
+     */
+    private val oscDelegate = lazy {
+        uk.me.cormack.lighting7.osc.OscService(
+            database = database,
+            handler = uk.me.cormack.lighting7.osc.OscHandler(
+                database = database,
+                currentProjectId = { projectManager.currentProject.id.value },
+                dispatch = SurfaceDispatch(DefaultSurfaceActions(this), activeBankState, encoderBankState, flashStateTracker),
+                ensureHistory = { history.ensure(it) },
+            ),
+        )
+    }
+
+    val osc: uk.me.cormack.lighting7.osc.OscService by oscDelegate
+
+    /** Close the OSC listener if anything started it; reading [osc] here would build one to close. */
+    fun closeOsc() {
+        if (oscDelegate.isInitialized()) runCatching { osc.close() }
+    }
+
+    /**
      * Central dispatch for inbound surface events (Phase 3). Subscribes to
      * [deviceMatcher] attach events and per-controller input flows, resolves bindings
      * via [controlSurfaceBindingService], and calls through to [DefaultSurfaceActions].
@@ -1199,6 +1232,7 @@ class State(val config: ApplicationConfig) {
         // service purely to close it, on every test that builds a State and shuts it down.
         if (updateServiceDelegate.isInitialized()) runCatching { updateService.close() }
         if (remoteAccessDelegate.isInitialized()) runCatching { remoteAccess.close() }
+        closeOsc()
         if (cloudDelegate.isInitialized()) runCatching { cloud.close() }
 
         runCatching { projectManager.show.close() }

@@ -154,6 +154,7 @@ parallel workers' threads hold no scope, so the cache lookup is this attribute r
 | Script compile | `script.compile` | `Show.script`, on a miss in the show's own cache | `cache.get` on the compiled-jar cache, with `cache.hit` |
 | MCP call through the cloud | `mcp.relay`, `mcp.call` | `cloud/McpRelay.kt` | the `mcp.server` span below |
 | MCP tool call | `mcp.server` span, `tools/call <tool>` | `McpProtocol` | under the `/mcp` call's transaction, or a relayed call's `mcp.relay` |
+| OSC message | `osc.message`, named by the address pattern it matched (`/lighting7/stack/{stack}/go`), else `unknown address` or `bad packet` | `OscHandler.handle`, on the OSC collector | `osc.resolve` (its DB spans), `osc.dispatch` (a GO's `cue.go`); tag `osc.outcome`, data `osc.queued_ms` (receipt to the collector) |
 
 An HTTP call is continued from the caller's `sentry-trace` / `baggage` and named by its **route
 template** (`GET /api/rest/auth/reset/{token}`), never the raw path. A call no API route took — a
@@ -170,7 +171,11 @@ D12), which sets that status and attaches nothing.
 
 The operations in the table join the request or message that runs them as a child span. Started
 from nowhere traced — the auto-sync scheduler, a MIDI GO, the auto-advance timer — they are their
-own transaction. A cue GO is REST or MIDI, never a WS frame.
+own transaction. A cue GO is REST, MIDI or OSC, never a WS frame.
+
+An OSC message's name is the table's pattern, never the address it carried, so a trace never holds a
+show's stack or cue names. Its status follows the log's outcome: `not_found`, `invalid_argument` for
+ambiguous and bad messages, `failed_precondition` for a refusal, `internal_error` for a failure.
 
 ### Sampling
 
@@ -181,6 +186,7 @@ own transaction. A cue GO is REST or MIDI, never a WS frame.
 | `app.boot`, `cue.go`, `sync.run` | always. When the request around one was sampled out, the operation stands alone as its own transaction rather than joining it, so it is still kept |
 | an auto-sync `sync.run` that changed nothing (`NO_OP`) | `sentry.idleSyncSampleRate`, or `tracesSampleRate` when empty, decided as it is sent (`TraceSampling.keepSyncRun`): the outcome is only known at the end. A manual run, a failed one, or one that pulled or pushed is always kept |
 | `websocket.message` of a continuous or snapshot type | never — the frame is handled with no Sentry work at all |
+| `osc.message` | `tracesSampleRate`, and never more than five a second (`OscHandler.TRACE_BUDGET_PER_SECOND`): past the budget a message runs untraced, so a sender flooding the listener cannot spend the quota |
 | everything else, a gesture frame included | `tracesSampleRate`: 1.0, 0.2 in `release`, or `sentry.tracesSampleRate` |
 
 The caller's sampling decision is not inherited, and its baggage loses `sentry-sample_rand` and
@@ -294,6 +300,7 @@ Every flush reads and resets what it reports, and sends nothing for a window tha
 | `boot.duration` | event (s) | `module()`'s first line to the show being ready | `cache`: `cold` if the Kotlin compiler ran, else `warm` |
 | `script.cache` | count | `ScriptCacheProbe.record`, once per compile | `result` (`hit`, `miss`), `cache` (`memory`, `disk`, `compiled`) |
 | `sync.run` | count | `RemoteSyncEngine.runSync` | `outcome` (`no_op`, `pushed`, …, `failed`), `trigger` (`auto`, `manual`) |
+| `osc.messages` | count | `OscService`: a message from an allowed sender handed to the collector, one the full channel dropped, a packet from a sender not on the allowlist | `result` (`received`, `dropped`, `refused`) |
 | `jvm.heap.used` | gauge (bytes) | `MemoryMXBean` | — |
 | `jvm.gc.pause` | histogram | GC notifications, one per stop-the-world pause. A ZGC cycle is concurrent work and is left out | `gc` (`minor`, `major`) |
 

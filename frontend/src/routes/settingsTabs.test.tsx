@@ -42,6 +42,7 @@ vi.mock('@/components/users/UsersTab', () => ({ UsersTab: () => <div>users body<
 vi.mock('@/components/updates/UpdatePanel', () => ({ UpdatePanel: () => <div>updates body</div> }))
 vi.mock('@/components/remoteAccess/RemoteAccessPanel', () => ({ RemoteAccessPanel: () => <div>remote body</div> }))
 vi.mock('@/components/cloud/CloudPanel', () => ({ CloudPanel: () => <div>cloud body</div> }))
+vi.mock('@/components/osc/OscPanel', () => ({ OscPanel: () => <div>osc body</div> }))
 vi.mock('@/components/telemetry/TelemetryCard', () => ({ TelemetryCard: () => null }))
 vi.mock('@/components/stage/StageRegionsContent', () => ({ StageRegionsContent: () => <div>regions body</div> }))
 vi.mock('@/components/rigging/RiggingsContent', () => ({ RiggingsContent: () => <div>rigging body</div> }))
@@ -84,13 +85,19 @@ afterEach(cleanup)
 describe('Install Settings tabs', () => {
   it('offers an admin every tab', () => {
     renderInstall()
-    expect(tabs()).toEqual(['General', 'Users', 'Sync', 'Remote access', 'Cloud', 'Updates', 'Diagnostics'])
+    expect(tabs()).toEqual(['General', 'Users', 'Sync', 'Remote access', 'OSC', 'Cloud', 'Updates', 'Diagnostics'])
   })
 
   it('offers an operator no Sync, Users, Remote access or Cloud, as the sidebar does', () => {
     role = 'OPERATOR'
     renderInstall()
-    expect(tabs()).toEqual(['General', 'Updates', 'Diagnostics'])
+    expect(tabs()).toEqual(['General', 'OSC', 'Updates', 'Diagnostics'])
+  })
+
+  it('opens the OSC tab for an operator too, who reads its log', () => {
+    role = 'OPERATOR'
+    renderInstall('/install/osc')
+    expect(screen.getByText('osc body')).toBeTruthy()
   })
 
   it('opens General for an operator who reaches the Sync tab by URL', () => {

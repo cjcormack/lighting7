@@ -521,6 +521,7 @@ export function SurfaceLibrary({
           actionChip("back", "Back", { type: "cueStackBack", stackId: stack.id }),
           actionChip("pause", "Pause", { type: "cueStackPause", stackId: stack.id }),
           actionChip("fx-size", "FX amount", { type: "stackFxAmount", stackId: stack.id }),
+          ...(stack.uuid != null ? [actionChip("stop", "Stop", { type: "cueStackStop", stackUuid: stack.uuid })] : []),
         ],
       })
       for (const cue of stack.cues) {
@@ -535,6 +536,19 @@ export function SurfaceLibrary({
           strip: null,
           chips: [
             actionChip("fire", "Fire", { type: "fireCue", cueId: cue.id }),
+            // The explicit forms (OSC plan D4), from a desk that sends the uuids they name.
+            ...(stack.uuid != null && cue.uuid != null
+              ? [
+                  actionChip("go-to", "Go to", { type: "cueStackGoTo", stackUuid: stack.uuid, entryUuid: cue.uuid }),
+                  actionChip("standby", "Standby", { type: "cueStackStandby", stackUuid: stack.uuid, entryUuid: cue.uuid }),
+                ]
+              : []),
+            ...(cue.cueUuid != null
+              ? [
+                  actionChip("on", "On", { type: "looseCueSet", cueUuid: cue.cueUuid, on: true }),
+                  actionChip("off", "Off", { type: "looseCueSet", cueUuid: cue.cueUuid, on: false }),
+                ]
+              : []),
           ],
         })
       }
@@ -577,7 +591,11 @@ export function SurfaceLibrary({
         badge: "Look",
         kind: "look",
         strip: null,
-        chips: [actionChip("apply", "Apply", { type: "applyLook", lookUuid: look.uuid })],
+        chips: [
+          actionChip("apply", "Apply", { type: "applyLook", lookUuid: look.uuid }),
+          actionChip("on", "On", { type: "lookSet", lookUuid: look.uuid, on: true }),
+          actionChip("off", "Off", { type: "lookSet", lookUuid: look.uuid, on: false }),
+        ],
       })
     }
 

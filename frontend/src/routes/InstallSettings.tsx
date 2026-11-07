@@ -15,11 +15,12 @@ import { DiagnosticsContent } from "./Diagnostics"
 import { CloudSyncHubBody } from "./CloudSync"
 import { UpdatePanel } from "@/components/updates/UpdatePanel"
 import { RemoteAccessPanel } from "@/components/remoteAccess/RemoteAccessPanel"
+import { OscPanel } from "@/components/osc/OscPanel"
 import { CloudPanel } from "@/components/cloud/CloudPanel"
 import { TelemetryCard } from "@/components/telemetry/TelemetryCard"
 import { useShownTabs } from "@/navigation"
 
-const TABS = ["general", "users", "sync", "remote", "cloud", "updates", "diagnostics"] as const
+const TABS = ["general", "users", "sync", "remote", "osc", "cloud", "updates", "diagnostics"] as const
 type Tab = (typeof TABS)[number]
 
 /**
@@ -31,6 +32,7 @@ const TAB_NAV_IDS: Record<Tab, string> = {
   users: "users",
   sync: "sync",
   remote: "remote-access",
+  osc: "osc",
   cloud: "cloud",
   updates: "updates",
   diagnostics: "diagnostics",
@@ -69,6 +71,7 @@ export function InstallSettings() {
             {shown.has("users") && <TabsTrigger value="users">Users</TabsTrigger>}
             {shown.has("sync") && <TabsTrigger value="sync">Sync</TabsTrigger>}
             {shown.has("remote") && <TabsTrigger value="remote">Remote access</TabsTrigger>}
+            {shown.has("osc") && <TabsTrigger value="osc">OSC</TabsTrigger>}
             {shown.has("cloud") && <TabsTrigger value="cloud">Cloud</TabsTrigger>}
             {/* Shown to everyone: the version, and whether the desk is about to restart, are
                 things anyone standing at it should be able to read. The actions inside are
@@ -89,6 +92,7 @@ export function InstallSettings() {
         {activeTab === "users" && <UsersTab />}
         {activeTab === "sync" && <CloudSyncHubBody />}
         {activeTab === "remote" && <RemoteAccessPanel />}
+        {activeTab === "osc" && <OscPanel />}
         {activeTab === "cloud" && <CloudPanel />}
         {activeTab === "updates" && <UpdatePanel />}
         {activeTab === "diagnostics" && <DiagnosticsContent />}

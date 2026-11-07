@@ -75,6 +75,8 @@ object BindingHealthEvaluator {
         val validBankUuids: Set<UUID> = emptySet(),
         val validPageUuids: Set<UUID> = emptySet(),
         val connectedWindowNames: Set<String> = emptySet(),
+        /** Every cue entry's uuid in the project, to its stack's uuid. */
+        val validEntryUuids: Map<UUID, UUID> = emptyMap(),
     )
 
     /**
@@ -114,6 +116,10 @@ object BindingHealthEvaluator {
         is BindingTarget.CueStackBack -> checkStack(target.stackId, target.stackUuid, context)
         is BindingTarget.CueStackPause -> checkStack(target.stackId, target.stackUuid, context)
         is BindingTarget.FireCue -> checkCue(target.cueId, target.cueUuid, context)
+        is BindingTarget.CueStackGoTo -> checkEntry(target.stackUuid, target.entryUuid, context)
+        is BindingTarget.CueStackStandby -> checkEntry(target.stackUuid, target.entryUuid, context)
+        is BindingTarget.CueStackStop -> checkStack(0, target.stackUuid, context)
+        is BindingTarget.LooseCueSet -> checkCue(0, target.cueUuid, context)
         // The fixture and its trigger. Whether the desk is armed is a fact about this second, not
         // about the binding — an unarmed press is announced, never a dead binding.
         is BindingTarget.FireTrigger -> checkTrigger(target.fixtureKey, target.trigger, context)
@@ -132,6 +138,8 @@ object BindingHealthEvaluator {
         BindingTarget.LocateSelection -> AssignmentHealth.Ok
         // A Look lands whole (absolute-looks plan D1), so the one failure is a Look that is gone.
         is BindingTarget.ApplyLook ->
+            uuidHealth(target.lookUuid, context.validLookUuids) { AssignmentHealth.MissingLook(it) }
+        is BindingTarget.LookSet ->
             uuidHealth(target.lookUuid, context.validLookUuids) { AssignmentHealth.MissingLook(it) }
         // A template's *emptiness* is not a health question: a generic template pressed with
         // nothing selected is a dropped press, which is a fact about the selection at that moment
@@ -210,6 +218,18 @@ object BindingHealthEvaluator {
         val ok = if (stackUuid != null) uuid != null && uuid in context.validStackUuids
         else stackId in context.validStackIds
         return if (ok) AssignmentHealth.Ok else AssignmentHealth.MissingStack(stackId)
+    }
+
+    /**
+     * A GO TO or standby needs its stack and an entry of it. A removed entry reads as a missing cue —
+     * the health vocabulary has no word for an entry — with no id to name, since the binding holds none.
+     */
+    private fun checkEntry(stackUuid: String, entryUuid: String, context: Context): AssignmentHealth {
+        val stack = checkStack(0, stackUuid, context)
+        if (stack != AssignmentHealth.Ok) return stack
+        val entry = uuidOrNull(entryUuid)
+        return if (entry != null && context.validEntryUuids[entry] == uuidOrNull(stackUuid)) AssignmentHealth.Ok
+        else AssignmentHealth.MissingCue(0)
     }
 
     private fun checkCue(cueId: Int, cueUuid: String?, context: Context): AssignmentHealth {

@@ -59,7 +59,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-HAND-PLACE-SHAPE`](#fu-hand-place-shape) | Trigger | Busk | a third caller of `appendBuskPad`, or `AddPadOutcome.Invalid` needs to mean something at a non-REST door |
 | [`FU-STATE-PROJECT-SCOPED`](#fu-state-project-scoped) | Ready | State | fired 2026-10-01: the desk's arm is a fourth (stage-view session 9); rig safety a fifth (venue-visit S6) |
 | [`FU-DTO-RECORD-SUMMARY`](#fu-dto-record-summary) | Trigger | State | a second `state/` class needs a record summary, or a library-only field reaches a frame that should not carry it |
-| [`FU-MIDI-SHOW-GUARD`](#fu-midi-show-guard) | Trigger | MIDI | a project switch kills a surface's input and it has to be replugged |
 | [`FU-SLOT-DROP-OVERLAY-HIDDEN`](#fu-slot-drop-overlay-hidden) | Trigger | Busk | a palette row dropped at a collapsed cue-slot overlay lands on nothing |
 | [`FU-PROG-PER-USER`](#fu-prog-per-user) | Rejected | Prog | decision record — do not re-propose |
 | [`FU-PROG-STALE-SOURCE-NAME`](#fu-prog-stale-source-name) | Trigger | Prog | a renamed Look or palette shows its old name on a live programmer layer |
@@ -902,28 +901,6 @@ reviews the next one.
 
 **Trigger**: a second `state/` class needs a record summary, or a field added for the library view
 turns up somewhere it should not.
-
-### `FU-MIDI-SHOW-GUARD`
-
-**The MIDI dispatch chain reads `state.show` unguarded, on a collector with no per-event catch** ·
-Trigger · Multi-screen S3 (2026-09-16), review finding 31
-
-`SurfaceInputRouter` collects a controller's input as `controller.input.collect { route(...) }` with
-no `try`/`catch` around the dispatch, and the record actions below it reach `state.show` — which
-throws while a project switch is in flight. One throw cancels that collector, and the device's input
-is dead until it is unplugged and replugged. `currentProjectId()` catches the project lookup; nothing
-catches the show.
-
-Pre-existing and house-wide: `applyLook`, `pressPalette` and `pressPad` all have this shape. The
-hand added two more instances (`pickUpPad`, `handPlaceInBank`), and `handPlaceInBank` is the first
-that *writes rows* inside that unguarded call, which is why it is worth recording rather than leaving
-implicit.
-
-The fix belongs at the collector, not per action: a per-event guard in `SurfaceInputRouter` that logs
-and continues, mirroring the one `Sockets.kt`'s frame loop already has for exactly this reason ("one
-bad frame must not tear down the operator's whole socket").
-
-**Trigger**: a project switch kills a surface's input and it has to be replugged.
 
 ### `FU-BUSK-EDIT-CONCURRENCY`
 
@@ -3355,6 +3332,8 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-11
 
+- `FU-MIDI-SHOW-GUARD` — every surface input runs inside `SurfaceDispatch.guarded`, which turns a throw
+  into a failed outcome and carries on; the OSC collector shares it (OSC plan session 1).
 - `FU-CLOUD-DEFAULT-URL` — an absent `cloud.baseUrl` is `https://lighting7.net`, so a packaged desk can
   be adopted with no `local.conf`; an empty one is still no cloud, and the test suite and
   `scripts/cloud-session.sh` set it so.
