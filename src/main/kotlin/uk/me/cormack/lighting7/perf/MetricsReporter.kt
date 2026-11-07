@@ -145,6 +145,7 @@ class MetricsReporter(
         for ((key, n) in metrics.drainSyncRuns()) {
             count("sync.run", n, mapOf("outcome" to key.first.lowercase(), "trigger" to key.second.name.lowercase()))
         }
+        for ((result, n) in metrics.drainOsc()) count("osc.messages", n, mapOf("result" to result.tag))
         val heap = ManagementFactory.getMemoryMXBean().heapMemoryUsage.used
         add(Metric(Metric.Kind.GAUGE, "jvm.heap.used", heap.toDouble(), MetricsUnit.Information.BYTE))
         for (kind in DeskMetrics.GcKind.entries) summary("jvm.gc.pause", metrics.gcPause(kind), mapOf("gc" to kind.tag))

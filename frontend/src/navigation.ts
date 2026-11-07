@@ -25,6 +25,7 @@ import {
   Palette,
   Activity,
   Users,
+  Radio,
   Download,
   Maximize2,
   Minimize2,
@@ -457,6 +458,18 @@ export const navItems: NavItem[] = [
     section: "desk",
     parent: "install-settings",
     adminOnly: true,
+  },
+  // OSC in (OSC plan D12): both roles, since the operator at the desk is who needs to see that a QLab
+  // cue did nothing. The panel shows an operator the log alone; the settings are an admin's.
+  {
+    id: "osc",
+    label: "OSC",
+    commandLabel: "OSC from QLab",
+    icon: Radio,
+    path: () => "/install/osc",
+    pathMatch: "/install/osc",
+    section: "desk",
+    parent: "install-settings",
   },
   // Lighting7 Cloud: every `/install/cloud` route is in `adminOnly`.
   {

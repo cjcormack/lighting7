@@ -13,6 +13,12 @@ object TraceSampling {
     const val OP_CUE_GO = "cue.go"
     const val OP_SYNC_RUN = "sync.run"
 
+    /**
+     * One received OSC message, named by the address pattern it matched (`osc/OscHandler.kt`). At the
+     * sample rate, under the handler's own per-second budget, since a sender can flood the listener.
+     */
+    const val OP_OSC_MESSAGE = "osc.message"
+
     /** Kept whatever the sample rate — bar an idle auto-sync run, see [keepSyncRun]. */
     val ALWAYS_KEEP = setOf(OP_BOOT, OP_CUE_GO, OP_SYNC_RUN)
 

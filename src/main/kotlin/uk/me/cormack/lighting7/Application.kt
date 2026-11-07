@@ -100,8 +100,13 @@ fun Application.module() {
     val publicListener = startPublicListener(state)
     // On its own scope, off the show's path: a pending adoption resumes polling.
     state.cloud.start()
+    // Before the show, like the cloud, so its settings apply on a desk whose show failed to start; a
+    // message that arrives before the show is up is a *failed* row. A bind failure is `osc.state`'s
+    // error, never a failed startup.
+    runCatching { state.osc.start() }.onFailure { log.warn("OSC did not start: {}", it.toString()) }
     monitor.subscribe(ApplicationStopping) {
         runCatching { state.cloud.close() }
+        state.closeOsc()
         publicListener?.stop(1_000, 2_000)
     }
 

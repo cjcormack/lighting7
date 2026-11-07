@@ -36,6 +36,7 @@ import {AuthWsApi, createAuthWsApi} from "./authWsApi";
 import {createUsersWsApi, UsersWsApi} from "./usersWsApi";
 import {createInstallWsApi, InstallWsApi} from "./installWsApi";
 import {createUpdateWsApi, UpdateWsApi} from "./updateWsApi";
+import { createOscWsApi, type OscWsApi } from "./oscWsApi";
 import {CloudWsApi, createCloudWsApi} from "./cloudWsApi";
 import {createWindowsWsApi, WindowsWsApi} from "./windowsApi";
 import {createHandWsApi, HandWsApi} from "./handApi";
@@ -61,6 +62,7 @@ interface LightingApi {
   users: UsersWsApi
   install: InstallWsApi
   updates: UpdateWsApi
+  osc: OscWsApi
   cloud: CloudWsApi
 
   fixtures: FixturesApi
@@ -142,6 +144,7 @@ function createLightingApi(): LightingApi {
   const usersWsApi = createUsersWsApi(connection)
   const installWsApi = createInstallWsApi(connection)
   const updateWsApi = createUpdateWsApi(connection)
+  const oscWsApi = createOscWsApi(connection)
   const cloudWsApi = createCloudWsApi(connection)
   const fixtureApi = createFixtureApi(connection)
   const projectApi = createProjectApi(connection)
@@ -192,6 +195,7 @@ function createLightingApi(): LightingApi {
     users: usersWsApi,
     install: installWsApi,
     updates: updateWsApi,
+    osc: oscWsApi,
     cloud: cloudWsApi,
 
     fixtures: fixtureApi,

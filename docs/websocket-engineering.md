@@ -1150,6 +1150,7 @@ Machine-scoped, so registered in the pre-warm-up band and unaffected by project 
 | `updateStateChanged` | `phase`, `availability`, `latestVersion?`, `downloadedBytes`, `totalBytes?` | Every socket |
 | `cloud.state` | `state`: `configured`, `enabled`, `adoption?`, `adopted?`, `connection`, `link?` (the sidecar's status, `OFF` when absent), `retryAt?`, `lastError?`, `lastOnlineAt?`, `notice?`, `noticeAt?`, `remote?`, `remoteSwitches` (`remoteAccess`, `mcpAccess`, `approveSessions`) | Admin sockets only (and bootstrap-open ones), snapshot on connect; a pending adoption's code and links left out on the public listener |
 | `remoteSession.pending` | `sessions`: `[{sid, email, displayName, linkedUser?, expiresAt}]`, oldest first, empty once none waits | Admin sockets (and bootstrap-open ones) **on the desk's own listener** only, snapshot on connect |
+| `osc.state` | `state`: `enabled`, `listening`, `port`, `error?`, `received`, `dropped`, `refused`, `refusedSenders` (`[{address, count, lastAt}]`, most recent first), `recent` (`[{at, sender, address, args, outcome, detail}]`, newest first, at most 50) | **Every** socket on the desk's own listener, operators' included; none on the public listener. Snapshot on connect |
 
 The account frames are payload-free **deliberately, not just by convention**: sockets are open to
 operators while `/api/rest/users` is admin-only, so a body here would leak exactly what that gate
@@ -1179,6 +1180,14 @@ error and each change of the control channel's status (`CONNECTING`, `ONLINE`, `
 list each time, which every admin window toasts and takes down once its session leaves the list. Only
 the desk's own listener is sent it, since only there may one be allowed; *Allow* and *Deny* are REST.
 Outbound only. See `docs/cloud-engineering.md` §"Remote sessions".
+
+`osc.state` is OSC in (`OscService.state`, OSC plan §3 "Wire"): whether the desk listens, the counts
+since it started, the refused senders and the last 50 messages with what each did. It is the one
+machine frame **every** window on the desk's own listener is sent, because the operator at the desk is
+who needs to see that a QLab cue did nothing (D12); the settings behind it (`/install/osc`) are an
+admin's, and nothing about OSC goes to the public listener (D5). `StateFlow`-backed and republished at
+most four times a second, from a coroutine off the collector's thread, so a flood never stops it
+saying so. Outbound only. See `docs/osc-engineering.md`.
 
 ### Cloud sync — `CloudSyncSocket.kt`
 

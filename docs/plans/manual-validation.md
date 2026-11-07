@@ -16,6 +16,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-CLOUD-P1`](#fu-manual-cloud-p1) | Lighting7 Cloud's P1 exit: a phone on 4G busks the venue desk opened from the portal, Claude patches a rig through the desk's cloud URL with no tunnel, an emailed invite approved in the portal lands its operator as `OPERATOR`, unlinking, disabling, removing a membership and *End* each close a session within 5 s, the two switches refuse what they name and cannot be changed remotely, the Remote access tab, `/oauth/*`, `/mcp` and the tunnel are gone and an upgraded desk keeps its policy switches, and a running fade sees nothing of the sidecar or the cloud stopping | Cloud P1 S9, 2026-11-07 |
+| [`FU-MANUAL-OSC-S1`](#fu-manual-osc-s1) | a QLab Network cue lands cue 1 and fired again mid-fade moves nothing; a Look's `on` and `off` and a busk Look pad from QLab; a QLab machine off the allowlist shows with *Allow this sender*; an operator sees the log | OSC session 1, 2026-11-07 |
 | [`FU-MANUAL-FX-SPEED-S4`](#fu-manual-fx-speed-s4) | ×½ and ×2 on a busked master halve and double it mid-song, a hold included, and greyed at 20 and 300; a fader and an encoder on *FX speed* move the selection's Local FX with no jump, the fader picking up at the lead FX | FX speed session 4, 2026-11-07 |
 | [`FU-MANUAL-FX-SPEED-S3`](#fu-manual-fx-speed-s3) | dragging Speed on a running chase changes its rate with no jump, letting go on ×2 settles it on the beat within a cycle, and TAP in the live FX editor holds its master, the rail reading *Held* | FX speed session 3, 2026-11-07 |
 | [`FU-MANUAL-FX-SPEED-S2`](#fu-manual-fx-speed-s2) | a tempo the operator tapped and captured on the rail outlives a GO of a cue that sets the same master, Record puts it into the cue's *Tempo on GO*, and that cue sets it after a Clear | FX speed session 2, 2026-11-07 |
@@ -154,6 +155,34 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-OSC-S1`
+
+**What it proves**: *QLab drives the desk* (OSC plan session 1) — a QLab Network cue sends a fixed
+`/lighting7/` address and the desk does what it names, once, however many times the cue is fired.
+
+**Why it is here**: the tests send OSC over loopback and read the desk; only QLab on the show network
+shows that its Network cues reach the listener as it sends them, that a repeat mid-fade moves nothing
+on the rig, and that the log reads well enough at the desk.
+
+**Test**, at the desk with QLab 5 on the show network, a show with a stack *Act 1* (cues 1 and 2,
+cue 1 with a ten-second fade), a Look *Haze fill* and a busk page *Storm* whose first bank holds a
+Look pad:
+
+1. **Enable.** As an admin, Install Settings → OSC: *Enable*, add the QLab Mac by its IP as *QLab*,
+   Save. The tab reads *Listening on UDP 8415*.
+2. **GO TO.** A QLab Network cue (OSC message, the desk's IP, port 8415, UDP) sending
+   `/lighting7/stack/act-1/cue/1/go`: cue 1 fades up and the log reads *Done · GO TO 1 … in Act 1*.
+   Fire it again mid-fade: nothing on the rig moves and the row says *already live*.
+3. **A Look.** `/lighting7/look/haze-fill/on`, then `/off`: the Look comes on whole and goes; each sent
+   twice changes nothing the second time.
+4. **A busk pad.** `/lighting7/busk/storm/1/1/press`: the Look pad's Look comes on, as a press on the
+   pad would.
+5. **A stranger.** From a second QLab machine not on the list, send the same cue: nothing happens, and
+   *Refused senders* lists its IP with *Allow this sender*.
+6. **An operator.** Signed in as an operator, the OSC tab shows the status and the log, and no settings.
 
 ---
 

@@ -391,6 +391,7 @@ internal fun DaoCue.toCueDetails(
     val stack = entry?.stack
     return CueDetails(
         id = this.id.value,
+        uuid = this.uuid.toString(),
         name = this.name,
         layers = this.layers.sortedBy { it.sortOrder }.mapNotNull { it.toDto() },
         adHocFx = adHocFxInOrder().map { it.toDto() },

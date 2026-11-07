@@ -93,6 +93,27 @@ class DeskMetrics {
 
     internal fun drainSyncRuns(): Map<Pair<String, SyncTrigger>, Long> = drain(syncRuns)
 
+    enum class OscResult(val tag: String) {
+        /** A message from an allowlisted sender, handed to the collector. */
+        RECEIVED("received"),
+
+        /** A message the full channel dropped before the collector reached it. */
+        DROPPED("dropped"),
+
+        /** A packet from a sender not on the allowlist, dropped unread. */
+        REFUSED("refused"),
+    }
+
+    private val oscCounts = AtomicLongArray(OscResult.entries.size)
+
+    /** One OSC message (or, for [OscResult.REFUSED], packet) — from `osc-1`, so an atomic add and nothing else. */
+    fun osc(result: OscResult) {
+        oscCounts.incrementAndGet(result.ordinal)
+    }
+
+    internal fun drainOsc(): Map<OscResult, Long> =
+        OscResult.entries.associateWith { oscCounts.getAndSet(it.ordinal, 0) }.filterValues { it > 0 }
+
     /** Each GO's duration, from the call to the cue being live. */
     val cueGo = EventSamples()
 

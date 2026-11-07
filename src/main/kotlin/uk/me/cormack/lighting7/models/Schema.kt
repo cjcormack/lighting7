@@ -44,6 +44,8 @@ val ALL_TABLES: List<Table> = listOf(
     DaoOAuthIdentities,
     DaoUsers, DaoUserSessions, DaoPasswordResetTokens,
     DaoRemoteAccessSettingsTable,
+    // Machine-local: this desk's OSC listener and its allowlist (OSC plan D5).
+    DaoOscSettingsTable, DaoOscSendersTable,
     DaoTelemetrySettingsTable,
     // Machine-local one-shot tube state (stage-view plan session 9); keyed by patch uuid, no FK.
     DaoEffectTubeStates,

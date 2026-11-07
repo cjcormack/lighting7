@@ -139,7 +139,11 @@ export function targetControlKind(target: BindingTarget): ControlKind | null {
     case 'cueStackGo':
     case 'cueStackBack':
     case 'cueStackPause':
+    case 'cueStackGoTo':
+    case 'cueStackStandby':
+    case 'cueStackStop':
     case 'fireCue':
+    case 'looseCueSet':
     case 'fireTrigger':
     case 'selectTarget':
     case 'clearSelection':
@@ -151,6 +155,7 @@ export function targetControlKind(target: BindingTarget): ControlKind | null {
     case 'speedMasterTap':
     case 'speedMasterScale':
     case 'applyLook':
+    case 'lookSet':
     case 'pressPalette':
     case 'pressPad':
     case 'pickUpPad':

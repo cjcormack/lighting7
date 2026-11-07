@@ -48,6 +48,8 @@ import uk.me.cormack.lighting7.models.DaoPromptBookAnchors
 import uk.me.cormack.lighting7.models.DaoPromptBookAnnotations
 import uk.me.cormack.lighting7.models.DaoPromptBooks
 import uk.me.cormack.lighting7.models.DaoRemoteAccessSettingsTable
+import uk.me.cormack.lighting7.models.DaoOscSettingsTable
+import uk.me.cormack.lighting7.models.DaoOscSendersTable
 import uk.me.cormack.lighting7.models.DaoRiggings
 import uk.me.cormack.lighting7.models.DaoScripts
 import uk.me.cormack.lighting7.models.DaoShowColours
@@ -180,6 +182,8 @@ object SyncDispositions {
         DaoUsers to SyncDisposition.MachineLocal("desk-local user accounts; never leave this machine"),
         DaoUserSessions to SyncDisposition.MachineLocal("live login sessions for this desk"),
         DaoRemoteAccessSettingsTable to SyncDisposition.MachineLocal("what this desk lets a remote caller do: scripts, effects, fixture commands"),
+        DaoOscSettingsTable to SyncDisposition.MachineLocal("this desk's OSC listener: whether it is on, its port and its interface"),
+        DaoOscSendersTable to SyncDisposition.MachineLocal("the senders this desk hears OSC from, by their LAN addresses"),
         DaoTelemetrySettingsTable to SyncDisposition.MachineLocal("this install's consent to send errors and logs to Sentry"),
         DaoPasswordResetTokens to SyncDisposition.MachineLocal("short-lived local password reset tokens"),
         DaoEffectTubeStates to SyncDisposition.MachineLocal("which confetti tubes on this rig are spent: the physical cannon, not the show"),

@@ -44,6 +44,9 @@ class MetricsReporterTest {
         metrics.scriptCache(ScriptCacheProbe.Source.COMPILED)
         metrics.syncRun(SyncOutcome.NO_OP, SyncTrigger.AUTO)
         metrics.syncRun(null, SyncTrigger.MANUAL)
+        metrics.osc(DeskMetrics.OscResult.RECEIVED)
+        metrics.osc(DeskMetrics.OscResult.REFUSED)
+        metrics.osc(DeskMetrics.OscResult.REFUSED)
     }
 
     private fun midiWith(nanos: Long) = MidiLatencyTracker().apply { record(MidiLatencyStage.INGRESS_BUTTON, nanos) }
@@ -108,7 +111,7 @@ class MetricsReporterTest {
             setOf(
                 "artnet.frame.lateness", "artnet.frame.overrun", "fx.tick.duration", "fx.active_effects", "ws.clients",
                 "ws.outbound.dropped", "midi.latency", "db.connection.wait", "cue.go.duration", "boot.duration", "script.cache",
-                "sync.run", "jvm.heap.used", "jvm.gc.pause",
+                "sync.run", "jvm.heap.used", "jvm.gc.pause", "osc.messages",
             ),
             names.keys,
         )
@@ -119,6 +122,10 @@ class MetricsReporterTest {
         assertEquals("millisecond", lateness.unit)
         assertEquals("0:1", lateness.attributes!!.getValue("universe").value)
         assertEquals("warm", names.getValue("boot.duration").single().attributes!!.getValue("cache").value)
+        assertEquals(
+            mapOf<String, Double>("received" to 1.0, "refused" to 2.0),
+            names.getValue("osc.messages").associate { it.attributes!!.getValue("result").value.toString() to it.value },
+        )
     }
 
     @Test

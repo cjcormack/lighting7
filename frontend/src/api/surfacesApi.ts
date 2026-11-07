@@ -75,6 +75,36 @@ export interface FireCueTarget {
   cueUuid?: string | null
 }
 
+// The five below (OSC plan D4) are uuid-only: they were added after format 11, so no row of theirs
+// predates the uuid. Each is an explicit form that lands the same state however often it arrives.
+
+/** GO TO one entry of a stack, starting it if stopped; nothing if that entry is already live. */
+export interface CueStackGoToTarget {
+  type: "cueStackGoTo"
+  stackUuid: string
+  entryUuid: string
+}
+
+/** Arm one entry of a stack as its next GO. */
+export interface CueStackStandbyTarget {
+  type: "cueStackStandby"
+  stackUuid: string
+  entryUuid: string
+}
+
+/** Stop a stack — which drops the desk's arm, as every stack stop does. */
+export interface CueStackStopTarget {
+  type: "cueStackStop"
+  stackUuid: string
+}
+
+/** Take (`on`) or let go of a cue's loose hold; nothing if it already is so. */
+export interface LooseCueSetTarget {
+  type: "looseCueSet"
+  cueUuid: string
+  on: boolean
+}
+
 /**
  * Fire one tube of a one-shot fixture (a confetti cannon) on press — stage-view plan session 9.
  * Needs the desk's arm, like every fire: an unarmed press does nothing and the desk announces it
@@ -264,6 +294,13 @@ export interface ApplyLookTarget {
   lookUuid: string
 }
 
+/** A Look on whole (`on`) or every layer of it off; nothing if it already is so. */
+export interface LookSetTarget {
+  type: "lookSet"
+  lookUuid: string
+  on: boolean
+}
+
 /**
  * Press a template onto the **desk selection**, as a layer that tracks it — a palette chip's tap.
  *
@@ -414,7 +451,11 @@ export type BindingTarget =
   | CueStackGoTarget
   | CueStackBackTarget
   | CueStackPauseTarget
+  | CueStackGoToTarget
+  | CueStackStandbyTarget
+  | CueStackStopTarget
   | FireCueTarget
+  | LooseCueSetTarget
   | FireTriggerTarget
   | FlashTarget
   | BlackoutTarget
@@ -434,6 +475,7 @@ export type BindingTarget =
   | StripTarget
   | EncoderBankSetTarget
   | ApplyLookTarget
+  | LookSetTarget
   | PressPaletteTarget
   | PressPadTarget
   | PickUpPadTarget

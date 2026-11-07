@@ -682,7 +682,7 @@ class SetupTools(
             val row = element as? JsonObject ?: run { problems += "fixtures[$index]: not an object"; return@forEachIndexed }
             val label = "fixtures[$index]"
             val name = row.string("name")?.trim().orEmpty()
-            val key = row.string("key")?.trim()?.takeIf { it.isNotEmpty() } ?: slug(name)
+            val key = row.string("key")?.trim()?.takeIf { it.isNotEmpty() } ?: slugOf(name)
             val where = "$label ('${key.ifEmpty { name }}')"
             val rowProblems = mutableListOf<String>()
             if (name.isEmpty()) rowProblems += "name must not be blank"
@@ -2186,9 +2186,5 @@ class SetupTools(
         fun JsonObject.boolean(name: String): Boolean? = (this[name] as? JsonPrimitive)?.booleanOrNull
         fun JsonObject.stringList(name: String): List<String> =
             (this[name] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf(String::isNotEmpty) }.orEmpty()
-
-        /** A key from a display name: "FOH 1 (SL)" → "foh-1-sl". */
-        fun slug(name: String): String =
-            name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(100)
     }
 }

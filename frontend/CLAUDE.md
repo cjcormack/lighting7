@@ -8051,7 +8051,7 @@ path may quietly change where it lands.
   the project on the rig (`WindowView.needsRig`, `windowViewProject`), whatever project that window
   was left on; a library keeps the window's own.
 - **Not every nav path is its own route**: `users`' `/install/users` is served by
-  `InstallSettings`' `:tab` route, like `sync`, `remote-access`, `updates` and
+  `InstallSettings`' `:tab` route, like `sync`, `osc`, `cloud`, `updates` and
   `diagnostics`. Adding a tab means touching `TABS` + a `TabsTrigger` in
   `routes/InstallSettings.tsx`, not `App.tsx` — and a `navItems` entry under
   `install-settings` with the tab's role rule, in `TABS` order, and its id in

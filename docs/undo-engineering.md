@@ -14,7 +14,7 @@ Both are runtime state (D15): no table, no column, nothing synced. A restart sta
 
 `history/WriteOrigin.kt` is a coroutine context element that is also a `ThreadContextElement`, so the
 blocking `transaction {}` a handler runs reads it through a `ThreadLocal` on whatever thread it lands.
-Four doors set one, and nothing between a door and the transaction changes:
+Five doors set one, and nothing between a door and the transaction changes:
 
 | Door | Where | Source | Window |
 |---|---|---|---|
@@ -22,8 +22,9 @@ Four doors set one, and nothing between a door and the transaction changes:
 | WS | the dispatch loop in `Sockets.kt`, per inbound frame (`SocketScope.writeOrigin`) | `SocketScope.user` | `SocketScope.window` |
 | MCP | `McpProtocol.callTool`, per tool call | `mcp:{grantId}`, named *Claude · {clientName}* from the grant, or plain *Claude* for a client called Claude or unnamed | none |
 | Surface | `SurfaceInputRouter.route`, per input | `surface:{deviceKey}` | none |
+| OSC | `OscHandler.handle`, per message (`osc/OscHandler.kt`) | `osc:{senderId}`, named as the allowlist names the sender (*QLab*) | none |
 
-A source is `HistorySource`: an account, a Claude grant, a surface, or the desk. Two windows signed in
+A source is `HistorySource`: an account, a Claude grant, a surface, an OSC sender, or the desk. Two windows signed in
 as one account are one source; the window is kept for display.
 
 The REST door answers the request's id as `X-History-Entry` before the handler runs. The entry that

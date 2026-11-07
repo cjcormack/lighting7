@@ -11,7 +11,7 @@ import { createWsSubscribable } from './wsSubscriptionFactory'
  * either moves.
  */
 export interface HistorySource {
-  kind: 'ACCOUNT' | 'MCP' | 'SURFACE' | 'DESK'
+  kind: 'ACCOUNT' | 'MCP' | 'SURFACE' | 'OSC' | 'DESK'
   name: string
   window?: string
 }

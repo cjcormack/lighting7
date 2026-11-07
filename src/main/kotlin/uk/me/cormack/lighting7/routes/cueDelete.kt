@@ -97,7 +97,7 @@ internal fun cueInUseMessage(uses: List<CueUsesDto>): String =
 
 /**
  * What names each of [cues] of [project]: its entries (in show order), busk pads, cue slots, the
- * prompt-book anchors on its entries and the `FireCue` bindings to it. Must run inside a transaction.
+ * prompt-book anchors on its entries and the `FireCue` and `LooseCueSet` bindings to it. Must run inside a transaction.
  */
 internal fun cueUsesOf(
     project: DaoProject,
@@ -113,15 +113,18 @@ internal fun cueUsesOf(
     val cueOfEntry = slots.values.flatten().associate { it.entry.id.value to it.entry.cueId!! }
     val pads = DaoBuskPad.find { DaoBuskPads.cue inList ids }.toList()
     val cueSlots = DaoCueSlot.find { DaoCueSlots.cue inList ids }.toList()
-    val fireCue = BindingTarget.FireCue(0).discriminator()
+    val cueTargets = listOf(BindingTarget.FireCue(0).discriminator(), BindingTarget.LooseCueSet("", true).discriminator())
     val byUuid = cues.associateBy { it.uuid.toString() }
     val bindings = DaoControlSurfaceBinding.find {
-        (DaoControlSurfaceBindings.project eq project.id) and (DaoControlSurfaceBindings.targetType eq fireCue)
+        (DaoControlSurfaceBindings.project eq project.id) and (DaoControlSurfaceBindings.targetType inList cueTargets)
     }.mapNotNull { binding ->
-        val target = runCatching { BindingTargetJson.decodeFromString<BindingTarget>(binding.targetPayload) }.getOrNull()
-            as? BindingTarget.FireCue ?: return@mapNotNull null
-        // Uuid first, as the binding's own health check reads it; the int only for a row with none.
-        val cueId = target.cueUuid?.let { byUuid[it]?.id?.value } ?: target.cueId.takeIf { target.cueUuid == null && it in ids }
+        val cueId = when (val target = runCatching { BindingTargetJson.decodeFromString<BindingTarget>(binding.targetPayload) }.getOrNull()) {
+            // Uuid first, as the binding's own health check reads it; the int only for a row with none.
+            is BindingTarget.FireCue ->
+                target.cueUuid?.let { byUuid[it]?.id?.value } ?: target.cueId.takeIf { target.cueUuid == null && it in ids }
+            is BindingTarget.LooseCueSet -> byUuid[target.cueUuid]?.id?.value
+            else -> null
+        }
         cueId?.let { it to binding }
     }
     return cues.associate { cue ->
