@@ -1,0 +1,647 @@
+<title>FX Speed by Ear</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column in the family of the FX editor's earlier design pages; the desk drawings are dark in both themes, as the desk is. */
+:root {
+  --bg: #f5f4f7; --card: #ffffff; --fg: #1b1a20; --muted: #5e5b68; --line: #dddae3;
+  --accent: #6a3dcb; --accent-soft: #efe8fd; --amber: #8f5500; --amber-soft: #fbefd9;
+  --go: #1f7a45; --go-soft: #dcf2e4; --bad: #b42318; --bad-soft: #fde7e5;
+  --desk-bg: #0c0b10; --desk-panel: #15141b; --desk-raise: #1f1d27; --desk-line: #2c2a35;
+  --desk-fg: #ecebf1; --desk-muted: #a3a0ae; --desk-faint: #6d6a78;
+  --desk-violet: #a78bfa; --desk-violet-strong: #8b5cf6; --desk-sky: #38bdf8; --desk-amber: #f5b14a; --desk-green: #4ade80;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111015; --card: #1a1920; --fg: #f2f1f5; --muted: #a6a3b0; --line: #2c2a33;
+  --accent: #b597ff; --accent-soft: #2b2140; --amber: #f5c56b; --amber-soft: #3a2c10;
+  --go: #86efac; --go-soft: #173825; --bad: #fca5a5; --bad-soft: #3b1414; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111015; --card: #1a1920; --fg: #f2f1f5; --muted: #a6a3b0; --line: #2c2a33;
+  --accent: #b597ff; --accent-soft: #2b2140; --amber: #f5c56b; --amber-soft: #3a2c10;
+  --go: #86efac; --go-soft: #173825; --bad: #fca5a5; --bad-soft: #3b1414; color-scheme: dark; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 40px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 64px; }
+.read { max-width: 760px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(32px, 5vw, 50px); font-weight: 800; line-height: 1.04; }
+h2 { font-size: 26px; font-weight: 700; }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 18px; color: var(--muted); max-width: 66ch; }
+.lede b, .muted b, li b, td b, p b { color: var(--fg); font-weight: 600; }
+.muted { color: var(--muted); }
+code { font-family: var(--mono); font-size: 0.86em; background: color-mix(in srgb, var(--line) 60%, transparent); padding: 1px 5px; border-radius: 4px; }
+section { display: flex; flex-direction: column; gap: 20px; }
+.head { display: flex; flex-direction: column; gap: 8px; }
+.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 600; font-family: var(--mono); background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.tag.back { background: var(--amber-soft); color: var(--amber); }
+.tag.both { background: var(--go-soft); color: var(--go); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 720px; }
+th { text-align: left; font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 8px 12px 8px 0; border-bottom: 1px solid var(--fg); }
+td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--muted); }
+td:first-child { color: var(--fg); font-weight: 600; white-space: nowrap; }
+td.n { font-family: var(--mono); color: var(--accent); }
+ul.points { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 14.5px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 28px; align-items: start; }
+.cols > * { min-width: 0; }
+button { font: inherit; }
+button:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.callout { border-left: 3px solid var(--accent); background: var(--card); padding: 12px 16px; border-radius: 0 8px 8px 0; color: var(--muted); font-size: 14.5px; }
+.callout b { color: var(--fg); }
+
+/* Desk drawings */
+.board { border: 1px solid var(--line); border-radius: 12px; background: var(--desk-bg); color: var(--desk-fg); overflow: hidden; font-size: 13px; line-height: 1.4; }
+.board-cap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 9px 14px; background: var(--card); color: var(--fg); border-bottom: 1px solid var(--line); }
+.board-cap h3 { font-size: 14px; margin-right: auto; }
+.board-cap span { font-size: 12.5px; color: var(--muted); }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 1px; background: var(--desk-line); }
+.trio { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1px; background: var(--desk-line); }
+.pane { background: var(--desk-panel); padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pane-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--desk-faint); }
+.pane-label.now { color: var(--desk-amber); }
+.pane-label.next { color: var(--desk-violet); }
+.dmuted { color: var(--desk-muted); }
+.dsmall { font-size: 11.5px; }
+.readout { font-size: 12.5px; color: var(--desk-muted); }
+.readout b { color: var(--desk-fg); font-weight: 600; }
+
+.isec { display: flex; flex-direction: column; gap: 8px; }
+.isec-h { display: flex; align-items: baseline; gap: 8px; }
+.isec-h span { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--desk-faint); }
+.isec-h em { font-style: normal; font-size: 11px; color: var(--desk-muted); margin-left: auto; }
+.ann { font-family: var(--mono); font-size: 10px; color: var(--desk-violet); border: 1px solid var(--desk-violet-strong); border-radius: 50%; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dchip { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--desk-line); background: var(--desk-raise); font-size: 12px; color: var(--desk-fg); white-space: nowrap; }
+.dchip.mono { font-family: var(--mono); font-size: 11.5px; }
+.dchip.on { border-color: var(--desk-violet-strong); background: color-mix(in srgb, var(--desk-violet-strong) 22%, var(--desk-raise)); }
+.dchip.held { border-color: var(--desk-amber); color: var(--desk-amber); background: color-mix(in srgb, var(--desk-amber) 12%, var(--desk-raise)); }
+.dchip .cv { color: var(--desk-muted); font-size: 10px; }
+.dbtn { height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--desk-line); background: var(--desk-raise); color: var(--desk-fg); font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.dbtn:hover { border-color: var(--desk-muted); }
+.dbtn.tap { min-width: 64px; justify-content: center; letter-spacing: 0.08em; }
+.dbtn.tap.flash { background: color-mix(in srgb, var(--desk-violet-strong) 45%, var(--desk-raise)); border-color: var(--desk-violet); }
+.dbtn:disabled { opacity: 0.35; cursor: default; }
+.seg { display: inline-flex; align-items: center; min-height: 28px; border: 1px solid var(--desk-line); border-radius: 7px; padding: 2px; gap: 2px; background: var(--desk-bg); flex-wrap: wrap; }
+.seg button, .seg span.o { height: 22px; padding: 0 8px; border-radius: 5px; border: 0; background: transparent; color: var(--desk-muted); font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; white-space: nowrap; }
+.seg button[aria-pressed="true"], .seg span.o.on { background: var(--desk-raise); color: var(--desk-fg); font-weight: 600; box-shadow: inset 0 0 0 1px var(--desk-line); }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.row .lab { font-size: 12px; color: var(--desk-muted); min-width: 72px; }
+.bpm { font-family: var(--mono); font-size: 20px; font-weight: 500; color: var(--desk-fg); font-variant-numeric: tabular-nums; }
+.bpm small { font-size: 11px; color: var(--desk-muted); margin-left: 3px; }
+.lamp { width: 10px; height: 10px; border-radius: 50%; background: var(--desk-line); flex: none; }
+.lamp.lit { background: var(--desk-green); box-shadow: 0 0 8px var(--desk-green); }
+.menu { border: 1px solid var(--desk-line); border-radius: 9px; background: var(--desk-raise); padding: 5px; display: flex; flex-direction: column; gap: 1px; font-size: 12px; max-width: 260px; }
+.menu div { padding: 5px 8px; border-radius: 5px; display: flex; gap: 8px; align-items: center; color: var(--desk-fg); }
+.menu div.sel { background: color-mix(in srgb, var(--desk-violet-strong) 22%, var(--desk-raise)); }
+.menu div span { margin-left: auto; color: var(--desk-muted); font-family: var(--mono); font-size: 11px; }
+.menu hr { border: 0; border-top: 1px solid var(--desk-line); margin: 3px 0; }
+.fam { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 1px 5px; border-radius: 4px; background: var(--desk-bg); color: var(--desk-sky); }
+
+/* The speed slider */
+.speed { display: flex; flex-direction: column; gap: 4px; }
+.speed-top { display: flex; align-items: center; gap: 10px; }
+.speed input[type=range] { flex: 1; min-width: 120px; accent-color: var(--desk-violet-strong); }
+.speed .val { font-family: var(--mono); font-size: 13px; min-width: 64px; text-align: right; color: var(--desk-fg); font-variant-numeric: tabular-nums; border: 1px solid var(--desk-line); border-radius: 6px; padding: 3px 7px; background: var(--desk-bg); }
+.ticks { position: relative; height: 18px; margin-right: 74px; }
+.ticks span { position: absolute; transform: translateX(-50%); font-family: var(--mono); font-size: 10px; color: var(--desk-faint); white-space: nowrap; }
+.ticks span.major { color: var(--desk-muted); }
+.ticks span::before { content: ""; position: absolute; left: 50%; top: -5px; width: 1px; height: 4px; background: currentColor; }
+canvas.strip { display: block; width: 100%; height: 120px; border-radius: 6px; background: var(--desk-bg); }
+.pg { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 1px; background: var(--desk-line); }
+@media (max-width: 800px) { .pg { grid-template-columns: minmax(0, 1fr); } }
+.pg .ctl { background: var(--desk-panel); padding: 14px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.pg .out { background: var(--desk-bg); padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.status { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--desk-muted); }
+.pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid var(--desk-line); color: var(--desk-muted); }
+.pill.held { border-color: var(--desk-amber); color: var(--desk-amber); }
+.pill.grid { border-color: color-mix(in srgb, var(--desk-green) 60%, var(--desk-line)); color: var(--desk-green); }
+.pill.glide { border-color: var(--desk-sky); color: var(--desk-sky); }
+label.chk { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--desk-muted); cursor: pointer; }
+
+/* Programmer and rail mocks */
+.plist { display: flex; flex-direction: column; border: 1px solid var(--desk-line); border-radius: 8px; overflow: hidden; }
+.plist .ph { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--desk-faint); padding: 6px 10px; background: var(--desk-bg); border-bottom: 1px solid var(--desk-line); }
+.plist .pr { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--desk-line); font-size: 12px; }
+.plist .pr:last-child { border-bottom: 0; }
+.plist .pr b { font-weight: 600; }
+.plist .pr .v { font-family: var(--mono); color: var(--desk-fg); }
+.plist .pr .x { color: var(--desk-faint); }
+.card-m { border: 1px solid var(--desk-line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--desk-raise); }
+.card-m.held { border-color: var(--desk-amber); }
+.rec { border: 1px solid var(--desk-line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.rec .rr { display: flex; align-items: center; gap: 8px; }
+.box { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--desk-violet); background: var(--desk-violet-strong); flex: none; }
+
+/* Model diagram */
+.flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 1px; background: var(--desk-line); }
+.flow > div { background: var(--desk-panel); padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+.flow h4 { margin: 0; font-family: var(--display); font-size: 15px; color: var(--desk-fg); }
+.flow .big { font-family: var(--mono); font-size: 22px; color: var(--desk-fg); }
+.flow .op { font-family: var(--mono); font-size: 11px; color: var(--desk-violet); letter-spacing: 0.06em; text-transform: uppercase; }
+
+ol.dec { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 14px; counter-reset: d; }
+ol.dec li { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; }
+ol.dec li::before { counter-increment: d; content: "Q" counter(d); font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--accent); padding-top: 2px; }
+ol.dec h3 { margin-bottom: 4px; }
+ol.dec p { color: var(--muted); font-size: 14.5px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<main class="wrap">
+
+<header class="head read">
+  <span class="eyebrow">Design · FX speed · agreed 2026-11-06</span>
+  <h1>FX speed, set by ear</h1>
+  <p class="lede">An FX's speed is a cycle length in beats and bars today. It follows a speed master or runs on <i>Seconds</i>, and a cue sets a tempo from a list typed into its Cue tab. This page proposes three changes. <b>Speed</b> becomes a slider against the master, snapping from ×¼ to ×4. <b>Own tempo</b>, set by tapping, replaces Seconds. <b>Tempo goes into the programmer</b>, so Record puts it into the cue.</p>
+</header>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">Today</span>
+    <h2>Three places that make speed hard to set</h2>
+  </div>
+  <div class="board">
+    <div class="board-cap"><h3>An FX's timing in the editor, and a cue's tempos</h3><span>As built after the FX settings plan</span></div>
+    <div class="trio">
+      <div class="pane">
+        <span class="pane-label now">Cycle · eight steps in beats and bars</span>
+        <div class="chips"><span class="dchip mono">1 bar ▾</span><span class="dchip mono">M1 · 120 ▾</span><span class="dchip">→</span><span class="dchip mono">∞ ▾</span></div>
+        <div class="seg"><span class="o">⅛ beat</span><span class="o">¼ beat</span><span class="o">½ beat</span><span class="o">1 beat</span><span class="o">2 beats</span><span class="o on">1 bar</span><span class="o">2 bars</span><span class="o">4 bars</span></div>
+        <p class="readout">The operator has to turn "a bit faster" into a note length. A longer cycle is a slower FX, so the scale reads backwards against a speed.</p>
+      </div>
+      <div class="pane">
+        <span class="pane-label now">Seconds · the other answer to the master chip</span>
+        <div class="menu"><div>Seconds</div><hr><div class="sel">M1 · Main<span>120</span></div><div>M2 · Chase<span>128</span></div></div>
+        <div class="row"><span class="lab">Cycle</span><span class="dchip mono">2 s</span><span class="dmuted dsmall">seconds a cycle · follows no master</span></div>
+        <p class="readout">Seconds is a typed number. Nothing can tap it, and moving onto it or off it restarts the FX's phase.</p>
+      </div>
+      <div class="pane">
+        <span class="pane-label now">Cue tab · Speed masters</span>
+        <div class="plist"><div class="ph">Speed masters on GO</div><div class="pr"><b>M2 · Chase</b><span class="v">128</span><span class="x">✕</span></div><div class="pr"><b>M1 · Main</b><span class="v">96</span><span class="x">✕</span></div></div>
+        <p class="readout">A tempo is busked by tapping, but it reaches a cue only by typing it again into this list. Record captures values, FX and scenery, but not tempo.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">Other desks</span>
+    <h2>Most desks show a rate, tap it, and record it</h2>
+    <p class="muted">From search summaries of the vendors' manuals and forums. This session's network policy blocked the vendor sites themselves, as it did for the FX settings review.</p>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Desk</th><th>An FX's speed is</th><th>Masters</th><th>Tap</th><th>Into a cue</th></tr></thead>
+      <tbody>
+        <tr><td>grandMA3</td><td>A rate per attribute, in BPM, Hz or seconds a beat. <i>Measure</i> says how many beats a phaser takes.</td><td>Speed masters. A phaser attribute names its master. The master's <b>Speed Scale</b> multiplies or divides it.</td><td><i>Learn</i> on the master. By default a tap ignores the scale.</td><td>Speed is a layer value. Record stores it with the phaser.</td></tr>
+        <tr><td>MagicQ</td><td>FX speed in BPM</td><td>Up to 100 speed masters, per cue stack or per FX. An FX's own master wins over its stack's.</td><td><i>Tap to time</i> on a playback sets the speed of the current cue's FX, or its chase.</td><td>Recorded with the FX. A master on the stack overrides the recorded speed.</td></tr>
+        <tr><td>Eos</td><td>A cycle time, or a BPM</td><td>Rate masters, in percent</td><td><i>Learn Time</i> on the effect averages taps into a BPM.</td><td>BPM is a cue-level override. A cue recorded with a changed BPM is starred.</td></tr>
+        <tr><td>Hog 4</td><td>Rate in BPM, beside Size, Offset and Length</td><td>Rate masters scale a cuelist by percent. Batch faders give 0× to 4×.</td><td>Tap sync on the master's Choose and Go keys</td><td>Stored with the cue. The cuelist rate scales on top.</td></tr>
+        <tr><td>Titan</td><td>Shape speed in BPM</td><td>BPM masters replace the local tempo. Rate masters scale it.</td><td>Tap on a BPM master. A typed number on its key sets it.</td><td>Through the playback's options</td></tr>
+        <tr><td>Onyx</td><td>A speed value that is not linear in BPM</td><td>None tied to BPM</td><td>Not native. Users ask for it and script it.</td><td>Speed through override cuelists</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="cols">
+    <ul class="points">
+      <li><b>Nobody asks for a note length.</b> grandMA3 keeps Measure apart from Speed, and the others show a rate.</li>
+      <li><b>A master relates to an FX by scaling it.</b> grandMA3 has Speed Scale, Hog and Titan have rate percentages, Hog's batch faders run 0× to 4×. The proposal's ×-slider is that idea on the FX itself.</li>
+    </ul>
+    <ul class="points">
+      <li><b>Tap is the main way to set a tempo,</b> and an FX's own speed can be tapped too (Eos's Learn Time, MagicQ's Tap to time).</li>
+      <li><b>The speed a cue plays is recorded from the live state.</b> Eos stars the change once it is recorded. No desk makes you type a tempo into a cue's list.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">The model</span>
+    <h2>Tempo times Speed gives the cycle</h2>
+    <p class="muted">An FX runs against a <b>tempo</b>: a speed master's, or its own. Its <b>Speed</b> says how fast it goes against that tempo. At ×1 it makes one cycle a bar, and every snap doubles or halves it. The cycle in beats stays what the desk stores (Speed is 4 ÷ cycle), so no beat FX changes when this lands. The readout gives the cycle in seconds at the tempo it is running at.</p>
+  </div>
+  <div class="board">
+    <div class="board-cap"><h3>One FX: a Wave on M2</h3><span>Words on the screen, with what the desk stores</span></div>
+    <div class="flow">
+      <div><span class="op">Tempo</span><h4>M2 · Chase</h4><span class="big">128 <small class="dmuted">BPM</small></span><p class="readout">A speed master's beats a minute, or the FX's <b>own tempo</b>. Tapped, typed, set by a cue, or held in the programmer.</p></div>
+      <div><span class="op">× Speed</span><h4>×2</h4><span class="big">×2</span><p class="readout">Stored as <code>cycle</code> 2 beats, as today. ×1 is one cycle a bar. The snaps run ×¼ ×½ ×1 ×2 ×4, the slider ×1/16 to ×16, and a typed value goes further.</p></div>
+      <div><span class="op">= Cycle</span><h4>0.94 s a cycle</h4><span class="big">0.94 <small class="dmuted">s</small></span><p class="readout">A readout only. It follows the tempo live, so a tap on M2 moves it.</p></div>
+    </div>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Word</th><th>Means</th><th>Was</th><th>Stored as</th></tr></thead>
+      <tbody>
+        <tr><td>Tempo</td><td>A speed master's beats a minute: the rail's big number, the master sheet's field, the Cue tab's list</td><td>Speed (the glossary's word for a master's rate)</td><td><code>bpm</code>, unchanged</td></tr>
+        <tr><td>Speed</td><td>How fast an FX runs against its tempo, ×1 being one cycle a bar</td><td>Cycle (the eight-step chip)</td><td><code>cycle</code> in beats, unchanged; Speed = 4 ÷ cycle</td></tr>
+        <tr><td>Own tempo</td><td>An FX's own beats a minute, tapped in the editor, following no master</td><td>Seconds</td><td><code>ownBpm</code>, in place of <code>seconds</code></td></tr>
+        <tr><td>Held tempo</td><td>A master's tempo the programmer holds. It runs now, Record stores it, Clear lets it go.</td><td></td><td>Runtime only, like the programmer's scenery</td></tr>
+        <tr><td>Tempo on GO</td><td>The tempos a cue sets as it comes on</td><td>Speed masters (the Cue tab's section)</td><td><code>cues.speed_masters</code>, unchanged</td></tr>
+        <tr><td>Cycle</td><td>How long one cycle takes, in seconds, as a readout</td><td>Cycle</td><td>Derived</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">Try it</span>
+    <h2>The Speed control, live</h2>
+    <p class="muted">A Wave on one head, drawn over the last two bars, with the beat grid. Tap a few times to set the tempo. Drag Speed: it sticks at the snaps unless <i>Snap</i> is off. The phase never jumps. Off a snap the FX drifts off the beat grid, and when it lands on a snap it glides back onto the grid within a cycle. Taps work the way the desk counts them: the last four taps, any older than two seconds dropped.</p>
+  </div>
+  <div class="board">
+    <div class="board-cap"><h3>FX editor · Speed</h3><span>A model of the proposal, not the desk's code</span></div>
+    <div class="pg">
+      <div class="ctl">
+        <div class="isec">
+          <div class="isec-h"><span>Speed</span><em id="pgSourceNote">Taps M1 · every FX on M1 follows</em></div>
+          <div class="row">
+            <div class="seg" role="group" aria-label="Tempo">
+              <button type="button" id="srcM1" aria-pressed="true">M1 · Main</button>
+              <button type="button" id="srcOwn" aria-pressed="false">Own tempo</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="lamp" id="beatLamp"></span>
+            <span class="bpm" id="bpmText">120<small>BPM</small></span>
+            <button type="button" class="dbtn tap" id="tapBtn">TAP</button>
+          </div>
+          <div class="speed">
+            <div class="speed-top">
+              <input type="range" id="speedRange" min="-4" max="4" step="0.01" value="0" aria-label="Speed">
+              <span class="val" id="speedVal">×1</span>
+            </div>
+            <div class="ticks" id="ticks"></div>
+          </div>
+          <div class="row"><label class="chk"><input type="checkbox" id="snapChk" checked> Snap</label></div>
+          <p class="readout" id="speedReadout"></p>
+          <div class="status" id="status"></div>
+        </div>
+      </div>
+      <div class="out">
+        <canvas class="strip" id="strip" aria-label="The FX's output over the last two bars"></canvas>
+        <p class="readout">Bright lines are bars, faint lines beats. The trace is the Wave's level. <span id="gridNote"></span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">The editor</span>
+    <h2>Speed replaces Cycle and the master chip</h2>
+    <p class="muted">The Timing strip becomes <b>Speed</b>: the tempo chip, Tap and the tempo, then the slider. Direction and Runs sit on the row below, where they are now. The same section draws in the tray, the popover, the palette editor and the cue FX tab, in the narrower layout.</p>
+  </div>
+  <div class="board">
+    <div class="board-cap"><h3>FX editor inspector · a Wave on M1</h3><span>Numbers match the notes</span></div>
+    <div class="pair">
+      <div class="pane">
+        <div class="isec">
+          <div class="isec-h"><span>Speed</span><em>held in the programmer</em></div>
+          <div class="row"><span class="ann">1</span><span class="dchip mono on">M1 · Main ▾</span><span class="ann">2</span><span class="dbtn tap">TAP</span><span class="ann">3</span><span class="dchip mono held">132 BPM</span></div>
+          <div class="row"><span class="ann">4</span>
+            <div class="seg"><span class="o">×¼</span><span class="o">×½</span><span class="o on">×1</span><span class="o">×2</span><span class="o">×4</span></div><span class="dchip mono">×1</span></div>
+          <p class="readout"><span class="ann">5</span> <b>1 bar · 1.82 s a cycle</b> at 132 BPM</p>
+          <div class="row"><span class="ann">6</span><span class="dchip">→ Forward</span><span class="dchip mono">∞ ▾</span></div>
+        </div>
+      </div>
+      <div class="pane">
+        <span class="pane-label">The tempo chip's menu</span>
+        <div class="menu">
+          <div class="sel">M1 · Main<span>132</span></div>
+          <div>M2 · Chase <i class="fam">colour</i><span>128</span></div>
+          <div>M3 · Moves <i class="fam">position</i><span>64</span></div>
+          <hr>
+          <div>Own tempo<span>96</span></div>
+          <hr>
+          <div>Same speed as…</div>
+        </div>
+        <span class="pane-label">On Own tempo</span>
+        <div class="row"><span class="dchip mono on">Own ▾</span><span class="dbtn tap">TAP</span><span class="dchip mono">96 BPM</span></div>
+        <p class="readout">Tap sets this FX's own tempo, and no other FX moves. The slider works the same on it.</p>
+      </div>
+    </div>
+  </div>
+  <div class="cols">
+    <ul class="points">
+      <li><b>1 · Tempo chip.</b> The masters with their family badges, then <i>Own tempo</i>, then <i>Same speed as…</i> (today's <i>Same cycle as…</i>). A new FX is stamped with its family's master, as now.</li>
+      <li><b>2 · Tap.</b> On a master it taps that master's tempo <b>into the programmer</b>, so every FX on it follows, the rail shows it held, and Record stores it. On Own tempo it sets the FX's own. Two to four taps, as the desk counts.</li>
+      <li><b>3 · The tempo,</b> typed or tapped. Amber while the programmer holds it.</li>
+    </ul>
+    <ul class="points">
+      <li><b>4 · The slider</b> with its five labelled snaps (the drawing shows them as a segment), its outer ticks at ×⅛, ×1/16, ×8 and ×16, and a typed value at its end that takes a fraction (×⅔) or a decimal. It sticks at every power of two. Hold ⌥ to slide past a snap.</li>
+      <li><b>5 · The readout,</b> in bars or beats where the speed is a snap, and always in seconds at the running tempo.</li>
+      <li><b>6 · Direction and Runs,</b> unchanged.</li>
+    </ul>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Where</th><th>Reads today</th><th>Reads</th></tr></thead>
+      <tbody>
+        <tr><td>FX chips and summaries</td><td><code>1 bar · M1</code>, <code>4 s</code></td><td><code>×1 · M1</code>, <code>×½ · Own 96</code></td></tr>
+        <tr><td>Applied FX table, Timeline cell, fixture sheet</td><td>the cycle label</td><td>the Speed and its tempo; the cycle in seconds on hover</td></tr>
+        <tr><td>The graph's Cycle knob</td><td>snaps to the eight steps</td><td>a <b>Speed</b> knob, snapping to the powers of two, hover <i>×2 · 0.94 s</i></td></tr>
+        <tr><td>Cue FX tab</td><td>Cycle and Seconds</td><td>the Speed section, narrow layout; Tap on a master sets that master's row of the cue's Tempo on GO</td></tr>
+        <tr><td>Palette editor</td><td>Cycle and Seconds</td><td>the Speed section, narrow layout; Tap on a master is a live tap, since a palette has nowhere to keep a tempo</td></tr>
+        <tr><td>Speed rail, master sheet</td><td>Speed · 120</td><td>Tempo · 120, with Held, Capture, ×½ and ×2</td></tr>
+        <tr><td>Candle and Fluorescent Flicker</td><td>Rate M2 / Seconds</td><td><i>Runs at its own pace</i>: both are stateful and read neither a cycle nor a rate, so they show no Speed</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">Tempo in the programmer</span>
+    <h2>Tap it while you build the cue, then Record</h2>
+    <p class="muted">The programmer holds tempos the way it holds scenery. A tap or a typed tempo in the FX editor holds that master's tempo, and so does <i>Capture</i> on a rail card, which captures a busked tempo. A held master runs at its held tempo at once. Record writes the held tempos into the cue's <b>Tempo on GO</b>. The rail and the surfaces stay live otherwise: a tap there is still beaten by the next cue that sets that master.</p>
+  </div>
+  <div class="board">
+    <div class="board-cap"><h3>Building cue 12 with a faster chase</h3><span>Programmer list · Record · Speed rail</span></div>
+    <div class="trio">
+      <div class="pane">
+        <span class="pane-label next">Programmer · Tempo</span>
+        <div class="plist">
+          <div class="ph">Tempo</div>
+          <div class="pr"><b>M2 · Chase</b><span class="v">132</span><span class="x" title="Release">✕</span></div>
+        </div>
+        <div class="plist">
+          <div class="ph">Values · FX</div>
+          <div class="pr"><b>Front wash · Colour Cycle</b><span class="v">×2 · M2</span><span class="x">✕</span></div>
+          <div class="pr"><b>Back truss · Wave</b><span class="v">×1 · M2</span><span class="x">✕</span></div>
+        </div>
+        <p class="readout">The tempo field is editable here. ✕ releases a hold, and <i>Clear</i> releases them all.</p>
+      </div>
+      <div class="pane">
+        <span class="pane-label next">Record into cue 12</span>
+        <div class="rec">
+          <div class="rr"><span class="box"></span><b>Values and FX</b><span class="dmuted">8 heads</span></div>
+          <div class="rr"><span class="box"></span><b>Tempo</b><span class="dmuted">M2 · Chase 132</span></div>
+          <div class="rr"><span class="box" style="background:transparent"></span><span class="dmuted">Scenery · nothing held</span></div>
+        </div>
+        <p class="readout">The Tempo row works like the Scenery row: on by default, and untick it to leave the tempos out. A merge replaces the rows for the held masters and keeps the cue's other rows.</p>
+      </div>
+      <div class="pane">
+        <span class="pane-label next">Speed rail · M2</span>
+        <div class="card-m held">
+          <div class="row"><b>M2 · Chase</b><i class="fam">colour</i><span class="pill held" style="margin-left:auto">Held</span></div>
+          <div class="row"><span class="lamp lit"></span><span class="bpm">132<small>BPM</small></span></div>
+          <div class="row"><span class="dbtn tap">TAP</span><span class="dbtn">×½</span><span class="dbtn">×2</span><span class="dbtn">Release</span></div>
+        </div>
+        <div class="card-m">
+          <div class="row"><b>M1 · Main</b><span class="dmuted dsmall" style="margin-left:auto">set by cue 11</span></div>
+          <div class="row"><span class="lamp"></span><span class="bpm">96<small>BPM</small></span></div>
+          <div class="row"><span class="dbtn tap">TAP</span><span class="dbtn">×½</span><span class="dbtn">×2</span><span class="dbtn">Capture</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>When</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr><td>Tap or tempo in the FX editor</td><td>Holds that master at the new tempo. It runs now, and every FX on the master follows.</td></tr>
+        <tr><td><i>Capture</i> on a rail card</td><td>Holds the master at the tempo it is running at, so a busked tap can be recorded.</td></tr>
+        <tr><td>A tap, ×½ or ×2 on a held master, from the rail or a surface</td><td>Moves the hold, so a tap always changes what is on screen.</td></tr>
+        <tr><td>A GO that sets a held master</td><td>The desk remembers it as the master's live tempo but doesn't run it while the hold stands.</td></tr>
+        <tr><td>Release or Clear</td><td>The master goes to its live tempo: the last one a GO, a press, a tap or a typed tempo gave it.</td></tr>
+        <tr><td>Blind</td><td>A hold is staged. The rail shows the staged tempo beside the running one, and leaving Blind lands it. A rail or surface tap meanwhile moves the running tempo, which is what is on stage.</td></tr>
+        <tr><td>Record</td><td>Held tempos go into the cue's Tempo on GO. A new cue takes the held list. A merge replaces the rows for the held masters.</td></tr>
+        <tr><td>Include · Update</td><td>Include holds the cue's tempos. Update writes the holds back, and the change counter counts a held tempo the cue doesn't have.</td></tr>
+        <tr><td>Undo</td><td>A hold is a programmer step, so ⌘Z takes it back.</td></tr>
+        <tr><td>A project switch · a reload</td><td>A switch drops the holds. A carried reload keeps them.</td></tr>
+        <tr><td>A follower master</td><td>Refused, naming the leader to tap instead, as every tempo write on a follower is.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="callout read">The Cue tab's list stays, renamed <b>Tempo on GO</b>. It is where a recorded tempo shows and where one can still be fixed by hand. Record is now the usual way in.</p>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">Extras</span>
+    <h2>Half time, double time, and a speed fader</h2>
+  </div>
+  <div class="cols">
+    <div class="head">
+      <h3>×½ and ×2 on every master</h3>
+      <p class="muted">On each rail card, in the master sheet, and as a surface button target (<code>speedMasterScale</code>, factor ½ or 2). Each halves or doubles the tempo, as a tempo write: live, or moving the hold on a held master. A button is disabled where the result would leave 20–300 BPM, and on a follower, whose leader's buttons do it. A tap afterwards sets the beat it hears, as grandMA3's Learn does by default, and doesn't keep the factor.</p>
+    </div>
+    <div class="head">
+      <h3>FX speed on a fader or encoder</h3>
+      <p class="muted">A binding target, <code>fxSpeed</code>, that moves the Speed of every Local FX painting a selected head. An encoder moves each FX a quarter of an octave a detent, each sticking at its own snaps. A fader sets them all from ×¼ to ×4 with soft takeover against the lead FX, the one painting the first selected head. The ring shows the lead's Speed. The phase is kept, as in the editor. This is what Hog and Onyx operators use a speed fader for.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">Underneath</span>
+    <h2>What changes underneath</h2>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Change</th><th>Where</th><th>Detail</th></tr></thead>
+      <tbody>
+        <tr><td>Speed is a view of the cycle</td><td><span class="tag">client</span></td><td>No stored beat FX changes. <code>SPEED_STEPS</code> and its eight labels go, and one function speaks Speed and its readout everywhere.</td></tr>
+        <tr><td>Own tempo replaces Seconds</td><td><span class="tag both">both</span></td><td><code>ownBpm</code> on every FX home: a live FX, an FX palette, a Look's FX, a cue's ad-hoc FX. It runs on the wall-clock loop with a rate scale of <code>ownBpm / 120</code> and a cycle of <code>cycle ÷ 2</code> seconds, which is the rate master's arithmetic, so a tap never jumps the phase. A one-shot data step (database step 12) turns a Seconds row of <i>s</i> seconds into tempo 120 at <i>2s</i> beats, the same output. A new <code>formatVersion</code>, and the importer converts older archives.</td></tr>
+        <tr><td>A speed change keeps the phase</td><td><span class="tag back">desk</span></td><td>A beat FX keeps its elapsed cycles when its cycle changes, so its phase, its runs and a Bounce's direction stay put. A forever FX on a master that lands on a power of two glides back onto the grid over the next cycle. A move between a master and Own tempo still restarts the phase, because it changes the loop the FX runs on.</td></tr>
+        <tr><td>Tempo in the programmer</td><td><span class="tag back">desk</span></td><td><code>state/ProgrammerTempo.kt</code>, runtime-only, with a <code>programmer.tempoState</code> frame. The bank runs a held master's tempo over its live one. Record, Include, Update, Clear, Blind and undo read it, through the same paths as the programmer's scenery.</td></tr>
+        <tr><td>Half and double</td><td><span class="tag back">desk</span></td><td>A <code>speedMasters.scale</code> frame and the <code>speedMasterScale</code> binding target</td></tr>
+        <tr><td>Speed on a surface</td><td><span class="tag back">desk</span></td><td>The <code>fxSpeed</code> binding target and its feedback, through <code>applyFxUpdate</code></td></tr>
+        <tr><td>MCP</td><td><span class="tag back">desk</span></td><td>The FX tools take <code>ownBpm</code> and keep <code>cycle</code>; their descriptions say what ×1 means. <code>seconds</code> is still read and converted. <code>set_bpm</code> gains <code>hold</code>. <code>get_current_state</code> lists held tempos.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">Plan</span>
+    <h2>Four sessions</h2>
+    <p class="muted">One PR each, run by <code>/next-session</code> in this order. Own tempo goes first because it changes the wire, the database and the archive, and the slider needs it. The programmer's tempo comes before the slider, so the editor's Tap has somewhere to write when it lands.</p>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>#</th><th>Session</th><th>What ships</th><th>Local checks</th></tr></thead>
+      <tbody>
+        <tr><td class="n">1</td><td><b>Own tempo on the desk</b></td><td><code>ownBpm</code> replaces <code>seconds</code> on every FX home, the wire, MCP and sync. Database step 12 and a <code>formatVersion</code>. Record and Include carry it. The editor's Seconds becomes <i>Own tempo</i> with its BPM, and the labels follow.</td><td>Full <code>./gradlew test</code> and <code>npm run check</code></td></tr>
+        <tr><td class="n">2</td><td><b>Tempo in the programmer</b></td><td><code>ProgrammerTempo</code>, the bank's held-over-live rule, Record, Include, Update, Clear, Blind, undo and MCP's <code>hold</code>. In the client, the programmer's Tempo list, Record's Tempo row, the rail's Held, Capture and Release, and <i>Tempo on GO</i>.</td><td>compileTestKotlin · fx, state, routes, plugins · check:quick</td></tr>
+        <tr><td class="n">3</td><td><b>The Speed slider</b></td><td>The phase kept on a speed change, with the glide onto the grid. The Speed section in every FX editor layout, Tap (a hold on a master, the FX's own tempo on Own), the graph's Speed knob, and × labels on every chip and table.</td><td>compileTestKotlin · fx · check:quick</td></tr>
+        <tr><td class="n">4</td><td><b>Half, double and a speed fader</b></td><td>×½ and ×2 on the rail and the master sheet, <code>speedMasterScale</code> and <code>fxSpeed</code> with their feedback, and the binding picker's entries.</td><td>compileTestKotlin · midi, fx · check:quick</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="cols">
+    <div class="head"><h3>Out of scope</h3>
+      <ul class="points">
+        <li>Speed counted in steps, so a longer colour list runs slower (<code>FU-FX-PER-STEP-TIMING</code> stays dormant).</li>
+        <li>MIDI clock, Ableton Link and audio beat detection.</li>
+        <li>One FX at two speeds on two attributes (<code>FU-SPEED-PER-ATTRIBUTE</code>).</li>
+        <li>A tap on a surface confirmed by its LED (<code>FU-SPEED-SURFACE-TAP-LED</code>).</li>
+      </ul>
+    </div>
+    <div class="head"><h3>Also agreed</h3>
+      <ul class="points">
+        <li><b>Tempo</b> is the screen word for a master's rate, freeing <b>Speed</b> for the FX. The glossary gave Speed to the master.</li>
+        <li>A tap from the rail or a surface on a <b>held</b> master moves the hold, rather than going live underneath where nothing would show it.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="eyebrow">Asked and answered</span>
+    <h2>Six answers</h2>
+  </div>
+  <ol class="dec read">
+    <li><div><h3>What does ×1 mean?</h3><p><b>One cycle a bar</b>, today's default, so a new beat FX at its default reads ×1 (a preset's own cycle reads as it is, the sweeps ×2). One cycle a beat (Hog's reading) and a step FX counting steps were declined.</p></div></li>
+    <li><div><h3>What replaces Seconds?</h3><p><b>Own tempo, tapped</b>, with the same slider on it. Masters only, and keeping Seconds with a Tap, were declined.</p></div></li>
+    <li><div><h3>Which taps go into the programmer?</h3><p><b>The FX editor's, plus <i>Capture</i></b> on a rail card (first drawn as <i>Hold</i>, renamed because the glossary's Hold is a Pulse's). The rail and the surfaces stay live. Every tap being held was declined, because a busk tap would then block the next cue's tempo.</p></div></li>
+    <li><div><h3>Extras?</h3><p><b>Both</b>: ×½ and ×2 on masters, and an FX speed fader or encoder.</p></div></li>
+    <li><div><h3>A master's word?</h3><p><b>Tempo</b>, so Speed is the FX's.</p></div></li>
+    <li><div><h3>A rail or surface tap on a held master?</h3><p><b>It moves the hold.</b></p></div></li>
+  </ol>
+</section>
+
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const state = { src: 'M1', bpm: { M1: 120, own: 96 }, held: false, oct: 0, snap: true, alt: false };
+  const taps = { M1: [], own: [] };
+  // FX phase, kept across speed changes; the beat clock per source.
+  let beats = { M1: 0, own: 0 }, phase = 0, gliding = false, last = performance.now();
+  const hist = [];
+
+  const FR = { '-4': '1/16', '-3': '⅛', '-2': '¼', '-1': '½', '0': '1', '1': '2', '2': '4', '3': '8', '4': '16' };
+  const speed = () => Math.pow(2, state.oct);
+  const cycleBeats = () => 4 / speed();
+  const onSnap = () => Math.abs(state.oct - Math.round(state.oct)) < 1e-6;
+  const speedLabel = () => onSnap() ? '×' + FR[String(Math.round(state.oct))] : '×' + (Math.round(speed() * 100) / 100);
+  const lengthWords = (b) => {
+    if (b >= 4) { const bars = b / 4; return bars + (bars === 1 ? ' bar' : ' bars'); }
+    const m = { 2: '2 beats', 1: '1 beat', 0.5: '½ beat', 0.25: '¼ beat' };
+    return m[b] || (Math.round(b * 100) / 100 + ' beats');
+  };
+
+  // Ticks under the slider: every power of two, the five snaps labelled bold.
+  const ticks = $('ticks');
+  for (let o = -4; o <= 4; o++) {
+    const s = document.createElement('span');
+    s.textContent = '×' + FR[String(o)];
+    s.style.left = ((o + 4) / 8 * 100) + '%';
+    if (Math.abs(o) <= 2) s.className = 'major';
+    ticks.appendChild(s);
+  }
+
+  function render() {
+    const b = state.bpm[state.src];
+    $('bpmText').innerHTML = Math.round(b) + '<small>BPM</small>';
+    $('srcM1').setAttribute('aria-pressed', String(state.src === 'M1'));
+    $('srcOwn').setAttribute('aria-pressed', String(state.src === 'own'));
+    $('speedVal').textContent = speedLabel();
+    $('speedRange').value = String(state.oct);
+    const secs = cycleBeats() * 60 / b;
+    $('speedReadout').innerHTML = (onSnap() ? '<b>' + lengthWords(cycleBeats()) + ' · ' : '<b>') + (Math.round(secs * 100) / 100) + ' s a cycle</b> at ' + Math.round(b) + ' BPM';
+    $('pgSourceNote').textContent = state.src === 'M1' ? 'Taps M1 · every FX on M1 follows' : 'Taps this FX only';
+    const st = [];
+    if (state.src === 'M1' && state.held) st.push('<span class="pill held">M1 held in the programmer · Record stores it</span>');
+    if (state.src === 'own') st.push('<span class="pill">Own tempo · follows no master</span>');
+    if (state.src === 'own') {} else st.push(gliding ? '<span class="pill glide">Gliding onto the grid</span>' : onSnap() ? '<span class="pill grid">On the grid</span>' : '<span class="pill">Between snaps · off the grid</span>');
+    $('status').innerHTML = st.join('');
+    $('gridNote').textContent = state.src === 'own' ? 'An Own tempo has no master grid, so it keeps its phase and never glides.' : onSnap() ? 'At a snap each cycle starts on a bar or a beat.' : 'Off a snap the cycles drift across the grid.';
+  }
+
+  function tap() {
+    const now = performance.now(), list = taps[state.src];
+    while (list.length && now - list[0] > 2000) list.shift();
+    list.push(now);
+    while (list.length > 4) list.shift();
+    const btn = $('tapBtn');
+    btn.classList.add('flash'); setTimeout(() => btn.classList.remove('flash'), 90);
+    if (list.length >= 2) {
+      let sum = 0; for (let i = 1; i < list.length; i++) sum += list[i] - list[i - 1];
+      const bpm = Math.min(300, Math.max(20, 60000 / (sum / (list.length - 1))));
+      state.bpm[state.src] = bpm;
+      if (state.src === 'M1') state.held = true;
+      render();
+    }
+  }
+  function setOct(raw) {
+    let o = Math.max(-4, Math.min(4, raw));
+    if (state.snap && !state.alt) { const r = Math.round(o); if (Math.abs(o - r) < 0.18) o = r; }
+    const wasSnap = onSnap();
+    state.oct = o;
+    if (onSnap() && !wasSnap && state.src === 'M1') gliding = true;
+    if (!onSnap()) gliding = false;
+    render();
+  }
+
+  $('srcM1').addEventListener('click', () => { state.src = 'M1'; phase = 0; render(); });
+  $('srcOwn').addEventListener('click', () => { state.src = 'own'; phase = 0; render(); });
+  $('tapBtn').addEventListener('click', tap);
+  $('speedRange').addEventListener('input', (e) => setOct(parseFloat(e.target.value)));
+  $('snapChk').addEventListener('change', (e) => { state.snap = e.target.checked; });
+  window.addEventListener('keydown', (e) => { if (e.key === 'Alt') state.alt = true; });
+  window.addEventListener('keyup', (e) => { if (e.key === 'Alt') state.alt = false; });
+  window.addEventListener('blur', () => { state.alt = false; });
+
+  const cv = $('strip'), ctx = cv.getContext('2d');
+  function size() { const r = cv.getBoundingClientRect(); cv.width = Math.max(200, r.width * devicePixelRatio); cv.height = 120 * devicePixelRatio; }
+  size(); window.addEventListener('resize', size);
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  function step(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    for (const k of ['M1', 'own']) beats[k] += dt * state.bpm[k] / 60;
+    const cb = cycleBeats();
+    phase = (phase + dt * state.bpm[state.src] / 60 / cb) % 1;
+    if (gliding) {
+      const target = (beats[state.src] / cb) % 1;
+      let err = target - phase; if (err > 0.5) err -= 1; if (err < -0.5) err += 1;
+      const rate = dt * state.bpm[state.src] / 60 / cb; // a cycle's worth of catch-up
+      if (Math.abs(err) <= rate * 1.5) { phase = target; gliding = false; render(); }
+      else phase = (phase + Math.sign(err) * rate * 0.5 + 1) % 1;
+    }
+    hist.push({ b: beats[state.src], v: 0.5 - 0.5 * Math.cos(phase * 2 * Math.PI) });
+    const windowBeats = 8;
+    while (hist.length && beats[state.src] - hist[0].b > windowBeats + 0.5) hist.shift();
+    const lit = (beats[state.src] % 1) < 0.15;
+    $('beatLamp').classList.toggle('lit', lit);
+    draw(windowBeats);
+    if (!reduce) requestAnimationFrame(step);
+  }
+  function draw(windowBeats) {
+    const w = cv.width, h = cv.height, now = beats[state.src];
+    ctx.clearRect(0, 0, w, h);
+    const x = (b) => w - (now - b) / windowBeats * w;
+    for (let b = Math.floor(now - windowBeats); b <= now; b++) {
+      ctx.strokeStyle = b % 4 === 0 ? css('--desk-muted') : css('--desk-line');
+      ctx.lineWidth = devicePixelRatio;
+      ctx.beginPath(); ctx.moveTo(x(b), 0); ctx.lineTo(x(b), h); ctx.stroke();
+    }
+    ctx.strokeStyle = css('--desk-violet'); ctx.lineWidth = 2 * devicePixelRatio;
+    ctx.beginPath();
+    hist.forEach((p, i) => { const px = x(p.b), py = h - 8 * devicePixelRatio - p.v * (h - 16 * devicePixelRatio); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+    ctx.stroke();
+  }
+  render();
+  if (reduce) {
+    // A still frame: two bars of the FX at its current speed.
+    for (let i = 0; i <= 400; i++) { const b = i / 50; hist.push({ b, v: 0.5 - 0.5 * Math.cos((b / cycleBeats()) * 2 * Math.PI) }); }
+    beats[state.src] = 8; draw(8);
+  } else requestAnimationFrame(step);
+})();
+</script>
