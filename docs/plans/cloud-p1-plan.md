@@ -688,7 +688,7 @@ and 7) deferred: they stay open under `FU-MANUAL-CLOUD-P1A`. **OQ-10:** the shel
 
 **UC-3 through the cloud**, the operator item session 9 needs: once the cloud plan's session 4 is
 deployed, a Claude connector added with the desk's cloud URL drives this desk. The owner records the
-date here. *Not yet seen.*
+date here. **Seen 2026-11-07**, the owner reports.
 
 **`FU-MANUAL-CLOUD-P1`**, the PRD's exit, added by session 9 and run once both plans are merged and
 deployed:
