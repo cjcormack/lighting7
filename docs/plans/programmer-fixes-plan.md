@@ -349,8 +349,8 @@ suites locally: no Gradle change, schema, sync or cross-package refactor.
 |---|---|---|---|---|---|
 | 1 | The FX picker: one release and a close trace | merged | `claude/festive-faraday-m5qr2b` | [#369](https://github.com/cjcormack/lighting7/pull/369) | 8584e2e |
 | 2 | Element rows stay put | merged | `claude/determined-goodall-rw10tw` | [#370](https://github.com/cjcormack/lighting7/pull/370) | 993814b |
-| 3 | Cells with gaps | in review | `claude/lucid-johnson-fw56wn` | | |
-| 4 | Recent values on the desk | planned | | | |
+| 3 | Cells with gaps | merged | `claude/lucid-johnson-fw56wn` | [#372](https://github.com/cjcormack/lighting7/pull/372) | a3325c3 |
+| 4 | Recent values on the desk | in review | `claude/optimistic-dijkstra-u99aaa` | | |
 | 5 | Recents in every value editor | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -523,6 +523,18 @@ D14–D19.
 - Local: `./gradlew compileTestKotlin`, `--tests 'uk.me.cormack.lighting7.state.*'`,
   `--tests 'uk.me.cormack.lighting7.plugins.*'` and `--tests 'uk.me.cormack.lighting7.telemetry.*'`,
   `check:quick`.
+- As built: the spellings and the colour serializer are `components/editor/recentValueSpelling.ts`
+  and `useRecordRecent` is `store/recentValues.ts`'s, beside `useRecentValues`, which reads the WS
+  layer through `useSyncExternalStore` because the kit's hosts provide no Redux store. A typed value
+  records when its field is left or the editor closes, not on each commit: `EditorField` commits per
+  keystroke, so recording each would list `2` and `20` on the way to `200`. A picker's release
+  sends 100 ms later, since react-colorful reports a drag's last move from an effect that can land
+  after it; a slider's commit sends a microtask later, since Radix commits a key's step before it
+  reports the step's value. A tap records the value as tapped, not the merged colour it writes, so
+  the desk moves it to the front (D17). `level:` takes only a slider that is not a pan or tilt, and
+  `palette-level:` only a palette attribute whose intent is a percent. The
+  backend's packages are run as `./gradlew :test --tests …`: a bare `test` also runs
+  `:launcher:test`, which the filters match nothing in, and fails.
 
 ### Session 5 — Recents in every value editor
 

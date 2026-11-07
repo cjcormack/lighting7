@@ -91,6 +91,9 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // The located targets, a StateFlow following the live show: on a fresh desk nothing is
         // located, and that empty frame is still what every Locate button starts from.
         LocateStateOutMessage::class,
+        // Recent values (programmer-fixes plan D16), a StateFlow following the live show: on a fresh
+        // desk every list is empty, and that empty frame is still what every Recent band starts from.
+        RecentValuesStateOutMessage::class,
     )
 
     @Test

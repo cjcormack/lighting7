@@ -45,6 +45,7 @@ import {createEffectsWsApi, EffectsWsApi} from "./effectsApi";
 import {createVenueHoldWsApi, VenueHoldWsApi} from "./venueHoldApi";
 import {createCueHoldsWsApi, CueHoldsWsApi} from "./cueHoldsApi";
 import {createGrandMasterWsApi, GrandMasterWsApi} from "./grandMasterApi";
+import {createRecentValuesWsApi, RecentValuesWsApi} from "./recentValuesApi";
 import {createHistoryWsApi, HistoryWsApi} from "./historyApi";
 import {createLocateWsApi, LocateWsApi} from "./locateWsApi";
 import {createStackFxAmountWsApi, StackFxAmountWsApi} from "./stackFxAmountApi";
@@ -93,6 +94,7 @@ interface LightingApi {
   venueHold: VenueHoldWsApi
   cueHolds: CueHoldsWsApi
   grandMaster: GrandMasterWsApi
+  recentValues: RecentValuesWsApi
   history: HistoryWsApi
   locate: LocateWsApi
   stackFxAmount: StackFxAmountWsApi
@@ -173,6 +175,7 @@ function createLightingApi(): LightingApi {
   const venueHoldWsApi = createVenueHoldWsApi(connection)
   const cueHoldsWsApi = createCueHoldsWsApi(connection)
   const grandMasterWsApi = createGrandMasterWsApi(connection)
+  const recentValuesWsApi = createRecentValuesWsApi(connection)
   const historyWsApi = createHistoryWsApi(connection)
   const locateWsApi = createLocateWsApi(connection)
   const stackFxAmountWsApi = createStackFxAmountWsApi(connection)
@@ -224,6 +227,7 @@ function createLightingApi(): LightingApi {
     venueHold: venueHoldWsApi,
     cueHolds: cueHoldsWsApi,
     grandMaster: grandMasterWsApi,
+    recentValues: recentValuesWsApi,
     history: historyWsApi,
     locate: locateWsApi,
     stackFxAmount: stackFxAmountWsApi,

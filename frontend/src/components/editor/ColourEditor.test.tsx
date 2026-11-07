@@ -64,6 +64,9 @@ vi.mock('@/hooks/useFixtureLookup', () => ({
 }))
 
 import { ColourEditor, ECHO_SETTLE_MS, emitterHeadCounts, type ColourEditorProps } from './ColourEditor'
+import { lightingApi } from '@/api/lightingApi'
+import type { RecentValuesState } from '@/api/recentValuesApi'
+import { RECENT_RELEASE_SETTLE_MS } from '@/store/recentValues'
 import { ColourPickerPopover } from '@/components/fixtures/ColourPickerPopover'
 
 const rgb = colourProp('rgbColour', chan(1), chan(2), chan(3))
@@ -609,6 +612,119 @@ describe('the keyboard, through the popover host', () => {
     }
     fireEvent.keyDown(field('R'), { key: 'Enter' })
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+})
+
+describe('the Recent band', () => {
+  let desk: RecentValuesState
+  let record: ReturnType<typeof vi.spyOn>
+  beforeEach(() => {
+    desk = { projectId: 1, lists: {} }
+    vi.spyOn(lightingApi.recentValues, 'get').mockImplementation(() => desk)
+    record = vi.spyOn(lightingApi.recentValues, 'record').mockImplementation(() => {})
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] })
+  })
+  afterEach(() => vi.useRealTimers())
+
+  const saturation = () => document.querySelector('.react-colorful__saturation [aria-valuetext]')!
+
+  it('records a picker drag once, on its release, as the colour it wrote — never per frame', () => {
+    const { onColourChange } = draw({ hasWhiteChannel: true, w: 40 })
+    fireEvent.pointerDown(saturation())
+    fireEvent.mouseDown(saturation())
+    fireEvent.mouseMove(window, { buttons: 1, pageX: 30, pageY: 30 })
+    fireEvent.mouseMove(window, { buttons: 1, pageX: 60, pageY: 10 })
+    expect(onColourChange.mock.calls.length).toBeGreaterThan(0)
+    act(() => vi.advanceTimersByTime(RECENT_RELEASE_SETTLE_MS * 5))
+    expect(record).not.toHaveBeenCalled()
+
+    fireEvent.mouseUp(window)
+    fireEvent.pointerUp(window)
+    act(() => vi.advanceTimersByTime(RECENT_RELEASE_SETTLE_MS))
+    expect(record).toHaveBeenCalledTimes(1)
+    const [r, g, b, w] = onColourChange.mock.lastCall!
+    const hex = [r, g, b].map((n: number) => n.toString(16).padStart(2, '0')).join('')
+    // The white the picker zeroed is said, so it replays as 0 rather than as "leave white".
+    expect(w).toBe(0)
+    expect(record).toHaveBeenCalledWith('colour', `#${hex};w0`)
+  })
+
+  it('records a typed byte when its field is left, and an emitter slider on its commit', async () => {
+    draw({ hasWhiteChannel: true, w: 40 })
+    fireEvent.change(field('R'), { target: { value: '2' } })
+    fireEvent.change(field('R'), { target: { value: '200' } })
+    expect(record).not.toHaveBeenCalled()
+    fireEvent.blur(field('R'))
+    expect(record).toHaveBeenCalledExactlyOnceWith('colour', '#c8141e;w40')
+
+    // A key's step on the white slider is a whole gesture: Radix commits it.
+    fireEvent.keyDown(screen.getByRole('slider', { name: 'W' }), { key: 'ArrowRight' })
+    await act(async () => {})
+    expect(record).toHaveBeenCalledTimes(2)
+    expect(record).toHaveBeenLastCalledWith('colour', '#c8141e;w41')
+  })
+
+  it('records nothing for Pick or a palette press', () => {
+    templates = [template(2, 'Warm Amber')]
+    draw({ targets: FOUR, projectId: 1, palettes: { projectId: 1, targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'] } })
+    fireEvent.click(screen.getByRole('button', { name: 'Pick' }))
+    fireEvent.click(within(document.querySelector('[data-band-palette]') as HTMLElement).getByText('Warm Amber'))
+    expect(toggle).toHaveBeenCalled()
+    act(() => vi.advanceTimersByTime(RECENT_RELEASE_SETTLE_MS * 5))
+    cleanup()
+    expect(record).not.toHaveBeenCalled()
+  })
+
+  it('draws the live project’s colours, and a tap writes one as typed and moves it to the front', () => {
+    desk = { projectId: 1, lists: { colour: ['#102030', '#ff8800;w0'] } }
+    const { onColourChange } = draw({ hasWhiteChannel: true, hasAmberChannel: true, w: 90, a: 50 })
+    const band = document.querySelector('[data-recent-values="colour"]')!
+    expect(band).not.toBeNull()
+    fireEvent.click(within(band as HTMLElement).getByRole('button', { name: 'Recent #ff8800' }))
+    // White as recorded, amber left where it was: the recent did not say it.
+    expect(onColourChange).toHaveBeenLastCalledWith(255, 136, 0, 0, 50, undefined)
+    // Recorded as tapped, so the desk moves that recent to the front rather than adding another.
+    expect(record).toHaveBeenCalledExactlyOnceWith('colour', '#ff8800;w0')
+  })
+
+  it('records one colour for a drag that takes focus from a field, and a typed byte before a tap', () => {
+    const { onColourChange } = draw({ hasWhiteChannel: true, w: 40 })
+    // The editor opens with R focused; pressing the picker takes the focus from it.
+    field('R').focus()
+    fireEvent.pointerDown(saturation())
+    field('R').blur()
+    fireEvent.mouseDown(saturation())
+    fireEvent.mouseMove(window, { buttons: 1, pageX: 30, pageY: 30 })
+    act(() => vi.advanceTimersByTime(RECENT_RELEASE_SETTLE_MS * 3))
+    expect(record).not.toHaveBeenCalled()
+    fireEvent.mouseUp(window)
+    fireEvent.pointerUp(window)
+    act(() => vi.advanceTimersByTime(RECENT_RELEASE_SETTLE_MS))
+    expect(record).toHaveBeenCalledTimes(1)
+    const [r, g, b] = onColourChange.mock.lastCall!
+    const hex = [r, g, b].map((n: number) => n.toString(16).padStart(2, '0')).join('')
+    expect(record).toHaveBeenCalledWith('colour', `#${hex};w0`)
+
+    record.mockClear()
+    desk = { projectId: 1, lists: { colour: ['#ff8800;w0'] } }
+    cleanup()
+    draw({ hasWhiteChannel: true, w: 40 })
+    fireEvent.change(field('G'), { target: { value: '99' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Recent #ff8800' }))
+    expect(record.mock.calls).toEqual([
+      ['colour', '#0a631e;w40'],
+      ['colour', '#ff8800;w0'],
+    ])
+  })
+
+  it('draws nothing and records nothing in an editor of a project that is not live', () => {
+    desk = { projectId: 2, lists: { colour: ['#102030'] } }
+    draw({ projectId: 1 })
+    expect(document.querySelector('[data-recent-values]')).toBeNull()
+    fireEvent.change(field('G'), { target: { value: '99' } })
+    fireEvent.blur(field('G'))
+    act(() => vi.advanceTimersByTime(RECENT_RELEASE_SETTLE_MS))
+    expect(record).not.toHaveBeenCalled()
   })
 })
 
