@@ -16,7 +16,9 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-FX-SPEED-S4`](#fu-manual-fx-speed-s4) | ×½ and ×2 on a busked master halve and double it mid-song, a hold included, and greyed at 20 and 300; a fader and an encoder on *FX speed* move the selection's Local FX with no jump, the fader picking up at the lead FX | FX speed session 4, 2026-11-07 |
+| [`FU-MANUAL-FX-SPEED-S3`](#fu-manual-fx-speed-s3) | dragging Speed on a running chase changes its rate with no jump, letting go on ×2 settles it on the beat within a cycle, and TAP in the live FX editor holds its master, the rail reading *Held* | FX speed session 3, 2026-11-07 |
 | [`FU-MANUAL-FX-SPEED-S2`](#fu-manual-fx-speed-s2) | a tempo the operator tapped and captured on the rail outlives a GO of a cue that sets the same master, Record puts it into the cue's *Tempo on GO*, and that cue sets it after a Clear | FX speed session 2, 2026-11-07 |
+| [`FU-MANUAL-FX-SPEED-S1`](#fu-manual-fx-speed-s1) | a Look whose FX was on *Seconds* before the upgrade runs at the same rate after it and reads *Own tempo*; a Candle or Fluorescent Flicker that was on Seconds flickers as it did, on *Natural* | FX speed session 1, 2026-11-07 |
 | [`FU-MANUAL-PROGRAMMER-FIXES`](#fu-manual-programmer-fixes) | the programmer's four fixes at the desk — the FX picker stays open through a colour drag and a dimmer through 0 with Lit on, or the close trace names its door; expanded element rows survive a trip to Show and back; ⌘-clicked cells with gaps take one value, *Add* doing it on the tablet; a recent set on one window lands from another's pop-up over three cells | Programmer fixes S1–S5, 2026-11-07 |
 | [`FU-MANUAL-SHOW-VIEW-FIXES`](#fu-manual-show-view-fixes) | the Show view's editing fixes on a real stack — a duplicated follow cue fires its follower, the editor pane toggled and a marquee at the bottom of a long stack, four numbers renumbered from their cells, a cue armed from its pip mid-show, *In production* off and on mid-run, a block of three cues dragged | Show view fixes S1–S5, 2026-11-06 |
 | [`FU-MANUAL-UNDO`](#fu-manual-undo) | undo and history on Sleeping Beauty — a Clear undone brings the busk back over its fade with the FX mid-phase, the store round trip is byte-for-byte, History names each window and Claude, a deleted cue comes back with its pad and anchor, a re-address undone asks first, and ⌘Z, ⇧⌘Z and the X-Touch's Undo walk both histories in order | Undo S1–S6, 2026-11-04 |
@@ -180,6 +182,31 @@ takeover set to *Pickup* (a motor fader is *Immediate* by default, its motor goi
 
 ---
 
+## `FU-MANUAL-FX-SPEED-S3`
+
+**What it proves**: *the Speed slider* (fx-speed plan session 3) — a change of Speed keeps the FX's
+place in its cycle, and a forever beat FX let go on a power of two glides back onto the beat.
+
+**Why it is here**: `FxSpeedPhaseTest` reads the phase either side of a cycle change; only the rig
+shows a chase not jumping under a dragged slider, and the glide landing on the music.
+
+**Test**, on the dev rig, a chase (a Wave *Chase* on a group) on M2 at ×1, M2 set to 120, and the
+chase open in the live FX editor from the fixture sheet's tray:
+
+1. **No jump.** Drag the Speed slider slowly from ×1 to about ×3 and back: the chase speeds up and
+   slows down from where it is, no head jumping ahead or back. The readout follows the drag
+   (*1 bar · 2 s a cycle at 120 BPM* at ×1).
+2. **Onto the beat.** Drag to about ×1.6 and hold a few bars, then let go on ×2 (the slider sticks
+   there): within one cycle the chase lines up on the beat again, never running backwards. Set
+   Direction to ↔ and repeat: it keeps bouncing the same way through the change.
+3. **Runs.** Set Runs to ×4 and change Speed halfway through: the chase still ends after its fourth
+   cycle and hands back.
+4. **Tap holds the master.** TAP four times on the beat in the Speed section: the tempo field turns
+   amber, and M2's card on the busk rail reads *Held* at the tapped tempo. *Release* on the card: the
+   field is no longer amber.
+
+---
+
 ## `FU-MANUAL-FX-SPEED-S2`
 
 **What it proves**: *tempo in the programmer* (fx-speed plan session 2) — a held tempo runs over the
@@ -198,6 +225,38 @@ right on the desk's screens.
    M2 at that tempo. Clear, then GO the new cue: M2 lands on it.
 4. **Blind.** Blind, then set M2's tempo in the programmer's list: the rail shows the staged tempo
    beside the running one, and the chase does not move until Blind is left.
+
+---
+
+## `FU-MANUAL-FX-SPEED-S1`
+
+**What it proves**: *Own tempo on the desk* (fx-speed plan session 1) — step 12 of the database's
+migrations, and the importer, put a Seconds FX on Own tempo 120 at twice its cycle without changing
+how fast it runs.
+
+**Why it is here**: `OwnTempoMigrationTest` runs the step over a frozen database and
+`OwnTempoEquivalenceTest` holds the output to the bit; only the dev desk's own database shows that
+the show's real Looks came through and read right.
+
+**Test**, on the dev rig:
+
+1. **What was rewritten.** In the desk's log from its first start on session 1, each FX the step
+   rewrote has an `Own tempo: <table> '<owner>': … on Seconds now runs on …` line (`look_fx`,
+   `cue_ad_hoc_fx` or `palette_fx`), and a last line counts them and names the backup. A step that
+   rewrote nothing logs nothing. If there is no `look_fx` line, import a show export made before
+   session 1 (`formatVersion` below 49) that holds a Look with an FX on *Seconds*: the importer
+   converts it the same way.
+2. **The same rate.** Press a Look a `look_fx` line names, or the imported one, and time ten
+   cycles: ten times the seconds it had. Its row in the Applied FX table reads *Own 120* and a
+   Speed of 2 ÷ those seconds (one Timing cell, or Timing and Speed on a wide screen); *Edit…*
+   opens it with the tempo chip on *Own*, the *Own tempo* field at 120 and a readout giving those
+   seconds a cycle at 120 BPM. A 4 s pulse reads ×½ and *2 bars · 4 s a cycle at 120 BPM*, 40 s
+   for ten.
+3. **Its own clock.** Tap M1 on the rail to another tempo: that FX does not move. Change its Own
+   tempo to 60 in the editor: it halves with its phase kept.
+4. **A wall-clock FX.** A Candle or Fluorescent Flicker that was on Seconds is on Natural now, with
+   no rate master: it flickers as it did, its Applied FX row's Timing reads *Natural*, and its
+   editor says *Runs at its own pace*.
 
 ---
 
