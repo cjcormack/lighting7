@@ -27,11 +27,14 @@ import { LiveAppearanceReporter, pickSelectionColour, targetHeads, type PickedCo
 import { cn } from '@/lib/utils'
 import type { ColourAttributeDescriptor } from '@/store/fixtures'
 import { usePatchListQuery } from '@/store/patches'
+import { useRecordRecent } from '@/store/recentValues'
 import { EditorField } from './EditorField'
 import { EditorFooter } from './EditorFooter'
 import { EditorReadout } from './EditorReadout'
 import { numericSeed } from './useEditorKeyboard'
 import { FxBand, PaletteBand } from './PaletteBands'
+import { RecentValues } from './RecentValues'
+import { parseRecentColour, RECENT_COLOUR, serializeRecentColour } from './recentValueSpelling'
 
 /** The whole of what this editor writes: three colour bytes and the three bundled emitters. */
 export interface ColourChannels {
@@ -407,6 +410,9 @@ export function ColourEditor({
    */
   const gestureRef = useRef({ live: false, holding: false, at: Number.NEGATIVE_INFINITY })
   const releaseRef = useRef<(() => void) | null>(null)
+  const recent = useRecordRecent(RECENT_COLOUR, projectId)
+  // Radix commits a key's step before it reports the step's value.
+  const flushAfterSlide = () => queueMicrotask(recent.flush)
   const seedKnob = useCallback((color: RgbColor) => {
     if (!gestureRef.current.holding) gestureRef.current.live = false
     setPickerColor(color)
@@ -416,6 +422,8 @@ export function ColourEditor({
     gestureRef.current.at = performance.now()
   }
   const holdPicker = (event: { button: number }) => {
+    // A press inside the last drag's settle: that drag's colour goes first.
+    recent.flush()
     touchPicker()
     // A secondary button's release can be swallowed by a context menu, which would hold for good.
     if (event.button !== 0 || releaseRef.current != null) return
@@ -426,6 +434,7 @@ export function ColourEditor({
       gestureRef.current.at = performance.now()
       for (const name of events) window.removeEventListener(name, release)
       releaseRef.current = null
+      recent.release()
     }
     for (const name of events) window.addEventListener(name, release)
     releaseRef.current = release
@@ -528,20 +537,22 @@ export function ColourEditor({
    * per handler — it is the same three lines that used to sit in four places.
    */
   const send = useCallback(
-    (next: ColourBuffer) => {
+    (next: ColourBuffer, record: 'stage' | 'none') => {
       pendingRef.current = next
       bufferSinceRef.current = null
       setPicked(null)
-      onColourChange(
-        next.r,
-        next.g,
-        next.b,
-        hasWhiteChannel ? next.w : undefined,
-        hasAmberChannel ? next.a : undefined,
-        hasUvChannel ? next.uv : undefined,
-      )
+      const written = {
+        r: next.r,
+        g: next.g,
+        b: next.b,
+        w: hasWhiteChannel ? next.w : undefined,
+        a: hasAmberChannel ? next.a : undefined,
+        uv: hasUvChannel ? next.uv : undefined,
+      }
+      onColourChange(written.r, written.g, written.b, written.w, written.a, written.uv)
+      if (record === 'stage') recent.stage(serializeRecentColour(written))
     },
-    [onColourChange, hasWhiteChannel, hasAmberChannel, hasUvChannel],
+    [onColourChange, hasWhiteChannel, hasAmberChannel, hasUvChannel, recent],
   )
 
   /**
@@ -558,6 +569,7 @@ export function ColourEditor({
         isExactWhite(color) && hasWhiteChannel
           ? { r: 0, g: 0, b: 0, w: 255, a: zeroIfHeld(held.a), uv: zeroIfHeld(held.uv) }
           : { r: color.r, g: color.g, b: color.b, w: zeroIfHeld(held.w), a: zeroIfHeld(held.a), uv: zeroIfHeld(held.uv) },
+        'stage',
       )
     },
     [send, hasWhiteChannel],
@@ -577,7 +589,19 @@ export function ColourEditor({
     // **The knob is deliberately not moved to follow the number**: it follows the desk's answer
     // once that settles (see [combinedCss]), and where the host holds `combinedCss` constant it
     // stays put; the cell's own swatch tracks the value.
-    send({ ...currentChannels(), [channel]: channelByte(value) })
+    send({ ...currentChannels(), [channel]: channelByte(value) }, 'stage')
+  }
+
+  /**
+   * A tap on a recent: the whole colour as if its bytes had been typed, an emitter it does not
+   * name left where it is. It records the value as tapped, so the desk moves it to the front.
+   */
+  const pickRecent = (value: string) => {
+    const colour = parseRecentColour(value)
+    if (colour == null) return
+    const stated = Object.fromEntries(Object.entries(colour).filter(([, v]) => v !== undefined))
+    send({ ...currentChannels(), ...stated }, 'none')
+    recent.now(value)
   }
 
   // ─── The heads, the leaves and Pick ─────────────────────────────────────
@@ -710,14 +734,17 @@ export function ColourEditor({
           onKeyDownCapture={(event) => {
             if (isPickerKey(event)) touchPicker()
           }}
+          onKeyUpCapture={(event) => {
+            if (isPickerKey(event)) recent.release()
+          }}
         >
           <RgbColorPicker color={pickerColor} onChange={handleColourChange} />
         </div>
         {channelFields && (
           <div className={cn('w-20 shrink-0', compact ? 'space-y-2.5' : 'space-y-1.5')}>
-            <ChannelField label="R" value={channels.r} onChange={(v) => setChannel('r', v)} seed={numericSeed(keyboardOpen)} />
-            <ChannelField label="G" value={channels.g} onChange={(v) => setChannel('g', v)} />
-            <ChannelField label="B" value={channels.b} onChange={(v) => setChannel('b', v)} />
+            <ChannelField label="R" value={channels.r} onChange={(v) => setChannel('r', v)} onDone={recent.flush} seed={numericSeed(keyboardOpen)} />
+            <ChannelField label="G" value={channels.g} onChange={(v) => setChannel('g', v)} onDone={recent.flush} />
+            <ChannelField label="B" value={channels.b} onChange={(v) => setChannel('b', v)} onDone={recent.flush} />
           </div>
         )}
       </div>
@@ -745,9 +772,24 @@ export function ColourEditor({
         >
           {EMITTERS.filter(({ key }) => emitters[key].has).map(({ key, label, tint }) =>
             channelFields ? (
-              <EmitterRow key={key} label={label} tint={tint} value={emitters[key].value} onChange={(v) => setChannel(key, v)} />
+              <EmitterRow
+                key={key}
+                label={label}
+                tint={tint}
+                value={emitters[key].value}
+                onChange={(v) => setChannel(key, v)}
+                onSlideEnd={flushAfterSlide}
+                onFieldDone={recent.flush}
+              />
             ) : (
-              <ExtendedChannelSlider key={key} label={label} value={emitters[key].value} onChange={(v) => setChannel(key, v)} color={tint} />
+              <ExtendedChannelSlider
+                key={key}
+                label={label}
+                value={emitters[key].value}
+                onChange={(v) => setChannel(key, v)}
+                onValueCommit={flushAfterSlide}
+                color={tint}
+              />
             ),
           )}
         </div>
@@ -787,6 +829,10 @@ export function ColourEditor({
       </span>
     </EditorReadout>
   ) : null
+
+  const recentBand = (
+    <RecentValues listKey={RECENT_COLOUR} projectId={projectId} onPick={pickRecent} readOnly={readOnly} className={docked ? 'mt-2' : undefined} />
+  )
 
   // The Palettes band, mounted only where a host asks for one — its store hooks are the band's.
   const band =
@@ -901,6 +947,7 @@ export function ColourEditor({
             {labelLine != null && <div className="mb-4">{labelLine}</div>}
             {controls}
             {readout}
+            {recentBand}
           </div>
           {bandSection}
           {fxSection}
@@ -918,6 +965,7 @@ export function ColourEditor({
       {/* The popover's 12px padding is 2px short of the knob's 14px overhang, and the popover scrolls. */}
       <div className="px-0.5">{controls}</div>
       {readout}
+      {recentBand}
       {fxSection}
       {footerRow}
     </div>
@@ -942,15 +990,28 @@ function ChannelField({
   label,
   value,
   onChange,
+  onDone,
   seed,
 }: {
   label: string
   value: number
   onChange: (next: number) => void
+  /** The field left: its typed value is done. */
+  onDone: () => void
   seed?: string | null
 }) {
   return (
-    <EditorField label={label} prefix={label} value={Math.round(value)} onCommit={onChange} min={0} max={255} seed={seed} fieldClassName="px-1.5" />
+    <EditorField
+      label={label}
+      prefix={label}
+      value={Math.round(value)}
+      onCommit={onChange}
+      onDraft={(raw) => raw === null && onDone()}
+      min={0}
+      max={255}
+      seed={seed}
+      fieldClassName="px-1.5"
+    />
   )
 }
 
@@ -960,11 +1021,17 @@ function EmitterRow({
   tint,
   value,
   onChange,
+  onSlideEnd,
+  onFieldDone,
 }: {
   label: string
   tint: string
   value: number
   onChange: (next: number) => void
+  /** The slider let go, or a key's step. */
+  onSlideEnd: () => void
+  /** The field left. */
+  onFieldDone: () => void
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -979,6 +1046,7 @@ function EmitterRow({
         step={1}
         aria-label={label}
         onValueChange={([v]) => onChange(v)}
+        onValueCommit={onSlideEnd}
         className="min-w-0 flex-1"
       />
       {/* The row already names the channel with its dot and letter, so the field's name is for a
@@ -987,6 +1055,7 @@ function EmitterRow({
         label={`${label} value`}
         value={Math.round(value)}
         onCommit={onChange}
+        onDraft={(raw) => raw === null && onFieldDone()}
         min={0}
         max={255}
         className="w-14 shrink-0"

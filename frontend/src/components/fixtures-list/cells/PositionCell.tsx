@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, type ReactNode } from 'react'
+import { memo, useRef, type ReactNode } from 'react'
 import { CENTRE_MAX, CENTRE_MIN, clampCentre, dmxToCentre, formatCentre } from '@/lib/positionScale'
 import type { CellResolution } from '../columns'
 import type { CellBatch, CellCommit } from '../rowModel'
@@ -7,6 +7,9 @@ import { EditorSurface, type CellClickBehaviour } from '../../editor/EditorSurfa
 import { EditorLabelLine } from '../../editor/EditorLabelLine'
 import { CellSourceChip, type CellKey } from '../../fixtureSheet/CellSourceChip'
 import { EditorReadout } from '../../editor/EditorReadout'
+import { RecentValues } from '../../editor/RecentValues'
+import { parseRecentPosition, RECENT_POSITION, serializeRecentPosition } from '../../editor/recentValueSpelling'
+import { useRecordRecent } from '@/store/recentValues'
 import { PaletteBands, usePaletteSave } from '../../editor/PaletteBands'
 import { PositionAimTool } from '../../stage3d/PositionAimTool'
 import { PositionSpreadTool } from './PositionSpreadTool'
@@ -18,6 +21,7 @@ import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
 import { numericSeed, useEditorKeyboard } from '../../editor/useEditorKeyboard'
 import { useEditorOpen } from '../../editor/useEditorOpen'
 import { ValueFieldRow } from '../../editor/ValueFieldRow'
+import type { CellClickEvent } from '../../sheet/cellSelectionModel'
 
 interface PositionCellOwnProps {
   value: Extract<CellValue, { kind: 'position' }>
@@ -59,7 +63,7 @@ interface PositionCellOwnProps {
    */
   selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
-  onBeginEdit: () => void
+  onBeginEdit: (event?: CellClickEvent) => void
   /**
    * The cell's `(head, property)` keys, for the source chip on the editor's label line
    * (fixture-fx-sheets plan D19). Given by the programmer grid where it draws ownership; absent,
@@ -125,29 +129,6 @@ export const PositionCell = memo(function PositionCell({
   const positions = heads.resolutions.filter((r): r is PositionResolution => r.kind === 'position')
   const panRange = { min: ranges.panMin, max: ranges.panMax }
   const tiltRange = { min: ranges.tiltMin, max: ranges.tiltMax }
-
-  // Per-axis, exactly as the sliders are: sending the row's aggregate for the axis that did not
-  // move would overwrite every batch target's value for it with one number. The value is clamped
-  // to the scale here (the field's caller-clamp rule) and each head's byte is resolved where the
-  // target descriptor is in hand.
-  const commitPan = useCallback(
-    (raw: number) => onCommit({ kind: 'position', panCentre: clampCentre(raw) }),
-    [onCommit],
-  )
-  const commitTilt = useCallback(
-    (raw: number) => onCommit({ kind: 'position', tiltCentre: clampCentre(raw) }),
-    [onCommit],
-  )
-  // The pad writes both axes in one commit.
-  const commitPad = useCallback(
-    (nx: number, ny: number) =>
-      onCommit({
-        kind: 'position',
-        panCentre: clampCentre(CENTRE_MIN + nx * (CENTRE_MAX - CENTRE_MIN)),
-        tiltCentre: clampCentre(CENTRE_MIN + ny * (CENTRE_MAX - CENTRE_MIN)),
-      }),
-    [onCommit],
-  )
 
   // Controlled, because the container has to be able to open this from outside — Enter over a
   // selection, or the bar's Set — which an uncontrolled Radix popover offers no door for. The
@@ -250,31 +231,24 @@ export const PositionCell = memo(function PositionCell({
             ) : undefined
           }
         >
-          <PositionPads
-            x={(panShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}
-            y={(tiltShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}
-            onChange={commitPad}
+          <PositionEditorBody
+            panShown={panShown}
+            tiltShown={tiltShown}
+            // The scope's own pair — the programmer's, the focused Look's, the cue's — where it is
+            // one value over exactly the heads this edit lands on.
+            scopePair={value.isUniform && sameHeads(positions, resolutions) ? { pan: panShown, tilt: tiltShown } : null}
+            onCommit={onCommit}
+            seed={numericSeed(keyboardOpen)}
             targets={bandTargets}
             projectId={projectId}
           >
-            <div className="min-w-0 flex-1 space-y-2">
-              <ValueFieldRow
-                label="Pan"
-                min={CENTRE_MIN}
-                max={CENTRE_MAX}
-                value={panShown}
-                onChange={commitPan}
-                seed={numericSeed(keyboardOpen)}
-              />
-              <ValueFieldRow label="Tilt" min={CENTRE_MIN} max={CENTRE_MAX} value={tiltShown} onChange={commitTilt} />
-            </div>
-          </PositionPads>
-          <EditorReadout>
-            <span>{bytesLine}</span>
-            {heads.count > 1 && !sameRanges && <span>ranges differ</span>}
-            {!value.isUniform && <span className="ml-auto">heads differ</span>}
-            {skipped && <span>{skipped}</span>}
-          </EditorReadout>
+            <EditorReadout>
+              <span>{bytesLine}</span>
+              {heads.count > 1 && !sameRanges && <span>ranges differ</span>}
+              {!value.isUniform && <span className="ml-auto">heads differ</span>}
+              {skipped && <span>{skipped}</span>}
+            </EditorReadout>
+          </PositionEditorBody>
         </PaletteBands>
       </div>
     </EditorSurface>
@@ -285,6 +259,118 @@ export const PositionCell = memo(function PositionCell({
 
 const NO_TARGETS: NonNullable<CellBatch['targets']> = []
 
+type PositionCommit = Extract<CellCommit, { kind: 'position' }>
+
+/** Whether the batch is the cell's own heads, so the cell's value is the batch's. */
+function sameHeads(batch: readonly PositionResolution[], own: readonly NonNullable<CellResolution>[]): boolean {
+  return (
+    batch.length === own.length &&
+    batch.every((r, i) => {
+      const o = own[i]
+      return o.kind === 'position' && o.pan.universe === r.pan.universe && o.pan.channelNo === r.pan.channelNo && o.tilt.universe === r.tilt.universe && o.tilt.channelNo === r.tilt.channelNo
+    })
+  )
+}
+
+/**
+ * The pad, the two fields and the Recent band, mounted with the open editor so the recorder's
+ * gesture ends with it (D17). A commit stages the pair the heads hold once it lands (D15): the axis
+ * it says, the other the one this editor last set, else [scopePair]'s — the scope's own value where
+ * it is one over the batch. With neither, the other axis is not known to be one value, and nothing is
+ * recorded; the wire is never read, since it is not the scope being edited. A drag records on its
+ * release, a typed axis when its field is left, a tap at once.
+ */
+function PositionEditorBody({
+  panShown,
+  tiltShown,
+  scopePair,
+  onCommit,
+  seed,
+  targets,
+  projectId,
+  children,
+}: {
+  panShown: number
+  tiltShown: number
+  scopePair: { pan: number; tilt: number } | null
+  onCommit: (commit: CellCommit) => void
+  seed: string | null
+  targets: NonNullable<CellBatch['targets']>
+  projectId?: number
+  children: ReactNode
+}) {
+  const recent = useRecordRecent(RECENT_POSITION, projectId)
+  // What this open editor has set, axis by axis: every head takes it (a centre value is the same
+  // share of each head's own travel).
+  const stated = useRef<{ pan?: number; tilt?: number }>({})
+  const send = (commit: PositionCommit) => {
+    onCommit(commit)
+    stated.current = {
+      pan: commit.panCentre ?? stated.current.pan,
+      tilt: commit.tiltCentre ?? stated.current.tilt,
+    }
+    const pan = stated.current.pan ?? scopePair?.pan
+    const tilt = stated.current.tilt ?? scopePair?.tilt
+    if (pan != null && tilt != null) recent.stage(serializeRecentPosition(pan, tilt))
+  }
+  // Per-axis, exactly as the sliders are: sending the row's aggregate for the axis that did not
+  // move would overwrite every batch target's value for it with one number. The value is clamped
+  // to the scale here (the field's caller-clamp rule) and each head's byte is resolved where the
+  // target descriptor is in hand.
+  const commitPan = (raw: number) => send({ kind: 'position', panCentre: clampCentre(raw) })
+  const commitTilt = (raw: number) => send({ kind: 'position', tiltCentre: clampCentre(raw) })
+  // The pad writes both axes in one commit.
+  const commitPad = (nx: number, ny: number) =>
+    send({
+      kind: 'position',
+      panCentre: clampCentre(CENTRE_MIN + nx * (CENTRE_MAX - CENTRE_MIN)),
+      tiltCentre: clampCentre(CENTRE_MIN + ny * (CENTRE_MAX - CENTRE_MIN)),
+    })
+  const pickRecent = (value: string) => {
+    const pair = parseRecentPosition(value)
+    if (pair == null) return
+    onCommit({ kind: 'position', panCentre: pair.pan, tiltCentre: pair.tilt })
+    stated.current = { pan: pair.pan, tilt: pair.tilt }
+    recent.now(value)
+  }
+  return (
+    <>
+      <PositionPads
+        x={(panShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}
+        y={(tiltShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}
+        onChange={commitPad}
+        onRelease={recent.flush}
+        targets={targets}
+        projectId={projectId}
+      >
+        <div className="min-w-0 flex-1 space-y-2">
+          <ValueFieldRow
+            label="Pan"
+            min={CENTRE_MIN}
+            max={CENTRE_MAX}
+            value={panShown}
+            onChange={commitPan}
+            onFieldDone={recent.flush}
+            onSlideEnd={recent.slideEnd}
+            seed={seed}
+          />
+          <ValueFieldRow
+            label="Tilt"
+            min={CENTRE_MIN}
+            max={CENTRE_MAX}
+            value={tiltShown}
+            onChange={commitTilt}
+            onFieldDone={recent.flush}
+            onSlideEnd={recent.slideEnd}
+          />
+        </div>
+      </PositionPads>
+      {children}
+      <RecentValues listKey={RECENT_POSITION} projectId={projectId} onPick={pickRecent} />
+    </>
+  )
+}
+
 /**
  * The pad beside the fields, in the viewer's mode: the XY pad, or in Stage mode the jog pad — a
  * component of its own so only an open editor subscribes to the mode, not every cell on the grid.
@@ -293,6 +379,7 @@ function PositionPads({
   x,
   y,
   onChange,
+  onRelease,
   targets,
   projectId,
   children,
@@ -300,6 +387,8 @@ function PositionPads({
   x: number
   y: number
   onChange: (nx: number, ny: number) => void
+  /** The XY pad let go. */
+  onRelease: () => void
   targets: NonNullable<CellBatch['targets']>
   projectId?: number
   children: ReactNode
@@ -311,7 +400,7 @@ function PositionPads({
         <PadModeSwitch mode={mode} />
       </div>
       <div className="flex items-start gap-3">
-        {mode === 'STAGE' ? <CellJogPad targets={targets} projectId={projectId} /> : <XyPad x={x} y={y} onChange={onChange} />}
+        {mode === 'STAGE' ? <CellJogPad targets={targets} projectId={projectId} /> : <XyPad x={x} y={y} onChange={onChange} onRelease={onRelease} />}
         {children}
       </div>
     </>
@@ -342,7 +431,17 @@ const JOG_PAD_SIZE = 100
  * Not a keyboard control — the two fields beside it are, and a slider apiece under them — so it
  * carries no role a screen reader would try to operate.
  */
-function XyPad({ x, y, onChange }: { x: number; y: number; onChange: (nx: number, ny: number) => void }) {
+function XyPad({
+  x,
+  y,
+  onChange,
+  onRelease,
+}: {
+  x: number
+  y: number
+  onChange: (nx: number, ny: number) => void
+  onRelease: () => void
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
   const read = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -375,9 +474,11 @@ function XyPad({ x, y, onChange }: { x: number; y: number; onChange: (nx: number
         if (dragging.current) read(e)
       }}
       onPointerUp={() => {
+        if (dragging.current) onRelease()
         dragging.current = false
       }}
       onPointerCancel={() => {
+        if (dragging.current) onRelease()
         dragging.current = false
       }}
     >

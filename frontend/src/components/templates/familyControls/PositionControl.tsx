@@ -4,6 +4,10 @@ import { Slider } from '@/components/ui/slider'
 import { EditorField } from '@/components/editor/EditorField'
 import { CENTRE_MAX, CENTRE_MIN, clampCentre, formatCentre, positionOnScale } from '@/lib/positionScale'
 import type { PaletteIntent } from '@/lib/paletteIntent'
+import { useRecordRecent } from '@/store/recentValues'
+import { useSlideEnd } from '@/components/editor/useSlideEnd'
+import { RecentValues } from '@/components/editor/RecentValues'
+import { parseRecentPosition, RECENT_POSITION, serializeRecentPosition } from '@/components/editor/recentValueSpelling'
 
 /**
  * Pan and tilt **centre-relative** (venue-visit plan D3): `-128..127` on each axis, 0 at the centre
@@ -19,14 +23,30 @@ import type { PaletteIntent } from '@/lib/paletteIntent'
 export function PositionControl({
   value,
   onChange,
+  projectId,
 }: {
   value: PaletteIntent | undefined
   onChange: (intent: PaletteIntent | null) => void
+  /** The palette's project: its Recent band is drawn only while that project is the live one. */
+  projectId?: number
 }) {
   const current = value?.kind === 'position' ? value : null
   const { pan, tilt } = current != null ? positionOnScale(current) : { pan: 0, tilt: 0 }
-  const set = (next: { pan: number; tilt: number }) =>
-    onChange({ kind: 'position', pan: clampCentre(next.pan), tilt: clampCentre(next.tilt), unit: 'centre' })
+  // A palette's position is always both axes, so every commit is a pair (D15): a drag records on
+  // its commit, a typed axis when its field is left, a tap at once.
+  const recent = useRecordRecent(RECENT_POSITION, projectId)
+  const slideEnd = useSlideEnd(recent.slideEnd)
+  const set = (next: { pan: number; tilt: number }) => {
+    const pair = { pan: clampCentre(next.pan), tilt: clampCentre(next.tilt) }
+    onChange({ kind: 'position', ...pair, unit: 'centre' })
+    recent.stage(serializeRecentPosition(pair.pan, pair.tilt))
+  }
+  const pickRecent = (recorded: string) => {
+    const pair = parseRecentPosition(recorded)
+    if (pair == null) return
+    onChange({ kind: 'position', pan: pair.pan, tilt: pair.tilt, unit: 'centre' })
+    recent.now(recorded)
+  }
 
   return (
     <div className="space-y-3">
@@ -55,6 +75,7 @@ export function PositionControl({
                   max={CENTRE_MAX}
                   fieldClassName="w-16"
                   onCommit={(next) => set({ pan, tilt, [axis]: next })}
+                  onDraft={(raw) => raw === null && recent.flush()}
                 />
               )}
             </div>
@@ -65,10 +86,12 @@ export function PositionControl({
               step={1}
               value={[shown]}
               onValueChange={([next]) => next !== undefined && set({ pan, tilt, [axis]: next })}
+              {...slideEnd}
             />
           </div>
         )
       })}
+      <RecentValues listKey={RECENT_POSITION} projectId={projectId} onPick={pickRecent} />
       <p className="text-[11px] text-muted-foreground">
         {current?.unit === 'degrees'
           ? `Saved in degrees — shown here as ${formatCentre(pan)} / ${formatCentre(tilt)}, and saved centre-relative once you move it.`

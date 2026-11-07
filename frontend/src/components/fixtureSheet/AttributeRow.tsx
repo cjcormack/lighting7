@@ -19,6 +19,19 @@ import { ColourEditor } from '../editor/ColourEditor'
 import { WarmthEditor, warmthReading } from '../editor/WarmthEditor'
 import { SettingCell } from '../fixtures-list/cells/SettingCell'
 import { fromPct, toPct } from '../editor/cellPercent'
+import { RecentValues } from '../editor/RecentValues'
+import {
+  parseRecentPercent,
+  parseRecentPosition,
+  RECENT_POSITION,
+  recentLevelKeyFor,
+  serializeRecentPercent,
+} from '../editor/recentValueSpelling'
+import { useSlideEnd } from '../editor/useSlideEnd'
+import { useRecordRecent } from '@/store/recentValues'
+import { sheetPositionRecent } from './sheetRecents'
+
+const noop = () => {}
 import type { CellCommit } from '../fixtures-list/rowModel'
 import { SheetField } from './SheetField'
 import { SourceChip, sourceEdgeClass } from './SourceChip'
@@ -91,11 +104,14 @@ function RowFrame({
   trailing?: ReactNode
   children: ReactNode
 }) {
-  const { openRowId, connected } = useFixtureSheet()
+  const { openRowId, connected, setRecentRowId } = useFixtureSheet()
   const finger = useFingerSized()
   const name = row.label
+  const engage = () => setRecentRowId?.(openKey(headKey, row))
   return (
     <div
+      onPointerDownCapture={engage}
+      onFocusCapture={engage}
       data-row={row.id}
       data-kind={row.kind}
       data-source={source.kind}
@@ -152,6 +168,7 @@ function SliderRow({ row, headKey, headName, sourceGroup }: { row: Extract<Sheet
   const { isAnyParked } = useAttributeParkStatus(attribute)
   const readOnly = useRowReadOnly(isAnyParked)
   const value = useSliderValue(attribute)
+  const { recentRowId } = useFixtureSheet()
   return (
     <RowFrame row={row} headKey={headKey} headName={headName} source={source} readOnly={readOnly} parked={isAnyParked}>
       <LevelControl
@@ -160,6 +177,8 @@ function SliderRow({ row, headKey, headName, sourceGroup }: { row: Extract<Sheet
         min={attribute.min}
         max={attribute.max}
         readOnly={readOnly}
+        recentKey={recentLevelKeyFor(attribute)}
+        showRecents={recentRowId === openKey(headKey, row)}
         // A drag follows the hand; a typed value takes the programmer fade.
         onDrag={(v) => writeSheetLevel(headKey, attribute.name, v, undefined, sourceGroup)}
         onTyped={(v) => writeSheetLevel(headKey, attribute.name, v, getProgrammerFadeMs(), sourceGroup)}
@@ -207,6 +226,8 @@ export function LevelControl({
   onDrag,
   onTyped,
   lowest,
+  recentKey,
+  showRecents = false,
 }: {
   label: string
   /** The value — over a pick of heads (D13), the highest, where the thumb sits. */
@@ -221,10 +242,31 @@ export function LevelControl({
    * group visualisers' reading) and the field says `40–80`.
    */
   lowest?: number
+  /**
+   * The `level:` list it records into (D17: a drag on its commit, Enter at once) — the percent the
+   * grid reads for the byte. Absent or null, nothing is recorded and no band drawn.
+   */
+  recentKey?: string | null
+  /** Draw the Recent band under the control: the row is the one last engaged. */
+  showRecents?: boolean
 }) {
   const mixed = lowest != null && lowest !== value
   const span = Math.max(1, max - min)
-  return (
+  const recent = useRecordRecent(recentKey ?? '')
+  const slideEnd = useSlideEnd(recent.slideEnd)
+  const spelling = (byte: number) => (recentKey != null ? serializeRecentPercent(toPct(byte)) : null)
+  const typed = (byte: number) => {
+    onTyped(byte)
+    const recorded = spelling(byte)
+    if (recorded != null) recent.now(recorded)
+  }
+  const pickRecent = (recorded: string) => {
+    const pct = parseRecentPercent(recorded)
+    if (pct == null) return
+    onTyped(Math.max(min, Math.min(max, fromPct(pct))))
+    recent.now(recorded)
+  }
+  const controls = (
     <>
       <Slider
         aria-label={label}
@@ -233,7 +275,13 @@ export function LevelControl({
         max={max}
         step={1}
         disabled={readOnly}
-        onValueChange={([v]) => v !== undefined && onDrag(v)}
+        onValueChange={([v]) => {
+          if (v === undefined) return
+          onDrag(v)
+          const staged = spelling(v)
+          if (staged != null) recent.stage(staged)
+        }}
+        {...slideEnd}
         className={cn(
           'min-w-[60px] flex-1',
           // The range: the fill runs to the highest head, and the track's own colour masks it below
@@ -255,9 +303,18 @@ export function LevelControl({
         min={0}
         max={100}
         disabled={readOnly}
-        onEnter={(pct) => onTyped(Math.max(min, Math.min(max, fromPct(Math.max(0, Math.min(100, pct))))))}
+        onEnter={(pct) => typed(Math.max(min, Math.min(max, fromPct(Math.max(0, Math.min(100, pct))))))}
       />
     </>
+  )
+  if (recentKey == null) return controls
+  // One tree whether or not the band shows: the band appears in the press that engages the row, and
+  // a changed parent would remount the slider and the field under that press.
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+      <div className="flex min-w-0 items-center gap-2">{controls}</div>
+      {showRecents && <RecentValues listKey={recentKey} onPick={pickRecent} readOnly={readOnly} />}
+    </div>
   )
 }
 
@@ -464,6 +521,21 @@ function PositionRow({ row, headKey, headName, sourceGroup }: { row: Extract<She
       writeSheetPosition(headKey, resolution, commit, typed ? getProgrammerFadeMs() : undefined, sourceGroup),
     [headKey, resolution, sourceGroup],
   )
+  // A gesture's end records the pair the head holds (D17): a drag on its release, Enter at once.
+  const recent = useRecordRecent(RECENT_POSITION)
+  const recordingWrite = (commit: Extract<CellCommit, { kind: 'position' }>, typed: boolean) => {
+    const pair = sheetPositionRecent([{ key: headKey, resolution }], commit)
+    write(commit, typed)
+    if (pair == null) return
+    recent.stage(pair)
+    if (typed) recent.flush()
+  }
+  const pickRecent = (value: string) => {
+    const pair = parseRecentPosition(value)
+    if (pair == null) return
+    write({ kind: 'position', panCentre: pair.pan, tiltCentre: pair.tilt }, true)
+    recent.now(value)
+  }
 
   const padMode = usePositionPadMode()
   const jogKeys = useMemo(() => [headKey], [headKey])
@@ -506,8 +578,9 @@ function PositionRow({ row, headKey, headName, sourceGroup }: { row: Extract<She
               pan={panNorm}
               tilt={tiltNorm}
               readOnly={readOnly}
+              onRelease={recent.flush}
               onMove={(x, y) =>
-                write(
+                recordingWrite(
                   {
                     kind: 'position',
                     pan: Math.round(resolution.panMin + x * (resolution.panMax - resolution.panMin)),
@@ -526,7 +599,8 @@ function PositionRow({ row, headKey, headName, sourceGroup }: { row: Extract<She
                 min={resolution.panMin}
                 max={resolution.panMax}
                 readOnly={readOnly}
-                onCommit={(c, typed) => write(c, typed)}
+                onCommit={recordingWrite}
+                onSlideEnd={recent.slideEnd}
                 axis="pan"
               />
               <AxisControl
@@ -535,7 +609,8 @@ function PositionRow({ row, headKey, headName, sourceGroup }: { row: Extract<She
                 min={resolution.tiltMin}
                 max={resolution.tiltMax}
                 readOnly={readOnly}
-                onCommit={(c, typed) => write(c, typed)}
+                onCommit={recordingWrite}
+                onSlideEnd={recent.slideEnd}
                 axis="tilt"
               />
             </div>
@@ -552,6 +627,7 @@ function PositionRow({ row, headKey, headName, sourceGroup }: { row: Extract<She
             </div>
           )}
         </div>
+        {open && <RecentValues listKey={RECENT_POSITION} onPick={pickRecent} readOnly={readOnly} />}
         {aimButton && <div className="flex justify-end">{aimButton}</div>}
       </div>
     </RowFrame>
@@ -566,6 +642,7 @@ export function AxisControl({
   max,
   readOnly,
   onCommit,
+  onSlideEnd,
 }: {
   label: string
   axis: 'pan' | 'tilt'
@@ -575,7 +652,10 @@ export function AxisControl({
   max: number
   readOnly: boolean
   onCommit: (commit: Extract<CellCommit, { kind: 'position' }>, typed: boolean) => void
+  /** The slider let go (`useSlideEnd`). */
+  onSlideEnd?: () => void
 }) {
+  const slideEnd = useSlideEnd(onSlideEnd ?? noop)
   // Centre-relative on every head (venue-visit plan D3, the grid's PositionCell rule): the slider
   // and the field both run -128..127 with 0 at the centre of travel, and the commit is resolved to
   // this head's own byte by `clampCommitToResolution`.
@@ -593,6 +673,7 @@ export function AxisControl({
         step={1}
         disabled={readOnly}
         onValueChange={([v]) => v !== undefined && onCommit({ kind: 'position', [key]: v }, false)}
+        {...slideEnd}
         className="min-w-[40px] flex-1"
       />
       <SheetField
@@ -620,12 +701,15 @@ export function PositionPad({
   tilt,
   readOnly,
   onMove,
+  onRelease,
 }: {
   size: number
   pan: number
   tilt: number
   readOnly: boolean
   onMove: (x: number, y: number) => void
+  /** A press let go. */
+  onRelease?: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -655,8 +739,14 @@ export function PositionPad({
         at(e)
       }}
       onPointerMove={(e) => dragging && at(e)}
-      onPointerUp={() => setDragging(false)}
-      onPointerCancel={() => setDragging(false)}
+      onPointerUp={() => {
+        if (dragging) onRelease?.()
+        setDragging(false)
+      }}
+      onPointerCancel={() => {
+        if (dragging) onRelease?.()
+        setDragging(false)
+      }}
     >
       <span
         className="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_0_2px_var(--color-primary)]"

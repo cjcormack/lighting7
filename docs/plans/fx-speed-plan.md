@@ -171,7 +171,7 @@ docs it names written, and its row marked *in review* with its branch. A session
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Own tempo on the desk | in review | `claude/quirky-faraday-k08oa7` | [#374](https://github.com/cjcormack/lighting7/pull/374) | `0082602` |
+| 1 | Own tempo on the desk | merged | `claude/quirky-faraday-k08oa7` | [#374](https://github.com/cjcormack/lighting7/pull/374) | `0082602` |
 | 2 | Tempo in the programmer | in review | `claude/fx-speed-0zrqvu` | | |
 | 3 | The Speed slider | planned | | | |
 | 4 | Half, double and a speed fader | planned | | | |

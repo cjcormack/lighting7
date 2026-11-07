@@ -252,6 +252,7 @@ export function ScriptSheet({
           strip={scope.reason != null ? <ReadOnlyNote reason={scope.reason} /> : undefined}
           verbs={verbs}
           marqueeDragging={sheet.marqueeDragging}
+          addLatch={sheet.addLatch}
           foldForStrip={false}
         />
       </div>

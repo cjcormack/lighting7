@@ -161,4 +161,18 @@ describe('HeadsChip', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Highlight' }))
     expect(highlight.press).toHaveBeenCalled()
   })
+
+  it('carries the Add latch as a menu item on a phone, where row C has no room for its button', () => {
+    const onToggle = vi.fn()
+    chip({ cells: 1, addLatch: { on: false, onToggle } }, true)
+    open(true)
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /^Add/ }))
+    expect(onToggle).toHaveBeenCalled()
+  })
+
+  it('draws no Add item off a phone', () => {
+    chip({ cells: 1, addLatch: { on: false, onToggle: vi.fn() } })
+    open()
+    expect(screen.queryByRole('menuitemcheckbox', { name: /^Add/ })).toBeNull()
+  })
 })

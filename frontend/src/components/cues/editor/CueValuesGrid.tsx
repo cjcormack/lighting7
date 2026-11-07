@@ -29,14 +29,15 @@ import { EditorContextProvider } from '@/components/programmer/EditorContext'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
 import { orderedSelectedCells, type CellActionCopy, type CellKeyboardPermission } from '@/components/sheet/cellEntry'
-import { arrowStepTarget, listSelectionIntentFor } from '@/components/sheet/listSelectionModel'
+import { arrowStepTarget, cellClickIntent, latchedIntent, listSelectionIntentFor } from '@/components/sheet/listSelectionModel'
+import { blankClickKeepsSelection, useAddLatch } from '@/components/sheet/useAddLatch'
 import { stepCellSelection, type CellSelection } from '@/components/sheet/useCellSelection'
 import { useCellEditorRequests } from '@/components/sheet/useCellEditorRequests'
 import { useSheetKeyboard, type SheetCellKeys, type SheetKeyRefusal, type SheetRowKeys } from '@/components/sheet/useSheetKeyboard'
 import { useCueActionDialogs } from '@/components/runner/cueActionDialogs'
 import { useActiveKeyRegion } from '@/components/sheet/keyRegion'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
-import type { CellRef } from '@/components/sheet/cellSelectionModel'
+import type { CellClickEvent, CellRef } from '@/components/sheet/cellSelectionModel'
 import type { ColumnKey } from '@/components/fixtures-list/columns'
 import type { CueTarget } from '@/api/cuesApi'
 import { ExpandAllButton } from '@/components/fixtures-list/ExpandAllButton'
@@ -310,11 +311,24 @@ function CueValuesGridBody({
     },
     [onRequestUnlock, openUnlock],
   )
+  // The Add latch (D7), touch's ⌘: every clear — Escape, Deselect, a tap on blank space — turns it off.
+  const { control: addLatch, ref: addLatchRef, off: addLatchOff } = useAddLatch()
+  const clearSelection = useCallback(() => {
+    addLatchOff()
+    return clearByLadder()
+  }, [addLatchOff, clearByLadder])
+  /** A click on a blank cell clears, unless it is building a selection (D1). */
+  const onBackgroundClick = useCallback(
+    (event?: CellClickEvent) => {
+      if (!blankClickKeepsSelection(event, addLatchRef.current)) clearSelection()
+    },
+    [addLatchRef, clearSelection],
+  )
   useSheetKeyboard<ColumnKey>({
     cellCount,
     permission,
     isCellSelected,
-    onEscape: clearByLadder,
+    onEscape: clearSelection,
     onOpen: openCellEditor,
     onClear: clearSelectedCells,
     onRefused,
@@ -326,7 +340,10 @@ function CueValuesGridBody({
   const isRegion = activeRegion != null && activeRegion === region.current
 
   // ── Rows' gestures ─────────────────────────────────────────────────────────────────────────────
-  const onRowClick = useCallback((id: RowId, e: React.MouseEvent) => selectRow(id, listSelectionIntentFor(e)), [selectRow])
+  const onRowClick = useCallback(
+    (id: RowId, e: React.MouseEvent) => selectRow(id, latchedIntent(listSelectionIntentFor(e), addLatchRef.current)),
+    [addLatchRef, selectRow],
+  )
   const onToggleExpand = useCallback(
     (row: GroupRow | FixtureRow, options?: { level?: boolean }) => {
       if (options?.level) expandAll(row.kind === 'group' ? 'groups' : 'fixtures', !row.isExpanded)
@@ -335,11 +352,15 @@ function CueValuesGridBody({
     },
     [toggleGroupExpanded, toggleFixtureExpanded, expandAll],
   )
+  /** A cell's click, by its modifiers (D1): the rows go first, since rows and cells are one selection. */
   const onBeginCellEdit = useCallback(
-    (row: Row, col: ColumnKey) => {
-      if (row.kind !== 'divider') selectCells([{ rowId: row.id, col }], 'replace')
+    (row: Row, col: ColumnKey, event?: CellClickEvent) => {
+      if (row.kind === 'divider') return
+      const { intent, detail } = cellClickIntent(event, addLatchRef.current)
+      if (rowCountRef.current > 0) clearRows()
+      cellSelection.click({ rowId: row.id, col }, intent, cellGrid, detail)
     },
-    [selectCells],
+    [addLatchRef, cellGrid, cellSelection, clearRows],
   )
   const onAdd = useCallback(
     (target: CueTarget) => {
@@ -413,6 +434,7 @@ function CueValuesGridBody({
           strip={readOnlyReason != null ? <span className="truncate text-xs text-muted-foreground">{readOnlyReason}</span> : undefined}
           foldForStrip={false}
           marqueeDragging={marqueeDragging}
+          addLatch={addLatch}
           // With nothing selected the bar is the kit's reserved row, which draws no verbs — so the
           // three view verbs ride its chip slot there, and the verbs slot once something is.
           chip={hasSelection ? undefined : <div className="ml-auto flex shrink-0 items-center gap-2">{viewVerbs}</div>}
@@ -432,7 +454,7 @@ function CueValuesGridBody({
               {cellCount > 0 && <span aria-hidden className="h-5 w-px bg-border" />}
               {viewVerbs}
               {hasSelection && (
-                <Button variant="ghost" size="sm" onClick={clearByLadder} title="Deselect all">
+                <Button variant="ghost" size="sm" onClick={clearSelection} title="Deselect all">
                   <X className="size-3.5" />
                   <span className="hidden @[700px]:inline">Deselect</span>
                 </Button>
@@ -480,7 +502,8 @@ function CueValuesGridBody({
             closeEditorCell={closeEditorCell}
             editorAnchorRef={setRef}
             onMarqueeDragChange={setMarqueeDragging}
-            onBackgroundClick={clearByLadder}
+            onBackgroundClick={onBackgroundClick}
+            addLatch={addLatch.on}
             selectionDimmed={!isRegion}
           />
         </div>

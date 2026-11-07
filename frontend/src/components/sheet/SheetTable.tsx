@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
 import { useStableCallback } from '@/hooks/useStableCallback'
 import { cellSelectionClass, type CellSelectionJoin } from './cellSelection'
-import { describeCellScope, type CellRef, type RowId } from './cellSelectionModel'
+import { describeCellScope, type CellClickEvent, type CellRef, type RowId } from './cellSelectionModel'
 import { useCellMarquee } from './useCellMarquee'
 import type { CellSelection } from './useCellSelection'
 import { useRevealCell } from './revealCell'
@@ -91,7 +91,7 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
   /** First-column click — the caller derives the intent from the mouse event. */
   onRowClick: (id: RowId, e: React.MouseEvent) => void
   /** A click landed on this cell: the caller selects the one cell. */
-  onBeginCellEdit: (row: Row, col: C) => void
+  onBeginCellEdit: (row: Row, col: C, event?: CellClickEvent) => void
   /** A cell's editor committed: the caller fans it over the selection. */
   onCellCommit: (row: Row, col: C, value: unknown) => void
   /** How many rows a commit from this cell lands on. */
@@ -137,7 +137,9 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
   closeEditorCell?: CellRef<C> | null
   editorAnchorRef?: React.RefObject<HTMLElement | null>
   onMarqueeDragChange?: (dragging: boolean) => void
-  onBackgroundClick?: () => void
+  onBackgroundClick?: (event?: CellClickEvent) => void
+  /** The selection bar's *Add* latch (touch): a held drag accumulates as a ⌘-drag does. */
+  addLatch?: boolean
   selectionEmpty?: boolean
   scrollToRowId?: RowId | null
   onScrolledToRow?: () => void
@@ -205,6 +207,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
   editorAnchorRef,
   onMarqueeDragChange,
   onBackgroundClick,
+  addLatch,
   selectionEmpty,
   scrollToRowId,
   onScrolledToRow,
@@ -281,6 +284,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
     isRowSelected: isSelected,
     onRowMarquee: selectsRows ? onRowMarquee : undefined,
     onDragChange: onMarqueeDragChange,
+    addLatch,
   })
 
   const { right: moreColumnsRight, attach: attachScroller } = useScrollEdges(scrollRef, {
@@ -820,7 +824,7 @@ interface SheetRowViewProps<Row extends SheetRow, C extends string> {
   selected: boolean
   rowClass?: string
   onRowClick: (id: RowId, e: React.MouseEvent) => void
-  onBeginCellEdit: (row: Row, col: C) => void
+  onBeginCellEdit: (row: Row, col: C, event?: CellClickEvent) => void
   onCellCommit: (row: Row, col: C, value: unknown) => void
   batchCountFor: (row: Row, col: C) => number
   batchRowsFor: (row: Row, col: C) => readonly Row[]
@@ -845,7 +849,7 @@ interface SheetRowViewProps<Row extends SheetRow, C extends string> {
   autoCloseCol: C | null
   selectionEmpty?: boolean
   editorAnchorRef?: React.RefObject<HTMLElement | null>
-  onEmptyCellClick: () => void
+  onEmptyCellClick: (event?: CellClickEvent) => void
   dragHandle?: SheetDragHandle
 }
 
@@ -1017,7 +1021,7 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
           keyboardSeed: autoOpenCol === column.key ? autoOpenSeed : null,
           selectionEmpty,
           editorAnchorRef,
-          onBeginEdit: () => onBeginCellEdit(row, column.key),
+          onBeginEdit: (event) => onBeginCellEdit(row, column.key, event),
           onCommit: (next) => onCellCommit(row, column.key, next),
         }
         return (

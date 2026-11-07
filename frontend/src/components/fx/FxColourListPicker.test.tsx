@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Provider } from 'react-redux'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { installRecordingFetch, installRelativeUrlRequest } from '@/test/backendMock'
 
 // lightingApi opens a real WebSocket at import time and jsdom has none; the
@@ -72,6 +72,8 @@ vi.mock('@/components/ui/slider', () => ({
 
 import { FxColourListPicker } from './FxColourListPicker'
 import { store } from '@/store'
+import { lightingApi } from '@/api/lightingApi'
+import type { RecentValuesState } from '@/api/recentValuesApi'
 
 /** The colour swatches, in order, by rendered background. */
 const swatchLabels = (container: HTMLElement) =>
@@ -411,5 +413,88 @@ describe('FxColourListPicker reorders (programmer-fixes plan D23, D24)', () => {
     expect(swatchLabels(container)).toEqual(['rgb(255, 0, 0)', 'rgb(0, 255, 0)'])
     act(() => dnd.props!.onDragEnd!({ active: { id: first }, over: null }))
     expect(swatchLabels(container)).toEqual(['rgb(17, 17, 17)', 'rgb(34, 34, 34)'])
+  })
+})
+
+describe('FxColourListPicker recent values (programmer-fixes plan D20, D23)', () => {
+  let desk: RecentValuesState
+  let record: ReturnType<typeof vi.spyOn>
+  beforeEach(() => {
+    installRelativeUrlRequest()
+    installRecordingFetch()
+    desk = { projectId: 1, lists: {} }
+    vi.spyOn(lightingApi.recentValues, 'get').mockImplementation(() => desk)
+    record = vi.spyOn(lightingApi.recentValues, 'record').mockImplementation(() => {})
+  })
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  const openFirstSwatch = (container: HTMLElement) =>
+    fireEvent.click(container.querySelector('button[style*="background-color"]')!)
+  const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 30)))
+
+  it('records a swatch’s drag once, on its release, with the emitters the targets have', async () => {
+    const { container } = render(withStore(<ControlledPicker initial="#ff0000,#00ff00" extendedChannels={{ white: true }} />))
+    openFirstSwatch(container)
+    const picker = screen.getByLabelText('Colour picker')
+    fireEvent.mouseDown(picker, { button: 0 })
+    fireEvent.change(picker, { target: { value: '#ee0000' } })
+    fireEvent.change(picker, { target: { value: '#dd0000' } })
+    expect(record).not.toHaveBeenCalled()
+    fireEvent.mouseUp(document.body)
+    await settle()
+    expect(record).toHaveBeenCalledExactlyOnceWith('colour', '#dd0000;w0')
+  })
+
+  it('records a picker’s key steps once, on the key-up, however many the key repeated', () => {
+    const { container } = render(withStore(<ControlledPicker initial="#ff0000" />))
+    openFirstSwatch(container)
+    const picker = screen.getByLabelText('Colour picker')
+    // A move with no press held is a key's step.
+    fireEvent.change(picker, { target: { value: '#ee0000' } })
+    fireEvent.change(picker, { target: { value: '#dd0000' } })
+    expect(record).not.toHaveBeenCalled()
+    fireEvent.keyUp(picker, { key: 'ArrowLeft' })
+    expect(record).toHaveBeenCalledExactlyOnceWith('colour', '#dd0000')
+  })
+
+  it('records an emitter slider’s drag once, on its commit', async () => {
+    const { container } = render(withStore(<ControlledPicker initial="#ff0000" extendedChannels={{ white: true }} />))
+    openFirstSwatch(container)
+    const white = screen.getByLabelText('Emitter')
+    fireEvent.change(white, { target: { value: '40' } })
+    fireEvent.change(white, { target: { value: '80' } })
+    expect(record).not.toHaveBeenCalled()
+    fireEvent.pointerUp(white)
+    await act(async () => {})
+    expect(record).toHaveBeenCalledExactlyOnceWith('colour', '#ff0000;w80')
+    // Nothing is left staged to go again when the swatch closes.
+    cleanup()
+    expect(record).toHaveBeenCalledTimes(1)
+  })
+
+  it('records a typed hex when its field is left, not on the way to it', () => {
+    const { container } = render(withStore(<ControlledPicker initial="#ff0000" />))
+    openFirstSwatch(container)
+    const hex = screen.getByRole('dialog').querySelector('input[type="text"]')!
+    fireEvent.change(hex, { target: { value: '#ff0' } })
+    fireEvent.change(hex, { target: { value: '#ff0000' } })
+    expect(record).not.toHaveBeenCalled()
+    fireEvent.blur(hex)
+    expect(record).toHaveBeenCalledExactlyOnceWith('colour', '#ff0000')
+  })
+
+  it('a tap sets the swatch’s colour as a release, and moves the recent to the front', () => {
+    desk = { projectId: 1, lists: { colour: ['#102030;w50'] } }
+    const onEmit = vi.fn()
+    const { container } = render(withStore(<ControlledPicker initial="#ff0000,#00ff00" onEmit={onEmit} extendedChannels={{ white: true }} />))
+    openFirstSwatch(container)
+    const band = screen.getByRole('dialog').querySelector('[data-recent-values="colour"]') as HTMLElement
+    fireEvent.click(within(band).getByRole('button', { name: 'Recent #102030 · W 50' }))
+    expect(onEmit).toHaveBeenCalledExactlyOnceWith('#102030;w50,#00ff00', true)
+    expect(record).toHaveBeenCalledExactlyOnceWith('colour', '#102030;w50')
   })
 })

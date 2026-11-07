@@ -1,7 +1,7 @@
 # WebSocket Protocol Engineering Documentation
 
-The desk's real-time channel: one endpoint, one polymorphic message envelope, **126 message types**
-(49 inbound, 77 outbound) across eighteen domain families. This document is the inventory and the
+The desk's real-time channel: one endpoint, one polymorphic message envelope, **172 message types**
+(64 inbound, 108 outbound) across twenty-five domain families. This document is the inventory and the
 rules that govern it.
 
 The inventory below is generated from the `@SerialName` declarations, which are the wire contract.
@@ -247,6 +247,7 @@ snapshot is what lands it on the new count. `grandMaster.state`,
 | Park | `ParkSocket.kt` | 3 | 1 | `handlePark` | `setupParkSubscriptions` |
 | Programmer | `ProgrammerSocket.kt` | 15 | 12 | `handleProgrammer` | `setupProgrammerSubscriptions` |
 | Project | `ProjectSocket.kt` | 1 | 2 | `handleProject` | `setupProjectSubscriptions` |
+| Recent values | `RecentValuesSocket.kt` | 1 | 1 | `handleRecentValues` | `setupRecentValuesSubscriptions` |
 | Rig safety | `RigSafetySocket.kt` | — | 1 | — | `setupRigSafetySubscriptions` |
 | Scenery | `ScenerySocket.kt` | — | 1 | — | `setupScenerySubscriptions` |
 | Selection | `SelectionSocket.kt` | 3 | 1 | `handleSelection` | `setupSelectionSubscriptions` |
@@ -261,7 +262,7 @@ Broadcast, Cloud sync, Effects, History, Locate, Machine, Move in dark, Rig safe
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
 
-## Client → Server (55)
+## Client → Server (64)
 
 Every inbound frame is `{ "type": "<name>", …fields }`. Fields with a default are optional.
 
@@ -551,6 +552,19 @@ ignored. The Grand Master overview panel's fader, sent at frame rate (floored at
 `FU-AUTH-WS-PER-MESSAGE` stays unfired. `GET/PUT /projects/{id}/grand-master` reads and sets the
 same value over REST, and a MIDI `grandMasterFader` binding moves it too.
 
+### Recent values — `RecentValuesSocket.kt`
+
+| Message | Fields | Reply |
+|---|---|---|
+| `recentValues.record` | `key: String`, `value: String` | none — `recentValues.state` follows |
+
+Puts one value at the front of the live project's list `key` (programmer-fixes plan D14–D17):
+a value editor sends one when a gesture ends — a slider's commit, a picker's release, a field left,
+a tap on a recent — never per frame, so it is a `GESTURE` in `TraceSampling.WS_MESSAGES`. A key or
+value outside `state/RecentValues.kt`'s vocabulary is dropped and logged, and so is a `level:` key
+naming an attribute no patched fixture has. A gesture of both roles on either listener, so
+`FU-AUTH-WS-PER-MESSAGE` stays unfired. No REST, no MCP tool.
+
 ### Stack FX amount — `StackFxAmountSocket.kt`
 
 | Message | Fields | Reply |
@@ -683,7 +697,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (87)
+## Server → Client (108)
 
 ### Boot — `BootSocket.kt`
 
@@ -1014,6 +1028,20 @@ every DIMMER and UV channel, and the colour mix (a `DmxColour`'s RGB, WHITE and 
 with no dimmer; a STROBE channel and an LED ring's RING channel are cut only at 0 (`midi/GlobalScalerState.kt`). Every listener
 sees the scaled output, so `channelState` and the Stage view draw the rig as the grand master
 leaves it.
+
+### Recent values — `RecentValuesSocket.kt`
+
+| Message | Payload | Cast |
+|---|---|---|
+| `recentValues.state` | `projectId: Int`, `lists: {<key>: [String]}`, newest first | Connect snapshot + broadcast |
+
+The live project's recent values (programmer-fixes plan D14–D16): per list key — `colour`,
+`level:<attribute>`, `palette-level:<attribute>`, `position`, `warmth` — at most 12 values, no
+repeats. `RecentValuesService` on `State` keeps every project's lists while the desk runs (runtime
+only, no table, no sync), and the frame follows the live show through `SocketScope.subscribeShow`,
+so switching shows and back finds each show's lists. A `level:` key's attribute must be a level —
+a slider, not a pan or tilt — that some patched fixture has, and a `palette-level:` key's a palette
+attribute whose intent is a percent.
 
 ### History — `HistorySocket.kt`
 
@@ -1482,6 +1510,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/HistorySocket.kt` | What the key takes, per socket: `history.state` |
 | `plugins/HistoryOrigin.kt` | The write origin the socket, REST, MCP and surface doors run each request under |
 | `plugins/LocateSocket.kt` | The located targets: `locate.state` |
+| `plugins/RecentValuesSocket.kt` | The value editors' recent values: `recentValues.state` and `recentValues.record` |
 | `plugins/StackFxAmountSocket.kt` | Each stack's FX amount: `stackFxAmount.state` and `stackFxAmount.set` |
 | `plugins/MoveInDarkSocket.kt` | What the live show moves in the dark: `moveInDark.state` |
 | `plugins/MachineSocket.kt` | Accounts, install row, update state, remote-access tunnel state, Lighting7 Cloud state (machine-scoped band) |

@@ -12,6 +12,10 @@ import {
   type PaletteIntent,
   type WhitePolicy,
 } from '@/lib/paletteIntent'
+import { useRecordRecent } from '@/store/recentValues'
+import { RecentValues } from '@/components/editor/RecentValues'
+import { parseRecentColour, RECENT_COLOUR, recentColourFromHex, recentColourHex } from '@/components/editor/recentValueSpelling'
+import { useWindowRelease } from '@/components/editor/useWindowRelease'
 import { colourPolicyLocked, effectiveColourPolicy, type PaletteValues } from './paletteRows'
 
 /**
@@ -30,9 +34,12 @@ import { colourPolicyLocked, effectiveColourPolicy, type PaletteValues } from '.
 export function ColourControl({
   values,
   onChange,
+  projectId,
 }: {
   values: PaletteValues
   onChange: (attribute: string, intent: PaletteIntent | null) => void
+  /** The palette's project: its Recent band is drawn only while that project is the live one. */
+  projectId?: number
 }) {
   const value = values.rgbColour
   const current = value?.kind === 'colour' ? value : null
@@ -47,6 +54,23 @@ export function ColourControl({
 
   const setColour = (next: Partial<{ hex: string; policy: WhitePolicy }>) =>
     onChange('rgbColour', { kind: 'colour', hex, policy, ...next })
+
+  // A colour recent here is the hex alone (D20a): the emitters are rows of their own, and setting
+  // them would force *RGB only*. A drag records on the window's release, a typed hex when its field
+  // is left, a tap at once — keeping the policy, leaving the emitter rows as they are.
+  const recent = useRecordRecent(RECENT_COLOUR, projectId)
+  const setHex = (next: string) => {
+    setColour({ hex: next })
+    const rgb = recentColourFromHex(next)
+    if (rgb != null) recent.stage(recentColourHex(rgb))
+  }
+  const holdPicker = useWindowRelease(recent.release)
+  const pickRecent = (value: string) => {
+    const colour = parseRecentColour(value)
+    if (colour == null) return
+    setColour({ hex: recentColourHex(colour) })
+    recent.now(recentColourHex(colour))
+  }
 
   return (
     <div className="space-y-3">
@@ -65,8 +89,15 @@ export function ColourControl({
         )}
       </div>
       <div className="flex items-start gap-3">
-        <div className="[&_.react-colorful]:!w-40 [&_.react-colorful]:!h-32">
-          <HexColorPicker color={hex} onChange={(next) => setColour({ hex: next })} />
+        <div
+          className="[&_.react-colorful]:!w-40 [&_.react-colorful]:!h-32"
+          onPointerDownCapture={holdPicker}
+          onMouseDownCapture={holdPicker}
+          onTouchStartCapture={() => holdPicker({ button: 0 })}
+          // A move with no press held is a key's step on the picker: a gesture of its own.
+          onKeyUp={() => recent.flush()}
+        >
+          <HexColorPicker color={hex} onChange={setHex} />
         </div>
         <div className="space-y-2 min-w-0 flex-1">
           <Input
@@ -78,9 +109,10 @@ export function ColourControl({
             onChange={(e) => {
               const next = e.target.value.trim()
               if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(next)) {
-                setColour({ hex: next })
+                setHex(next)
               }
             }}
+            onBlur={recent.flush}
             className="font-mono"
           />
           <div
@@ -90,6 +122,7 @@ export function ColourControl({
           />
         </div>
       </div>
+      <RecentValues listKey={RECENT_COLOUR} projectId={projectId} onPick={pickRecent} />
 
       <div className="space-y-1.5">
         <Label>White / amber handling — on heads that have those channels</Label>

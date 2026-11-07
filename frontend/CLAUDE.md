@@ -689,6 +689,16 @@ Release folds to its glyph and the scope line drops the fade.
   docks `ColourEditor` with its typed channels, the position row grows its pad and Pan / Tilt fields.
   The colour row's swatch is how the head **looks** — dimmed by its dimmer (a head's own, else the
   fixture's), with the UV dot — and the text beside it is the value.
+- **Recent values** (programmer-fixes plan D20, §The editor kit's `RecentValues`): a level row
+  records `level:<attribute>` (a drag on its commit, Enter at once) and draws its band only while
+  it is the row last pressed or focused — the sheet's `recentRowId`, one band at a time, so a sheet
+  of sliders is not a sheet of bands and an unengaged row subscribes to nothing. `LevelControl`
+  keeps one element tree whether or not the band shows, since the band appears in the very press
+  that engages the row. The Position row records the pair — a pad drag on its release, open or
+  closed, and a typed axis on Enter — and draws its band in the open editor, under the pad; over a pick (`PickPositionControls` with `recents`; the busk Position tab leaves
+  it off) nothing is recorded while the other axis differs across the heads. The open warmth row's
+  `WarmthEditor` records `warmth`, the open colour row's `ColourEditor` `colour`. A dimmerless
+  head's *Dimmer* scales a colour and is no rig level, so it records nothing.
 - **Position writes `programmer.setPosition`, never raw channels** (D8; `sheetWrites.ts`): the commit
   goes through `clampCommitToResolution`'s centre rule, so `-20` lands where the programmer's position
   cell would land it, and a one-axis commit takes the other axis from the held `position` entry, else
@@ -3118,7 +3128,10 @@ never means two things where a finger lands. The other phone rules on row C: bel
 the heads chip counting cells · the mask's glyph · Set · Fan · FX · Release ▾ (`SelectionBar.tsx`, §The
 programmer's scoped grid), Deselect in the chip's menu, and a tap on the grid's empty background
 runs the same cells-then-rows ladder Escape does — only on the grid's own DOM, since React bubbles a
-click inside a portalled cell editor up the same tree.
+click inside a portalled cell editor up the same tree. On a touch screen row C also offers ***Add***,
+touch's ⌘ (programmer-fixes plan D7, §Sheet kit) — a button, or on the phone arm the heads chip's
+menu item: while it is on, a tap adds or takes out one cell or row and a hold's marquee accumulates,
+so a selection with gaps can be built by finger.
 
 `useTemplatePress` and `useTemplatePressHandlers` are gone; `usePress.test.tsx` pins the routes, the
 pair and the scope.
@@ -3572,9 +3585,41 @@ no notion of an address. ↑ / ↓ are one row in both, stopping at the first an
 `linear` sheet extended a run of addresses until the desk tried it (2026-09-24): a block starting
 mid-row took the whole of every row in between, when the gesture on screen was a rectangle.
 
+**A cell click takes the row click's modifiers** (programmer-fixes plan D1–D5; `CellSelection.click`,
+by `listSelectionIntentFor`): plain selects the cell alone, **⌘ / Ctrl toggles that one cell**, **⇧
+selects the rectangle** from the cursor's anchor to it, replacing the selection, and **⌘⇧ adds that
+rectangle** — so a selection can have gaps. The rectangle is `cellRectangle`, the one a ⇧-arrow
+walks; the toggle is `toggleCell`, never the marquee's `'toggle'`, which only adds (a ⌘-drag never
+subtracts). With no anchor on the grid (nothing selected, or its row collapsed or filtered away) ⇧
+and ⌘⇧ act as a plain and a ⌘ click. A second click of a double click on the same cell
+(`event.detail > 1`) only makes sure it is selected, so a ⌘ double click opens the editor on a
+selected cell; a click with no pointer behind it (`detail` 0: Enter or Space on a focused cell) is
+always plain (`cellClickIntent`). The event comes from the cell's trigger through `onBeginEdit(event)`
+and the tables' `onBeginCellEdit(row, col, event)`; each host — `useSheet`, `FixturesListContainer`,
+`CueValuesGrid` — clears a row selection first and calls `click`. A blank cell passes its click to
+the host's background clear, which leaves the selection alone when ⌘, Ctrl or ⇧ is held or the
+latch is on (`blankClickKeepsSelection`); a plain click there still clears. Nothing downstream
+assumes a rectangle: the writes, ⌫ and Spread are per column (`cellsByColumn`), so they reach exactly
+the selected cells, and the desk selection stays heads × the cells' families.
+
+**On a touch screen the selection bar draws *Add*** (D7; `AddLatchToggle`, `useAddLatch`), on a coarse
+pointer only: a toggle (`aria-pressed`, ＋) under which a tap on a cell is a ⌘-click, a tap on a row's
+name a ⌘-click on the row, and a held drag accumulates (`latchedIntent`, the marquee's `addLatch`).
+It is the host's state, never stored, and turns off on a clear — Escape, Deselect, a tap on the empty
+space under the rows — and when the pointer stops being coarse, but not when a tap takes out the last
+cell, so a double-tap on the one selected cell opens its editor with Add still on. Every kit surface
+passes `sheet.addLatch` to its bar, whose word folds to the glyph below `@[600px]`; the programmer's
+container hands its own to row C through `renderToolbar`'s `addLatch`, and on the phone arm it is the
+heads chip's menu item (*Add*) rather than a button, since that row has no room. A modified click
+takes the focus off the cell trigger it landed on (`releaseCellTriggerFocus`), since a ⌘-click can
+leave that cell unselected and a focused trigger would take Enter, a character and ⌫ for itself.
+
 **The anchor rides in the cell selection** (`useCellSelection`'s `cursor`, beside the keys in one
 state object so they cannot describe two different selections): the keys' door, `place`, sets it,
-and every pointer change and clear drops it. With none stored, a selection's cursor is derived —
+and so does a click — a plain or ⌘ click puts anchor and head on its cell, a ⇧ click keeps the anchor
+and moves the head, so the arrows step from the last cell clicked and a ⇧-arrow after ⌘-clicks
+replaces them with its rectangle. A ⌘-click that empties the selection drops the cursor, and a
+marquee and a clear drop it too. With none stored, a selection's cursor is derived —
 its first cell in reading order as the anchor and its last as the head (`cursorOfSelection`) — so a
 marquee dragged either way is anchored at its top-left. A step asks the table to **reveal** the
 head (`revealCell` on `SheetTable` and `FixturesTable`, through `sheet/revealCell.ts`): the least
@@ -4115,6 +4160,11 @@ Palettes sheet's Value column. What it is and what it learned:
   other way could send the pair the write boundary refuses by name. The hex field gained
   `type="text"` and an `aria-label` (*Hex colour*) in the move — `useEditorKeyboard`'s selector
   names the type, so without it Enter in the field did nothing in the cell.
+- **Their Recent bands are the live project's** (programmer-fixes plan D20, D20a): both hosts pass
+  the palette's `projectId`, and a palette of another project draws none and records nothing. A
+  percent is the palette's own `palette-level:` list, never the grid's `level:`; a colour is its hex
+  alone, a tap keeping the policy and the emitter rows. They record a draft's gesture, before Save
+  or Apply.
 - **Generic value palettes only.** A per-fixture palette's values were recorded per head and an
   FX palette holds no value, so both keep the read-out — `value: undefined`, blank of any
   editor, named when a marquee sweeps them up (*Pulse runs an FX — open to change · skipped*) —
@@ -4329,6 +4379,55 @@ each was:
   with it in session 3: the Fan panel's colour endpoint is `ColourEditor` compact in every host
   — the busk tab's shipped measurement, `.colour-picker-compact`'s 11rem — and never a utility. `ChannelNumberInput`
   is deleted; the editor mounts `EditorField` and clamps the byte itself.
+- **`RecentValues`** — the **Recent** band (programmer-fixes plan D14–D19, session 4): a label and
+  one row, never wrapping, of at most eight of the live project's last values for one list —
+  swatches for a colour, the hex on the hover; chips for a level, a position or a warmth
+  (`62%`, `−20, 12`, `3200 K · 80%`). The desk keeps the lists, for every window and device
+  (`recentValues.state` / `.record`, `api/recentValuesApi.ts`); the keys and spellings are
+  `recentValueSpelling.ts`, mirroring lighting7 `state/RecentValues.kt` — a colour lowercase
+  `#rrggbb` with a `;w` / `;a` / `;uv` tag per emitter the editor wrote, zero included, so a white
+  set to 0 replays as 0. `store/recentValues.ts` reads it through `useSyncExternalStore`, not an RTK
+  entry, since the kit's hosts provide no store, and its hook runs in the band, so a list's change
+  re-renders the band alone: mount it in an editor, never in a row. A tap hands the host the value,
+  which writes it **through its own typed path** — in a batch every selected cell, in the
+  programmer Local, and it records the value **as tapped**, so the desk moves that recent to the
+  front. **`useRecordRecent(key, projectId)`** is the editor's recorder, subscribing to nothing: a
+  commit inside a gesture is `stage`d, under the key and live project it was staged in, and only the
+  gesture's last is sent. `flush` sends it at once — a field left (`EditorField`'s
+  `onDraft(null)`), and a slider's `onValueCommit` a microtask later, since Radix commits a key's
+  step before it reports the step's value. `release` is the picker's alone (its window release
+  through `holdPicker`, an arrow key's key-up): it sends 100 ms later, because react-colorful reports
+  a drag's last move from an effect that can land after the release, and the next press flushes
+  first. A tap is `now`, after anything staged; closing the editor sends what is staged. A colour's
+  label is its hex and each emitter it lights, `#000000 · W 255`. Never recorded: a palette press,
+  Pick, an FX swap or Revert, a MIDI write. The band draws
+  nothing, and the recorder sends nothing, while the list is empty, before the desk's first frame
+  (an older desk sends none), or in an editor whose `projectId` is not the live project. Session 4
+  mounts it in `ColourEditor` under the controls and read-out, above the footer, in every host
+  (read-only takes it out of reach with the controls). Session 5 mounts it in the other value
+  editors, each recording its own list and replaying a tap through its own commit:
+  - the programmer's cells — `SliderCell` (`level:<attribute>`, never for a pan or tilt:
+    `recentLevelKeyFor`), `PositionCell` (`position`) and `WarmthEditor` under `WarmthCell`
+    (`warmth`). The two cells draw their editor body as an inner component (`SliderEditorBody`,
+    `PositionEditorBody`) so the recorder mounts and unmounts with the open editor: a hook at the
+    cell's level would outlive the popover and never send what a closed editor staged.
+  - `ColourEditorBody`, under both FX colour pickers (each colour of a list too): a typed hex is
+    staged until its field is left, a drag sends on the body's `onRelease`, a slider's commit and a
+    preset at once; the project is the route's, as the pickers' palettes are.
+  - the palette editor's `FamilyControls`, given the palette's `projectId` by `PaletteEditor` and
+    the palette sheet's Value cell: `PercentControl` records `palette-level:<attribute>`,
+    `PositionControl` the pair, and `ColourControl` its hex alone (D20a) on the window's release
+    (`useWindowRelease`), a tap setting the hex and keeping the policy and the emitter rows.
+  - the fixture sheet's rows (§The fixture sheet).
+
+  A **position** records only a pair, and nothing while the other axis is not one value over the
+  heads: the cell takes it from what the open editor has set, else from its own scoped value where
+  that is uniform over exactly the batch's heads — never the wire, which is not the scope being
+  edited; the fixture sheet takes the pair its write resolves (`sheetPositionRecent` over
+  `sheetWrites.ts`' `resolvePosition`: the held entry, else the wire). A slider's gesture ends on
+  `useSlideEnd` — Radix's `onValueCommit` and the press's window release, since Radix sends no
+  commit for a drag back to where it began — and the recorder's `slideEnd` sends a microtask on.
+  A key's step on a picker records on its key-up.
 - **`useLivePush`** — `hooks/useLivePush.ts` moved beside its callers, and **`useSheet`'s ~30 Hz
   commit throttle is that hook with `floorMs: 33`** (D16): the busk tabs' hook and the sheet's
   throttle were two copies of one rule — a floor, a dedupe, a release that always lands. Two things
@@ -4554,9 +4653,9 @@ an inline width, so `maxWidth: 'none'` goes with it — the symptom of forgettin
 stays narrow and scrolls, which looks exactly like the width never being applied.
 
 **On the programmer's grid a single click on a cell selects it, and a double click opens its
-editor.** The whole of a single click is the selection: one cell, replacing whatever was there —
-including when the cell is already in the marquee, which is how a rectangle is narrowed to one of
-its own cells, the one thing a rectangle cannot say. The editor is opened by the selection bar's
+editor.** The whole of a single click is the selection: a plain click is one cell, replacing whatever
+was there — including when the cell is already in the marquee, which is how a rectangle is narrowed
+to one of its own cells — and ⌘ and ⇧ shape it as on every sheet (§Sheet kit). The editor is opened by the selection bar's
 **Set**, by Enter, by typing (§The programmer's keyboard), or by a **double** click, so the drag,
 the single click and the keys all say *what* to edit and one gesture says *edit it*.
 
@@ -7183,8 +7282,10 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
   left on top, and `StackDetail` keys the Timeline by stack, so one stack's toast cannot undo another's. Every gesture toasts what it did, in one id per stack, the
   press's knock-on named from the answer's `released` (*Amber on LX1 Orbits in Q5. Lavender released
   there.*). The gestures:
-  - **One cell.** A click selects, a shift-click extends the selection to the rectangle from its
-    anchor; a second click on the one selected cell toggles it — a Look or
+  - **One cell.** A click selects; ⌘, ⇧ and ⌘⇧ (or a tap under *Add*) select as on every sheet
+    (§Sheet kit), through `useSheet`'s `clickCell` and never the toggle below, so a ⌘-click on the one
+    selected cell deselects it and writes nothing; a plain second click on the one selected cell
+    toggles it — a Look or
     palette cell on is `layerOn` with `settingsFrom` the nearest filled cell above in its column, else
     below (D6, `nearestFilled`), off is `layerOff` — and a scenery cell's second click opens
     `TimelineSceneryPopover` instead, through `EditorSurface`: `SceneryControl` (`commit="release"`, so one write per gesture),

@@ -1,6 +1,6 @@
 # Lighting7 Cloud P1: remote access and MCP, the desk's side
 
-> **Document status: ACTIVE — written 2026-11-05, session 8 in review.** The desk half of the PRD's
+> **Document status: ACTIVE — written 2026-11-05; sessions 1–8 merged, session 9 planned.** The desk half of the PRD's
 > phase P1. The cloud half is `docs/plans/p1-plan.md` in `cjcormack/lighting7-cloud`. Design record:
 > [`cloud-design/INDEX.md`](cloud-design/INDEX.md), whose rules R1–R7 apply to every session here.
 
@@ -319,8 +319,8 @@ and a session is added here for it.
 | 4 | The SPA in remote mode | merged | `claude/cloud-p1-htmv50` | [#357](https://github.com/cjcormack/lighting7/pull/357) | `52c68fe` |
 | 5 | Bundling and supervising the sidecar | merged | `claude/awesome-lamport-bbwlen` | [#361](https://github.com/cjcormack/lighting7/pull/361) | `bbeac1e` |
 | 6 | Linking cloud accounts | merged | `claude/festive-wright-5j9oje` | [#364](https://github.com/cjcormack/lighting7/pull/364) | `0b40974` |
-| 7 | Remote sessions on the Cloud tab | in review | `claude/gifted-hopper-w8jn4c` | [#366](https://github.com/cjcormack/lighting7/pull/366) | `a3984d1` |
-| 8 | The MCP relay | in review | `claude/cloud-p1-v6rzx8` | | |
+| 7 | Remote sessions on the Cloud tab | merged | `claude/gifted-hopper-w8jn4c` | [#366](https://github.com/cjcormack/lighting7/pull/366) | `a3984d1` |
+| 8 | The MCP relay | merged | `claude/cloud-p1-v6rzx8` | [#367](https://github.com/cjcormack/lighting7/pull/367) | `33dd2fe` |
 | 9 | Delete ngrok and the desk's OAuth server | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session` fills

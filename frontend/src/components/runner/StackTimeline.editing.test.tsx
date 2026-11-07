@@ -177,6 +177,29 @@ describe('one cell', () => {
     ])
   })
 
+  // programmer-fixes plan D4a: a ⌘-click is a selection, never the sole cell's toggle.
+  it('a ⌘-click adds a cell, once, writing nothing', async () => {
+    mount()
+    fireEvent.click(cell(102, PALETTE), { detail: 1 })
+    fireEvent.click(cell(104, PALETTE), { metaKey: true, detail: 1 })
+    expect(edit).not.toHaveBeenCalled()
+    // Toggled once, not again through the sheet's own cell door: both cells are On's.
+    fireEvent.click(document.querySelector('[data-timeline-verb="On"]')!)
+    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    expect(requests[0].ops.map((op) => ('cueId' in op ? `${op.op}:${op.cueId}` : op.op))).toEqual(['layerOn:2', 'layerOn:4'])
+  })
+
+  it('a ⌘-click on the one selected cell deselects it and sends no edit', () => {
+    mount()
+    fireEvent.click(cell(102, PALETTE), { detail: 1 })
+    fireEvent.click(cell(102, PALETTE), { metaKey: true, detail: 1 })
+    expect(edit).not.toHaveBeenCalled()
+    expect(document.querySelector('[data-timeline-verb="On"]')).toBeNull()
+    // Nothing is selected, so the next plain click selects rather than toggling.
+    fireEvent.click(cell(102, PALETTE), { detail: 1 })
+    expect(edit).not.toHaveBeenCalled()
+  })
+
   it('⏎ toggles the selected cell, ⌫ turns it off: one request each', async () => {
     mount()
     fireEvent.click(cell(103, PALETTE))
@@ -289,7 +312,7 @@ describe('a range', () => {
   it('a shift-click extends the selection to a range, writing nothing', async () => {
     mount()
     fireEvent.click(cell(101, PALETTE))
-    fireEvent.click(cell(104, PALETTE), { shiftKey: true })
+    fireEvent.click(cell(104, PALETTE), { shiftKey: true, detail: 1 })
     expect(edit).not.toHaveBeenCalled()
     fireEvent.click(document.querySelector('[data-timeline-verb="On"]')!)
     await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))

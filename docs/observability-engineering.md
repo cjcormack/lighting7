@@ -195,7 +195,7 @@ a new one has a row:
 |---|---|
 | Continuous (never) | `updateChannel`, `programmer.set` / `setColour` / `setPosition` / `patchLayer` / `keyStack`, `updateFx`, `surfaceScaler.setGrandMaster`, `grandMaster.set`, `speedMasters.setBpm` / `tap` / `requestBeat`, `windows.announce` |
 | Snapshot (never) | every state request a client sends on connect (`channelState`, `programmer.state`, …) |
-| Gesture (sampled) | the rest: selection, hand, busk page, programmer layers, blind and scenery, park, FX pause, resume and remove, surface learn and banks, blackout, the windows commands |
+| Gesture (sampled) | the rest: selection, hand, busk page, programmer layers, blind and scenery, park, FX pause, resume and remove, surface learn and banks, blackout, the windows commands, `recentValues.record` |
 
 An idle auto-sync tick is the steady state, so it is not worth a transaction each time: at a
 one-minute interval that would be about 43,000 a month for one project.

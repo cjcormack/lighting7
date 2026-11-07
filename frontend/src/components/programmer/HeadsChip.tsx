@@ -16,6 +16,7 @@ import {
 import { relinkToDesk, useDeskFollow } from '@/lib/deskFollow'
 import { cn } from '@/lib/utils'
 import { unlinkFromDeskNow } from '@/store/selection'
+import type { AddLatchControl } from '@/components/sheet/useAddLatch'
 
 /** The glyph's accessible name while this window keeps its own selection. */
 export const OWN_SELECTION = 'This window’s own selection'
@@ -39,6 +40,8 @@ export interface HeadsChipProps {
   onDeselect: () => void
   /** Locate, *Set locate from current* and Highlight, which a phone's row has no room for. */
   rigVerbs: RigVerbs | null
+  /** The *Add* latch, which on a phone's row is this menu's rather than a button of its own. */
+  addLatch?: AddLatchControl | null
 }
 
 /**
@@ -64,6 +67,7 @@ export function HeadsChip({
   colourKeys,
   onDeselect,
   rigVerbs,
+  addLatch = null,
 }: HeadsChipProps) {
   const following = useDeskFollow()
   // A phone's row (< 600): cells only, no ×, and the rig verbs in the menu.
@@ -142,6 +146,14 @@ export function HeadsChip({
             <span className="text-[10.5px] text-muted-foreground">Off: this window keeps its own</span>
           </span>
         </ToolbarMenuCheckboxItem>
+        {phone && addLatch != null && (
+          <ToolbarMenuCheckboxItem checked={addLatch.on} onCheckedChange={addLatch.onToggle}>
+            <span className="flex flex-col">
+              <span>Add</span>
+              <span className="text-[10.5px] text-muted-foreground">A tap adds a cell or row, or takes it out</span>
+            </span>
+          </ToolbarMenuCheckboxItem>
+        )}
         {phone && rigVerbs != null && hasSelection && (
           <>
             <ToolbarMenuSeparator />

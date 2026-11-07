@@ -254,6 +254,7 @@ export function PaletteSheet({
           return (
             <PaletteValueCell
               {...cellProps}
+              projectId={projectId}
               face={row.palette ? <PaletteValue palette={row.palette} /> : null}
               landing={() => valueLanding(cellProps.value.family, cellProps.batchRows() as PaletteSheetRow[])}
             />
@@ -538,7 +539,7 @@ export function PaletteSheet({
         display: (row) => (row.palette ? <PressedAgo at={row.palette.lastPressedAt} /> : null),
       },
     ],
-    [fxLibrary, fxWithMaster, master1, masterByUuid, masterValue, put, timingOptions],
+    [fxLibrary, fxWithMaster, master1, masterByUuid, masterValue, projectId, put, timingOptions],
   )
 
   const openRow = useCallback(
@@ -676,6 +677,7 @@ export function PaletteSheet({
           strip={scope.reason != null ? <ReadOnlyNote reason={scope.reason} /> : undefined}
           verbs={verbs}
           marqueeDragging={sheet.marqueeDragging}
+          addLatch={sheet.addLatch}
           foldForStrip={false}
         />
       </div>

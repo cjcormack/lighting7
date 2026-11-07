@@ -396,6 +396,7 @@ describe('FixturesTable cell gesture', () => {
     expect(onBeginCellEdit).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'fixture:a' }),
       'dimmer',
+      expect.objectContaining({ type: 'click' }),
     )
     expect(document.querySelector('[data-cell-editor-surface]')).toBeNull()
   })

@@ -16,6 +16,7 @@ import { useEditorOpen } from '../../editor/useEditorOpen'
 import { PaletteBands } from '../../editor/PaletteBands'
 import { useCueBandProject } from '../../press/pressCue'
 import { familyForCategory } from '@/lib/attributeFamily'
+import type { CellClickEvent } from '../../sheet/cellSelectionModel'
 
 interface SettingCellOwnProps {
   value: Extract<CellValue, { kind: 'setting' }>
@@ -60,7 +61,7 @@ interface SettingCellOwnProps {
    */
   selectionEmpty?: boolean
   onCommit: (commit: CellCommit) => void
-  onBeginEdit: () => void
+  onBeginEdit: (event?: CellClickEvent) => void
   /**
    * The cell's `(head, property)` keys, for the source chip on the editor's label line
    * (fixture-fx-sheets plan D19). Given by the programmer grid where it draws ownership; absent,

@@ -118,6 +118,7 @@ function useSheetContext(
   rowGroups: readonly { rows: readonly SheetRow[] }[],
 ) {
   const [openRowId, setOpenRowId] = useState<string | null>(null)
+  const [recentRowId, setRecentRowId] = useState<string | null>(null)
   const connected = useIsDeskConnected()
   const blind = useProgrammerBlind()
   const { data: effects } = useActiveFxQuery()
@@ -137,9 +138,11 @@ function useSheetContext(
       paletteName,
       openRowId,
       setOpenRowId,
+      recentRowId,
+      setRecentRowId,
       aim,
     }),
-    [target, host, connected, blind, effects, reachOf, cueLabel, fxDetail, paletteName, openRowId, aim],
+    [target, host, connected, blind, effects, reachOf, cueLabel, fxDetail, paletteName, openRowId, recentRowId, aim],
   )
   // The picker opens on the family of the row open on the sheet, and starts its effect on that
   // row's property where the effect can take it (Fx board, "Adding"). An open row is keyed by its
