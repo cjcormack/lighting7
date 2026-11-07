@@ -520,6 +520,21 @@ class SocketMessageWireFormatTest {
         assertEquals(masked, assertIs<SelectionStateOutMessage>(json.decodeFromString<OutMessage>(encodedMasked)))
     }
 
+    // ─── Recent values ──────────────────────────────────────────────────────
+
+    @Test
+    fun `recentValues domain — record routes via RecentValuesInMessage and state round-trips`() {
+        val record = json.decodeFromString<InMessage>("""{"type":"recentValues.record","key":"colour","value":"#ff8800;w0"}""")
+        assertIs<RecentValuesInMessage>(record)
+        assertEquals(RecentValuesRecordInMessage("colour", "#ff8800;w0"), record)
+
+        val out = RecentValuesStateOutMessage(3, mapOf("colour" to listOf("#ff8800;w0", "#000000"), "level:dimmer" to listOf("pct:62")))
+        val encoded = json.encodeToString<OutMessage>(out)
+        assertTrue(encoded.contains(""""type":"recentValues.state""""), encoded)
+        assertTrue(encoded.contains(""""lists":{"colour":["#ff8800;w0","#000000"],"level:dimmer":["pct:62"]}"""), encoded)
+        assertEquals(out, assertIs<RecentValuesStateOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+    }
+
     // ─── Project domain ─────────────────────────────────────────────────────
 
     @Test

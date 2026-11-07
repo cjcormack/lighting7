@@ -814,6 +814,12 @@ class State(val config: ApplicationConfig) {
     val sceneryService: SceneryService by lazy { SceneryService(this) }
 
     /**
+     * The value pop-ups' recent values, per project (programmer-fixes plan D14): runtime only, kept
+     * for every project while the desk runs. See [RecentValuesService].
+     */
+    val recentValues = RecentValuesService()
+
+    /**
      * What holds each live cue in the current show (`cueHolds.state`, cue model plan §3.4). Here
      * rather than on the show's registry ([uk.me.cormack.lighting7.fx.CueHolds]) so a socket's one
      * subscription outlives a project switch; each show's registry publishes into it, its frames

@@ -4362,6 +4362,32 @@ each was:
   with it in session 3: the Fan panel's colour endpoint is `ColourEditor` compact in every host
   — the busk tab's shipped measurement, `.colour-picker-compact`'s 11rem — and never a utility. `ChannelNumberInput`
   is deleted; the editor mounts `EditorField` and clamps the byte itself.
+- **`RecentValues`** — the **Recent** band (programmer-fixes plan D14–D19, session 4): a label and
+  one row, never wrapping, of at most eight of the live project's last values for one list —
+  swatches for a colour, the hex on the hover; chips for a level, a position or a warmth
+  (`62%`, `−20, 12`, `3200 K · 80%`). The desk keeps the lists, for every window and device
+  (`recentValues.state` / `.record`, `api/recentValuesApi.ts`); the keys and spellings are
+  `recentValueSpelling.ts`, mirroring lighting7 `state/RecentValues.kt` — a colour lowercase
+  `#rrggbb` with a `;w` / `;a` / `;uv` tag per emitter the editor wrote, zero included, so a white
+  set to 0 replays as 0. `store/recentValues.ts` reads it through `useSyncExternalStore`, not an RTK
+  entry, since the kit's hosts provide no store, and its hook runs in the band, so a list's change
+  re-renders the band alone: mount it in an editor, never in a row. A tap hands the host the value,
+  which writes it **through its own typed path** — in a batch every selected cell, in the
+  programmer Local, and it records the value **as tapped**, so the desk moves that recent to the
+  front. **`useRecordRecent(key, projectId)`** is the editor's recorder, subscribing to nothing: a
+  commit inside a gesture is `stage`d, under the key and live project it was staged in, and only the
+  gesture's last is sent. `flush` sends it at once — a field left (`EditorField`'s
+  `onDraft(null)`), and a slider's `onValueCommit` a microtask later, since Radix commits a key's
+  step before it reports the step's value. `release` is the picker's alone (its window release
+  through `holdPicker`, an arrow key's key-up): it sends 100 ms later, because react-colorful reports
+  a drag's last move from an effect that can land after the release, and the next press flushes
+  first. A tap is `now`, after anything staged; closing the editor sends what is staged. A colour's
+  label is its hex and each emitter it lights, `#000000 · W 255`. Never recorded: a palette press,
+  Pick, an FX swap or Revert, a MIDI write. The band draws
+  nothing, and the recorder sends nothing, while the list is empty, before the desk's first frame
+  (an older desk sends none), or in an editor whose `projectId` is not the live project. Session 4
+  mounts it in `ColourEditor` under the controls and read-out, above the footer, in every host
+  (read-only takes it out of reach with the controls); session 5 the other value editors.
 - **`useLivePush`** — `hooks/useLivePush.ts` moved beside its callers, and **`useSheet`'s ~30 Hz
   commit throttle is that hook with `floorMs: 33`** (D16): the busk tabs' hook and the sheet's
   throttle were two copies of one rule — a floor, a dedupe, a release that always lands. Two things

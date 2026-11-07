@@ -421,6 +421,8 @@ export const stageRenderWs: {
   },
 }
 
+const NO_RECENT_VALUES_MOCK = { projectId: null, lists: {} }
+
 export function lightingApiMock() {
   const namespaces: Record<string, unknown> = {
       bootStatus: {
@@ -592,6 +594,13 @@ export function lightingApiMock() {
           Promise.resolve({ targetType, targetKey, attribute, blind: false, stacks: [] }),
         clearTarget: (targetType: string, targetKey: string) =>
           Promise.resolve({ targetType, targetKey, values: 0, fx: 0, partial: [] }),
+      },
+      // Spelled out because `store/recentValues.ts` reads `get()` through `useSyncExternalStore`,
+      // which loops on the fresh Subscription the fallback Proxy answers each call.
+      recentValues: {
+        get: () => NO_RECENT_VALUES_MOCK,
+        subscribe: noopSub,
+        record: () => {},
       },
       moveInDark: {
         get: () => moveInDarkWs.last,
