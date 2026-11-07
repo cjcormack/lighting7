@@ -2,7 +2,7 @@ import { useSpeedMasterDisplay } from '@/store/speedMasters'
 import { fxSpeedLabel } from '@/components/fx/fxConstants'
 import { isAroundSpelling } from '@/components/fx/centreMode'
 import { fxDynamicsParts } from '@/lib/fxDynamics'
-import { isOnSeconds } from '@/lib/fxTiming'
+import { followsNoMaster } from '@/lib/fxTiming'
 import type { PaletteSummary } from '@/api/palettesApi'
 
 /**
@@ -21,15 +21,15 @@ export function FxPadDetail({ palette: template }: { palette: PaletteSummary }) 
     isWallClock ? template.fx?.rateSpeedMasterUuid : template.fx?.speedMasterUuid,
   )
   if (template.fx == null) return 'FX'
-  const seconds = isOnSeconds(template.fx, template.fx.timingSource)
-  const speed = fxSpeedLabel(template.fx.cycle, template.fx.timingSource, seconds)
+  const free = followsNoMaster(template.fx, template.fx.timingSource)
+  const speed = fxSpeedLabel(template.fx.cycle, template.fx.timingSource, template.fx.ownBpm)
   // A null `timingSource` means the stored `fxType` no longer resolves in this desk's registry.
   // Both clauses go then, not just the speed: `isWallClock` is false for a null as well as for a
   // beat effect, so naming the beat master would state a tempo link a wall-clock effect does not
   // have. Say nothing rather than pick the likelier of two wrong answers.
-  // On Seconds (D7) there is no master to name: `4 s` says what it runs on.
+  // On Own tempo or Natural there is no master to name: `1 bar · Own 96` or `4 s` says what it runs on.
   const masterLabel =
-    template.fx.timingSource == null || seconds ? null : master ? `M${master.index}` : 'M1'
+    template.fx.timingSource == null || free ? null : master ? `M${master.index}` : 'M1'
   // *around* (fixture-fx-sheets plan D16): the movement template orbits whatever holds the position
   // underneath — the one thing about a Circle pad an operator needs before pressing it after a
   // position pad. An Absolute one (every stored Override, call 6) says nothing.

@@ -216,8 +216,8 @@ describe('PaletteSheet — the columns', () => {
     expect(row(3).querySelector('[data-cell="fade"] button')).toBeNull()
     expect(row(1).querySelector('[data-cell="master"] button')).toBeNull()
     expect(row(3)).toHaveTextContent('M4 Strobe')
-    // A wall-clock effect's null rate master is Seconds (D7), not master 1.
-    expect(row(5)).toHaveTextContent('Seconds')
+    // A wall-clock effect's null rate master is Natural, not master 1.
+    expect(row(5)).toHaveTextContent('Natural')
     // An empty but settable Fade is the em-dash; a set one its seconds.
     expect(within(row(1).querySelector('[data-cell="fade"]') as HTMLElement).getByText('—')).toBeInTheDocument()
     expect(row(2)).toHaveTextContent('2s')
@@ -284,18 +284,18 @@ describe('PaletteSheet — Master', () => {
     expect(savePalette).toHaveBeenCalledWith({ projectId: 1, paletteId: 3, fx: { ...PULSE.fx, speedMasterUuid: null } })
   })
 
-  it('puts a beat effect on Seconds keeping its speed, and offers it before every master (D7)', async () => {
+  it('puts a beat effect on Own tempo at its master’s tempo, keeping its speed, and offers it before every master', async () => {
     draw()
     drag('master', 3, 3)
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
     const options = (await screen.findAllByRole('option')).map((o) => o.textContent)
-    expect(options[0]).toBe('Seconds')
-    fireEvent.click(screen.getByRole('option', { name: 'Seconds' }))
-    // The beats at the master's stored tempo (every master here is 120 BPM): half a second a beat.
-    const sent = savePalette.mock.calls[0][0] as { fx: { cycle: number; seconds: boolean; speedMasterUuid: null } }
-    expect(sent.fx.seconds).toBe(true)
+    expect(options[0]).toBe('Own tempo / Natural')
+    fireEvent.click(screen.getByRole('option', { name: 'Own tempo / Natural' }))
+    // Every master here is stored at 120 BPM; the cycle stays in beats.
+    const sent = savePalette.mock.calls[0][0] as { fx: { cycle: number; ownBpm: number; speedMasterUuid: null } }
+    expect(sent.fx.ownBpm).toBe(120)
     expect(sent.fx.speedMasterUuid).toBeNull()
-    expect(sent.fx.cycle).toBe(PULSE.fx!.cycle / 2)
+    expect(sent.fx.cycle).toBe(PULSE.fx!.cycle)
   })
 
   it('a beat effect on master 1 still takes a Master before the bank has loaded', () => {
@@ -309,12 +309,12 @@ describe('PaletteSheet — Master', () => {
     expect(row(8)).toHaveTextContent('M1')
   })
 
-  it('writes the rate master on a WALL_CLOCK effect, and offers Seconds first', async () => {
+  it('writes the rate master on a WALL_CLOCK effect, and offers Natural first', async () => {
     draw()
     drag('master', 5, 5)
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
     const options = (await screen.findAllByRole('option')).map((o) => o.textContent)
-    expect(options[0]).toBe('Seconds')
+    expect(options[0]).toBe('Own tempo / Natural')
     fireEvent.click(screen.getByRole('option', { name: 'M3 · Movement' }))
     expect(savePalette).toHaveBeenCalledWith({
       projectId: 1,
@@ -324,7 +324,7 @@ describe('PaletteSheet — Master', () => {
     expect(savePalette.mock.calls[0][0]).not.toHaveProperty('effect.speedMasterUuid')
   })
 
-  it('Clear writes M1 on a beat effect and Seconds on a wall-clock one — both the stored null', async () => {
+  it('Clear writes M1 on a beat effect and Natural on a wall-clock one — both the stored null', async () => {
     const running = template(7, {
       name: 'Rainbow Fast',
       family: 'COLOUR',

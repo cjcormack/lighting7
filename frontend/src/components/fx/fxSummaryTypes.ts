@@ -39,11 +39,8 @@ export interface FxSummaryData {
    * must carry it, or a wall-clock effect renders as unscaled while it is running scaled.
    */
   rateSpeedMasterUuid: string | null
-  /**
-   * D7's flag (venue-visit plan S15) — with [timingSource], what says the division is seconds. Every
-   * adapter carries it, for [speedMasterUuid]'s reason.
-   */
-  seconds: boolean
+  /** A beat effect's own tempo, in place of a master. Every adapter carries it, for [speedMasterUuid]'s reason. */
+  ownBpm: number | null
   /** The effect type's timing source from the library, null where the library does not have it. */
   timingSource: string | null
 }
@@ -107,7 +104,7 @@ export function fromLookFx(e: LookFx, library?: FxLibraryEntry[]): FxSummaryData
     parameterDefs: lookupParameterDefs(e.fxType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
     rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
-    seconds: e.seconds ?? false,
+    ownBpm: e.ownBpm ?? null,
     timingSource: lookupTimingSource(e.fxType, library),
   }
 }
@@ -131,7 +128,7 @@ export function fromCueAdHocFx(
     parameterDefs: lookupParameterDefs(e.fxType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
     rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
-    seconds: e.seconds ?? false,
+    ownBpm: e.ownBpm ?? null,
     timingSource: lookupTimingSource(e.fxType, library),
   }
 }
@@ -155,7 +152,7 @@ export function fromFixtureDirectFx(
     parameterDefs: lookupParameterDefs(e.fxType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
     rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
-    seconds: e.seconds ?? false,
+    ownBpm: e.ownBpm ?? null,
     timingSource: lookupTimingSource(e.fxType, library),
   }
 }
@@ -179,7 +176,7 @@ export function fromFixtureIndirectFx(
     parameterDefs: lookupParameterDefs(e.fxType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
     rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
-    seconds: e.seconds ?? false,
+    ownBpm: e.ownBpm ?? null,
     timingSource: lookupTimingSource(e.fxType, library),
   }
 }
@@ -203,7 +200,7 @@ export function fromGroupActiveFx(
     parameterDefs: lookupParameterDefs(e.fxType, library),
     speedMasterUuid: e.speedMasterUuid ?? null,
     rateSpeedMasterUuid: e.rateSpeedMasterUuid ?? null,
-    seconds: e.seconds ?? false,
+    ownBpm: e.ownBpm ?? null,
     timingSource: lookupTimingSource(e.fxType, library),
   }
 }

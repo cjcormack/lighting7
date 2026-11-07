@@ -114,7 +114,7 @@ internal fun captureCurrentState(state: State): CapturedState {
                 sortOrder = adHocFx.size,
                 speedMasterUuid = effect.speedMasterUuid?.toString(),
                 rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
-                seconds = effect.seconds,
+                ownBpm = effect.ownBpm,
                 amount = dyn.amount,
                 direction = dyn.direction.name,
                 runs = dyn.runs,
@@ -578,6 +578,7 @@ internal fun validateCueChildren(
             fxSteps = registry.steps(effect.fxType),
         )?.let { return it }
         registry.fxWriteProblem(effect.fxType, effect.parameters, effect.family)?.let { return it }
+        registry.clockProblem(effect.fxType, effect.ownBpm)?.let { return it }
     }
     return null
 }
@@ -784,7 +785,7 @@ internal fun writeCueChildren(
     if (adHocFx != null) {
         val existing = if (created) emptyList() else cue.adHocFxInOrder()
         val incoming = inListOrder(adHocFx, { it.sortOrder }) { effect, i -> effect.copy(sortOrder = i) }
-            .map { it.canonicalTarget() }
+            .map { it.canonicalTarget().withStoredClock(registry) }
         val pairing = if (restore) {
             pairByKey(existing, incoming, { it.uuid to it.fxKey }, { restoredUuid(it.uuid) to it.fxKey })
         } else {
@@ -882,10 +883,10 @@ internal fun DaoCueAdHocFxEntity.take(effect: CueAdHocFxDto) {
     interval = effect.intervalMs.asDuration()
     randomWindow = effect.randomWindowMs.asDuration()
     sortOrder = effect.sortOrder
-    // Seconds follows no master (D7), so a row on Seconds keeps none beside it.
-    speedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.speedMasterUuid)
-    rateSpeedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
-    seconds = effect.seconds
+    // Own tempo follows no master (fx-speed plan D3), so a row on it keeps none beside it.
+    speedMasterUuid = if (effect.ownBpm != null) null else speedMasterUuidOrNull(effect.speedMasterUuid)
+    rateSpeedMasterUuid = if (effect.ownBpm != null) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
+    ownBpm = effect.ownBpm
     amount = effect.amount
     direction = FxSpecCoercion.Names.canonicalDirection(effect.direction)
     runs = effect.runs

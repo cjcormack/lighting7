@@ -119,7 +119,8 @@ internal fun Route.routeApiRestGroups(state: State) {
                         // showed a live rate-master chip for a field it cannot read.
                         speedMasterUuid = instance.reportedSpeedMasterUuid,
                         rateSpeedMasterUuid = instance.reportedRateSpeedMasterUuid,
-                        seconds = instance.onSeconds,
+                        ownBpm = instance.ownBpm,
+                        natural = instance.onNatural,
                         amount = instance.dynamics.amount,
                         direction = instance.dynamics.direction.name,
                         runs = instance.dynamics.runs,
@@ -229,7 +230,9 @@ data class AddGroupFxRequest(
     val speedMasterUuid: String? = null,
     /** Wall-clock rate master (null → unscaled). Only meaningful for WALL_CLOCK effects. */
     val rateSpeedMasterUuid: String? = null,
-    /** On *Seconds* (D7) — see [AddFxRequest.seconds]. */
+    /** Own tempo, Natural and the old Seconds — see [AddFxRequest.ownBpm]. */
+    val ownBpm: Double? = null,
+    val natural: Boolean = false,
     val seconds: Boolean = false,
     /** Amount (effects plan D2), 0–1 — see [AddFxRequest.amount]. */
     val amount: Double = 1.0,
@@ -279,8 +282,9 @@ data class GroupFxDto(
     val speedMasterUuid: String? = null,
     /** Wall-clock rate master (null → unscaled). Only meaningful for WALL_CLOCK effects. */
     val rateSpeedMasterUuid: String? = null,
-    /** D7's reading — see [uk.me.cormack.lighting7.fx.FxDto.seconds]. */
-    val seconds: Boolean = false,
+    /** See [uk.me.cormack.lighting7.fx.FxDto.ownBpm] and [uk.me.cormack.lighting7.fx.FxDto.natural]. */
+    val ownBpm: Double? = null,
+    val natural: Boolean = false,
     /** See [uk.me.cormack.lighting7.fx.FxDto.amount] and its three siblings. */
     val amount: Double = 1.0,
     val direction: String = "FORWARD",
@@ -374,7 +378,12 @@ private fun applyGroupFx(
         request.attribute,
     )
     val registration = state.show.fxRegistry.getRegistration(request.fxType)
-    val timing = FxTiming(request.cycle ?: registration?.defaultCycle ?: CycleLength.ONE_BAR)
+    val kind = registration?.timingSource ?: TimingSource.BEAT
+    val clock = requestedClock(
+        engine.speedMasters, kind, request.ownBpm, request.seconds, request.natural, request.cycle,
+        request.speedMasterUuid, request.rateSpeedMasterUuid,
+    )
+    val timing = FxTiming(clock.cycle ?: registration?.defaultCycle ?: CycleLength.ONE_BAR)
     val blendMode = FxSpecCoercion.Strict.blendMode(request.blendMode)
     val spreadOrder = FxSpecCoercion.Strict.order(request.order)
     val elementMode = request.elementMode?.let { FxSpecCoercion.Strict.elementMode(it) } ?: ElementMode.NEW_FX_DEFAULT
@@ -405,8 +414,6 @@ private fun applyGroupFx(
     val elFilter = FxSpecCoercion.Strict.elementFilter(request.elementFilter)
 
     // Create SINGLE FxInstance for the entire group
-    secondsTimingConflict(request.seconds, request.speedMasterUuid, request.rateSpeedMasterUuid)
-        ?.let { throw IllegalArgumentException(it) }
     val instance = FxInstance(effect, target, timing, blendMode).apply {
         registrationId = registration?.id
         phaseOffset = request.phaseOffset
@@ -422,9 +429,8 @@ private fun applyGroupFx(
         request.timing?.let { t -> updateDynamics { it.copy(timing = t) } }
         speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)
         rateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid)
-        // The type's loop, and D7's choice — this route never set the loop before S15, so a
-        // wall-clock effect on a group ran on the beat loop.
-        applyTimingChoice(registration?.timingSource ?: TimingSource.BEAT, request.seconds)
+        // The type's loop, and its own clock if it asked for one (fx-speed plan D3, D4).
+        applyTimingChoice(kind, clock.ownBpm, clock.natural)
     }
 
     markProgrammerOwned(instance, request.programmerOwned)

@@ -183,9 +183,15 @@ describe('the graph', () => {
     expect(wire.taps).toEqual(['m1'])
   })
 
-  it('says Seconds, and offers no Tap, for an FX on its own clock', () => {
+  it('says Natural, and offers no Tap, for a wall-clock FX on no master', () => {
     draw(answerOf({ clock: [{ seconds: true }], fx: [previewFx(2, { speedMasterUuid: null })] }))
-    expect(screen.getByText('Seconds')).toBeTruthy()
+    expect(screen.getByText('Natural')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Tap' })).toBeNull()
+  })
+
+  it('names an FX’s Own tempo, and offers no Tap', () => {
+    draw(answerOf({ clock: [{ ownBpm: 96, msPerBeat: 625 }], fx: [previewFx(2, { speedMasterUuid: null, ownBpm: 96 })] }))
+    expect(screen.getByText('Own 96')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Tap' })).toBeNull()
   })
 
@@ -445,11 +451,18 @@ describe('the handles (FX editor plan D12, §4.4)', () => {
     expect(editor.set).not.toHaveBeenCalled()
   })
 
-  it('drags the first cycle’s edge of a Seconds FX in seconds, not onto the beat steps', () => {
-    const editor = editorOf({ seconds: true, cycle: 30, timingSource: 'WALL_CLOCK' })
+  it('drags the first cycle’s edge of a wall-clock FX in seconds, not onto the beat steps', () => {
+    const editor = { ...editorOf({ cycle: 30, timingSource: 'WALL_CLOCK' }), wallClock: true }
     draw(handleAnswer(), { editor })
     drag(handle('cycle')!, { x: 112, y: 10 }, { x: 116, y: 10 })
     expect(editor.set).toHaveBeenLastCalledWith({ cycle: 33 }, true)
+  })
+
+  it('snaps an Own tempo FX’s cycle onto the beat steps, as on a master', () => {
+    const editor = editorOf({ ownBpm: 96, timingSource: 'WALL_CLOCK' })
+    draw(handleAnswer(), { editor })
+    drag(handle('cycle')!, { x: 112, y: 10 }, { x: 156, y: 10 })
+    expect(editor.set).toHaveBeenLastCalledWith({ cycle: 8 }, true)
   })
 
   it('drags Spread’s knob, at the last row’s start, the row’s start following the finger', () => {

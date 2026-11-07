@@ -59,7 +59,7 @@ private val updateStageLock = Any()
  *   stack for. A key a running effect covers is the effect's, so its base moves with no ramp.
  * - **Effects**: the running instances its untimed effects spawned, reconciled by stored uuid, layer,
  *   target and property against what the cue spawns now. A changed one is edited in place through
- *   [applyFxUpdate] — id and phase kept, but for a move between Seconds and a master, which
+ *   [applyFxUpdate] — id and phase kept, but for a move between Own tempo and a master, which
  *   restarts its loop — a removed one shrinks to nothing over the fade, and one the stored cue has
  *   gained grows from nothing over it, at the cue's priority. One the cue spawned that is no longer
  *   running — an N-shot run out, one a stomp took off — stays off.
@@ -217,7 +217,7 @@ internal fun alignFx(state: State, fxId: Long, from: FxSettingsSnapshot, to: FxS
 /**
  * The in-place edit that takes [live] to [fresh]'s settings: every field that differs, each in the
  * form [UpdateFxRequest] reads as a change — master 1 by its uuid, forever as [UpdateFxRequest.runForever],
- * Seconds as [UpdateFxRequest.seconds] — and nothing else, so no field is re-sent that a refusal
+ * Own tempo as [UpdateFxRequest.ownBpm], Natural as [UpdateFxRequest.natural] — and nothing else, so no field is re-sent that a refusal
  * could catch on. No `targets`: a cue's effect never splits (`FX_SPLIT_NOT_LOCAL`).
  */
 internal fun alignmentRequest(live: FxSettingsSnapshot, fresh: FxSettingsSnapshot): UpdateFxRequest {
@@ -227,22 +227,25 @@ internal fun alignmentRequest(live: FxSettingsSnapshot, fresh: FxSettingsSnapsho
     val nowDyn = fresh.dynamics
     val typeMoved = now.fxType != was.fxType
     val beat = fresh.timingSource == TimingSource.BEAT
-    val toSeconds = fresh.onSeconds && !live.onSeconds
-    val fromSeconds = !fresh.onSeconds && live.onSeconds
+    // Own tempo is a beat effect's own clock, Natural a wall-clock effect's: no rate master.
+    val fromOwn = fresh.ownBpm == null && live.ownBpm != null
+    val nowNatural = !beat && now.rateSpeedMasterUuid == null
+    val wasNatural = live.timingSource == TimingSource.WALL_CLOCK && was.rateSpeedMasterUuid == null
     val speedMaster = when {
-        toSeconds || !beat -> null
-        fromSeconds || now.speedMasterUuid != was.speedMasterUuid ->
+        fresh.ownBpm != null || !beat -> null
+        fromOwn || now.speedMasterUuid != was.speedMasterUuid ->
             now.speedMasterUuid?.toString()
         else -> null
     }
-    // A wall-clock effect off Seconds has a rate master; one with none is on Seconds (toSeconds).
-    val rateMaster = if (!beat && !toSeconds && (fromSeconds || now.rateSpeedMasterUuid != was.rateSpeedMasterUuid)) {
+    // A wall-clock effect off Natural has a rate master.
+    val rateMaster = if (!beat && !nowNatural && (wasNatural || now.rateSpeedMasterUuid != was.rateSpeedMasterUuid)) {
         now.rateSpeedMasterUuid?.toString()
     } else null
     return UpdateFxRequest(
         fxType = now.fxType.takeIf { typeMoved },
         parameters = now.parameters.takeIf { typeMoved || it != was.parameters },
-        cycle = now.cycle.takeIf { it != was.cycle },
+        // Sent with any move of the clock, so the swap never re-reads a kept cycle across the move.
+        cycle = now.cycle.takeIf { it != was.cycle || typeMoved || (fresh.ownBpm == null) != (live.ownBpm == null) || nowNatural != wasNatural },
         blendMode = now.blendMode.takeIf { it != was.blendMode },
         phaseOffset = nowDyn.phaseOffset.takeIf { it != wasDyn.phaseOffset },
         order = now.order.takeIf { nowDyn.order != wasDyn.order },
@@ -251,11 +254,10 @@ internal fun alignmentRequest(live: FxSettingsSnapshot, fresh: FxSettingsSnapsho
         timing = nowDyn.timing.takeIf { it != wasDyn.timing },
         speedMasterUuid = speedMaster,
         rateSpeedMasterUuid = rateMaster,
-        seconds = when {
-            toSeconds -> true
-            fromSeconds -> false
-            else -> null
-        },
+        ownBpm = fresh.ownBpm.takeIf { it != live.ownBpm },
+        natural = true.takeIf { nowNatural && !wasNatural },
+        // Off Own tempo onto master 1 where the snapshot names it by no uuid.
+        seconds = false.takeIf { fromOwn && speedMaster == null },
         amount = now.amount.takeIf { it != was.amount },
         direction = now.direction.takeIf { it != was.direction },
         runs = now.runs.takeIf { it != was.runs },

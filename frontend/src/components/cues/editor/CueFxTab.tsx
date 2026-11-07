@@ -11,7 +11,7 @@ import { EditorReadout } from '@/components/editor/EditorReadout'
 import { FxFields } from '@/components/fx/FxFields'
 import { FxPicker, type DraftFxPick } from '@/components/fx/FxPicker'
 import { selectionKeyOf, storedFxOf } from '@/components/fx/draftFx'
-import { fxSpeedLabel, secondsLabel } from '@/components/fx/fxConstants'
+import { fxSpeedLabel } from '@/components/fx/fxConstants'
 import { cueFxDraftOf, fxSwapOptions, runsWord, swappedDraft, withCueFxDraft, type FxDraft } from '@/components/fx/fxEditorModel'
 import { useFxScope } from '@/components/fx/useFxScope'
 import { fxTargetOf } from '@/components/fx/selectionFxTarget'
@@ -21,7 +21,7 @@ import { previewDraftOf, storedFxAttribute } from '@/components/fxEditor/fxStrip
 import { useFxPreview } from '@/components/fxEditor/useFxPreview'
 import { attributeFamilyForFxFamily } from '@/lib/attributeFamily'
 import { fxDynamicsParts } from '@/lib/fxDynamics'
-import { isOnSeconds } from '@/lib/fxTiming'
+import { isOnNatural } from '@/lib/fxTiming'
 import { fxTargetLabel, storedFxTargets, type FxTargetFields } from '@/lib/fxTargets'
 import { drivenCategoryOf } from '@/lib/stepFx'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
@@ -40,7 +40,7 @@ const NO_SELECTION: readonly CueTarget[] = []
 
 /**
  * The cue editor's **FX** tab (show-cue-editing plan §4.1, D17): one row per stored effect — its
- * target, effect and property, its speed (a master, or *Seconds*), size, direction and runs, and its
+ * target, effect and property, its speed (a master, its Own tempo or Natural), size, direction and runs, and its
  * fire timing — reorderable. A row opens `FxFields` over the stored effect
  * (`cueFxDraftOf` / `withCueFxDraft`), its `FxScope` from the effect's target, with the
  * cue's *Delay · Interval · Random* under it, and the graph strip of the open FX on its own targets
@@ -375,17 +375,17 @@ function FxRow({
   )
 }
 
-/** A row's speed: *Seconds* and its cycle, or the cycle on its master (S15) — `1 bar · M2`. */
+/** A row's speed: the cycle on its master (S15) — `1 bar · M2` — on its Own tempo, or on Natural. */
 function SpeedLabel({ effect, entry }: { effect: CueAdHocFx; entry: FxLibraryEntry | undefined }) {
   const wallClock = entry?.timingSource === 'WALL_CLOCK'
-  const onSeconds = isOnSeconds(effect, entry?.timingSource)
+  const natural = isOnNatural(effect, entry?.timingSource)
   const master = useSpeedMasterDisplay(wallClock ? effect.rateSpeedMasterUuid : effect.speedMasterUuid)
-  const cycle = onSeconds ? secondsLabel(effect.cycle) : fxSpeedLabel(effect.cycle, entry?.timingSource)
-  const who = onSeconds ? 'Seconds' : wallClock ? `Rate M${master?.index ?? 1}` : `M${master?.index ?? 1}`
+  const cycle = fxSpeedLabel(effect.cycle, entry?.timingSource, effect.ownBpm)
+  const who =
+    effect.ownBpm != null ? null : natural ? 'Natural' : wallClock ? `Rate M${master?.index ?? 1}` : `M${master?.index ?? 1}`
   return (
     <span className="shrink-0 text-muted-foreground" data-effect-speed>
-      · {cycle != null ? `${cycle} · ` : ''}
-      {who}
+      · {[cycle, who].filter(Boolean).join(' · ')}
     </span>
   )
 }

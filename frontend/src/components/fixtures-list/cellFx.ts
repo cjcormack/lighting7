@@ -280,7 +280,7 @@ function sameLensFields(a: ActiveFx, b: ActiveFx): boolean {
       a.attribute === b.attribute &&
       a.cycle === b.cycle &&
       a.timingSource === b.timingSource &&
-      a.seconds === b.seconds &&
+      a.ownBpm === b.ownBpm &&
       a.isRunning === b.isRunning &&
       a.programmerOwned === b.programmerOwned &&
       a.spent === b.spent &&

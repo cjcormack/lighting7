@@ -93,7 +93,7 @@ class FxSiblingsMigrationTest {
 
         val (desk, logs) = captureLogs("FxSiblingsMigration") { startDesk() }
 
-        assertEquals(CUE_NUMBER_USER_VERSION, userVersion())
+        assertEquals(OWN_TEMPO_USER_VERSION, userVersion())
         assertEquals(1, backups().size, "the database is backed up before anything moves")
         assertTrue(logs.any { "Look 'Moves' in 'Old movements': Circle — Circle is now Path, shape CIRCLE" in it }, logs.joinToString("\n"))
         assertTrue(logs.any { "Cue 'Q1' in 'Old movements': Flicker — 'min' is now 'low'; 'max' is now 'high'" in it }, logs.joinToString("\n"))
@@ -196,7 +196,7 @@ class FxSiblingsMigrationTest {
     @Test
     fun `a fresh database is born past step 8`() {
         startDesk()
-        assertEquals(CUE_NUMBER_USER_VERSION, userVersion())
+        assertEquals(OWN_TEMPO_USER_VERSION, userVersion())
         assertEquals(emptyList(), backups())
     }
 }

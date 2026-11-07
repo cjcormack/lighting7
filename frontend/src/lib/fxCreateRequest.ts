@@ -50,8 +50,10 @@ export interface FxCreateRequest {
   timing?: Timing
   speedMasterUuid?: string | null
   rateSpeedMasterUuid?: string | null
-  /** On *Seconds* (D7): the division is seconds, no master. */
-  seconds?: boolean
+  /** A beat effect's own tempo, in place of a master. */
+  ownBpm?: number | null
+  /** A wall-clock effect on *Natural*: no rate master. */
+  natural?: boolean
   /** Amount (effects plan D2), 0–1; omitted → 1. */
   amount?: number
   /** Direction (D5); omitted → forward. */
@@ -98,7 +100,8 @@ export function fxCreateAddition(
     ...(request.rateSpeedMasterUuid != null
       ? { rateSpeedMasterUuid: request.rateSpeedMasterUuid }
       : {}),
-    ...(request.seconds ? { seconds: true } : {}),
+    ...(request.ownBpm != null ? { ownBpm: request.ownBpm } : {}),
+    ...(request.natural ? { natural: true } : {}),
     ...(request.amount != null && request.amount !== 1 ? { amount: request.amount } : {}),
     ...(request.direction != null && request.direction !== 'FORWARD' ? { direction: request.direction } : {}),
     ...(request.runs != null ? { runs: request.runs } : {}),

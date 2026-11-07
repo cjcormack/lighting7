@@ -59,8 +59,9 @@ private val valueTargetSchema = buildJsonObject {
 
 /** An effect's cycle, where the tools describe one. One bar is venue-visit plan D16's default. */
 private const val CYCLE_DESCRIPTION =
-    "FX cycle length in beats: 0.25=16th, 0.5=8th, 1.0=one beat, 2.0=half a bar, 4.0=one bar, 8.0=two bars. " +
-        "With seconds: true, the cycle in seconds instead. Omit for one bar (4.0)."
+    "FX cycle length in beats of its tempo — its speed master's, or its ownBpm: 0.25=16th, 0.5=8th, 1.0=one beat, " +
+        "2.0=half a bar, 4.0=one bar, 8.0=two bars. The desk's editor shows this as Speed, ×1 being one bar (4.0), " +
+        "×2 half a bar, ×½ two bars. A wall-clock FX's cycle is seconds instead. Omit for one bar (4.0)."
 
 /** Timing (terminology plan D22), the same on every FX schema. */
 private val timingSchema = buildJsonObject {
@@ -88,12 +89,19 @@ private val elementModeSchema = buildJsonObject {
 /** The speed-master field's words, shared by every effect schema. */
 private const val SPEED_MASTER_DESCRIPTION =
     "Speed master whose tempo this FX follows, by uuid (describe_rig lists them). Omit for the master whose family " +
-        "matches the FX's family (intensity, colour, position or beam), else master 1, the global tempo. Leave it out with seconds."
+        "matches the FX's family (intensity, colour, position or beam), else master 1, the global tempo. Leave it out with ownBpm."
 
-/** D7's Seconds, in the tools' words. */
+/** The old Seconds (venue-visit plan D7), still read by fx-speed plan D5. */
 private const val SECONDS_DESCRIPTION =
-    "Run on Seconds: cycle is the cycle in seconds and the FX follows no speed master (for a slow breathe " +
-        "that must not move with the tempo). Not with speedMasterUuid or rateSpeedMasterUuid."
+    "The old spelling of ownBpm, still read. With a cycle, true runs a beat FX on its own tempo of 120 with cycle " +
+        "read as seconds (stored as twice the cycle in beats); without one, on its own tempo at the running tempo of " +
+        "the master it would have followed, its cycle kept. On a wall-clock FX it is Natural. Send ownBpm instead."
+
+/** Own tempo (fx-speed plan D3), in the tools' words. */
+private const val OWN_BPM_DESCRIPTION =
+    "Run on its own tempo, 20–300 BPM, following no speed master: cycle stays in beats of this tempo, so one bar " +
+        "(4.0) at 60 is a four-second cycle (for a slow breathe that must not move with the masters). A beat FX only; " +
+        "not with speedMasterUuid or rateSpeedMasterUuid."
 
 /**
  * Amount, Direction, Runs (effects plan D2, D5, D9) and the spread's shape (D4), the same on every
@@ -236,6 +244,10 @@ private val lookFxSchema = buildJsonObject {
         put("rateSpeedMasterUuid", buildJsonObject {
             put("type", "string")
             put("description", "Speed master scaling this FX's wall-clock rate, named by uuid. Only wall-clock FX read it. Omit to leave the FX unscaled.")
+        })
+        put("ownBpm", buildJsonObject {
+            put("type", "number")
+            put("description", OWN_BPM_DESCRIPTION)
         })
         put("seconds", buildJsonObject {
             put("type", "boolean")
@@ -393,7 +405,7 @@ internal val applyLookTool = ToolDef(
             put("lookId", buildJsonObject { put("type", "integer") })
             put("cycle", buildJsonObject {
                 put("type", "number")
-                put("description", "Optional cycle override for the Look's FX that follow a speed master; an FX on Seconds keeps its own cycle")
+                put("description", "Optional cycle override for the Look's FX that follow a speed master; an FX on its own tempo keeps its own cycle")
             })
             put("asValues", buildJsonObject {
                 put("type", "boolean")
@@ -649,6 +661,10 @@ private val adHocFxSchema = buildJsonObject {
         put("rateSpeedMasterUuid", buildJsonObject {
             put("type", "string")
             put("description", "Speed master scaling this FX's wall-clock rate, by uuid. Omit to leave it unscaled.")
+        })
+        put("ownBpm", buildJsonObject {
+            put("type", "number")
+            put("description", OWN_BPM_DESCRIPTION)
         })
         put("seconds", buildJsonObject {
             put("type", "boolean")

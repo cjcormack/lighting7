@@ -151,8 +151,13 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
         }.body<SpeedMasterDto>()
         assertEquals(tagged.uuid, live(client.pressed(pulse(quad)).fxId).speedMasterUuid.toString())
 
+        val onOwn = live(client.pressed(pulse(quad).copy(ownBpm = 96.0)).fxId)
+        assertEquals(96.0, onOwn.ownBpm)
+        assertNull(onOwn.speedMasterUuid)
+
+        // The old seconds with no cycle keeps the speed of the family master it would have followed.
         val onSeconds = live(client.pressed(pulse(quad).copy(seconds = true)).fxId)
-        assertTrue(onSeconds.onSeconds)
+        assertEquals(tagged.bpm, onSeconds.ownBpm)
         assertNull(onSeconds.speedMasterUuid)
 
         val master1 = state.show.fxEngine.speedMasters.masterStates().first().uuid.toString()

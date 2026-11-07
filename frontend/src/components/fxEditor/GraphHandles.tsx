@@ -148,7 +148,7 @@ export function CycleTab({
   const cancel = useDragCancel()
   const [drag, setDrag] = useState<{ x: number; cycle: number } | null>(null)
   const edgeX = sampleX({ plotLeft, plotWidth }, samples, SAMPLES_PER_CYCLE)
-  const inSeconds = editor.draft.seconds || editor.wallClock
+  const inSeconds = editor.wallClock
   const cycleWords = (cycle: number) => (inSeconds ? `${cycle} s` : getCycleLabel(cycle))
   const hovering = useRef(false)
   useEffect(() => () => {

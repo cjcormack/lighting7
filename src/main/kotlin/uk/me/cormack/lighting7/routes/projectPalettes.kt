@@ -272,7 +272,7 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                     // (effects plan P4).
                     val keptUuid = template.effects.firstOrNull()?.uuid
                     template.effects.forEach { it.delete() }
-                    createPaletteFx(template, effect, keptUuid)
+                    createPaletteFx(template, effect, state.show.fxRegistry, keptUuid)
                 }
                 PaletteWriteOutcome.Written(
                     template.toDto(state.show.fxRegistry, paletteUsage(template.id.value)),
@@ -595,7 +595,7 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                         parameters = effect.parameters
                         speedMasterUuid = effect.speedMasterUuid
                         rateSpeedMasterUuid = effect.rateSpeedMasterUuid
-                        seconds = effect.seconds
+                        ownBpm = effect.ownBpm
                         amount = effect.amount
                         direction = effect.direction
                         runs = effect.runs
@@ -1085,7 +1085,7 @@ internal fun performPaletteCreate(
             this.fadeDuration = input.fadeDurationMs.asDuration()
         }
         createPaletteRows(template, rows)
-        effect?.let { createPaletteFx(template, it) }
+        effect?.let { createPaletteFx(template, it, state.show.fxRegistry) }
         PaletteCreateResult.Ok(template.toDto(state.show.fxRegistry, paletteUsage(template.id.value)))
     }
     if (result is PaletteCreateResult.Ok) state.show.fixtures.paletteListChanged()
@@ -1279,6 +1279,7 @@ private fun validatePaletteFx(
     // disagree silently — the template banks under one family and runs as another.
     val registration = registry.getRegistration(effect.fxType)
         ?: return "'${effect.fxType}' is not an FX this desk knows"
+    registry.clockProblem(effect.fxType, effect.ownBpm)?.let { return it }
     // Palette Steps sits in the family of the palettes it is given (effects plan §3.6, §4.4), so
     // what its category must agree with is that family's, read off the palettes themselves.
     val category = if (registration.id == PALETTE_STEPS_ID) {
@@ -1411,7 +1412,8 @@ private fun createPaletteRows(template: DaoPalette, rows: List<PaletteRowDto>) {
  * leniently — the same treatment a Look effect gets, so the two cannot disagree about what a
  * stored effect means.
  */
-private fun createPaletteFx(template: DaoPalette, effect: PaletteFxDto, uuid: java.util.UUID? = null) {
+private fun createPaletteFx(template: DaoPalette, written: PaletteFxDto, registry: FxRegistry, uuid: java.util.UUID? = null) {
+    val effect = written.withStoredClock(registry)
     // A template's effect has no target of its own: it lands on the selection.
     TriggerIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.attribute, "FX")))
     CommandIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.attribute, "FX")))
@@ -1434,10 +1436,10 @@ private fun createPaletteFx(template: DaoPalette, effect: PaletteFxDto, uuid: ja
         // handler — a 500 on a malformed body. The Look path (`writeLookChildren`) already goes
         // through the tolerant helper, and null here means master 1, which is the documented
         // meaning of an absent master everywhere else.
-        speedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.speedMasterUuid)
-        rateSpeedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
-        // Seconds follows no master (D7), so a row on Seconds keeps none beside it.
-        seconds = effect.seconds
+        // Own tempo follows no master (fx-speed plan D3), so a row on it keeps none beside it.
+        speedMasterUuid = if (effect.ownBpm != null) null else speedMasterUuidOrNull(effect.speedMasterUuid)
+        rateSpeedMasterUuid = if (effect.ownBpm != null) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
+        ownBpm = effect.ownBpm
         amount = effect.amount
         direction = FxSpecCoercion.Names.canonicalDirection(effect.direction)
         runs = effect.runs
@@ -1597,7 +1599,7 @@ internal fun DaoPaletteFxEntity.toDto(registry: FxRegistry) = PaletteFxDto(
     parameters = parameters,
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
-    seconds = seconds,
+    ownBpm = ownBpm,
     amount = amount,
     direction = direction,
     runs = runs,

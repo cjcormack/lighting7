@@ -26,7 +26,8 @@ import { handPickUp } from '@/store/hand'
 import { useCopyPaletteMutation, useSavePaletteMutation } from '@/store/palettes'
 import type { PaletteFx, PaletteInput, PaletteSummary } from '@/api/palettesApi'
 import type { SpeedMaster } from '@/api/speedMastersApi'
-import { beatsToSeconds, isOnSeconds, secondsToBeats } from '@/lib/fxTiming'
+import { OWN_BPM_DEFAULT, clampOwnBpm, followsNoMaster } from '@/lib/fxTiming'
+import { ownTempoLabel } from '@/components/fx/fxConstants'
 import { usePaletteDelete } from './usePaletteDelete'
 import { PaletteValue } from './PaletteValue'
 import { PaletteValueCell, type PaletteValueDraft, type PaletteValueLanding } from './PaletteValueCell'
@@ -48,11 +49,10 @@ export function paletteRowId(paletteId: number): string {
 }
 
 /**
- * The Master column's *Seconds* (venue-visit plan D7): the effect follows no master — a beat effect's
- * division read as seconds, a wall-clock effect's rate master null. Never on the wire; the wire says
- * `seconds`.
+ * The Master column's *Own tempo* or *Natural* (fx-speed plan D3, D4): the effect follows no master —
+ * a beat effect on its own `ownBpm`, a wall-clock effect's rate master null. Never on the wire.
  */
-export const SECONDS = 'seconds'
+export const FREE_TIMING = 'free'
 
 /**
  * Master 1 before the bank has loaded — a beat effect's null master, which is master 1 whether or
@@ -130,9 +130,9 @@ export function PaletteSheet({
     () => masters.map((m) => ({ value: m.uuid, label: `M${m.masterIndex} · ${m.name}` })),
     [masters],
   )
-  /** Seconds, then every master — one question for every effect, as the editor's chip asks it. */
+  /** Own tempo or Natural, then every master — one question for every effect, as the editor's chip asks it. */
   const timingOptions = useMemo<SheetOption[]>(
-    () => [{ value: SECONDS, label: 'Seconds' }, ...beatOptions],
+    () => [{ value: FREE_TIMING, label: 'Own tempo / Natural' }, ...beatOptions],
     [beatOptions],
   )
 
@@ -147,15 +147,15 @@ export function PaletteSheet({
   )
 
   /**
-   * The Master column's value for one effect template — `seconds` when it follows no master (D7),
+   * The Master column's value for one effect palette — [FREE_TIMING] when it follows no master,
    * else the stored uuid, **canonical**: a beat effect's null is master 1, so it reads as M1's uuid
    * and an M1 commit writes null back. Undefined where the effect type is unknown.
    */
   const masterValue = useCallback(
     (effect: PaletteFx): string | undefined => {
       if (effect.timingSource == null) return undefined
-      if (isOnSeconds(effect, effect.timingSource)) return SECONDS
-      if (effect.timingSource === 'WALL_CLOCK') return effect.rateSpeedMasterUuid ?? SECONDS
+      if (followsNoMaster(effect, effect.timingSource)) return FREE_TIMING
+      if (effect.timingSource === 'WALL_CLOCK') return effect.rateSpeedMasterUuid ?? FREE_TIMING
       return effect.speedMasterUuid ?? master1?.uuid ?? MASTER_1
     },
     [master1],
@@ -165,50 +165,43 @@ export function PaletteSheet({
    * The effect with its timing changed, and only if it moves. Null where the choice cannot apply:
    * a master this project does not have, or an effect whose type no longer resolves.
    *
-   * A **beat** effect moving between Seconds and a master keeps its speed — the division converted
-   * at the master's stored tempo, the one this sheet reads — so a pad does not change speed under a
-   * timing edit. A wall-clock effect's number is seconds either way, and its master is its rate
-   * master.
+   * A **beat** effect moving onto Own tempo keeps its speed (fx-speed plan D3) — it starts at its
+   * master's stored tempo, the one this sheet reads, the cycle in beats unchanged — so a pad does not
+   * change speed under a timing edit. A wall-clock effect's number is seconds either way, and its
+   * master is its rate master.
    */
   const fxWithMaster = useCallback(
     (effect: PaletteFx, choice: string): PaletteFx | null | 'same' => {
-      if (choice !== SECONDS && choice !== MASTER_1 && !masterByUuid.has(choice)) return null
+      if (choice !== FREE_TIMING && choice !== MASTER_1 && !masterByUuid.has(choice)) return null
       if (effect.timingSource == null) return null
       const wallClock = effect.timingSource === 'WALL_CLOCK'
-      const onSeconds = isOnSeconds(effect, effect.timingSource)
+      const free = followsNoMaster(effect, effect.timingSource)
       const bpmOf = (uuid: string | null | undefined) =>
         (uuid != null && uuid !== MASTER_1 ? masterByUuid.get(uuid) : master1)?.bpm ?? 0
-      // The flag is written only where it moves, so an edit of a palette that never used it sends
-      // the effect as it was with the one field changed. A wall-clock effect's Seconds is its null
-      // rate master, which needs no flag.
-      const offSeconds = effect.seconds === true ? { seconds: false } : {}
-      if (choice === SECONDS) {
-        if (onSeconds) return 'same'
+      if (choice === FREE_TIMING) {
+        if (free) return 'same'
         if (wallClock) return { ...effect, rateSpeedMasterUuid: null }
+        const running = bpmOf(effect.speedMasterUuid)
         return {
           ...effect,
-          seconds: true,
+          ownBpm: running > 0 ? clampOwnBpm(running) : OWN_BPM_DEFAULT,
           speedMasterUuid: null,
           rateSpeedMasterUuid: null,
-          cycle: beatsToSeconds(effect.cycle, bpmOf(effect.speedMasterUuid)),
         }
       }
       if (wallClock) {
         const next = choice === MASTER_1 ? (master1?.uuid ?? null) : choice
         if (next == null) return null
-        if (!onSeconds && effect.rateSpeedMasterUuid === next) return 'same'
-        return { ...effect, ...offSeconds, rateSpeedMasterUuid: next }
+        if (!free && effect.rateSpeedMasterUuid === next) return 'same'
+        return { ...effect, rateSpeedMasterUuid: next }
       }
       // Master 1 has two spellings — its uuid and the null that means it — so both sides are
       // compared canonically, and M1 is written as null, the spelling every other writer uses.
       const next = canonicalBeat(choice, master1)
-      if (!onSeconds && canonicalBeat(effect.speedMasterUuid, master1) === next) return 'same'
-      return {
-        ...effect,
-        ...offSeconds,
-        speedMasterUuid: next,
-        ...(onSeconds ? { cycle: secondsToBeats(effect.cycle, bpmOf(choice)) } : {}),
-      }
+      if (!free && canonicalBeat(effect.speedMasterUuid, master1) === next) return 'same'
+      // The tempo is written only where it moves, so an edit of a palette that never used it sends
+      // the effect as it was with the one field changed.
+      return { ...effect, ...(effect.ownBpm != null ? { ownBpm: null } : {}), speedMasterUuid: next }
     },
     [master1, masterByUuid],
   )
@@ -410,9 +403,9 @@ export function PaletteSheet({
         cell: (row, props) => {
           const effect = row.palette?.fx
           const wallClock = effect?.timingSource === 'WALL_CLOCK'
-          const seconds = effect != null && isOnSeconds(effect, effect.timingSource)
+          const free = effect != null && followsNoMaster(effect, effect.timingSource)
           const uuid = wallClock ? effect?.rateSpeedMasterUuid : (effect?.speedMasterUuid ?? master1?.uuid)
-          const master = !seconds && uuid != null ? masterByUuid.get(uuid) : undefined
+          const master = !free && uuid != null ? masterByUuid.get(uuid) : undefined
           return (
             <OptionCell
               {...(props as React.ComponentProps<typeof OptionCell>)}
@@ -423,7 +416,9 @@ export function PaletteSheet({
                     <span className="font-mono font-bold">M{master.masterIndex}</span> {master.name}
                   </span>
                 ) : (
-                  <span className="mx-1.5 text-xs text-muted-foreground">{seconds ? 'Seconds' : 'M1'}</span>
+                  <span className="mx-1.5 text-xs text-muted-foreground">
+                    {effect?.ownBpm != null ? ownTempoLabel(effect.ownBpm) : free ? 'Natural' : 'M1'}
+                  </span>
                 )
               }
             />
@@ -458,8 +453,8 @@ export function PaletteSheet({
           for (const row of batch as MemberRow[]) {
             const effect = row.palette.fx
             if (effect == null) continue
-            // Each kind's default: master 1 for a beat effect, Seconds (unscaled) for a wall-clock one.
-            const next = fxWithMaster(effect, effect.timingSource === 'WALL_CLOCK' ? SECONDS : MASTER_1)
+            // Each kind's default: master 1 for a beat effect, Natural for a wall-clock one.
+            const next = fxWithMaster(effect, effect.timingSource === 'WALL_CLOCK' ? FREE_TIMING : MASTER_1)
             if (next != null && next !== 'same') put(row.palette, 'master', { fx: next })
           }
         },

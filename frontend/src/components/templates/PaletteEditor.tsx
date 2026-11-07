@@ -256,8 +256,8 @@ export function PaletteEditor({
         // starts on Override. The blend is not carried from the last effect — it was the hard-coded
         // Override that made every Circle template circle 128/128.
         const spec = startingSpec(entry, { attribute: extra?.attribute })
-        // Seconds (D7) carries within one timing source like the division it qualifies.
-        const seconds = sameTiming && prev?.seconds === true
+        // An Own tempo carries within one timing source like the division it qualifies.
+        const ownBpm = sameTiming ? (prev?.ownBpm ?? null) : null
         // A step effect's start is the controls' (`FxStart`): Palette Steps is filed under this
         // family with its palettes, Slot Steps names a setting and its first slots.
         const category = extra?.family ?? drivenCategoryOf(entry)
@@ -275,10 +275,10 @@ export function PaletteEditor({
           timing: null,
           parameters: { ...spec.parameters, ...extra?.parameters },
           // Stamped at authoring time, not resolved later: `null` still means master 1 everywhere.
-          // An effect on Seconds follows none.
-          speedMasterUuid: seconds ? null : masterForCategory(fxFamilyOnAttribute(category, extra?.attribute)),
-          rateSpeedMasterUuid: seconds || !sameTiming ? null : (prev?.rateSpeedMasterUuid ?? null),
-          seconds,
+          // An effect on its own tempo follows none.
+          speedMasterUuid: ownBpm != null ? null : masterForCategory(fxFamilyOnAttribute(category, extra?.attribute)),
+          rateSpeedMasterUuid: ownBpm != null || !sameTiming ? null : (prev?.rateSpeedMasterUuid ?? null),
+          ownBpm,
           // Amount and runs carry over like the phase: each means the same thing whichever effect is
           // running (effects plan D2, D9), and the live editor's swap keeps them too.
           ...(prev?.amount != null ? { amount: prev.amount } : {}),
@@ -300,7 +300,7 @@ export function PaletteEditor({
                 : { spreadUnit: 'CYCLE' as const, spread: 1 }
               : {}),
           // The draft's own reading of its kind, until the desk answers with the registry's: what
-          // tells a wall-clock effect's Seconds (no rate master) from a beat effect on a master.
+          // tells a wall-clock effect's Natural (no rate master) from a beat effect on a master.
           timingSource: entry.timingSource ?? 'BEAT',
         }
       })
@@ -732,7 +732,7 @@ function FxControls({
           {/* The master's reason, which the old form said beside its picker (session 5 kept it). */}
           <EditorReadout>
             A new FX is one bar on the master of this family, stored on the
-            palette — every layer applying it follows the same tempo. On Seconds it follows none.
+            palette — every layer applying it follows the same tempo. On Own tempo or Natural it follows none.
           </EditorReadout>
         </div>
       )}
@@ -824,7 +824,7 @@ function fxKey(effect: PaletteFx | null): string {
     effect.phaseOffset ?? 0,
     effect.speedMasterUuid ?? null,
     effect.rateSpeedMasterUuid ?? null,
-    effect.seconds === true,
+    effect.ownBpm ?? null,
     // Size, direction and runs (effects plan D2, D5, D9), read at their defaults when unsaid.
     effect.amount ?? 1,
     effect.direction ?? 'FORWARD',

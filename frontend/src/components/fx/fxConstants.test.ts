@@ -19,8 +19,11 @@ describe('fxSpeedLabel', () => {
     expect(fxSpeedLabel(0.5, 'BEAT')).toBe('½ beat')
   })
 
-  it('reads a beat effect on Seconds (D7) as seconds, whatever its type', () => {
-    expect(fxSpeedLabel(10, 'BEAT', true)).toBe('10 s')
+  it('reads a beat effect on its own tempo in beats, and names the tempo', () => {
+    expect(fxSpeedLabel(4, 'BEAT', 96)).toBe('1 bar · Own 96')
+    // A running one reports the wall-clock loop it runs on; its cycle is still beats.
+    expect(fxSpeedLabel(2, 'WALL_CLOCK', 120)).toBe('2 beats · Own 120')
+    expect(fxSpeedLabel(0.5, null, 97.5)).toBe('½ beat · Own 97.5')
   })
 
   it('reads the same number as seconds for a wall-clock effect', () => {

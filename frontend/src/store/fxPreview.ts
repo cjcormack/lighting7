@@ -50,9 +50,13 @@ export interface FxPreviewWindow {
   sampleMs: number
 }
 
-/** A clock at the window's start: a master's tick and beat length, or `seconds` for FX on their own clock. */
+/**
+ * A clock at the window's start: a master's tick and beat length, an Own tempo's [ownBpm] and beat
+ * length, or `seconds` for wall-clock FX on Natural.
+ */
 export interface FxPreviewClock {
   speedMasterUuid?: string | null
+  ownBpm?: number | null
   seconds?: boolean
   tickAtStart?: number | null
   msPerBeat?: number | null
@@ -131,6 +135,8 @@ export interface FxPreviewFx {
   attribute: string
   running: boolean
   speedMasterUuid?: string | null
+  /** Its Own tempo; null on a master or Natural. */
+  ownBpm?: number | null
   offsets: (number | null)[]
   starts: (number[] | null)[]
   holding: (number[][] | null)[]

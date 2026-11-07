@@ -57,8 +57,10 @@ export interface ActiveFxState {
   speedMasterUuid?: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null
-  /** D7's reading: follows no master. See `ActiveFx.seconds`. */
-  seconds?: boolean
+  /** A beat effect's own tempo, when it follows no master. See `ActiveFx.ownBpm`. */
+  ownBpm?: number | null
+  /** A wall-clock effect with no rate master. See `ActiveFx.natural`. */
+  natural?: boolean
   /** Amount (effects plan D2), 0–1: how much reaches the stage over what is underneath. Absent at 1. */
   amount?: number
   /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`. Absent when forward. */
@@ -111,13 +113,21 @@ export interface UpdateFxRequest {
   /** Reassign the wall-clock rate master; omitted = no change, as above. */
   rateSpeedMasterUuid?: string
   /**
-   * Move the effect between *Seconds* and a master (venue-visit plan D7); omitted = no change.
-   * `true` puts it on Seconds — a beat effect's division read as seconds, no master; a wall-clock
-   * effect's rate master dropped, the *unscaled* a null could never say (`FU-FX-RATE-MASTER-CLEAR`).
-   * Refused beside a master. `false` puts it on the master sent beside it (a beat effect's absent
-   * master is master 1; a wall-clock effect must name one).
+   * Put a beat effect on its own tempo, 20–300 BPM, or retune one already on it, phase kept;
+   * omitted = no change. Refused beside a master and on a wall-clock effect. Naming
+   * [speedMasterUuid] takes it off its own tempo.
    */
-  seconds?: boolean
+  ownBpm?: number
+  /**
+   * `true` puts a wall-clock effect on *Natural*, its rate master dropped — the fixed 120 BPM a null
+   * could never say. Naming [rateSpeedMasterUuid] takes it off.
+   */
+  natural?: boolean
+  /**
+   * `false` takes an effect off its own clock onto master 1 where its uuid is not known, since an absent
+   * [speedMasterUuid] means "keep" (the desk's old *Seconds* field, read for this).
+   */
+  seconds?: false
   /** Amount (effects plan D2), 0–1. Edited in place: the phase is kept. */
   amount?: number
   /** Direction (D5). Edited in place. */

@@ -35,7 +35,7 @@ const SECONDS_MAX = 600
 /**
  * Cycle from the first cycle's right edge, dragged from [edgeX] to [x]: the cycle scaled by how far
  * the edge moved from the plot's left. A cycle in beats snaps to a step, or stays where it began; one
- * in seconds (a wall-clock FX, or one on *Seconds*) has no steps, and moves to the nearest 0.05 s.
+ * in seconds (a wall-clock FX) has no steps and moves to the nearest 0.05 s. An Own tempo's cycle is beats.
  */
 export function cycleFromDrag(startCycle: number, plotLeft: number, edgeX: number, x: number, seconds = false): number {
   const span = edgeX - plotLeft

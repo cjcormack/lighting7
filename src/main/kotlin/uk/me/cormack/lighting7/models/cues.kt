@@ -2,6 +2,8 @@ package uk.me.cormack.lighting7.models
 
 import org.jetbrains.exposed.v1.javatime.duration
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.dao.IntEntity
@@ -144,6 +146,7 @@ data class CueAttributeAssignmentDto(
     val target: TargetRef get() = TargetRef.of(targetType, targetKey)
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class CueAdHocFxDto(
     val targetType: String,
@@ -168,11 +171,17 @@ data class CueAdHocFxDto(
     /** Wall-clock rate master (null → unscaled). See [LookFxSpec.rateSpeedMasterUuid]. */
     val rateSpeedMasterUuid: String? = null,
     /**
-     * On *Seconds* (venue-visit plan D7): the effect follows no master. A beat effect's
-     * `cycle` is then its own cycle in seconds; a wall-clock effect's is seconds already, and
-     * it is on Seconds whenever it has no rate master, flag or not. The masters are null beside it.
-     * See `fx/FxTimingChoice.kt`.
+     * A beat effect's *Own tempo* (fx-speed plan D3), 20–300 BPM: it follows no master, and its
+     * `cycle` of beats runs at this tempo. Null follows its master. A wall-clock effect has none: it
+     * is on *Natural* whenever it has no rate master. The masters are null beside it. See
+     * `fx/FxTimingChoice.kt`.
      */
+    val ownBpm: Double? = null,
+    /**
+     * **Read only, never written**: the retired *Seconds* (venue-visit plan D7), converted at the write
+     * boundary by D5 — a beat effect onto Own tempo 120 at twice [cycle], a wall-clock one onto Natural.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     val seconds: Boolean = false,
     /**
      * Amount (effects plan D2), 0.0–1.0: how much of the effect reaches the stage over what is
@@ -318,8 +327,8 @@ object DaoCueAdHocFx : IntIdTable("cue_ad_hoc_fx") {
     val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
     val rateSpeedMasterUuid = javaUUID("rate_speed_master_uuid").nullable()
 
-    /** D7's *Seconds* for a beat effect; see [CueAdHocFxDto.seconds]. */
-    val seconds = bool("seconds").default(false)
+    /** A beat effect's Own tempo (fx-speed plan D3); null follows its master. See [LookFxSpec.ownBpm]. */
+    val ownBpm = double("own_bpm").nullable()
 
     /** Amount (effects plan D2), 0.0–1.0; see [LookFxSpec.amount]. */
     val amount = double("amount").default(1.0)
@@ -378,7 +387,7 @@ class DaoCueAdHocFxEntity(id: EntityID<Int>) : IntEntity(id) {
     var sortOrder by DaoCueAdHocFx.sortOrder
     var speedMasterUuid by DaoCueAdHocFx.speedMasterUuid
     var rateSpeedMasterUuid by DaoCueAdHocFx.rateSpeedMasterUuid
-    var seconds by DaoCueAdHocFx.seconds
+    var ownBpm by DaoCueAdHocFx.ownBpm
     var amount by DaoCueAdHocFx.amount
     var direction by DaoCueAdHocFx.direction
     var runs by DaoCueAdHocFx.runs
@@ -689,7 +698,7 @@ internal fun DaoCueAdHocFxEntity.toDto() = CueAdHocFxDto(
     sortOrder = sortOrder,
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
-    seconds = seconds,
+    ownBpm = ownBpm,
     amount = amount,
     direction = direction,
     runs = runs,

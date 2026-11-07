@@ -129,11 +129,10 @@ export interface CueAdHocFx {
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null
   /**
-   * On *Seconds* (venue-visit plan D7): the effect follows no master, and a beat effect's
-   * `cycle` is its cycle in seconds. A wall-clock effect is on Seconds whenever it has no rate
-   * master, flag or not — read it through `isOnSeconds` (`lib/fxTiming.ts`). Absent = false.
+   * A beat effect's own tempo, 20–300 BPM, in place of a master (both masters then null); `cycle`
+   * stays beats. Never on a wall-clock effect, whose *Natural* is a null rate master. Absent = none.
    */
-  seconds?: boolean
+  ownBpm?: number | null
   /** Amount (effects plan D2), 0–1; absent at 1. */
   amount?: number
   /** Direction (D5); absent when forward. */

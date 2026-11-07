@@ -383,7 +383,7 @@ it as `edited: true`.
   - **FX** are reconciled against the running instances the cue's holds spawned, by stored
     uuid, cue layer, target and attribute (`CueFxKey`; `cueFxInstances` builds what a first
     hold would spawn, as `bringOn` does). A matched instance whose settings differ is edited in place
-    through `applyFxUpdate`, no `targets`: id and phase kept, but a move between Seconds and a
+    through `applyFxUpdate`, no `targets`: id and phase kept, but a move between Own tempo and a
     master restarts its loop. One the in-place edit refuses is started afresh. An unmatched running
     instance shrinks to nothing over the cue's fade. An unmatched stored FX grows from nothing
     over it, at the cue's priority — **but only one the cue newly gained**: the registry keeps what

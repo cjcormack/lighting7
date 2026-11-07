@@ -77,8 +77,10 @@ export interface FixtureDirectFx {
   speedMasterUuid?: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null
-  /** D7's reading: follows no master. */
-  seconds?: boolean
+  /** A beat effect's own tempo, when it follows no master. */
+  ownBpm?: number | null
+  /** A wall-clock effect with no rate master. */
+  natural?: boolean
 }
 
 export interface FixtureIndirectFx {
@@ -102,8 +104,10 @@ export interface FixtureIndirectFx {
   speedMasterUuid?: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid?: string | null
-  /** D7's reading: follows no master. */
-  seconds?: boolean
+  /** A beat effect's own tempo, when it follows no master. */
+  ownBpm?: number | null
+  /** A wall-clock effect with no rate master. */
+  natural?: boolean
 }
 
 export interface FixtureFx {
@@ -220,8 +224,10 @@ export interface AddFixtureFxRequest {
    * WALL_CLOCK effects; it sits alongside `speedMasterUuid` rather than replacing it.
    */
   rateSpeedMasterUuid?: string
-  /** On *Seconds* (D7): the division is seconds, no master. Never beside a master. */
-  seconds?: boolean
+  /** A beat effect's own tempo, 20–300 BPM, in place of a master. Never beside a master. */
+  ownBpm?: number
+  /** A wall-clock effect on *Natural*: no rate master. */
+  natural?: boolean
   /** Amount (effects plan D2), 0–1; omitted → 1. */
   amount?: number
   /** Direction (D5); omitted → forward. */
@@ -374,11 +380,12 @@ export interface ActiveFx {
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */
   rateSpeedMasterUuid: string | null
   /**
-   * D7's reading (venue-visit plan S15): the effect follows no master — a beat effect on its own
-   * cycle in seconds (its `timingSource` then reads `WALL_CLOCK`, the loop it runs on), or a
-   * wall-clock effect with no rate master. Absent from a desk before S15; `isOnSeconds` reads it.
+   * A beat effect's own tempo (fx-speed plan D3), non-null exactly when it follows no master: its
+   * `cycle` is still beats, and its `timingSource` reads `WALL_CLOCK`, the loop it runs on.
    */
-  seconds?: boolean
+  ownBpm?: number | null
+  /** A wall-clock effect on *Natural* (D4): no rate master, a fixed 120 BPM. */
+  natural?: boolean
   /** Amount (effects plan D2), 0–1: how much reaches the stage over what is underneath. Absent at 1. */
   amount?: number
   /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`. Absent when forward. */

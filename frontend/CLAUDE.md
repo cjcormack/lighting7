@@ -778,8 +778,8 @@ Release folds to its glyph and the scope line drops the fade.
   leaves those out where they do not apply and the draft's default would be a guess; a typed field commits on Enter
   (`SheetField`, shared with the rows). **Revert** sends the snapshot taken at open in one write
   (a never-assigned master as master 1's uuid — the frame cannot say null; an FX that opened
-  on *Seconds* gets `seconds: true` back, which is also how a wall-clock FX returns to
-  unscaled, `FU-FX-RATE-MASTER-CLEAR`'s close); **Done** comes back
+  on its Own tempo gets `ownBpm` back, one on Natural `natural: true`, which is also how a wall-clock
+  FX returns to unscaled, `FU-FX-RATE-MASTER-CLEAR`'s close); **Done** comes back
   to the list, landing any move the floor still held; **×** stops the FX, and pause / resume sit
   beside it. A write the closed socket dropped is forgotten as sent, so the release resends it. The draft is the editor's own while it is open, so a
   refetch never pulls a slider back under a finger; hosts key it on the FX's id *and* type, so
@@ -788,7 +788,7 @@ Release folds to its glyph and the scope line drops the fade.
   **Timing is one strip of chips**: **Cycle** (`CycleChip`, `1 bar ▾`) opens its steps in **beats a
   cycle** — `⅛ beat` … `4 bars`, `SPEED_STEPS` in `fxConstants.ts`, the one table every chip reads too
   (`FU-FE-FX-SPEED-SPELLING`, settled by venue-visit plan S15) — any other division typed after them,
-  and *Same cycle as…*; the **timing** chip is *Seconds* or a master (venue-visit plan D7;
+  and *Same cycle as…*; the **timing** chip is *Own tempo* (*Natural* on a wall-clock FX) or a master (fx-speed plan D3, D4;
   `TimingChip`, `timingChoicePatch`); **Direction** is a segment of three glyphs, → ← ↔,
   the word on the hover; **Runs** (`RunsChip`, `∞ ▾`, `×2 ▾`) opens *Forever*, ×1 to ×4 and a typed
   count — after which each head hands back to what is underneath (effects plan D9; a null count is
@@ -798,10 +798,11 @@ Release folds to its glyph and the scope line drops the fade.
   a typed value, lit while the value matches none** (`TypedCell`): Cycle's steps, Runs' counts, and a
   parameter's common values (`fxParamPresets.ts`, a client table keyed by FX and parameter — Wave's
   Width *10 % · 50 % · One head · 35 %*, its `widthUnit` drawn inside the segment while Width shows;
-  Colour Strobe's Width). On Seconds the
-  FX types its cycle in seconds and follows no master; a wall-clock FX types seconds either
-  way, its master being its rate master. Moving a beat FX between the two converts the division
-  at the master's live tempo, so its cycle holds (`lib/fxTiming.ts`). **Mix is Amount beside the
+  Colour Strobe's Width). On Own tempo a beat
+  FX keeps its cycle in beats, follows no master and shows a BPM field (20–300, `Own 96` on the chip); a
+  wall-clock FX types seconds either way, its master being its rate master and its free option
+  *Natural*. Moving a beat FX from a master onto Own tempo starts the tempo at the master's live BPM
+  and keeps the cycle, so its speed holds (fx-speed plan D3, `lib/fxTiming.ts`). **Mix is Amount beside the
   family's question** (effects plan D11; terminology plan D3): Amount a slider and a percent field — how
   much of the FX reaches the stage over what is underneath, which the desk weighs after the
   blend (a Replace at 50 % sits halfway over the level underneath) — and, for an FX that asks no
@@ -856,7 +857,7 @@ Release folds to its glyph and the scope line drops the fade.
   (`STEP`, 1, only where the library entry names `stepsFrom`) or *Free*, a slider in the unit the FX is on (steps
   0–16 under `STEP`, a percentage of the cycle 0–200 under `CYCLE`; it holds while its slider passes through 1, and
   a spread written from outside reads afresh) — with a readout of the gap between neighbouring starts as the ladder
-  has them (`neighbourGap`) as a share of the cycle, in steps where the FX has them, in beats (seconds on Seconds or
+  has them (`neighbourGap`) as a share of the cycle, in steps where the FX has them, in beats (seconds on
   the wall clock; a head's own cycle under *One cycle for: Each head*) and degrees, and under `STEP` on known heads
   the spread the desk runs: *⅓ cycle · 1 step · 1⅓ beats · 120° · spread 133 %* (`acrossHeads.ts`'
   `laterByReadout`, over `stepCountOf`; *on eight heads* where a `CYCLE` gap is the notional heads'); then **Segments · Parts · Wings**, each
@@ -1531,7 +1532,7 @@ re-exported by `fxEditorModel.ts`) rather than a second copy. `PaletteEditor`'s 
 mounts **`FxFields`** — the live editor's fields over the palette's draft (`paletteDraftOf`
 / `withPaletteDraft`), with no target: the Order and *Over* in *Across the heads* (a palette's own, read and
 saved by both and compared by `differsFromPalette`; a new one starts on `WHOLE`, a type swap keeps
-it, *New palette from FX* takes the running FX's), no *One cycle for* or head filter, and the same timing chip — *Seconds* or a master — as the live editor.
+it, *New palette from FX* takes the running FX's), no *One cycle for* or head filter, and the same timing chip — *Own tempo* (*Natural*) or a master — as the live editor.
 **`EffectParameterForm` is
 retired**, not rebuilt: it had been that branch's form and nothing else's since session 3. Choosing
 an FX starts it on its **starting spec** (`startingSpec`, the picker's rule): a movement FX
@@ -4119,16 +4120,17 @@ Value · Fade · Master · Notes · Layers · Pages · Pressed, grouped by the r
   `fadeDurationMsPresent: true`; Fan is the kit's `duration` plan. Set and Fan compare a null
   fade **as 0**, so Enter on an untouched editor does not turn *default* into an explicit 0s.
   An FX palette's Fade is `undefined`: blank, and named when a marquee sweeps it up.
-- **Master is the FX's timing in `PUT {fx}`: *Seconds* or a master** (venue-visit plan D7),
-  offered first on every FX. A master is `speedMasterUuid` on a `BEAT` FX,
-  `rateSpeedMasterUuid` on a `WALL_CLOCK` one; Seconds is `seconds: true` with no master on a beat
-  FX (its division converted at the master's **stored** tempo, so its cycle holds) and a null rate
-  master on a wall-clock one. The body is the whole FX with the timing changed — the flag only
+- **Master is the FX's timing in `PUT {fx}`: Own tempo, Natural or a master** (fx-speed plan D3,
+  D4), the free option (*Own tempo / Natural*) offered first on every FX. A master is
+  `speedMasterUuid` on a `BEAT` FX, `rateSpeedMasterUuid` on a `WALL_CLOCK` one; Own tempo is
+  `ownBpm` with no master on a beat FX (starting at the master's **stored** tempo, since the sheet
+  may edit a project that is not current, its cycle kept) and Natural a null rate master on a
+  wall-clock one; the cell reads `Own 96` or `Natural`. The body is the whole FX with the timing changed — the flag only
   where it moves — since the PUT replaces the FX half, and it **recreates the FX**, so a
   running instance restarts (the cell's title says so). A beat FX's null is master 1, compared
   canonically and written back as null — and it reads as master 1 even before the bank has loaded (a
   `master-1` stand-in, never on the wire), or a marquee over it would skip a row that takes a master.
-  Clear is each kind's default: master 1 on a beat FX, Seconds on a wall-clock one. An FX
+  Clear is each kind's default: master 1 on a beat FX, Natural on a wall-clock one. An FX
   whose type no longer resolves has no `timingSource`, so which field to write is unknown: its Master
   is blank and skipped.
 - **Value reads `rows ?? []`** and never resolves (`paletteIntent.ts`'s rule): the swatch and
@@ -5450,7 +5452,7 @@ popover and row C's Fan — and `AppliedTables.test.tsx` pins what the tables ca
   carrying the same verbs over a selection, a one-row verb disabled over several with the reason.
   **FX** is two views, *Selection* (the FX editor, below) and *All* (`applied/AppliedFxTable.tsx`,
   Applied FX moved, unchanged columns, bands and verbs): `fx/active`, one row per instance in the
-  desk's order; timing *Seconds* or the instance's master off the live bank, size, direction, runs
+  desk's order; timing `Own 96`, *Natural* or the instance's master off the live bank, size, direction, runs
   and *spent* the instance's fields, *held · Blind* `isHeldByBlind`; *Edit…*, *Pause* / *Resume*,
   *Save as palette…* (`applied/fxRows.ts`' `saveAsPaletteOffer`), *Stop*. *Edit…*, ⏎ and the
   name's double click are the row's press: it selects that FX's heads and opens it in *Selection*,
@@ -5612,7 +5614,7 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   into the ask, so a solo'd FX that is not the picked one is asked for beside it. The list reads only
   the apply order and the held-back reasons. The strip's hosts ask through the same hook with
   `drafts` (`{draft}` entries, `fxStripDraft.ts`' `previewDraftOf` — only the fields the FX says,
-  no master beside *Seconds*), `include: ONLY`, `notional` (heads the rig lacks, no targets, no row
+  no master beside an Own tempo), `include: ONLY`, `notional` (heads the rig lacks, no targets, no row
   keys to hear) or `ownHeads` (no targets: the FX's own heads); with none of those an ask with no
   targets is still no ask.
 - **The graph draws the answer and computes nothing** (P2; `FxGraph.tsx`). `fxPreviewDecode.ts`
@@ -5701,8 +5703,8 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
 - **Match** (D13) is *Same as…* in the Cycle chip's popover and beside the patterns, over the list's other FX: one
   write of the source's cycle and what it follows (master 1 named by its uuid, since an absent master keeps), or
   its four pattern fields with Spread and its unit. A source on a master of the other clock — read from its library entry,
-  since a beat FX on *Seconds* reports the wall clock — is offered disabled (one on *Seconds* copies
-  onto either), and so is a spread source on one head, which says no Order. Nothing links them
+  since a beat FX on Own tempo reports the wall clock — is offered disabled (one on Own tempo copies
+  its tempo with the cycle), and so is a spread source on one head, which says no Order. Nothing links them
   afterwards (`FU-FX-LINKED-TIMING`).
 - **Hover lights** (§4.5): `FxFields` wraps each control in `Lights`, which sets the link's `highlight`
   while the pointer rests there, and `drawLane` lights that mark (`LaneDrawOptions.highlight`,
@@ -5717,8 +5719,8 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   edits the picked FX, never under a coarse pointer (`hooks/useCoarsePointer.ts`) or read-only: the
   **Cycle tab** on the ruler at the first cycle's end (always sample 48, the desk's rate), labelled
   with the cycle (*1 bar ⇔*), snapped to `SPEED_STEPS` by ratio — the cycle the drag began on counting as
-  a step, so a triplet or 32 beats is kept until the drag leaves it — or, in seconds (a wall-clock FX,
-  or one on *Seconds*), moved to the nearest 0.05 s; over the picked FX's own section, **Spread's
+  a step, so a triplet or 32 beats is kept until the drag leaves it — or, in seconds (a wall-clock FX),
+  moved to the nearest 0.05 s; over the picked FX's own section, **Spread's
   knob** at the end of the dashed line through each row's first start, on the lowest row Spread
   moves furthest (a row of share 0 never moves, so a knob there would not follow the finger); a
   row block dragged sideways (the canvas's own pointer-down) for Phase; an Intensity FX's `max` and
@@ -6042,15 +6044,16 @@ fixture-fx-sheets session 5, did): a wall-clock FX gets its cycle in seconds and
 master, a beat FX beats a cycle and the speed master. Showing both to both was the pre-existing
 bug — a wall-clock FX's "Speed Master" did nothing at all. **The live FX editor keeps that
 gate and draws the timing as a chip** (`FxFields`' `TimingChip`, fixture-fx-sheets D11 and
-venue-visit plan D7): *Seconds* first, then every master — on a beat FX the speed master (`M2 ·
+fx-speed plan D3, D4): *Own tempo* (*Natural* on a wall-clock FX) first, then every master — on a beat FX the speed master (`M2 ·
 96`, master 1 when none is stored), on a wall-clock one the **rate** master (*Rate M2 · 96*) —
-beside the Cycle chip in the Timing strip rather than as a select under it. *Seconds* is an FX's own cycle with no
-master (`seconds` on the wire; a wall-clock FX's Seconds is no rate master). It lists the live
+beside the Cycle chip in the Timing strip rather than as a select under it. *Own tempo* is a beat FX's own tempo with no
+master (`ownBpm` on the wire, a BPM field in the popover); *Natural* is a wall-clock FX with no rate
+master (`natural: true`). It lists the live
 bank and always sends a concrete uuid — choosing M1 sends master 1's uuid, `SpeedMasterSelect`'s rule,
 because `updateFx`'s absent field means "keep" — and it reads the live BPM, never the stored one.
 **A new FX is its type's own cycle (one bar but where the library says otherwise) on the master
 tagged for its family, else master 1** (venue-visit plan D16): `FxPicker` and `PaletteEditor` stamp it through `useSpeedMasterForFamily` at creation,
-so `null` still means master 1 everywhere; a wall-clock FX starts on its own Seconds (4 s).
+so `null` still means master 1 everywhere; a wall-clock FX starts on Natural (4 s).
 
 `BeatIndicator` pulses from the keyed `speedMasters.beat` stream, always — the unkeyed
 legacy `beatSync` it used to fall back to is gone from both sides (backend D2). Omitting the
@@ -6755,14 +6758,14 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   here* strip stays under it, unlocked, and its place is a press on the Values selection
   (`HandCueLayerStrip`'s `host`, through `usePress`'s cue arm), its Undo the store's save toast's.
 - **The FX tab** (`CueFxTab.tsx`, session 6, §4.1, D17): one row per stored FX — target
-  (`fxTargetLabel`, a selection by its items), FX, attribute, cycle (*Seconds* and its cycle,
-  or the cycle on its master, S15), amount, direction and runs (`fxDynamicsParts`, `runsWord`) and
+  (`fxTargetLabel`, a selection by its items), FX, attribute, cycle (`1 bar · Own 96` on its Own tempo, `4 s · Natural`,
+  or the cycle on its master), amount, direction and runs (`fxDynamicsParts`, `runsWord`) and
   its fire timing — reorderable by its grip. A row opens `FxFields` over the stored FX
   through `cueFxDraftOf` / `withCueFxDraft` (`fxEditorModel.ts`: `paletteDraftOf`'s reading,
-  so Seconds, amount, direction, runs and the spread's shape carry, plus timing, element mode and
+  so Own tempo, amount, direction, runs and the spread's shape carry, plus timing, element mode and
   the head filter), its `FxScope` from the FX's target through `useFxScope` — `FxEditor`'s
   derivation, lifted to be shared — with the cue's *Delay · Interval · Random* (`TimingFields`)
-  under it. The editor opens once the FX library has (a wall-clock FX's Seconds is read from
+  under it. The editor opens once the FX library has (whether an FX is wall-clock, so on Natural, is read from
   it), and its draft is its own, seeded on open and again after an Undo (`CueRowStore.undoSeq`). A
   drag's moves coalesce on the store's flush (400 ms, 2 s), a release, reorder or add saves at once,
   and every gesture finds its FX in the desk's list by `uuid` (`indexOfDrawn`), which the store

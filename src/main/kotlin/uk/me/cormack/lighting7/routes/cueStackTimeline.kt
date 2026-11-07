@@ -294,7 +294,7 @@ private class TimelineReads(
             parameters = (defaults + effect.parameters).toSortedMap(),
             speedMasterUuid = if (beat) (speedMasterUuidOrNull(effect.speedMasterUuid) ?: master1Uuid)?.toString() else null,
             rateSpeedMasterUuid = if (beat) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)?.toString(),
-            seconds = effect.seconds,
+            ownBpm = effect.ownBpm,
             amount = effect.amount,
             direction = effect.direction.uppercase(),
             runs = effect.runs,
@@ -398,7 +398,8 @@ internal data class TimelineFxSettingsDto(
     val parameters: Map<String, String>,
     val speedMasterUuid: String?,
     val rateSpeedMasterUuid: String?,
-    val seconds: Boolean,
+    /** A beat effect's Own tempo (fx-speed plan D3); null on a master. */
+    val ownBpm: Double? = null,
     val amount: Double,
     val direction: String,
     val runs: Int?,

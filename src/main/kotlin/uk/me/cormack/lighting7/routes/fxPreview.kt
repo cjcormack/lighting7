@@ -53,7 +53,7 @@ internal const val CODE_FX_PREVIEW_INVALID = "FX_PREVIEW_INVALID"
  *   The first entry is the picked FX: its cycle sets the window and its Order the rows' order.
  * - **`include`**: `STACK` folds every running FX reaching the rows as well; `ONLY` the ones asked for.
  * - **`window`**: one of `cycles` (of the picked FX), `beats` (of its master — a wall-clock FX's rate
- *   master, master 1 for one on its own seconds) or `seconds`; two cycles when none. Longer than
+ *   master, master 1 for one on Natural, an Own tempo FX its own tempo) or `seconds`; two cycles when none. Longer than
  *   [MAX_WINDOW_CYCLES], [MAX_WINDOW_BEATS] or [MAX_WINDOW_SECONDS] is refused.
  * - **`solo`**: an index into the first [FxSampler.MAX_FX] of `fx`; that FX's family lane is drawn as
  *   though it were alone over what is underneath (D14).
@@ -135,18 +135,20 @@ internal data class FxPreviewResponse(
 
 /**
  * The window sampled: its length in beats — of the picked FX's master, a wall-clock FX's rate master,
- * or master 1 for one on its own seconds, as a `beats` window counts them — and in seconds.
+ * master 1 for one on Natural, or an Own tempo FX's tempo, as a `beats` window counts them — and in seconds.
  */
 @Serializable
 internal data class FxPreviewWindowAnswer(val beats: Double, val seconds: Double, val samples: Int, val sampleMs: Double)
 
 /**
- * A clock at the window's start: a speed master's tick and beat length, or `seconds: true` for FX
- * that run on their own seconds (*Seconds*, or a wall-clock FX with no rate master).
+ * A clock at the window's start: a speed master's tick and beat length; an Own tempo (fx-speed plan
+ * D3) and its beat length, with no tick to start from; or `seconds: true` for wall-clock FX on
+ * *Natural*, with no rate master.
  */
 @Serializable
 internal data class FxPreviewClock(
     val speedMasterUuid: String? = null,
+    val ownBpm: Double? = null,
     val seconds: Boolean = false,
     val tickAtStart: Long? = null,
     val msPerBeat: Double? = null,
@@ -218,8 +220,10 @@ internal data class FxPreviewFx(
     val family: String?,
     val attribute: String,
     val running: Boolean,
-    /** The master it runs on, matching a [FxPreviewClock]; null on its own seconds. */
+    /** The master it runs on, matching a [FxPreviewClock]; null on its own clock. */
     val speedMasterUuid: String? = null,
+    /** Its Own tempo (fx-speed plan D3), matching a [FxPreviewClock]'s; null on a master or Natural. */
+    val ownBpm: Double? = null,
     val offsets: List<Double?>,
     val starts: List<List<Int>?>,
     val holding: List<List<List<Int>>?>,
@@ -507,7 +511,7 @@ private fun answer(
     fun fixture(key: String) = runCatching { fixtures.untypedGroupableFixture(key) }.getOrNull()
     fun family(key: String, attribute: String): AttributeFamily? = fixture(key)?.let { familyForAttribute(it, attribute) }
 
-    /** The master an FX's clock follows, or null for its own seconds. */
+    /** The master an FX's clock follows, or null for its own clock (Own tempo, or Natural). */
     fun masterSlot(effect: FxInstance): Int? =
         if (effect.timingSource == TimingSource.BEAT) reads.speedSlotOf(effect)
         else reads.rateSlotOf(effect).takeIf { it != FxInstance.NO_RATE_MASTER }
@@ -579,6 +583,7 @@ private fun answer(
             attribute = effect.target.attribute,
             running = sampled.running,
             speedMasterUuid = masterSlot(effect)?.let(::uuidAt),
+            ownBpm = reads.ownBpmOf(effect),
             offsets = per.offsets.toList(),
             starts = per.starts.toList(),
             holding = per.holding.toList(),
@@ -594,21 +599,26 @@ private fun answer(
         )
     }
 
-    val slots = samples.fx.mapTo(LinkedHashSet()) { masterSlot(it.fx) }
-    val clocks = slots.map { slot ->
-        if (slot == null) FxPreviewClock(seconds = true)
-        else FxPreviewClock(
-            speedMasterUuid = uuidAt(slot),
-            tickAtStart = clock.tickAt(slot),
-            msPerBeat = clock.msPerTick(slot) * MasterClock.TICKS_PER_BEAT,
-        )
+    // An FX on Own tempo runs on no master: its clock is its tempo.
+    val keys = samples.fx.mapTo(LinkedHashSet()) { reads.ownBpmOf(it.fx) ?: masterSlot(it.fx) }
+    val clocks = keys.map { key ->
+        when (key) {
+            null -> FxPreviewClock(seconds = true)
+            is Double -> FxPreviewClock(ownBpm = key, msPerBeat = 60_000.0 / key)
+            else -> (key as Int).let { slot ->
+                FxPreviewClock(
+                    speedMasterUuid = uuidAt(slot),
+                    tickAtStart = clock.tickAt(slot),
+                    msPerBeat = clock.msPerTick(slot) * MasterClock.TICKS_PER_BEAT,
+                )
+            }
+        }
     }
 
     val lengthMs = n * samples.sampleMs
-    val windowSlot = sampler.windowSlot(asked.first(), reads)
     return FxPreviewResponse(
         window = FxPreviewWindowAnswer(
-            beats = lengthMs / (clock.msPerTick(windowSlot) * MasterClock.TICKS_PER_BEAT),
+            beats = lengthMs / sampler.windowMsPerBeat(asked.first(), clock, reads),
             seconds = lengthMs / 1000.0,
             samples = n,
             sampleMs = samples.sampleMs,

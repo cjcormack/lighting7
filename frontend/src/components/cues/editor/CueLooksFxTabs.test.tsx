@@ -244,7 +244,7 @@ const pulse = (over: Partial<CueAdHocFx> = {}): CueAdHocFx => ({
   elementFilter: null,
   timing: null,
   parameters: { min: '0', max: '255' },
-  seconds: true,
+  ownBpm: 96,
   amount: 0.5,
   direction: 'BOUNCE',
   runs: 3,
@@ -535,7 +535,7 @@ describe('the FX tab', () => {
     expect(stored.targetKey).toBe('[{"key":"orbit-sr","type":"fixture"},{"key":"orbit-sl","type":"fixture"}]')
   })
 
-  it('an edit keeps Seconds, size, direction, runs and fire timing, and sends the effect without its uuid', async () => {
+  it('an edit keeps Own tempo, size, direction, runs and fire timing, and sends the effect without its uuid', async () => {
     data.cue = cueOf({ adHocFx: [pulse()] })
     render(<Editor tab="fx" />)
     fireEvent.click(screen.getByRole('button', { name: /Open Pulse/ }))
@@ -543,7 +543,7 @@ describe('the FX tab', () => {
     fireEvent.change(high, { target: { value: '50' } })
     fireEvent.keyDown(high, { key: 'Enter' })
     const [edited] = (await patched(1)).adHocFx as CueAdHocFx[]
-    expect(edited).toMatchObject({ seconds: true, amount: 0.5, direction: 'BOUNCE', runs: 3, spread: 0.5, wings: 2, segments: 2, parts: 3, delayMs: 500, cycle: 2 })
+    expect(edited).toMatchObject({ ownBpm: 96, amount: 0.5, direction: 'BOUNCE', runs: 3, spread: 0.5, wings: 2, segments: 2, parts: 3, delayMs: 500, cycle: 2 })
     expect(Number(edited.parameters.max)).toBe(128)
     expect('uuid' in edited).toBe(false)
   })
@@ -571,7 +571,7 @@ describe('the FX tab', () => {
       projectId: 1,
       targets: [target],
       include: 'ONLY',
-      fx: [{ draft: { fxType: 'Pulse', attribute: 'dimmer', targets: [target], seconds: true, amount: 0.5, direction: 'BOUNCE', runs: 3 } }],
+      fx: [{ draft: { fxType: 'Pulse', attribute: 'dimmer', targets: [target], ownBpm: 96, amount: 0.5, direction: 'BOUNCE', runs: 3 } }],
     })
     expect(previews.asks[0]).not.toHaveProperty('notional')
     expect(document.querySelector('[data-fx-graph-strip="this"]')).toHaveTextContent('What is underneath at its GO is not drawn.')
@@ -585,7 +585,7 @@ describe('the FX tab', () => {
   })
 
   it('a reorder keeps every field of every effect, the spread shape included', () => {
-    const list = [pulse(), pulse({ fxType: 'SineWave', uuid: 'e-2', sortOrder: 1, seconds: false, amount: 1, direction: 'FORWARD', runs: null })]
+    const list = [pulse(), pulse({ fxType: 'SineWave', uuid: 'e-2', sortOrder: 1, ownBpm: null, amount: 1, direction: 'FORWARD', runs: null })]
     const moved = moveItem(list, 0, 1)!
     expect(moved.map((e) => [e.fxType, e.sortOrder])).toEqual([
       ['SineWave', 0],
@@ -628,7 +628,7 @@ describe('the FX tab', () => {
     expect(unlock).toHaveBeenCalledTimes(1)
   })
 
-  it('opens a row’s editor only once the effect library has, so Seconds is read from it', () => {
+  it('opens a row’s editor only once the effect library has, so its timing is read from it', () => {
     data.library = undefined as never
     data.cue = cueOf({ adHocFx: [pulse()] })
     render(<Editor tab="fx" />)

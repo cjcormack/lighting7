@@ -18,7 +18,7 @@ import { AlsoAddToBuskRow } from '@/components/busking/AlsoAddToBuskRow'
 import { useAddToBuskPage } from '@/components/busking/useAddToBuskPage'
 import type { BuskAddTarget } from '@/lib/buskAdd'
 import { fxSpeedLabel, NEW_FX_ELEMENT_MODE } from '@/components/fx/fxConstants'
-import { isOnSeconds } from '@/lib/fxTiming'
+import { isWallClock } from '@/lib/fxTiming'
 import { SpeedMasterChip } from '@/components/fx/SpeedMasterChip'
 import { findFxEntry } from '@/components/busking/buskingTypes'
 import { useCreatePaletteMutation, usePaletteListQuery } from '@/store/palettes'
@@ -89,8 +89,8 @@ export function NewPaletteFromFxSheet({
   const family = stepShape != null ? stepShape.family : category == null ? null : fxAttributeFamily(category, beamAttribute)
   // The **instance's** own answer, not the library entry's. They agree, but a running effect
   // reports its timing source directly and that is the nearer authority for describing this one.
-  const isWallClock = effect?.timingSource === 'WALL_CLOCK'
-  const speed = effect == null ? null : fxSpeedLabel(effect.cycle, effect.timingSource, effect.seconds)
+  const wallClock = effect != null && isWallClock(effect, effect.timingSource)
+  const speed = effect == null ? null : fxSpeedLabel(effect.cycle, effect.timingSource, effect.ownBpm)
 
   useEffect(() => {
     if (!open) return
@@ -136,8 +136,8 @@ export function NewPaletteFromFxSheet({
       parameters: effect.parameters,
       speedMasterUuid: effect.speedMasterUuid,
       rateSpeedMasterUuid: effect.rateSpeedMasterUuid,
-      // The running effect's timing (D7): a beat effect on Seconds keeps its cycle in seconds.
-      seconds: isOnSeconds(effect, effect.timingSource),
+      // The running effect's own tempo, which a palette keeps in place of a master.
+      ownBpm: effect.ownBpm ?? null,
       // Its size, direction and runs (effects plan D2, D5, D9), said only where not the default.
       ...(effect.amount != null && effect.amount !== 1 ? { amount: effect.amount } : {}),
       ...(effect.direction != null && effect.direction !== 'FORWARD' ? { direction: effect.direction } : {}),
@@ -198,8 +198,8 @@ export function NewPaletteFromFxSheet({
                 )}
                 <span className="flex-1" />
                 <SpeedMasterChip
-                  speedMasterUuid={isWallClock ? effect.rateSpeedMasterUuid : effect.speedMasterUuid}
-                  kind={isWallClock ? 'rate' : 'runsOn'}
+                  speedMasterUuid={wallClock ? effect.rateSpeedMasterUuid : effect.speedMasterUuid}
+                  kind={wallClock ? 'rate' : 'runsOn'}
                 />
                 {speed != null && (
                   <Badge variant="outline" className="font-mono text-[10px]">

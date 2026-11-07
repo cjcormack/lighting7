@@ -277,9 +277,9 @@ class FxSamplerParityTest {
     }
 
     @Test
-    fun `a Seconds FX`() {
+    fun `an Own tempo FX at a tempo other than 120`() {
         val sine = fx("Wave", SliderTarget.forGroup("hexes", "dimmer"), division = 1.5) {
-            applyTimingChoice(TimingSource.BEAT, seconds = true)
+            applyTimingChoice(TimingSource.BEAT, ownBpm = 96.0)
         }
         assertParity(rig(), listOf(sine), wake = Wake.TICKER)
     }
@@ -335,7 +335,7 @@ class FxSamplerParityTest {
     fun `a beat Sine Wave with a wall-clock FX Within it on one dimmer`() {
         val beat = fx("Wave", SliderTarget("hex-0", "dimmer")) { priority = 1 }
         val wall = fx("Wave", SliderTarget("hex-0", "dimmer"), division = 0.7, blend = BlendMode.MULTIPLY) {
-            applyTimingChoice(TimingSource.BEAT, seconds = true)
+            applyTimingChoice(TimingSource.BEAT, ownBpm = 84.0)
             priority = 2
         }
         assertParity(rig(), listOf(beat, wall), wake = Wake.BOTH)
@@ -392,7 +392,7 @@ class FxSamplerParityTest {
             val beat = fx("Wave", SliderTarget.forGroup("hexes", "dimmer")).dynamics { it.copy(runs = 3) }
             val candle = fx("CandleFlicker", SliderTarget.forGroup("hexes", "uv"), division = 1.0)
             val wall = fx("Path", PositionTarget("vary"), division = 2.0) {
-                applyTimingChoice(TimingSource.BEAT, seconds = true)
+                applyTimingChoice(TimingSource.BEAT, ownBpm = 132.0)
             }.dynamics { it.copy(runs = 2) }
             return listOf(beat, candle, wall).onEach { rig.engine.addFx(it) }
         }

@@ -171,7 +171,7 @@ docs it names written, and its row marked *in review* with its branch. A session
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Own tempo on the desk | planned | | | |
+| 1 | Own tempo on the desk | in review | `claude/quirky-faraday-k08oa7` | | |
 | 2 | Tempo in the programmer | planned | | | |
 | 3 | The Speed slider | planned | | | |
 | 4 | Half, double and a speed fader | planned | | | |
@@ -223,6 +223,17 @@ the next; whoever merges the last fills its own.
   bullet and migrations section, `docs/sync-engineering.md` (the new version), `docs/glossary.md` (an
   *Own tempo* row, *Was* Seconds, `done`).
 - **Local:** full `./gradlew test` and `npm run check`.
+- **As built.** The rate is `ownBpm / 60` on the stored beats, so `timing.cycle` stays the stored
+  cycle on every reader. The rewrite drops a Seconds FX's masters as well as its flag, a wall-clock
+  one's rate master included: Seconds spawned it with none, so keeping the master would have moved its
+  output. With no registry at database init, a wall-clock FX is told by name, normalised as the
+  registry resolves one: a built-in (`BUILT_IN_WALL_CLOCK_FX`, held to the library by a test) or one of
+  its project's FX definitions on the wall clock. An FX a script registers, which neither can see, is
+  read as a beat one; it runs on Natural at the seconds it meant (`storedClock`), and a stored write of
+  it is kept that way rather than refused (every other wall-clock FX is refused an Own tempo, D4). The
+  importer converts an older archive's `seconds` the same way, dropping that row's masters as the step
+  does. One exception to P3: a wall-clock FX on Seconds ignored a layer's cycle and rate-master
+  overrides, and on Natural it takes them; only a user FX that reads its phase can show it.
 
 ### Session 2 — Tempo in the programmer
 

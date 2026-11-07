@@ -12,7 +12,7 @@ import type { PaletteSummary } from '@/api/palettesApi'
 export function PaletteValue({ palette: template }: { palette: PaletteSummary }) {
   if (template.kind === 'fx') {
     const effect = template.fx
-    const speed = effect == null ? null : fxSpeedLabel(effect.cycle, effect.timingSource, effect.seconds)
+    const speed = effect == null ? null : fxSpeedLabel(effect.cycle, effect.timingSource, effect.ownBpm)
     const around = effect != null && isAroundSpelling(effect) ? 'around' : null
     const text = effect == null ? 'FX' : [effect.fxType, speed, around].filter((p) => p != null && p !== '').join(' · ')
     return (

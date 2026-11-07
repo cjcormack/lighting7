@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils'
 import {
   FX_FAMILY_INFO,
   fxSpeedLabel,
-  secondsLabel,
   getOrderLabel,
   elementModeSummary,
   getElementFilterLabel,
@@ -13,7 +12,6 @@ import { resolveColourToHex, isPaletteRef } from './colourUtils'
 import { useColourPalettes, type ColourPalettes } from './FxColourPalettes'
 import { SpeedMasterChip } from './SpeedMasterChip'
 import type { FxSummaryData } from './fxSummaryTypes'
-import { isOnSeconds } from '@/lib/fxTiming'
 import { fxTargetLabel, parseSelectionKey } from '@/lib/fxTargets'
 import { parseStepList, slotLabel } from '@/lib/stepFx'
 
@@ -46,10 +44,8 @@ export function FxSummary({
   const categoryInfo = FX_FAMILY_INFO[effect.family]
   const CategoryIcon = categoryInfo?.icon
   // An effect type the library no longer resolves has no timing source, so its division could be
-  // beats or seconds — the number is dropped rather than guessed, unless the flag says Seconds.
-  const speedLabel = effect.seconds
-    ? secondsLabel(effect.cycle)
-    : fxSpeedLabel(effect.cycle, effect.timingSource, isOnSeconds(effect, effect.timingSource))
+  // beats or seconds — the number is dropped rather than guessed, unless an Own tempo says beats.
+  const speedLabel = fxSpeedLabel(effect.cycle, effect.timingSource, effect.ownBpm)
   const { colourSwatches, textParams } = getCustomParams(effect, colourPalettes)
 
   return (

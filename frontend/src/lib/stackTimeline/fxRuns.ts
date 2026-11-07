@@ -1,5 +1,5 @@
 import type { TimelineEditOp, TimelineFx } from '@/api/stackTimelineApi'
-import { getCycleLabel, secondsLabel } from '@/components/fx/fxConstants'
+import { fxSpeedLabel, getCycleLabel, ownTempoLabel, secondsLabel } from '@/components/fx/fxConstants'
 import type { TimelineCells } from './cells'
 import { filledOf, type TimelineCueRef } from './edits'
 import type { TimelineColumn } from './model'
@@ -85,13 +85,13 @@ export function joinRunVerb(
   return { op: { op: 'joinRun', cueId: order[at].cueId, fxUuid: effect.uuid, entryId }, reason: null }
 }
 
-/** An FX's cycle as its settings time it: in beats on a master, in seconds on *Seconds* or the wall clock. */
+/** An FX's cycle as its settings time it: in beats on a master or its Own tempo, in seconds on the wall clock. */
 export function fxCycleWords(settings: Record<string, unknown>): string | null {
   const cycle = settings.cycle
   if (typeof cycle !== 'number') return null
-  // A beat FX's settings name its speed master; one on Seconds, or a wall-clock one, names none.
-  const beats = settings.seconds !== true && settings.speedMasterUuid != null
-  return beats ? getCycleLabel(cycle) : secondsLabel(cycle)
+  if (typeof settings.ownBpm === 'number') return fxSpeedLabel(cycle, 'BEAT', settings.ownBpm)
+  // A beat FX's settings name its speed master; a wall-clock one names none.
+  return settings.speedMasterUuid != null ? getCycleLabel(cycle) : secondsLabel(cycle)
 }
 
 /** What changed inside an FX run, as the ◆ says it — the first setting that moved. */
@@ -103,6 +103,7 @@ export function settingsChangeLabel(before: Record<string, unknown>, after: Reco
     const value = after[key]
     if (key === 'cycle') return fxCycleWords(after)
     if (key === 'amount' && typeof value === 'number') return `${Math.round(value * 100)}%`
+    if (key === 'ownBpm' && typeof value === 'number') return ownTempoLabel(value)
     if (key === 'parameters') return 'params'
     if (key.endsWith('Uuid')) return 'master'
     return typeof value === 'string' || typeof value === 'number' ? `${key} ${value}` : key

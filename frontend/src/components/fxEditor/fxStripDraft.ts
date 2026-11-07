@@ -23,7 +23,7 @@ export interface StoredFxFields {
   timing?: Timing | null
   speedMasterUuid?: string | null
   rateSpeedMasterUuid?: string | null
-  seconds?: boolean
+  ownBpm?: number | null
   amount?: number
   direction?: FxDirection
   runs?: number | null
@@ -59,7 +59,7 @@ export function storedFxAttribute(
 /**
  * A stored FX as the preview's `{draft}` (FX editor plan §3.3): `POST /fx/add`'s body, built by the
  * add's own write boundary and never added. Only what the FX says is sent, each field at the add's
- * spelling, so the strict decode names nothing it does not know; a master beside *Seconds* is left out,
+ * spelling, so the strict decode names nothing it does not know; a master beside an Own tempo is left out,
  * as the add refuses both. [programmerOwned] puts it in the programmer's band, where a pressed palette
  * runs, so a programmer value on the heads does not hold it back.
  */
@@ -68,7 +68,7 @@ export function previewDraftOf(
   attribute: string,
   { targets, programmerOwned = false }: { targets?: readonly CueTarget[]; programmerOwned?: boolean } = {},
 ): FxPreviewDraft {
-  const seconds = effect.seconds === true
+  const own = effect.ownBpm != null
   return {
     fxType: effect.fxType,
     attribute,
@@ -83,9 +83,9 @@ export function previewDraftOf(
     elementMode: effect.elementMode ?? STORED_ELEMENT_MODE,
     ...(effect.elementFilter != null ? { elementFilter: effect.elementFilter } : {}),
     ...(effect.timing != null ? { timing: effect.timing } : {}),
-    ...(seconds ? { seconds: true } : {}),
-    ...(!seconds && effect.speedMasterUuid != null ? { speedMasterUuid: effect.speedMasterUuid } : {}),
-    ...(!seconds && effect.rateSpeedMasterUuid != null ? { rateSpeedMasterUuid: effect.rateSpeedMasterUuid } : {}),
+    ...(effect.ownBpm != null ? { ownBpm: effect.ownBpm } : {}),
+    ...(!own && effect.speedMasterUuid != null ? { speedMasterUuid: effect.speedMasterUuid } : {}),
+    ...(!own && effect.rateSpeedMasterUuid != null ? { rateSpeedMasterUuid: effect.rateSpeedMasterUuid } : {}),
     ...(effect.amount != null ? { amount: effect.amount } : {}),
     ...(effect.direction != null ? { direction: effect.direction } : {}),
     ...(effect.runs != null ? { runs: effect.runs } : {}),

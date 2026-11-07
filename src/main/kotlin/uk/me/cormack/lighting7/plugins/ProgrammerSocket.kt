@@ -564,11 +564,13 @@ data class KeyStackLayerDto(
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
     /**
-     * The two effect kinds: the loop the effect runs on (`BEAT` | `WALL_CLOCK`) and whether it is on
-     * *Seconds* (venue-visit plan D7) — so [cycle] reads as seconds rather than beats.
+     * The loop the effect runs on (`BEAT` | `WALL_CLOCK`), and its own clock: a beat effect's Own
+     * tempo (fx-speed plan D3), or a wall-clock effect's *Natural* (D4) — so [cycle] reads as beats at
+     * that tempo, or as seconds.
      */
     val timingSource: String? = null,
-    val seconds: Boolean? = null,
+    val ownBpm: Double? = null,
+    val natural: Boolean? = null,
     /**
      * The two effect kinds: Size (effects plan D2, 0–1) and Direction (D5) — what [onStage] already
      * weighs, so the sheet can say *why* a 0 % effect is not on stage.
@@ -1585,7 +1587,8 @@ private fun uk.me.cormack.lighting7.fx.KeyStack.toDto(engine: uk.me.cormack.ligh
             speedMasterUuid = dto?.speedMasterUuid,
             rateSpeedMasterUuid = dto?.rateSpeedMasterUuid,
             timingSource = dto?.timingSource,
-            seconds = dto?.seconds,
+            ownBpm = dto?.ownBpm,
+            natural = dto?.natural,
             amount = dto?.amount,
             direction = dto?.direction,
             heldBack = if (effect != null) layer.heldBack else null,

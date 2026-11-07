@@ -251,8 +251,8 @@ data class LookFxSettings(
     val parameters: Map<String, String>,
     val speedMasterUuid: java.util.UUID?,
     val rateSpeedMasterUuid: java.util.UUID?,
-    /** [FxInstance.seconds] — D7's Seconds for a beat effect. */
-    val seconds: Boolean = false,
+    /** [FxInstance.ownBpm] — a beat effect's Own tempo (fx-speed plan D3); null follows its master. */
+    val ownBpm: Double? = null,
     /** [FxDynamics.amount] — effects plan D2. */
     val amount: Double = 1.0,
     /** [FxDynamics.direction] — effects plan D5. */
@@ -295,7 +295,7 @@ fun FxInstance.lookFxSettings(): LookFxSettings {
         parameters = effect.parameters,
         speedMasterUuid = speedMasterUuid,
         rateSpeedMasterUuid = rateSpeedMasterUuid,
-        seconds = seconds,
+        ownBpm = ownBpm,
         amount = dyn.amount,
         direction = dyn.direction.name,
         runs = dyn.runs,
@@ -324,18 +324,18 @@ fun FxInstance.comparableFxSettings(master1Uuid: java.util.UUID?): LookFxSetting
 /**
  * What an in-place edit between two instances reads of each: [settings] as
  * [comparableFxSettings] answers them, the [dynamics] they were read from, the
- * [timingSource] its type runs on and whether it is [onSeconds]. Taken of an instance before an edit,
+ * [timingSource] its type runs on and its Own tempo, if any. Taken of an instance before an edit,
  * so the edit can be undone.
  */
 data class FxSettingsSnapshot(
     val settings: LookFxSettings,
     val dynamics: FxDynamics,
     val timingSource: TimingSource,
-    val onSeconds: Boolean,
+    val ownBpm: Double?,
 )
 
 fun FxInstance.settingsSnapshot(master1Uuid: java.util.UUID?): FxSettingsSnapshot =
-    FxSettingsSnapshot(comparableFxSettings(master1Uuid), dynamics, registrationTimingSource, onSeconds)
+    FxSettingsSnapshot(comparableFxSettings(master1Uuid), dynamics, registrationTimingSource, ownBpm)
 
 /**
  * The identity of one programmer-layer effect instance: which layer spawned it, which of the
@@ -981,17 +981,17 @@ class FxInstance internal constructor(
     var timingSource: TimingSource = TimingSource.BEAT
 
     /**
-     * A **beat** effect on *Seconds* (venue-visit plan D7): its own cycle, [FxTiming.cycle]
-     * read as seconds, with no master. Such an instance runs on the wall clock
-     * ([timingSource] is `WALL_CLOCK`) with both masters null, which is exactly an unscaled
-     * wall-clock effect — the engine has nothing new to do for it.
+     * A **beat** effect's *Own tempo* (fx-speed plan D3), 20–300 BPM, or null when it follows its
+     * speed master. On Own tempo it runs on the wall clock ([timingSource] is `WALL_CLOCK`) with both
+     * masters null, its accumulator advancing at [ownTempoScale], so its `cycle` of beats takes
+     * `cycle × 60 ÷ ownBpm` seconds. Always null for a wall-clock effect.
      *
-     * Always false for a wall-clock effect: its division is seconds already, and its Seconds is
-     * having no rate master. [onSeconds] is the one reading of D7's choice for either kind, and
-     * [applyTimingChoice] the one writer. Set before the instance reaches the engine, as
-     * [timingSource] is.
+     * Whether it is null is set before the instance reaches the engine, as [timingSource] is, by
+     * [applyTimingChoice]; a move on or off Own tempo is a swap. The tempo itself is written in place
+     * by `FxEngine.updateFx` and read by the compose pass, so a tap moves the rate and keeps the phase.
      */
-    var seconds: Boolean = false
+    @Volatile
+    var ownBpm: Double? = null
 
     /**
      * Set on a one-head copy split off a spread effect (apply-model plan §3.4): the member it was —
@@ -1000,16 +1000,24 @@ class FxInstance internal constructor(
      */
     var splitMember: SplitMember? = null
 
-    /**
-     * D7's reading: this effect follows no master — a beat effect on [seconds], or a wall-clock
-     * effect with no rate master.
-     */
-    val onSeconds: Boolean
-        get() = seconds || (timingSource == TimingSource.WALL_CLOCK && rateSpeedMasterUuid == null)
+    /** A beat effect on its Own tempo (D3). */
+    val onOwnTempo: Boolean
+        get() = ownBpm != null
 
-    /** The timing source of the effect's *type*: [timingSource], except a beat effect on [seconds]. */
+    /** A wall-clock effect on *Natural* (D4): no rate master, a fixed 120 BPM. */
+    val onNatural: Boolean
+        get() = ownBpm == null && timingSource == TimingSource.WALL_CLOCK && rateSpeedMasterUuid == null
+
+    /** The timing source of the effect's *type*: [timingSource], except a beat effect on Own tempo. */
     val registrationTimingSource: TimingSource
-        get() = if (seconds) TimingSource.BEAT else timingSource
+        get() = if (ownBpm != null) TimingSource.BEAT else timingSource
+
+    /**
+     * The rate this effect's wall-clock accumulator advances at when it is on Own tempo, else null:
+     * a rate master's scale, or 1 on Natural, is the engine's to sample.
+     */
+    val ownTempoScale: Double?
+        get() = ownBpm?.let { ownTempoRate(it) }
 
     /**
      * Speed master this BEAT effect subscribes to, as the persisted master **uuid**
@@ -1166,7 +1174,7 @@ class FxInstance internal constructor(
 
     /**
      * Advance [accumulatedScaledMs] by one pass of [deltaMs] at [rateScale]
-     * (`master.bpm / 120`, 1.0 when no rate master is assigned).
+     * (`master.bpm / 120`, 1.0 when no rate master is assigned, [ownTempoScale] on Own tempo).
      *
      * Called once per effect per compose pass, before any phase is read, so every phase
      * call within a pass sees one coherent value.

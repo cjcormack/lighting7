@@ -40,7 +40,7 @@ internal const val CODE_FX_NEEDS_SELECTION = "FX_NEEDS_SELECTION"
  *   be in the selection's mask (`families`, absent = every attribute), else 400
  *   `FX_OUTSIDE_MASK`. No targets is 400 `FX_NEEDS_SELECTION`.
  * - **The timing.** No `cycle` is one bar, and a beat effect that names no master and is not
- *   on Seconds is stamped with the master whose `family` is its library family, else master 1
+ *   on its Own tempo is stamped with the master whose `family` is its library family, else master 1
  *   (venue-visit plan D16, [familyMasterUuidFor]) — the stamp MCP's effect tools make. The category,
  *   not the property group the mask reads.
  * - **Local replacement.** Before it starts, the press takes the selected heads off every other
@@ -105,9 +105,12 @@ internal data class ProgrammerFxRequest(
     val elementMode: String? = null,
     val elementFilter: String? = null,
     val timing: Timing? = null,
-    /** Absent on a beat effect not on Seconds: the master tagged for its family, else master 1 (D16). */
+    /** Absent on a beat effect not on Own tempo: the master tagged for its family, else master 1 (D16). */
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
+    /** Own tempo, Natural and the old Seconds, as [AddFxRequest.ownBpm] and its siblings read them. */
+    val ownBpm: Double? = null,
+    val natural: Boolean = false,
     val seconds: Boolean = false,
     /** 1.0 when absent, or the family's stacking start under [stack]. */
     val amount: Double? = null,
@@ -153,11 +156,9 @@ internal fun pressBareFx(
         return BareFxOutcome.Invalid("A Local FX needs a selection", CODE_FX_NEEDS_SELECTION)
     }
     val engine = state.show.fxEngine
-    val stamped = request.speedMasterUuid ?: if (request.seconds) {
-        null
-    } else {
-        familyMasterUuidFor(state.show.fxRegistry, engine.speedMasters, request.fxType, attribute = request.attribute)?.toString()
-    }
+    val familyMaster = familyMasterUuidFor(state.show.fxRegistry, engine.speedMasters, request.fxType, attribute = request.attribute)
+    val ownClock = request.ownBpm != null || request.seconds || request.natural
+    val stamped = request.speedMasterUuid ?: if (ownClock) null else familyMaster?.toString()
     fun build(start: FxStacking.Start?) = buildFxInstance(
         state,
         AddFxRequest(
@@ -175,6 +176,8 @@ internal fun pressBareFx(
             timing = request.timing,
             speedMasterUuid = stamped,
             rateSpeedMasterUuid = request.rateSpeedMasterUuid,
+            ownBpm = request.ownBpm,
+            natural = request.natural,
             seconds = request.seconds,
             amount = request.amount ?: start?.amount ?: 1.0,
             direction = request.direction,
@@ -186,6 +189,7 @@ internal fun pressBareFx(
             spreadUnit = request.spreadUnit,
             programmerOwned = true,
         ),
+        followed = familyMaster,
     )
     var instance = try {
         build(start = null)
