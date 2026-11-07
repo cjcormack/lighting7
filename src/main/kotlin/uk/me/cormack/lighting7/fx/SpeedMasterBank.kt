@@ -142,6 +142,13 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
                 get() = "$name follows $leaderName at $num/$den — unlink it in the " +
                     "speed-master sheet to set its tempo"
         }
+
+        /** A [scale] that would take the master's tempo outside the clock's range; nothing moved. */
+        data class OutOfRange(val name: String, val bpm: Double) : TempoWriteOutcome {
+            val describe: String
+                get() = "$name would run at ${"%.1f".format(bpm)} BPM, outside " +
+                    "${MasterClock.MIN_BPM.toInt()}–${MasterClock.MAX_BPM.toInt()}"
+        }
     }
 
     /**
@@ -674,6 +681,25 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
     fun setBpm(uuid: UUID?, bpm: Double, source: SpeedMasterSource): TempoWriteOutcome =
         tempoWrite(uuid) { entry -> moveRunning(entry, bpm, source) }
 
+    /**
+     * Halve or double one master's tempo (fx-speed plan D12), by [setBpm]'s rule: the tempo that
+     * runs — the hold when there is one — times [factor], moving the hold on a held master. Refused
+     * as [TempoWriteOutcome.OutOfRange] where the result would leave the clock's range, rather than
+     * clamped, so ×2 twice from 160 is not 300 then 300. No factor is kept: a later tap sets the beat
+     * it hears.
+     */
+    fun scale(uuid: UUID?, factor: Double, source: SpeedMasterSource = SpeedMasterSource.MANUAL): TempoWriteOutcome {
+        require(factor in SCALE_FACTORS) { "A tempo scale is ×½ or ×2, not ×$factor" }
+        return tempoWrite(uuid) { entry ->
+            val target = entry.clock.bpm.value * factor
+            // Judged under the write's lock, so a tempo moved meanwhile cannot turn a refusal into a clamp.
+            if (target < MasterClock.MIN_BPM - SCALE_EPSILON || target > MasterClock.MAX_BPM + SCALE_EPSILON) {
+                return TempoWriteOutcome.OutOfRange(entry.name, target)
+            }
+            moveRunning(entry, target, source)
+        }
+    }
+
     /** Tap one master's tempo (null → master 1), by [setBpm]'s rule. Same refusal rules. */
     fun tap(uuid: UUID?): TempoWriteOutcome =
         tempoWrite(uuid) { entry ->
@@ -883,5 +909,13 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         )
         onChangeSync?.invoke(change)
         _changes.tryEmit(change)
+    }
+
+    companion object {
+        /** The factors ×½ and ×2 send, the only ones [scale] takes (fx-speed plan D12). */
+        val SCALE_FACTORS: Set<Double> = setOf(0.5, 2.0)
+
+        /** Slack on [scale]'s range test, so ×2 of exactly 150 is 300. */
+        private const val SCALE_EPSILON = 1e-9
     }
 }

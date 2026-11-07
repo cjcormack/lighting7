@@ -1030,6 +1030,64 @@ class SpeedMasterBankTest {
         assertEquals(listOf<Pair<UUID, Double?>>(u2 to 70.0), moves)
     }
 
+    // ─── ×½ and ×2 (fx-speed plan D12) ───────────────────────────────────
+
+    @Test
+    fun `a scale on an unheld master moves live and runs it`() {
+        val (bank, u2, moves) = held()
+        assertEquals(SpeedMasterBank.TempoWriteOutcome.Applied, bank.scale(u2, 2.0))
+        assertEquals(200.0, bank.state(u2).bpm)
+        assertEquals(200.0, bank.state(u2).liveBpm)
+        assertEquals(SpeedMasterBank.TempoWriteOutcome.Applied, bank.scale(u2, 0.5))
+        assertEquals(100.0, bank.state(u2).bpm)
+        assertTrue(moves.isEmpty())
+    }
+
+    @Test
+    fun `a scale on a held master moves the hold and leaves live`() {
+        val (bank, u2, moves) = held()
+        bank.changeHolds(mapOf(u2 to 140.0))
+        assertEquals(SpeedMasterBank.TempoWriteOutcome.Applied, bank.scale(u2, 0.5))
+        assertEquals(70.0, bank.state(u2).bpm)
+        assertEquals(100.0, bank.state(u2).liveBpm, "the live tempo underneath is untouched")
+        assertEquals(listOf<Pair<UUID, Double?>>(u2 to 70.0), moves)
+        assertEquals(mapOf(u2 to 70.0), bank.holds())
+    }
+
+    @Test
+    fun `a scale that would leave 20 to 300 is refused and moves nothing`() {
+        val (bank, u2, _) = held()
+        bank.setBpm(u2, 160.0, SpeedMasterSource.MANUAL)
+        val changes = captureChanges(bank)
+        val refused = bank.scale(u2, 2.0)
+        assertTrue(refused is SpeedMasterBank.TempoWriteOutcome.OutOfRange, "got $refused")
+        assertEquals(320.0, refused.bpm)
+        assertEquals(160.0, bank.state(u2).bpm)
+        assertTrue(changes.isEmpty(), "a refused scale must not emit")
+
+        bank.setBpm(u2, 150.0, SpeedMasterSource.MANUAL)
+        assertEquals(SpeedMasterBank.TempoWriteOutcome.Applied, bank.scale(u2, 2.0), "exactly 300 is in range")
+        assertEquals(300.0, bank.state(u2).bpm)
+
+        bank.setBpm(u2, 39.0, SpeedMasterSource.MANUAL)
+        assertTrue(bank.scale(u2, 0.5) is SpeedMasterBank.TempoWriteOutcome.OutOfRange)
+        assertEquals(39.0, bank.state(u2).bpm)
+    }
+
+    @Test
+    fun `a scale on a follower is refused, and master 1's moves its followers`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 120.0), snapshot(u2, 2, name = "Movement", follow = 1 to 2)))
+        assertTrue(bank.scale(u2, 2.0) is SpeedMasterBank.TempoWriteOutcome.RefusedFollower)
+        assertEquals(60.0, bank.state(u2).bpm)
+
+        assertEquals(SpeedMasterBank.TempoWriteOutcome.Applied, bank.scale(null, 2.0), "null is master 1")
+        assertEquals(240.0, bank.state(u1).bpm)
+        assertEquals(120.0, bank.state(u2).bpm, "its follower moves with it")
+    }
+
     @Test
     fun `a held master linked as a follower loses its hold`() {
         val (bank, u2, moves) = held()

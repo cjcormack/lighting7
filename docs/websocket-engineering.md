@@ -603,6 +603,7 @@ client can ask about master 1 with a null uuid but must not expect to recognise 
 | `speedMasters.state` | — | Resync: replies `speedMasters.state` |
 | `speedMasters.setBpm` | `bpm: Double`, `masterUuid: String?` | Retunes; replies with the full bank state (a `speedMasters.error` first if refused) |
 | `speedMasters.tap` | `masterUuid: String?` | Tap tempo; replies with the full bank state (a `speedMasters.error` first if refused) |
+| `speedMasters.scale` | `factor: Double`, `masterUuid: String?` | ×½ or ×2 (fx-speed plan D12): the running tempo times `factor`, moving the hold on a held master; replies with the full bank state (a `speedMasters.error` first if refused: `SPEED_MASTER_RANGE` where it would leave 20–300, `SPEED_MASTER_INVALID` for any other factor, which is dropped) |
 | `speedMasters.requestBeat` | `masterUuid: String?` | One-shot: releases the next `speedMasters.beat` frame past the throttle. No reply |
 
 A present-but-garbled or unknown `masterUuid` **drops** a tempo write rather than degrading it to
@@ -1127,7 +1128,7 @@ are stored writes over REST, so `FU-AUTH-WS-PER-MESSAGE` stays unfired.
 | `speedMasters.state` | `masters: [{uuid?, index, name, bpm, isRunning, source, family?, followNum?, followDen?}]` | Connect snapshot, again on every project switch and reload, on request, and as the reply to every write |
 | `speedMasters.changed` | `masterUuid?`, `index`, `bpm`, `source`, `timestampMs` | Live BPM push, at tap rate — a follower's derived moves ride this like any other |
 | `speedMasters.beat` | `masterUuid?`, `index`, `beatNumber`, `bpm`, `timestampMs` | Every 16 beats (~8 s at 120 BPM), plus any `speedMasters.requestBeat`, plus the first beat after that master's tempo moves |
-| `speedMasters.error` | `masterUuid?`, `code`, `message` | Unicast failure ack for a refused tempo write (`SPEED_MASTER_FOLLOWER`) or a dropped one (`SPEED_MASTER_UNKNOWN`); always followed by the state reply |
+| `speedMasters.error` | `masterUuid?`, `code`, `message` | Unicast failure ack for a refused tempo write (`SPEED_MASTER_FOLLOWER`, or `SPEED_MASTER_RANGE` for a scale) or a dropped one (`SPEED_MASTER_UNKNOWN`, or `SPEED_MASTER_INVALID` for a scale by any factor but ×½ or ×2); always followed by the state reply |
 
 `source` is `MANUAL` or `TAP`. `uuid`/`masterUuid` is null only for the synthetic pre-load master 1.
 `family` and the `followNum`/`followDen` ratio are the routing/follow settings from the busk-view

@@ -12,6 +12,7 @@ import kotlinx.coroutines.yield
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.fx.FxSpeed
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.LayerResolver
@@ -96,6 +97,8 @@ class SurfaceFeedbackPublisherTest {
         val speedMasters = SpeedMasterBank()
         val stackFxAmounts = uk.me.cormack.lighting7.fx.StackFxAmounts()
         val fan = FakeFanRing()
+        val fxSpeed = FakeFxSpeedRing()
+        val fxStates = kotlinx.coroutines.flow.MutableStateFlow(0)
         val selection = DeskSelection { fixtures }
         val matcher: DeviceMatcher
         val recordingController = RecordingController(
@@ -161,6 +164,8 @@ class SurfaceFeedbackPublisherTest {
                 stackFxAmountsProvider = { stackFxAmounts },
                 stackIdResolver = { uuid -> if (uuid == stackUuid) 7 else null },
                 selectionFan = fan,
+                fxSpeed = fxSpeed,
+                fxStateProvider = { fxStates },
                 programmerLayerStackProvider = { layers },
                 buskRefsProvider = { buskRefs },
             )
@@ -402,6 +407,120 @@ class SurfaceFeedbackPublisherTest {
         fun set(amount: Int) {
             pan = amount
             stamps.value = SelectionFan.Shown(SelectionFan.Amounts(pan = amount), stamps.value.stamp + 1)
+        }
+    }
+
+    /** An FX speed's lead the test sets by hand: [SelectionFxSpeed]'s ring half without a desk behind it. */
+    private class FakeFxSpeedRing : FxSpeedRing {
+        var lead: Double? = null
+        override val shown = kotlinx.coroutines.flow.MutableStateFlow(0L)
+        override fun leadSpeed() = lead
+    }
+
+    /**
+     * An FX speed control shows the lead FX's Speed — ×¼–×4 on a fader, the slider's track on an
+     * encoder's ring, the nearer end past either — follows it as the running FX change, arms takeover
+     * from it, and reads nothing while no Local FX paints the selection (fx-speed plan D13).
+     */
+    @Test
+    fun `an FX speed control shows the lead FX's Speed and arms takeover from it`() = runBlocking {
+        val h = Harness(listOf(
+            binding(1, "fader-1", BindingTarget.FxSpeed),
+            binding(2, "enc-1", BindingTarget.FxSpeed, policy = BindingTakeoverPolicy.PICKUP),
+        ))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            fun control(id: String) = h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue(id)
+            fun motor() = h.recordingController.feedback
+                .filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>().filter { it.cc == 1 }
+            assertNull(control("fader-1").value, "no Local FX on the selection: the control reads nothing")
+            assertEquals(RingState.OFF, control("enc-1").ring)
+
+            h.fxSpeed.lead = 2.0
+            h.fxStates.value = 1
+            yield()
+            assertEquals(95u.toUByte(), motor().last().value, "×2 on a fader's ×¼–×4")
+            assertEquals(68, control("enc-1").value, "×2 on the ring, a step a quarter of an octave")
+            assertFalse(
+                h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "enc-1", 10u),
+                "a PICKUP control far from the lead's Speed must not jump every FX",
+            )
+
+            h.fxSpeed.lead = 8.0
+            h.fxStates.value = 2
+            yield()
+            assertEquals(127u.toUByte(), motor().last().value, "a lead past ×4 shows at the fader's top")
+            assertEquals(76, control("enc-1").value)
+
+            // A turn the desk read as stale re-shows the ring past the transport's last-sent cache.
+            h.recordingController.invalidations.clear()
+            h.fxSpeed.shown.value = 1
+            yield()
+            assertTrue(
+                MidiControlKey(0, MidiControlKey.Type.CC, 10) in h.recordingController.invalidations,
+                "enc-1's ring is re-sent: ${h.recordingController.invalidations}",
+            )
+
+            h.fxSpeed.lead = null
+            h.fxStates.value = 3
+            yield()
+            assertNull(control("fader-1").value)
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    /**
+     * A PICKUP fader's own write echoes back as the lead's Speed, snapped to a power of two or rounded
+     * to whole ticks, a few steps from where the fader stands: the echo keeps it engaged, and only a
+     * Speed moved from elsewhere arms its pickup.
+     */
+    @Test
+    fun `an FX speed fader's own echo keeps it engaged`() = runBlocking {
+        val h = Harness(listOf(binding(1, "fader-1", BindingTarget.FxSpeed, policy = BindingTakeoverPolicy.PICKUP)))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            h.fxSpeed.lead = 1.0
+            h.fxStates.value = 1
+            yield()
+            assertFalse(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 60u))
+            assertTrue(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 67u), "crossing ×1 picks it up")
+
+            // 67 sets ×1, which shows at 64: the echo must not leave the fader waiting at 64.
+            h.fxSpeed.lead = FxSpeed.faderSpeed(67)
+            h.fxStates.value = 2
+            yield()
+            assertTrue(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 68u))
+
+            h.fxSpeed.lead = 4.0
+            h.fxStates.value = 3
+            yield()
+            assertFalse(
+                h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 70u),
+                "a Speed moved from elsewhere arms pickup",
+            )
+
+            // A lead outside ×¼–×4 is picked up at the nearer end.
+            h.fxSpeed.lead = 8.0
+            h.fxStates.value = 4
+            yield()
+            assertFalse(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 100u))
+            assertTrue(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 127u), "×8 waits at the top")
+            h.fxSpeed.lead = 0.125
+            h.fxStates.value = 5
+            yield()
+            assertFalse(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 60u))
+            assertTrue(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 0u), "×⅛ waits at the bottom")
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
         }
     }
 

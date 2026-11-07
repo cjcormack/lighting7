@@ -272,6 +272,11 @@ export function tapSpeedMaster(masterUuid: string | null) {
   lightingApi.speedMasters.tap(masterUuid)
 }
 
+/** Halve or double one master's tempo over WS (null uuid → master 1), lighting7 fx-speed plan D12. */
+export function scaleSpeedMaster(masterUuid: string | null, factor: 0.5 | 2) {
+  lightingApi.speedMasters.scale(masterUuid, factor)
+}
+
 /**
  * Subscribe to one master's beat boundaries (null uuid → master 1). Frames are throttled
  * server-side, so callers interpolate locally between them — see `BeatIndicator`.

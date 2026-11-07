@@ -8,6 +8,8 @@ import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_FOLLOWER
+import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_INVALID
+import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_RANGE
 import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_UNKNOWN
 import uk.me.cormack.lighting7.models.SpeedMasterSource
 import java.util.UUID
@@ -46,6 +48,18 @@ data class SpeedMastersSetBpmInMessage(
 @Serializable
 @SerialName("speedMasters.tap")
 data class SpeedMastersTapInMessage(
+    val masterUuid: String? = null,
+) : SpeedMasterInMessage()
+
+/**
+ * Halve or double a master's tempo (fx-speed plan D12) — the rail's and the detail sheet's ×½ and
+ * ×2. [factor] is `0.5` or `2`; anything else is dropped with `SPEED_MASTER_INVALID`. [masterUuid]
+ * null/omitted → master 1.
+ */
+@Serializable
+@SerialName("speedMasters.scale")
+data class SpeedMastersScaleInMessage(
+    val factor: Double,
     val masterUuid: String? = null,
 ) : SpeedMasterInMessage()
 
@@ -110,9 +124,10 @@ data class SpeedMasterChangedOutMessage(
  * A tempo write was refused — the narrow failure ack (docs/websocket-engineering.md §"Reply
  * shape", option 2, the `surfaceLearn.error` precedent). Unicast to the writer, followed by the
  * usual full-state reply so a stale client snaps back to the truth it disagreed with.
- * [code] is `SPEED_MASTER_FOLLOWER` (the master follows master 1 — unlink it in the sheet) or
+ * [code] is `SPEED_MASTER_FOLLOWER` (the master follows master 1 — unlink it in the sheet),
  * `SPEED_MASTER_UNKNOWN` (well-formed uuid naming no master — the write was dropped, not
- * redirected to master 1).
+ * redirected to master 1), `SPEED_MASTER_RANGE` (a ×½ or ×2 that would leave 20–300) or
+ * `SPEED_MASTER_INVALID` (a scale by any other factor).
  */
 @Serializable
 @SerialName("speedMasters.error")
@@ -160,6 +175,21 @@ suspend fun handleSpeedMasters(scope: SocketScope, message: SpeedMasterInMessage
         is SpeedMastersTapInMessage -> {
             val outcome = withWriteTarget(message.masterUuid) { bank.tap(it) }
             reportTempoWrite(scope, message.masterUuid, outcome)
+            scope.send(buildSpeedMastersState(bank))
+        }
+        is SpeedMastersScaleInMessage -> {
+            if (message.factor in SpeedMasterBank.SCALE_FACTORS) {
+                val outcome = withWriteTarget(message.masterUuid) { bank.scale(it, message.factor) }
+                reportTempoWrite(scope, message.masterUuid, outcome)
+            } else {
+                scope.send(
+                    SpeedMasterErrorOutMessage(
+                        masterUuid = message.masterUuid,
+                        code = CODE_SPEED_MASTER_INVALID,
+                        message = "A tempo scale is ×½ or ×2 — the write was dropped",
+                    )
+                )
+            }
             scope.send(buildSpeedMastersState(bank))
         }
         is SpeedMastersRequestBeatInMessage -> {
@@ -219,6 +249,14 @@ private suspend fun reportTempoWrite(
             SpeedMasterErrorOutMessage(
                 masterUuid = requestedUuid,
                 code = CODE_SPEED_MASTER_FOLLOWER,
+                message = outcome.describe,
+            )
+        )
+
+        is SpeedMasterBank.TempoWriteOutcome.OutOfRange -> scope.send(
+            SpeedMasterErrorOutMessage(
+                masterUuid = requestedUuid,
+                code = CODE_SPEED_MASTER_RANGE,
                 message = outcome.describe,
             )
         )

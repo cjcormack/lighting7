@@ -398,6 +398,22 @@ class BindingHealthEvaluatorTest {
     }
 
     @Test
+    fun `a tempo scale is judged by its master, and the selection's FX speed is always Ok`() {
+        val gone = UUID.randomUUID().toString()
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterScale(null, 2.0), context()))
+        assertEquals(
+            AssignmentHealth.Ok,
+            BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterScale(liveMaster.toString(), 0.5), context()),
+        )
+        assertEquals(
+            AssignmentHealth.MissingSpeedMaster(gone),
+            BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterScale(gone, 2.0), context()),
+        )
+        // Selection-relative: no Local FX on the selection is this second's fact, not the binding's.
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.FxSpeed, context()))
+    }
+
+    @Test
     fun `a malformed speed-master uuid is reported dead rather than parsed leniently`() {
         val health = BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterTap("not-a-uuid"), context())
         assertEquals(AssignmentHealth.MissingSpeedMaster("not-a-uuid"), health)

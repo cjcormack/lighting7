@@ -138,6 +138,9 @@ interface SurfaceActions {
     /** Tap a speed master's tempo ([masterUuid] null → master 1). */
     fun tapSpeedMaster(masterUuid: String?)
 
+    /** Halve or double a speed master's tempo ([masterUuid] null → master 1), fx-speed plan D12. */
+    fun scaleSpeedMaster(masterUuid: String?, factor: Double) {}
+
     /**
      * Write a continuous value to [attribute] on every target in the desk selection
      * ([uk.me.cormack.lighting7.state.DeskSelection]) — a group fanned to its members. An empty
@@ -148,6 +151,12 @@ interface SurfaceActions {
 
     /** One turn of a fan encoder on [axis] over the desk selection — see [SelectionFan]. */
     fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte)
+
+    /**
+     * One move of an *FX speed* control over the desk selection's Local FX — see [SelectionFxSpeed].
+     * [encoder] is whether the control is an encoder (detents) or a fader (a position).
+     */
+    fun writeFxSpeed(midiValue7Bit: UByte, encoder: Boolean) {}
 
     /** Toggle [target] in, or replace the selection with it, per [mode]. */
     fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode)
@@ -457,6 +466,8 @@ class DefaultSurfaceActions(
 
     override fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte) = state.selectionFan.turn(axis, midiValue7Bit)
 
+    override fun writeFxSpeed(midiValue7Bit: UByte, encoder: Boolean) = state.selectionFxSpeed.turn(midiValue7Bit, encoder)
+
     override fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode) {
         when (mode) {
             // A toggle adds a head under whatever mask is standing; a replace has no column axis
@@ -749,6 +760,9 @@ class DefaultSurfaceActions(
     override fun tapSpeedMaster(masterUuid: String?) =
         withSpeedMasterTarget(masterUuid) { speedMasters.tap(it) }
 
+    override fun scaleSpeedMaster(masterUuid: String?, factor: Double) =
+        withSpeedMasterTarget(masterUuid) { speedMasters.scale(it, factor) }
+
     /**
      * Resolve a tempo-write target, mirroring `SpeedMasterSocket.withWriteTarget`: null or
      * absent means master 1, while a present-but-malformed uuid DROPS the write rather than
@@ -784,6 +798,10 @@ class DefaultSurfaceActions(
             )
 
             is SpeedMasterBank.TempoWriteOutcome.RefusedFollower -> warnTempoWriteDropped(
+                "Surface tempo write refused: ${outcome.describe}",
+            )
+
+            is SpeedMasterBank.TempoWriteOutcome.OutOfRange -> warnTempoWriteDropped(
                 "Surface tempo write refused: ${outcome.describe}",
             )
         }

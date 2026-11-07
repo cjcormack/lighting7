@@ -173,8 +173,8 @@ docs it names written, and its row marked *in review* with its branch. A session
 |---|---|---|---|---|---|
 | 1 | Own tempo on the desk | merged | `claude/quirky-faraday-k08oa7` | [#374](https://github.com/cjcormack/lighting7/pull/374) | `0082602` |
 | 2 | Tempo in the programmer | merged | `claude/fx-speed-0zrqvu` | [#376](https://github.com/cjcormack/lighting7/pull/376) | `b3a9373` |
-| 3 | The Speed slider | in review | `claude/jolly-keller-rfs1c3` | [#379](https://github.com/cjcormack/lighting7/pull/379) | |
-| 4 | Half, double and a speed fader | planned | | | |
+| 3 | The Speed slider | merged | `claude/jolly-keller-rfs1c3` | [#379](https://github.com/cjcormack/lighting7/pull/379) | `21de4d2` |
+| 4 | Half, double and a speed fader | in review | `claude/determined-darwin-alf1b1` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -353,6 +353,26 @@ the next; whoever merges the last fills its own.
   `docs/midi-control-surface-engineering.md`.
 - **Local:** `./gradlew compileTestKotlin`, then the `midi`, `fx`, `plugins` and `telemetry` packages;
   `npm run check:quick`.
+- **As built, where the code moved the plan:** *no Local FX on the selection* is not an
+  `AssignmentHealth`. Health is cached and re-evaluated on binding and fixture events, and every
+  selection target already answers `ok` for a fact about this second (an empty selection); a dead
+  binding also stops the router before dispatch. So `fxSpeed` is always `ok`, its control reads
+  nothing (a dark ring) while no Local FX paints the selection, and the Surfaces view's live card says
+  *No Local FX on the selection — a move is dropped*, or *Lead FX at ×2*, read back from the ring
+  through `fxSpeed.ts`. The plan named no scale for the ring: an encoder's ring is a 7-bit step a
+  quarter of an octave, ×1 at 64, so the device's own count moves as the lead does (on a coarser scale
+  a fast spin read back as a reversal) and the whole ×1/512–×32 fits; a fader's motor shows ×¼–×4. A
+  fader sticks within 0.12 of an octave of each power of two, the slider's rule, since 128 steps over
+  four octaves land on ×1 at no step, and a fader whose own write echoes back snapped or rounded keeps
+  its position as the logical value, or a PICKUP fader would wait at the snap it just made. An encoder
+  turn more than eight steps from where its ring was shown is read as a device the ring has not reached
+  yet: it moves nothing and the ring is re-shown past the transport's last-sent cache. The rig order
+  behind the lead is read once per selection and again after a rig or patch change.
+  The router tells an encoder from a fader by the profile's descriptor. Where no Local FX paints the
+  first selected head, the lead is the one painting the next. A ×½ or ×2 outside 20–300 is refused
+  rather than clamped, as `TempoWriteOutcome.OutOfRange` and over the socket `SPEED_MASTER_RANGE`;
+  on a follower the rail draws both disabled with the follow's reason beside its *Capture*, where its
+  TAP is absent. The shared vector gained `detents`, `faders` and `positions`.
 
 ## 6. Operator checks
 

@@ -667,6 +667,8 @@ export function SurfaceLibrary({
           minBpm: 60,
           maxBpm: 180,
         }),
+        actionChip("tempo-half", "M1 ×½", { type: "speedMasterScale", masterUuid: null, factor: 0.5 }),
+        actionChip("tempo-double", "M1 ×2", { type: "speedMasterScale", masterUuid: null, factor: 2 }),
         // Here, not on each page's row: they are page-agnostic, and a chip repeated once per page
         // reads as page-specific.
         actionChip("page-next", "Next page", { type: "buskPageNext" }),
@@ -689,6 +691,8 @@ export function SurfaceLibrary({
         actionChip("fan-tilt", "Fan tilt", { type: "selectionFan", axis: "TILT" }),
         actionChip("fan-across", "Fan across", { type: "selectionFan", axis: "ACROSS" }),
         actionChip("fan-depth", "Fan depth", { type: "selectionFan", axis: "DEPTH" }),
+        // The selection's Local FX, each whole (fx-speed plan D13): an encoder or a fader.
+        actionChip("fx-speed", "FX speed", { type: "fxSpeed" }),
       ],
     })
 

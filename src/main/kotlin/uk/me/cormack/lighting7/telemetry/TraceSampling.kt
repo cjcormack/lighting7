@@ -101,6 +101,7 @@ object TraceSampling {
             "selection.setFamilies",
             "selection.subselect",
             "selection.toggle",
+            "speedMasters.scale",
             "surfaceBank.set",
             "surfaceEncoderBank.set",
             "surfaceLearn.begin",

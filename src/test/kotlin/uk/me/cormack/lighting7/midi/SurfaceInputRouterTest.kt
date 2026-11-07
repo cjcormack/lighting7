@@ -261,6 +261,39 @@ class SurfaceInputRouterTest {
     }
 
     @Test
+    fun `SpeedMasterScale halves or doubles the named master on press only`() {
+        val actions = RecordingActions()
+        val master = "7d444840-9dc0-11d1-b245-5ffdce74fad2"
+        val router = buildRouter(actions, listOf(
+            binding(1, "btn-3", BindingTarget.SpeedMasterScale(master, 0.5)),
+            binding(2, "btn-4", BindingTarget.SpeedMasterScale(null, 2.0)),
+        ))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 18, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 18, velocity = 0u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 19, velocity = 127u))
+        assertEquals(
+            listOf<RecordedCall>(RecordedCall.ScaleSpeedMaster(master, 0.5), RecordedCall.ScaleSpeedMaster(null, 2.0)),
+            actions.calls.toList(),
+        )
+    }
+
+    @Test
+    fun `FxSpeed tells the action an encoder's turn from a fader's move`() {
+        val actions = RecordingActions()
+        // fader-1 = CC 1, enc-1 = CC 10 on X-Touch Compact Layer A.
+        val router = buildRouter(actions, listOf(
+            binding(1, "fader-1", BindingTarget.FxSpeed),
+            binding(2, "enc-1", BindingTarget.FxSpeed),
+        ))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 96u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 10, value = 65u))
+        assertEquals(
+            listOf<RecordedCall>(RecordedCall.WriteFxSpeed(96u, encoder = false), RecordedCall.WriteFxSpeed(65u, encoder = true)),
+            actions.calls.toList(),
+        )
+    }
+
+    @Test
     fun `SpeedMasterBpm target passes the configured window through on encoder moves`() {
         val actions = RecordingActions()
         // enc-1 = CC 10 on X-Touch Compact Layer A.
@@ -1038,6 +1071,12 @@ private class RecordingActions : SurfaceActions {
     override fun tapSpeedMaster(masterUuid: String?) {
         calls += RecordedCall.TapSpeedMaster(masterUuid)
     }
+    override fun scaleSpeedMaster(masterUuid: String?, factor: Double) {
+        calls += RecordedCall.ScaleSpeedMaster(masterUuid, factor)
+    }
+    override fun writeFxSpeed(midiValue7Bit: UByte, encoder: Boolean) {
+        calls += RecordedCall.WriteFxSpeed(midiValue7Bit, encoder)
+    }
     override fun applyLook(lookUuid: String) { calls += RecordedCall.ApplyLook(lookUuid) }
     override fun pressPalette(paletteUuid: String) { calls += RecordedCall.PressPalette(paletteUuid) }
     override fun pressPad(padUuid: String) { calls += RecordedCall.PressPad(padUuid) }
@@ -1119,4 +1158,6 @@ private sealed class RecordedCall {
         val value: UByte,
     ) : RecordedCall()
     data class TapSpeedMaster(val masterUuid: String?) : RecordedCall()
+    data class ScaleSpeedMaster(val masterUuid: String?, val factor: Double) : RecordedCall()
+    data class WriteFxSpeed(val value7Bit: UByte, val encoder: Boolean) : RecordedCall()
 }

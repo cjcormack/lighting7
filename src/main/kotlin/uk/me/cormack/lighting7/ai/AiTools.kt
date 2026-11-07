@@ -479,6 +479,8 @@ class AiTools(private val state: State) {
                     "${outcome.describe}. From here, retune Master 1 instead: its followers " +
                         "move with it."
                 )
+            is uk.me.cormack.lighting7.fx.SpeedMasterBank.TempoWriteOutcome.OutOfRange ->
+                return errorResult(outcome.describe)
         }
         return ToolExecutionResult(
             success = true,

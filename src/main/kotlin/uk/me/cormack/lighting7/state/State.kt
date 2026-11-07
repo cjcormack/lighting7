@@ -26,6 +26,7 @@ import uk.me.cormack.lighting7.fx.CueTriggerManager
 import uk.me.cormack.lighting7.midi.ActiveBankState
 import uk.me.cormack.lighting7.midi.EncoderBankState
 import uk.me.cormack.lighting7.midi.SelectionFan
+import uk.me.cormack.lighting7.midi.SelectionFxSpeed
 import uk.me.cormack.lighting7.midi.BindingHealthEvaluator
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
@@ -741,6 +742,9 @@ class State(val config: ApplicationConfig) {
     /** The fan encoders' gesture over [deskSelection] (venue-visit plan S12); runtime only, dropped with the show. */
     val selectionFan: SelectionFan by lazy { SelectionFan(this) }
 
+    /** The surface's FX speed over the desk selection's Local FX (fx-speed plan D13). */
+    val selectionFxSpeed: SelectionFxSpeed by lazy { SelectionFxSpeed(this) }
+
     /**
      * The effective rig order for `selection.subselect` and a spread's `NORMAL` order
      * (`state/BuskRigOrder.kt`), read fresh from the current project's rig tables at gesture time —
@@ -1008,6 +1012,8 @@ class State(val config: ApplicationConfig) {
             stackFxAmountsProvider = { show.cueStackManager.fxAmounts },
             stackIdResolver = { stackUuid -> show.cueStackManager.stackIdForUuid(database, stackUuid) },
             selectionFan = selectionFan,
+            fxSpeed = selectionFxSpeed,
+            fxStateProvider = { show.fxEngine.fxStateFlow },
             latencyTracker = midiLatencyTracker,
         )
     }

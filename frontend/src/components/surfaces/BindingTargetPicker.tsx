@@ -81,6 +81,7 @@ const CONTINUOUS_KINDS: TargetKind[] = [
   "groupAttribute",
   "selectionAttribute",
   "selectionFan",
+  "fxSpeed",
   "speedMasterBpm",
   "grandMasterFader",
   "stackFxAmount",
@@ -100,6 +101,7 @@ const BUTTON_KINDS: TargetKind[] = [
   "grandMasterToggle",
   "setBank",
   "speedMasterTap",
+  "speedMasterScale",
   "applyLook",
   "pressPalette",
   "pressPad",
@@ -124,6 +126,7 @@ const KIND_LABELS: Record<TargetKind, string> = {
   groupAttribute: "Group attribute",
   selectionAttribute: "Selection — attribute",
   selectionFan: "Selection — fan",
+  fxSpeed: "Selection — FX speed",
   cueStackGo: "Cue stack — Go",
   cueStackBack: "Cue stack — Back",
   cueStackPause: "Cue stack — Pause",
@@ -141,6 +144,7 @@ const KIND_LABELS: Record<TargetKind, string> = {
   setBank: "Set bank",
   speedMasterBpm: "Speed master — Tempo",
   speedMasterTap: "Speed master — Tap tempo",
+  speedMasterScale: "Speed master — Tempo ×½ / ×2",
   applyLook: "Look — apply",
   pressPalette: "Palette — press",
   pressPad: "Busk pad — press",
@@ -481,6 +485,16 @@ function TargetBody({
           nothing selected the turn is dropped.
         </p>
       </div>
+    )
+  }
+  if (kind === "fxSpeed" && value.type === "fxSpeed") {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Moves the Speed of every Local FX on the selected heads, each whole. An encoder moves each a
+        quarter of an octave a detent, stopping at every ×2 and ×½; a fader sets every one from ×¼ to
+        ×4, picking up where the lead FX runs. A layer&rsquo;s and a cue&rsquo;s FX are left alone. With
+        no Local FX on the selection the move is dropped.
+      </p>
     )
   }
   if (kind === "encoderBankSet" && value.type === "encoderBankSet") {
@@ -928,6 +942,34 @@ function TargetBody({
     )
   }
 
+  if (kind === "speedMasterScale" && value.type === "speedMasterScale") {
+    return (
+      <div className="space-y-2">
+        <SpeedMasterSelect
+          value={value.masterUuid}
+          onChange={(masterUuid) => onChange({ ...value, masterUuid })}
+        />
+        <div className="space-y-1.5">
+          <Label className="text-xs">Each press</Label>
+          <Select
+            value={String(value.factor)}
+            onValueChange={(f) => onChange({ ...value, factor: f === "2" ? 2 : 0.5 })}
+          >
+            <SelectTrigger aria-label="Tempo factor"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="0.5">×½ — halve the tempo</SelectItem>
+              <SelectItem value="2">×2 — double the tempo</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          On a held master it moves the hold. A press that would take the tempo outside 20–300 BPM,
+          or one on a master that follows another, does nothing.
+        </p>
+      </div>
+    )
+  }
+
   return null
 }
 
@@ -1046,6 +1088,10 @@ function defaultForKind(
       return { type: "speedMasterBpm", masterUuid: null, minBpm: 60, maxBpm: 180 }
     case "speedMasterTap":
       return { type: "speedMasterTap", masterUuid: null }
+    case "speedMasterScale":
+      return { type: "speedMasterScale", masterUuid: null, factor: 2 }
+    case "fxSpeed":
+      return { type: "fxSpeed" }
     // The record variants start **empty**, not on the first row of their library: an empty uuid
     // is refused by name at the write boundary, where the first row would save silently and bind
     // the button to something the operator never picked. The body below insists on a choice.

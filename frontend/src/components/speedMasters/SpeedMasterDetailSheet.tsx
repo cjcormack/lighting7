@@ -36,12 +36,15 @@ import {
   eligibleFollowTargets,
   followRatioOf,
   followTargetOf,
+  followerTempoLockedReason,
   formatFollowRatio,
   leaderNameOf,
   masterFamilyOptionLabel,
   type FollowRatio,
 } from '@/lib/speedMasterModel'
 import { formatBpm } from '../../hooks/useBpmDraft'
+import { useIsDeskConnected } from '@/store/status'
+import { TempoScaleButtons } from './TempoScaleButtons'
 
 /**
  * Radix `Select` reserves the empty string for "no value", so "routes nothing" needs a sentinel
@@ -123,6 +126,13 @@ export function SpeedMasterDetailSheet({
   // surface uses, and it falls back to "Master N" on a blank name instead of rendering nothing.
   const leaderName = leaderNameOf(bank, followTarget)
 
+  // This master's live frame, for the Tempo row's ×½ and ×2: what it runs at now, and whether it
+  // follows another as the bank runs it (not as this form's draft says).
+  const live = useSpeedMasterLiveQuery(undefined, {
+    selectFromResult: ({ data }) => ({ state: data?.find((m) => m.uuid === master?.uuid) ?? null }),
+  }).state
+  const connected = useIsDeskConnected()
+
   // Seed once per master, tracked by id in a ref rather than by dependencies — the list
   // refetches on every `speedMasters.listChanged`, and depending on the fields would let a
   // rename in another tab replace whatever is being typed here. Same rationale as
@@ -144,6 +154,16 @@ export function SpeedMasterDetailSheet({
   }, [master])
 
   if (!master) return null
+
+  const liveFollow = followRatioOf(live)
+  const liveLockedReason = liveFollow
+    ? followerTempoLockedReason(
+        master.name || `Master ${master.masterIndex}`,
+        liveFollow.num,
+        liveFollow.den,
+        leaderNameOf(bank, followTargetOf(live)),
+      )
+    : null
 
   // Master 1 is the global tempo every legacy surface and every unassigned effect resolves
   // to. The server refuses to delete it (409 SPEED_MASTER_PROTECTED), and refuses to give it a
@@ -237,6 +257,29 @@ export function SpeedMasterDetailSheet({
               placeholder={`Master ${master.masterIndex}`}
             />
           </div>
+
+          {live != null && (
+            <div className="space-y-1.5">
+              <Label>Tempo</Label>
+              <div className="flex items-center gap-2">
+                <span className="flex-1 font-mono text-lg font-bold tabular-nums">
+                  {formatBpm(live.bpm)}
+                  <span className="ml-1 text-[10px] font-normal text-muted-foreground">BPM</span>
+                </span>
+                <TempoScaleButtons
+                  masterUuid={live.uuid}
+                  masterIndex={live.index}
+                  bpm={live.bpm}
+                  connected={connected}
+                  lockedReason={liveLockedReason}
+                  className="h-9 px-3"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                What it runs at now. Halve or double it live; on a held master that moves the hold.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="speed-master-family">Default family</Label>

@@ -30,6 +30,8 @@ internal fun SpeedMasterBank.setCueTempos(cueLabel: String, tempos: List<CueSpee
                 logger.warn("{} sets speed master {}, which no longer exists; skipped", cueLabel, pair.speedMasterUuid)
             is SpeedMasterBank.TempoWriteOutcome.RefusedFollower ->
                 logger.warn("{} sets {}, which follows {}; skipped", cueLabel, outcome.name, outcome.leaderName)
+            // Only a scale answers it; a cue's tempo is clamped instead.
+            is SpeedMasterBank.TempoWriteOutcome.OutOfRange -> {}
         }
     }
     return set

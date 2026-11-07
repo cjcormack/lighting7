@@ -5,16 +5,20 @@ import {
   cycleOf,
   cycleSeconds,
   cycleTicks,
+  faderSpeed,
   fxSpeedLabel,
   isPowerOfTwo,
   parseSpeed,
   runningSpeed,
   speedAtPosition,
+  speedAtSurfacePosition,
   speedLabel,
   speedOf,
   speedReadout,
   stepSpeed,
   stickSpeed,
+  surfacePosition,
+  surfaceSpeedWords,
   trackPosition,
 } from './fxSpeed'
 import { createTapCounter } from './tapTempo'
@@ -40,6 +44,35 @@ describe('the shared vector', () => {
   it('runs a step-timed cycle of whole ticks as those ticks, as the desk does', () => {
     for (let n = 1; n <= 1200; n += 7) for (let steps = 2; steps <= 16; steps++) expect(cycleTicks((n / 24) * steps)).toBe(n * steps)
     expect(cycleTicks(0.333)).toBe(7)
+  })
+
+  it("steps a detent as the desk's encoder does, stopping on a power of two it would pass", () => {
+    for (const { speed, quarters, to } of vector.detents) {
+      expect(stepSpeed(speed, quarters), `×${speed} ${quarters}`).toBeCloseTo(to, 12)
+    }
+  })
+
+  it('reads a fader as the desk does, ×¼ to ×4 stuck at each power of two', () => {
+    for (const { value, speed } of vector.faders) expect(faderSpeed(value), `at ${value}`).toBeCloseTo(speed, 12)
+  })
+
+  it('shows a Speed on a ring and a fader where the desk does', () => {
+    for (const { speed, ring, fader } of vector.positions) {
+      expect(surfacePosition(speed, true), `ring ×${speed}`).toBe(ring)
+      expect(surfacePosition(speed, false), `fader ×${speed}`).toBe(fader)
+    }
+    // A ring reads back to the quarter octave it shows; a fader to within half a step.
+    expect(speedAtSurfacePosition(68, true)).toBe(2)
+    expect(speedAtSurfacePosition(84, true)).toBe(32)
+    expect(speedAtSurfacePosition(64, false)).toBeCloseTo(1, 1)
+  })
+
+  it('says what a control shows of the lead, never more exactly than it can', () => {
+    expect(surfaceSpeedWords(68, true)).toBe('×2')
+    expect(surfaceSpeedWords(65, true)).toBe('about ×1.19')
+    expect(surfaceSpeedWords(127, false)).toBe('×4 or faster')
+    expect(surfaceSpeedWords(0, false)).toBe('×¼ or slower')
+    expect(surfaceSpeedWords(66, false)).toBe('about ×1.06')
   })
 
   it('counts taps as the desk does', () => {

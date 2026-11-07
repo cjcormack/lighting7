@@ -5,6 +5,7 @@ import type { SpeedMaster } from '../../api/speedMastersApi'
 
 const saveMaster = vi.fn()
 const deleteMaster = vi.fn()
+const scaleSpeedMaster = vi.fn()
 
 const U2 = 'aaaaaaaa-0000-0000-0000-000000000002'
 
@@ -26,7 +27,10 @@ const bank = vi.hoisted(() => [
   },
 ])
 
+vi.mock('@/store/status', () => ({ useIsDeskConnected: () => true }))
+
 vi.mock('../../store/speedMasters', () => ({
+  scaleSpeedMaster: (...args: unknown[]) => scaleSpeedMaster(...args),
   useSpeedMasterListQuery: () => ({ data: bank }),
   useSaveSpeedMasterMutation: () => [
     (args: unknown) => ({ unwrap: () => saveMaster(args) }),
@@ -323,5 +327,22 @@ describe('SpeedMasterDetailSheet', () => {
     expect(screen.getByRole('combobox', { name: 'Default family' })).toHaveTextContent(
       'Not routed',
     )
+  })
+})
+
+describe('SpeedMasterDetailSheet — ×½ and ×2', () => {
+  it('halves or doubles the live tempo', () => {
+    renderSheet(master({ id: 2, uuid: U2, masterIndex: 2, name: 'Movement', bpm: 90 }))
+    expect(screen.getByText(/What it runs at now/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Halve the tempo of master 2' }))
+    expect(scaleSpeedMaster).toHaveBeenLastCalledWith(U2, 0.5)
+    fireEvent.click(screen.getByRole('button', { name: 'Double the tempo of master 2' }))
+    expect(scaleSpeedMaster).toHaveBeenLastCalledWith(U2, 2)
+  })
+
+  it('draws no Tempo row for a master the bank is not running', () => {
+    renderSheet(master())
+    expect(screen.queryByRole('button', { name: /the tempo of master 5/ })).toBeNull()
   })
 })

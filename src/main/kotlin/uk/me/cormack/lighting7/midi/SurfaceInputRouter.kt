@@ -201,7 +201,7 @@ class SurfaceInputRouter(
                 val binding = resolveBinding(deviceTypeKey, match.controlId) ?: return
                 if (isDeadBinding(binding)) return
                 latencyTracker.measure(MidiLatencyStage.INGRESS_CONTINUOUS) {
-                    dispatchContinuous(binding, match.value7Bit)
+                    dispatchContinuous(binding, match.value7Bit) { isEncoder(deviceTypeKey, match.controlId) }
                 }
             }
             is ResolvedInput.ButtonPress -> {
@@ -264,9 +264,15 @@ class SurfaceInputRouter(
         return true
     }
 
+    /** Whether [controlId] on [deviceTypeKey]'s profile is an encoder, which an *FX speed* reads as detents. */
+    private fun isEncoder(deviceTypeKey: String, controlId: String): Boolean =
+        types().firstOrNull { it.typeKey == deviceTypeKey }?.controls
+            ?.firstOrNull { it.controlId == controlId } is EncoderDescriptor
+
     private fun dispatchContinuous(
         binding: ControlSurfaceBindingService.ResolvedBinding,
         value7Bit: UByte,
+        isEncoder: () -> Boolean,
     ) {
         logger.debug(
             "surface-in: binding={} control={} value7Bit={} target={}",
@@ -284,6 +290,7 @@ class SurfaceInputRouter(
             is BindingTarget.SelectionAttribute ->
                 actions.writeSelectionAttribute(target.attribute, value7Bit, target.colourAxis)
             is BindingTarget.SelectionFan -> actions.writeSelectionFan(target.axis, value7Bit)
+            BindingTarget.FxSpeed -> actions.writeFxSpeed(value7Bit, isEncoder())
             is BindingTarget.Strip -> logger.warn(
                 "Strip binding {} reached continuous dispatch — resolve should have derived it",
                 binding.id,
@@ -327,6 +334,7 @@ class SurfaceInputRouter(
                 "Strip binding {} reached button dispatch — resolve should have derived it", binding.id,
             )
             is BindingTarget.SpeedMasterTap -> actions.tapSpeedMaster(target.masterUuid)
+            is BindingTarget.SpeedMasterScale -> actions.scaleSpeedMaster(target.masterUuid, target.factor)
             // Records: one behaviour each (D6). The Look whole, the template onto
             // the selection, the pad through its own bank's plan — never any of the three onto
             // whatever the other two would have chosen.
@@ -367,6 +375,10 @@ class SurfaceInputRouter(
             )
             is BindingTarget.SelectionFan -> logger.debug(
                 "Ignoring button press on binding {} → selection fan (continuous target)",
+                binding.id,
+            )
+            BindingTarget.FxSpeed -> logger.debug(
+                "Ignoring button press on binding {} → FX speed (continuous target)",
                 binding.id,
             )
             is BindingTarget.Flash -> {

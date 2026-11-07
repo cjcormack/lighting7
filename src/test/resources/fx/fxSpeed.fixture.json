@@ -1,5 +1,5 @@
 {
-  "about": "FX speed (fx-speed plan P2): the rules the desk and the editor both compute. `snaps` is a cycle in beats and whether it is a power of two of a beat, where a forever FX glides back onto its master's grid (D6); `glides` that glide's length and grid in master ticks, 24 a beat, two cycles under Bounce, null where it does not glide; `speeds` a Speed and the cycle the editor writes for it, rounded to whole ticks, with the ticks the desk runs and the Speed that runs (D1); `taps` tap times in ms and the tempo TapTempo counts from them, null before it has two (the last four taps, any more than two seconds older than the newest dropped). Shared by FxSpeedPhaseTest and fxSpeed.test.ts; change both sides together.",
+  "about": "FX speed (fx-speed plan P2): the rules the desk and the editor both compute. `snaps` is a cycle in beats and whether it is a power of two of a beat, where a forever FX glides back onto its master's grid (D6); `glides` that glide's length and grid in master ticks, 24 a beat, two cycles under Bounce, null where it does not glide; `speeds` a Speed and the cycle the editor writes for it, rounded to whole ticks, with the ticks the desk runs and the Speed that runs (D1); `taps` tap times in ms and the tempo TapTempo counts from them, null before it has two (the last four taps, any more than two seconds older than the newest dropped). The surface's FX speed (D13): `detents` an encoder's quarter-octave detents from a Speed, stopping at a power of two it would pass; `faders` a fader's position and the Speed it sets, ×¼ to ×4 stuck at each power of two; `positions` where an encoder's ring (a step a quarter of an octave, ×1 at 64, the whole ×1/512–×32 range in 28 to 84) and a fader (×¼–×4, at the nearer end past it) show a Speed. Shared by FxSpeedPhaseTest and fxSpeed.test.ts; change both sides together.",
   "snaps": [
     { "cycle": 0.125, "snapped": true },
     { "cycle": 0.25, "snapped": true },
@@ -46,5 +46,37 @@
     { "times": [0, 500, 3000, 3600], "bpm": 100 },
     { "times": [0, 2000], "bpm": 30 },
     { "times": [0, 2001], "bpm": null }
+  ],
+  "detents": [
+    { "speed": 1, "quarters": 1, "to": 1.189207115002721 },
+    { "speed": 1.5, "quarters": 1, "to": 1.7838106725040817 },
+    { "speed": 1.7838106725040817, "quarters": 1, "to": 2 },
+    { "speed": 2, "quarters": -1, "to": 1.681792830507429 },
+    { "speed": 1.2, "quarters": 3, "to": 2 },
+    { "speed": 32, "quarters": 1, "to": 32 },
+    { "speed": 0.75, "quarters": -2, "to": 0.5303300858899106 },
+    { "speed": 3, "quarters": -1, "to": 2.5226892457611436 },
+    { "speed": 0.0625, "quarters": -4, "to": 0.03125 }
+  ],
+  "faders": [
+    { "value": 0, "speed": 0.25 },
+    { "value": 127, "speed": 4 },
+    { "value": 64, "speed": 1 },
+    { "value": 32, "speed": 0.5 },
+    { "value": 48, "speed": 0.7129194683541263 },
+    { "value": 80, "speed": 1.4336422295750906 },
+    { "value": 96, "speed": 2 }
+  ],
+  "positions": [
+    { "speed": 1, "ring": 64, "fader": 64 },
+    { "speed": 4, "ring": 72, "fader": 127 },
+    { "speed": 16, "ring": 80, "fader": 127 },
+    { "speed": 0.1, "ring": 51, "fader": 0 },
+    { "speed": 0.25, "ring": 56, "fader": 0 },
+    { "speed": 2, "ring": 68, "fader": 95 },
+    { "speed": 0.5, "ring": 60, "fader": 32 },
+    { "speed": 1.5, "ring": 66, "fader": 82 },
+    { "speed": 40, "ring": 84, "fader": 127 },
+    { "speed": 0.001953125, "ring": 28, "fader": 0 }
   ]
 }

@@ -48,6 +48,7 @@ fun targetControlKind(target: BindingTarget): ControlKind? = when (target) {
     is BindingTarget.SpeedMasterBpm,
     BindingTarget.GrandMasterFader,
     is BindingTarget.StackFxAmount,
+    BindingTarget.FxSpeed,
         -> ControlKind.CONTINUOUS
 
     is BindingTarget.Flash,
@@ -64,6 +65,7 @@ fun targetControlKind(target: BindingTarget): ControlKind? = when (target) {
     BindingTarget.GrandMasterToggle,
     is BindingTarget.SetBank,
     is BindingTarget.SpeedMasterTap,
+    is BindingTarget.SpeedMasterScale,
     is BindingTarget.ApplyLook,
     is BindingTarget.PressPalette,
     is BindingTarget.PressPad,

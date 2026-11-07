@@ -143,6 +143,16 @@ export interface SpeedMasterTapTarget {
   masterUuid: string | null
 }
 
+/**
+ * Halve or double a speed master's tempo on press (lighting7 fx-speed plan D12), `masterUuid` null →
+ * master 1. On a held master it moves the hold; a press that would leave 20–300 is refused.
+ */
+export interface SpeedMasterScaleTarget {
+  type: "speedMasterScale"
+  masterUuid: string | null
+  factor: 0.5 | 2
+}
+
 // ─── Selection-relative targets ───────────────────────────────────────
 //
 // The layer beside the fixed bindings above: these name no fixture of their own, and what they
@@ -176,6 +186,15 @@ export type FanAxis = "PAN" | "TILT" | "ACROSS" | "DEPTH"
 export interface SelectionFanTarget {
   type: "selectionFan"
   axis: FanAxis
+}
+
+/**
+ * The Speed of every Local FX painting a head of the desk selection, each whole (lighting7 fx-speed
+ * plan D13): an encoder moves each a quarter of an octave a detent, a fader sets every one from ×¼
+ * to ×4, picking up at the lead FX's Speed, which the ring shows.
+ */
+export interface FxSpeedTarget {
+  type: "fxSpeed"
 }
 
 /** How a {@link SelectTargetTarget} press changes the desk selection. */
@@ -405,8 +424,10 @@ export type BindingTarget =
   | SetBankTarget
   | SpeedMasterBpmTarget
   | SpeedMasterTapTarget
+  | SpeedMasterScaleTarget
   | SelectionAttributeTarget
   | SelectionFanTarget
+  | FxSpeedTarget
   | SelectTargetTarget
   | ClearSelectionTarget
   | LocateSelectionTarget

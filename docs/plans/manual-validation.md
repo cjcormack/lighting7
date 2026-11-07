@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-FX-SPEED-S4`](#fu-manual-fx-speed-s4) | ×½ and ×2 on a busked master halve and double it mid-song, a hold included, and greyed at 20 and 300; a fader and an encoder on *FX speed* move the selection's Local FX with no jump, the fader picking up at the lead FX | FX speed session 4, 2026-11-07 |
 | [`FU-MANUAL-FX-SPEED-S2`](#fu-manual-fx-speed-s2) | a tempo the operator tapped and captured on the rail outlives a GO of a cue that sets the same master, Record puts it into the cue's *Tempo on GO*, and that cue sets it after a Clear | FX speed session 2, 2026-11-07 |
 | [`FU-MANUAL-PROGRAMMER-FIXES`](#fu-manual-programmer-fixes) | the programmer's four fixes at the desk — the FX picker stays open through a colour drag and a dimmer through 0 with Lit on, or the close trace names its door; expanded element rows survive a trip to Show and back; ⌘-clicked cells with gaps take one value, *Add* doing it on the tablet; a recent set on one window lands from another's pop-up over three cells | Programmer fixes S1–S5, 2026-11-07 |
 | [`FU-MANUAL-SHOW-VIEW-FIXES`](#fu-manual-show-view-fixes) | the Show view's editing fixes on a real stack — a duplicated follow cue fires its follower, the editor pane toggled and a marquee at the bottom of a long stack, four numbers renumbered from their cells, a cue armed from its pip mid-show, *In production* off and on mid-run, a block of three cues dragged | Show view fixes S1–S5, 2026-11-06 |
@@ -150,6 +151,32 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-FX-SPEED-S4`
+
+**What it proves**: *half, double and a speed fader* (fx-speed plan session 4) — ×½ and ×2 on a
+master are tempo writes like a tap, and an *FX speed* control moves the selection's Local FX as the
+Speed slider does.
+
+**Why it is here**: the tests read the bank and the FX's cycles; only the rig shows a chase halving on
+the beat, a fader picking up where the lead FX runs, and the X-Touch's ring following an FX the editor
+moved.
+
+**Test**, on the dev rig, two Local FX on the selection — a chase at ×1 and a pulse at ×1.5 — and an
+X-Touch with `enc-1` bound to *Selection — FX speed*, and `fader-1` bound to it with the binding's
+takeover set to *Pickup* (a motor fader is *Immediate* by default, its motor going to the lead):
+
+1. **×½ and ×2.** On the busk rail, ×½ on M2 mid-song: the chase halves and stays on the beat; ×2 puts
+   it back. *Capture* M2, then ×2: the card still reads *Held* at the doubled tempo. Take a master to
+   160: its ×2 greys out.
+2. **The encoder.** Turn `enc-1` a detent at a time: both FX speed up a quarter of an octave each, the
+   chase stopping at ×2, with no jump; the ring follows. Move the chase's Speed in the FX editor: the
+   ring moves with it.
+3. **The fader.** Hold `fader-1` at the bottom and move it up: nothing changes until it passes the
+   chase's Speed, then both follow it, ×1 easy to land on, and moving back down past ×1 still drives
+   them. Select a fixture with no Local FX: the encoder's ring goes dark and the fader moves nothing.
 
 ---
 

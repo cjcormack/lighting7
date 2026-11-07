@@ -35,6 +35,7 @@ import { programmerClearTempo, programmerHoldTempo, useProgrammerTempo } from '@
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { listedTempoIn, masterHoldOf, type MasterHold } from '@/lib/heldTempo'
 import { DESK_OFFLINE_LABEL } from '@/api/wsGesture'
+import { TempoScaleButtons } from '@/components/speedMasters/TempoScaleButtons'
 import type { SpeedMaster } from '@/api/speedMastersApi'
 import type { SpeedMasterLiveState } from '@/api/speedMastersWsApi'
 
@@ -389,97 +390,101 @@ function MasterCard({
           )}
         </span>
 
-        <div className="flex items-center gap-2">
-          <div className="flex flex-1 items-baseline gap-1.5">
-            {editing ? (
-              <input
-                autoFocus
-                inputMode="decimal"
-                value={draft}
-                onChange={(e) => change(e.target.value)}
-                onBlur={commit}
-                onKeyDown={onKeyDown}
-                aria-label={`Master ${master.index} tempo`}
-                className={cn(
-                  'w-[5ch] border-b border-primary bg-transparent font-mono font-bold leading-none tabular-nums outline-none',
-                  isMaster1 ? 'text-3xl' : 'text-lg',
-                )}
-              />
-            ) : (
-              <button
-                type="button"
-                disabled={!connected || lockedReason != null}
-                onClick={() => start(master.bpm)}
-                title={
-                  lockedReason ??
-                  (connected
-                    ? `Master ${master.index} — click to type a tempo, or hold the card and drag`
-                    : DESK_OFFLINE_LABEL)
-                }
-                className={cn(
-                  'font-mono font-bold leading-none tabular-nums transition-colors hover:text-primary disabled:hover:text-foreground',
-                  isMaster1 ? 'text-3xl' : 'text-lg',
-                )}
-              >
-                {formatBpm(shownBpm)}
-              </button>
-            )}
-            {blind && hold.stagedBpm != null && (
-              <span
-                data-tempo-staged
-                className="font-mono text-xs font-bold tabular-nums text-amber-700 dark:text-amber-300"
-                title="Staged in Blind: lands when Blind goes off"
-              >
-                → {formatBpm(hold.stagedBpm)}
-              </span>
-            )}
-            {blind && hold.releasing && (
-              <span
-                data-tempo-releasing
-                className="text-[10px] text-muted-foreground"
-                title="Released in Blind: runs until Blind goes off"
-              >
-                releasing
-              </span>
-            )}
-            {isMaster1 ? (
-              <span className="text-[10px] text-muted-foreground">BPM</span>
-            ) : follow ? (
-              <span
-                className="flex items-center gap-1 text-[10px] text-muted-foreground"
-                title={lockedReason ?? undefined}
-              >
-                <Link2 className="size-2.5 shrink-0" />
-                {describeFollow(follow.num, follow.den, leaderLabelOf(bank, leaderTarget))}
-              </span>
-            ) : (
-              <span className="text-[10px] text-muted-foreground">manual</span>
-            )}
-          </div>
-
-          {/* A follower's TAP is not disabled, it is absent — the chips take the cell instead, so
-            linking a master swaps one control for another rather than leaving a dead button. */}
-          {!follow && !isMaster1 && (
-            <TapButton master={master} connected={connected} className="h-8 px-3.5 pointer-coarse:h-11" />
-          )}
-          {!isMaster1 && (
-            <HoldButton
-              master={master}
-              held={hold.held}
-              connected={connected}
-              lockedReason={lockedReason}
-              className="h-8 px-2.5 pointer-coarse:h-11"
+        <div className="flex items-baseline gap-1.5">
+          {editing ? (
+            <input
+              autoFocus
+              inputMode="decimal"
+              value={draft}
+              onChange={(e) => change(e.target.value)}
+              onBlur={commit}
+              onKeyDown={onKeyDown}
+              aria-label={`Master ${master.index} tempo`}
+              className={cn(
+                'w-[5ch] border-b border-primary bg-transparent font-mono font-bold leading-none tabular-nums outline-none',
+                isMaster1 ? 'text-3xl' : 'text-lg',
+              )}
             />
+          ) : (
+            <button
+              type="button"
+              disabled={!connected || lockedReason != null}
+              onClick={() => start(master.bpm)}
+              title={
+                lockedReason ??
+                (connected
+                  ? `Master ${master.index} — click to type a tempo, or hold the card and drag`
+                  : DESK_OFFLINE_LABEL)
+              }
+              className={cn(
+                'font-mono font-bold leading-none tabular-nums transition-colors hover:text-primary disabled:hover:text-foreground',
+                isMaster1 ? 'text-3xl' : 'text-lg',
+              )}
+            >
+              {formatBpm(shownBpm)}
+            </button>
+          )}
+          {blind && hold.stagedBpm != null && (
+            <span
+              data-tempo-staged
+              className="font-mono text-xs font-bold tabular-nums text-amber-700 dark:text-amber-300"
+              title="Staged in Blind: lands when Blind goes off"
+            >
+              → {formatBpm(hold.stagedBpm)}
+            </span>
+          )}
+          {blind && hold.releasing && (
+            <span
+              data-tempo-releasing
+              className="text-[10px] text-muted-foreground"
+              title="Released in Blind: runs until Blind goes off"
+            >
+              releasing
+            </span>
+          )}
+          {isMaster1 ? (
+            <span className="text-[10px] text-muted-foreground">BPM</span>
+          ) : follow ? (
+            <span
+              className="flex items-center gap-1 text-[10px] text-muted-foreground"
+              title={lockedReason ?? undefined}
+            >
+              <Link2 className="size-2.5 shrink-0" />
+              {describeFollow(follow.num, follow.den, leaderLabelOf(bank, leaderTarget))}
+            </span>
+          ) : (
+            <span className="text-[10px] text-muted-foreground">manual</span>
           )}
         </div>
 
-        {/* Master 1 can never follow (the server refuses it a ratio), so its TAP needs no guard. */}
-        {isMaster1 && (
-          <div className="flex gap-2">
-            <TapButton master={master} connected={connected} className="h-11 flex-1" />
-            <HoldButton master={master} held={hold.held} connected={connected} lockedReason={null} className="h-11 px-3" />
-          </div>
-        )}
+        {/* A follower's TAP is not disabled, it is absent — the chips below take its place, so
+            linking a master swaps one control for another rather than leaving a dead button. Its ×½,
+            ×2 and Capture stay, disabled with the reason, as the plan's D12 asks. Master 1 can never
+            follow (the server refuses it a ratio), so its TAP needs no guard. */}
+        <div className="flex gap-2">
+          {!follow && (
+            <TapButton
+              master={master}
+              connected={connected}
+              className={isMaster1 ? 'h-11 flex-1' : 'h-8 flex-1 pointer-coarse:h-11'}
+            />
+          )}
+          <TempoScaleButtons
+            masterUuid={master.uuid}
+            masterIndex={master.index}
+            bpm={master.bpm}
+            connected={connected}
+            lockedReason={lockedReason}
+            className={cn(isMaster1 ? 'h-11 px-3' : 'h-8 px-2.5 pointer-coarse:h-11', follow && 'flex-1')}
+          />
+          <HoldButton
+            master={master}
+            held={hold.held}
+            connected={connected}
+            lockedReason={lockedReason}
+            className={isMaster1 ? 'h-11 px-3' : 'h-8 px-2.5 pointer-coarse:h-11'}
+          />
+        </div>
 
         {follow && (
           <RatioChips

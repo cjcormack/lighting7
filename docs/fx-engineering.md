@@ -2960,15 +2960,17 @@ The timing source is stored on `FxRegistration` in the `FxRegistry` and propagat
 
 ### Control-surface bindings
 
-Two `BindingTarget` variants drive the bank from hardware
+Three `BindingTarget` variants drive the bank from hardware, and one the FX's Speed
 (`midi/BindingTarget.kt`, dispatched by `midi/SurfaceInputRouter.kt`):
 
 | Target | Control | Behaviour |
 |--------|---------|-----------|
 | `speedMasterBpm` | fader / encoder | `{ masterUuid?, minBpm, maxBpm }` — 0..127 maps across the window, clamped into the clock's 20..300. Defaults to 60..180, because spreading 128 steps over the full range gives ~2.2 BPM a step |
 | `speedMasterTap` | button | `{ masterUuid? }` — taps on press, no-op on release |
+| `speedMasterScale` | button | `{ masterUuid?, factor }` — ×½ or ×2 on press (fx-speed plan D12): `SpeedMasterBank.scale`, the running tempo times the factor, a tempo write by D9 (on a held master it moves the hold). Refused as `OutOfRange` where it would leave 20–300, rather than clamped, and on a follower. No factor is kept: a tap afterwards sets the beat it hears. The rail cards and the master's detail sheet send the same write as `speedMasters.scale` (refusal `SPEED_MASTER_RANGE`), their buttons disabled at the range's ends and on a follower |
+| `fxSpeed` | fader / encoder | The Speed of every Local FX painting a selected head, each whole (D13) — see below |
 
-Both address the master by **uuid** (null → master 1), so they survive clone and
+The three tempo targets address the master by **uuid** (null → master 1), so they survive clone and
 cross-install import — unlike the older int-id cue/stack variants (`FU-SYNC-BINDING-PAYLOAD-UUIDS`).
 A binding naming a deleted master reports `AssignmentHealth.MissingSpeedMaster` rather than
 falling back to master 1: an *FX* degrading to the global tempo is reasonable, a control
@@ -2980,6 +2982,27 @@ just for encoder rings — soft takeover arms from `setLogical`, so without an i
 PICKUP encoder would stay ENGAGED and jump the tempo on first touch. Tap buttons get **no**
 LED feedback: every other LED entry reflects a steady boolean the publisher can read back,
 and a tap has no "on" state to hold.
+
+**FX speed** (`midi/SelectionFxSpeed.kt`, the arithmetic `fx/FxSpeed.kt`) moves every Local FX
+(`FxInstance.isLocalFx`) that paints a head of the desk selection, through `applyFxUpdate` with only a
+`cycle` and no `targets`, so nothing splits: an FX partly inside the selection changes on every head it
+paints, and the engine keeps its elapsed cycles (§"Phase Calculation"). An FX that runs at its own
+pace has no Speed and is left alone, as is every FX a layer, a cue or a Look owns. An **encoder**
+moves each a quarter of an octave a detent, each on its own (`stepSpeed`, the editor's arrow key,
+stopping at a power of two it would pass), read as the change from where its ring shows the **lead
+FX** — the Local FX painting the first selected head in rig order, the lowest Local rank where two do.
+A **fader** sets every one from ×¼ to ×4 on a log scale, stuck within 0.12 of an octave of a power of
+two so ×1 is reachable, and picks up at the lead's Speed (the nearer end when it lies outside). The
+ring shows the lead's Speed a 7-bit step a quarter of an octave, ×1 at 64 (the whole ×1/512–×32 in 28
+to 84), so a detent moves the device's own count as far as the turn moves the lead and a fast spin
+never reads back as a reversal; a turn more than eight steps off the ring moves nothing and re-shows
+it past the transport's last-sent cache. A fader's motor shows ×¼–×4, and a fader whose own write echoes
+back snapped or rounded keeps its position as the logical value, so the echo never re-arms its pickup.
+With no Local
+FX on the selection the control reads nothing and a move is dropped; the binding's health stays `ok`,
+as for every selection target. `src/test/resources/fx/fxSpeed.fixture.json`'s `detents`, `faders` and
+`positions` pin the desk's rules to `frontend/src/lib/fxSpeed.ts`, which the Surfaces view reads the
+ring back with.
 
 ## Future Considerations
 

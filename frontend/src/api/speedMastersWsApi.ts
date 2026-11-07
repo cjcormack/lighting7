@@ -31,9 +31,10 @@ export interface SpeedMasterLiveState {
 /**
  * A tempo write the server refused — `speedMasters.error`, unicast to whoever sent it.
  *
- * [code] is `SPEED_MASTER_FOLLOWER` (the master derives its tempo from the one it follows) or
+ * [code] is `SPEED_MASTER_FOLLOWER` (the master derives its tempo from the one it follows),
  * `SPEED_MASTER_UNKNOWN` (the uuid names no master, and the write was dropped rather than
- * redirected). [message] is the server's single operator-facing phrasing, shared with the MIDI
+ * redirected), `SPEED_MASTER_RANGE` (a ×½ or ×2 that would leave 20–300) or
+ * `SPEED_MASTER_INVALID` (a scale by any factor but ×½ or ×2). [message] is the server's single operator-facing phrasing, shared with the MIDI
  * surface, so clients display it rather than composing their own. A full `speedMasters.state`
  * frame always follows, which is what snaps a stale client back — there is nothing to refetch.
  */
@@ -91,6 +92,8 @@ export interface SpeedMastersWsApi {
   setBpm(masterUuid: string | null, bpm: number): void
   /** Tap one master's tempo (null uuid → master 1). */
   tap(masterUuid: string | null): void
+  /** Halve or double one master's tempo (null uuid → master 1), lighting7 fx-speed plan D12. */
+  scale(masterUuid: string | null, factor: 0.5 | 2): void
 }
 
 type SpeedMasterInMessage =
@@ -200,6 +203,9 @@ export function createSpeedMastersWsApi(conn: InternalApiConnection): SpeedMaste
     },
     tap(masterUuid) {
       sendGesture(conn, { type: 'speedMasters.tap', masterUuid: masterUuid ?? undefined })
+    },
+    scale(masterUuid, factor) {
+      sendGesture(conn, { type: 'speedMasters.scale', masterUuid: masterUuid ?? undefined, factor })
     },
   }
 }

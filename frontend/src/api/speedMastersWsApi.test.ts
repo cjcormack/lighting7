@@ -115,6 +115,19 @@ describe('createSpeedMastersWsApi', () => {
     ])
   })
 
+  it('sends ×½ and ×2 as speedMasters.scale, keyed and unkeyed', () => {
+    const { conn, sent } = fakeWsConnection()
+    const api = createSpeedMastersWsApi(conn)
+
+    api.scale(MASTER_2.uuid, 0.5)
+    api.scale(null, 2)
+
+    expect(sent).toEqual([
+      { type: 'speedMasters.scale', masterUuid: MASTER_2.uuid, factor: 0.5 },
+      { type: 'speedMasters.scale', factor: 2 },
+    ])
+  })
+
   it('routes a beat frame only to the subscribers of that master', () => {
     const { conn, frame } = fakeWsConnection()
     const api = createSpeedMastersWsApi(conn)
