@@ -1,0 +1,574 @@
+<title>OSC for QLab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column with a sticky contents rail on wide screens; tables and code scroll in their own boxes. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #1b2230;
+  --muted: #5a6475;
+  --rule: #dde1e8;
+  --accent: #2348a8;       /* the prompt desk's blue work light */
+  --accent-soft: #e6ecfa;
+  --standby: #a8650a;
+  --standby-soft: #fbefdc;
+  --go: #1d7a45;
+  --go-soft: #e1f3e8;
+  --stop: #a3302a;
+  --stop-soft: #f8e3e1;
+  --code-bg: #eef1f6;
+  --font-display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151d; --surface: #181d27; --fg: #e3e7ee; --muted: #9aa4b5; --rule: #2a3140;
+    --accent: #8eaaf5; --accent-soft: #1f2a45;
+    --standby: #e8a649; --standby-soft: #3a2b14;
+    --go: #5fcf8d; --go-soft: #15301f;
+    --stop: #f08a83; --stop-soft: #3a1c1a;
+    --code-bg: #1e2430;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151d; --surface: #181d27; --fg: #e3e7ee; --muted: #9aa4b5; --rule: #2a3140;
+  --accent: #8eaaf5; --accent-soft: #1f2a45;
+  --standby: #e8a649; --standby-soft: #3a2b14;
+  --go: #5fcf8d; --go-soft: #15301f;
+  --stop: #f08a83; --stop-soft: #3a1c1a;
+  --code-bg: #1e2430;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 4rem;
+}
+.shell {
+  max-width: 76rem;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3rem;
+}
+@media (min-width: 64rem) {
+  .shell { grid-template-columns: 14rem minmax(0, 1fr); }
+}
+
+nav.toc { display: none; }
+@media (min-width: 64rem) {
+  nav.toc {
+    display: block;
+    position: sticky;
+    top: calc(env(safe-area-inset-top, 0px) + 2rem);
+    align-self: start;
+    padding-top: 3.25rem;
+    font-size: 0.875rem;
+  }
+}
+nav.toc p {
+  font-family: var(--font-display);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin: 0 0 0.75rem;
+}
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+nav.toc a { color: var(--muted); text-decoration: none; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--accent); }
+
+main { min-width: 0; max-width: 46rem; }
+
+header.doc { padding-top: 3rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--rule); margin-bottom: 2rem; }
+.eyebrow {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 0.5rem;
+}
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; }
+h1 { font-size: clamp(2rem, 5vw, 2.75rem); font-weight: 700; margin: 0 0 1rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.5rem; font-weight: 600; margin: 3rem 0 0.75rem; scroll-margin-top: 1.5rem; }
+h3 { font-size: 1.125rem; font-weight: 600; margin: 2rem 0 0.5rem; }
+p { margin: 0 0 1rem; }
+.lede { font-size: 1.1875rem; color: var(--fg); }
+.meta { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; font-size: 0.875rem; color: var(--muted); margin: 1rem 0 0; }
+.meta b { color: var(--fg); font-weight: 700; }
+
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+:not(pre) > code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+pre {
+  background: var(--code-bg);
+  border-radius: 6px;
+  padding: 1rem 1.125rem;
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  margin: 0 0 1.25rem;
+}
+pre code { font-size: inherit; }
+
+ul, ol.plain { padding-left: 1.25rem; margin: 0 0 1rem; }
+li { margin-bottom: 0.35rem; }
+
+.table-wrap { overflow-x: auto; margin: 0 0 1.5rem; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.9375rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--rule); }
+tr:last-child td { border-bottom: 0; }
+th { font-family: var(--font-display); font-weight: 600; font-size: 0.8125rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+td code { white-space: nowrap; background: none; padding: 0; }
+td.addr code { color: var(--accent); }
+.group-row td { background: var(--bg); font-family: var(--font-display); font-weight: 600; font-size: 0.8125rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding-block: 0.4rem; }
+
+.chip {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  vertical-align: 0.1em;
+  white-space: nowrap;
+}
+.chip.new { background: var(--standby-soft); color: var(--standby); }
+.chip.exists { background: var(--go-soft); color: var(--go); }
+.chip.toggle { background: var(--stop-soft); color: var(--stop); }
+
+/* Pipeline diagram */
+.pipeline { display: flex; flex-direction: column; gap: 0.5rem; margin: 1.25rem 0 1.75rem; }
+.stage {
+  display: grid;
+  grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
+  gap: 0.25rem 1rem;
+  align-items: baseline;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 0.7rem 0.9rem;
+}
+.stage .name { font-family: var(--font-mono); font-size: 0.875rem; font-weight: 500; overflow-wrap: anywhere; }
+.stage .what { font-size: 0.9375rem; color: var(--muted); min-width: 0; }
+.stage.new { border-color: var(--standby); }
+.stage.new .name { color: var(--standby); }
+.stage.shared { border-color: var(--go); }
+.stage.shared .name { color: var(--go); }
+.arrow { font-family: var(--font-mono); color: var(--muted); padding-left: 1rem; line-height: 1; font-size: 0.875rem; }
+.legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; font-size: 0.8125rem; color: var(--muted); margin-top: 0.25rem; }
+.legend span::before { content: ""; display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 2px; margin-right: 0.35rem; vertical-align: -0.05em; border: 1.5px solid var(--rule); }
+.legend .l-new::before { border-color: var(--standby); }
+.legend .l-shared::before { border-color: var(--go); }
+@media (max-width: 30rem) {
+  .stage { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* QLab Network cue mock */
+.inspector {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  margin: 1.25rem 0 1.5rem;
+  overflow: hidden;
+}
+.inspector .bar {
+  display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  padding: 0.55rem 0.9rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-display);
+  font-size: 0.8125rem; font-weight: 600; color: var(--muted);
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+.inspector dl { margin: 0; padding: 0.9rem; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.5rem 1rem; }
+.inspector dt { color: var(--muted); font-size: 0.875rem; }
+.inspector dd { margin: 0; font-size: 0.9375rem; min-width: 0; overflow-wrap: anywhere; }
+.inspector dd code { color: var(--accent); background: none; padding: 0; }
+@media (max-width: 30rem) {
+  .inspector dl { grid-template-columns: minmax(0, 1fr); gap: 0.15rem; }
+  .inspector dd { margin-bottom: 0.5rem; }
+}
+
+/* Decisions */
+.decisions { display: flex; flex-direction: column; gap: 0; margin: 1rem 0 1.5rem; border-top: 1px solid var(--rule); }
+.decision { display: grid; grid-template-columns: 3rem minmax(0, 1fr); gap: 0.75rem; padding: 0.9rem 0; border-bottom: 1px solid var(--rule); }
+.decision .id { font-family: var(--font-mono); font-weight: 500; color: var(--accent); font-size: 0.9375rem; padding-top: 0.1rem; }
+.decision p { margin: 0; }
+.decision p + p { margin-top: 0.4rem; color: var(--muted); font-size: 0.9375rem; }
+.decision strong { font-weight: 700; }
+
+.callout {
+  border-left: 3px solid var(--standby);
+  background: var(--standby-soft);
+  padding: 0.8rem 1rem;
+  border-radius: 0 6px 6px 0;
+  margin: 1.25rem 0 1.5rem;
+}
+.callout p:last-child { margin-bottom: 0; }
+.callout .label { font-family: var(--font-display); font-weight: 600; font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--standby); display: block; margin-bottom: 0.25rem; }
+
+.sessions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; margin: 1rem 0 1.5rem; }
+.session { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 1rem 1.1rem; min-width: 0; }
+.session h3 { margin: 0 0 0.25rem; }
+.session .gate { font-size: 0.875rem; color: var(--muted); margin: 0 0 0.6rem; }
+.session ul { margin-bottom: 0; }
+
+.questions li { margin-bottom: 0.6rem; }
+
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: 0.875rem; color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+
+<div class="shell">
+  <nav class="toc" aria-label="Contents">
+    <p>Contents</p>
+    <ol>
+      <li><a href="#goals">Goals</a></li>
+      <li><a href="#fit">How it fits</a></li>
+      <li><a href="#addresses">The address set</a></li>
+      <li><a href="#names">Names in addresses</a></li>
+      <li><a href="#idempotent">Landing the same twice</a></li>
+      <li><a href="#qlab">A QLab Network cue</a></li>
+      <li><a href="#transport">Transport</a></li>
+      <li><a href="#security">Security and settings</a></li>
+      <li><a href="#log">Outcomes and the log</a></li>
+      <li><a href="#history">History and undo</a></li>
+      <li><a href="#learn">Learnable addresses</a></li>
+      <li><a href="#surface">REST, WS and storage</a></li>
+      <li><a href="#testing">Testing</a></li>
+      <li><a href="#decisions">Decisions</a></li>
+      <li><a href="#sessions">Sessions</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="doc">
+      <p class="eyebrow">Design · control surfaces</p>
+      <h1>OSC for QLab</h1>
+      <p class="lede">The desk listens for Open Sound Control on the LAN, so a QLab Network cue can GO a cue stack, jump to a cue, press a Look or a busk pad, or move the grand master, through the same actions a MIDI surface uses.</p>
+      <div class="meta">
+        <span><b>Status</b> Agreed · plan: <code>docs/plans/osc-plan.md</code></span>
+        <span><b>Date</b> 7 November 2026</span>
+        <span><b>Touches</b> <code>midi/</code>, a new <code>osc/</code>, Install settings, <code>history/</code></span>
+      </div>
+    </header>
+
+    <section id="goals">
+      <h2>Goals</h2>
+      <ul>
+        <li>A QLab operator can put the lighting on the QLab cue sheet: each QLab cue sends one OSC message and the desk lands the matching lighting cue.</li>
+        <li>No per-cue setup on the desk. The desk publishes a fixed set of addresses, named after the stacks, cues, Looks and busk pages that already exist.</li>
+        <li>Every OSC action does exactly what the same action does from a MIDI surface or the UI, because it is the same code.</li>
+        <li>The show is unaffected by OSC traffic, whether it is flooded, malformed or silent.</li>
+      </ul>
+      <h3>Not in scope</h3>
+      <ul>
+        <li>Recording, editing, patching or switching projects over OSC.</li>
+        <li>Firing one-shot triggers (confetti, pyro) or running fixture commands (lamp off, resets).</li>
+        <li>MIDI Show Control and timecode. Both are reasonable later doors, but neither is needed for QLab's Network cues.</li>
+        <li>Sending lighting state back to QLab. QLab doesn't read it; feedback is for TouchOSC, in session 3.</li>
+      </ul>
+    </section>
+
+    <section id="fit">
+      <h2>How it fits</h2>
+      <p>A MIDI press reaches the show through <code>SurfaceInputRouter</code>, which resolves a <code>BindingTarget</code> and dispatches it through <code>SurfaceActions</code>. <code>SurfaceActions</code> already calls the same <code>CueStackManager</code>, <code>BuskPressService</code> and <code>GlobalScalerState</code> code the REST routes use. OSC joins at that point. Everything upstream of it is new; everything from <code>SurfaceActions</code> down is shared.</p>
+
+      <div class="pipeline" role="list" aria-label="OSC message path">
+        <div class="stage" role="listitem"><span class="name">QLab Network cue</span><span class="what">One OSC message over UDP to the desk's IP and OSC port.</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="stage new" role="listitem"><span class="name">OscReceiver</span><span class="what">A <code>DatagramSocket</code> on its own <code>osc-1</code> thread. It drops senders that aren't on the allowlist, parses the packet, unpacks bundles and queues messages on a bounded channel that drops the oldest and counts each drop. It never touches the database or the show.</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="stage new" role="listitem"><span class="name">OscAddresses</span><span class="what">On one collector, maps each address and its arguments to a uuid-bearing <code>BindingTarget</code>, reading the current project as a REST request does. Answers <em>not found</em> or <em>ambiguous</em> without touching the show.</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="stage shared" role="listitem"><span class="name">SurfaceDispatch → SurfaceActions</span><span class="what">One dispatcher, lifted out of the MIDI router and shared with it, run under a <code>WriteOrigin</code> naming the sender, inside a per-message guard. It answers an outcome for the log.</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="stage shared" role="listitem"><span class="name">CueStackManager · BuskPressService · GlobalScalerState · SpeedMasterBank</span><span class="what">Unchanged.</span></div>
+        <div class="legend"><span class="l-new">New</span><span class="l-shared">Shared with MIDI and REST</span></div>
+      </div>
+
+      <p>Each received message and what became of it goes into a short ring buffer, which the settings page shows as the address log (<a href="#log">below</a>).</p>
+    </section>
+
+    <section id="addresses">
+      <h2>The address set</h2>
+      <p>Every address starts <code>/lighting7/</code> and acts on the current project. Segments in braces are names (see <a href="#names">Names in addresses</a>) or numbers. <span class="chip exists">exists</span> means <code>SurfaceActions</code> already has the action; <span class="chip new">new</span> means this work adds it, as a <code>BindingTarget</code> so MIDI gets it too; <span class="chip toggle">toggle</span> marks an address whose result depends on the desk's state. Cue sheets should use the explicit forms instead.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Address</th><th>Args</th><th>Does</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr class="group-row"><td colspan="4">Cue stacks</td></tr>
+            <tr><td class="addr"><code>/lighting7/stack/{stack}/cue/{n}/go</code></td><td>–</td><td>GO TO cue <var>n</var> in the stack, starting the stack if it's stopped. Nothing if cue <var>n</var> is already live.</td><td><span class="chip new">new</span> <code>CueStackGoTo</code> → <code>goToEntry</code></td></tr>
+            <tr><td class="addr"><code>/lighting7/stack/{stack}/cue/{n}/standby</code></td><td>–</td><td>Put cue <var>n</var> on standby, so the next GO fires it</td><td><span class="chip new">new</span> <code>CueStackStandby</code></td></tr>
+            <tr><td class="addr"><code>/lighting7/stack/{stack}/go</code></td><td>–</td><td>GO, as the stack's GO button</td><td><span class="chip exists">exists</span> <code>cueStackGo</code></td></tr>
+            <tr><td class="addr"><code>/lighting7/stack/{stack}/back</code></td><td>–</td><td>GO BACK</td><td><span class="chip exists">exists</span> <code>cueStackBack</code></td></tr>
+            <tr><td class="addr"><code>/lighting7/stack/{stack}/pause</code></td><td>–</td><td>Cancel the live entry's auto-advance timer, so the stack waits for the next GO</td><td><span class="chip exists">exists</span> <code>cueStackPause</code></td></tr>
+            <tr><td class="addr"><code>/lighting7/stack/{stack}/stop</code></td><td>–</td><td>Stop the stack. Like every stop, this drops the desk's arm.</td><td><span class="chip new">new</span> <code>CueStackStop</code></td></tr>
+            <tr><td class="addr"><code>/lighting7/stack/{stack}/fx-amount</code></td><td><code>f</code> 0–1</td><td>The stack's FX amount, at full resolution</td><td><span class="chip exists">exists</span> <code>StackFxAmount</code>, new float arm</td></tr>
+
+            <tr class="group-row"><td colspan="4">Cues and Looks</td></tr>
+            <tr><td class="addr"><code>/lighting7/cue/{cue}/on</code> · <code>/off</code></td><td>–</td><td>Take or let go a loose hold on the cue. Nothing if it is already so.</td><td><span class="chip new">new</span> <code>LooseCueSet(on)</code></td></tr>
+            <tr><td class="addr"><code>/lighting7/cue/{cue}/press</code></td><td>–</td><td>Toggle the loose hold, as a busk cue pad</td><td><span class="chip exists">exists</span> <span class="chip toggle">toggle</span> <code>fireCue</code></td></tr>
+            <tr><td class="addr"><code>/lighting7/look/{look}/on</code> · <code>/off</code></td><td>–</td><td>Put the Look on whole, or take every layer of it off. Nothing if it is already so.</td><td><span class="chip new">new</span> <code>LookSet(on)</code></td></tr>
+            <tr><td class="addr"><code>/lighting7/look/{look}/press</code></td><td>–</td><td>Toggle the Look</td><td><span class="chip exists">exists</span> <span class="chip toggle">toggle</span> <code>applyLook</code></td></tr>
+
+            <tr class="group-row"><td colspan="4">Busk</td></tr>
+            <tr><td class="addr"><code>/lighting7/busk/{page}/{bank}/{pad}/press</code></td><td>–</td><td>Press a pad, on the desk's selection. Bank and pad are counted from 1 in layout order, because bank names may repeat on a page.</td><td><span class="chip exists">exists</span> <span class="chip toggle">toggle</span> <code>pressPad</code></td></tr>
+            <tr><td class="addr"><code>/lighting7/busk/{page}/show</code></td><td>–</td><td>Show that busk page</td><td><span class="chip exists">exists</span> <code>buskPageSet</code></td></tr>
+
+            <tr class="group-row"><td colspan="4">Masters and tempo</td></tr>
+            <tr><td class="addr"><code>/lighting7/blackout</code></td><td><code>i</code> 0/1, optional</td><td>Set blackout; with no argument, toggle it</td><td><span class="chip new">new</span> set · <span class="chip exists">exists</span> toggle</td></tr>
+            <tr><td class="addr"><code>/lighting7/grandmaster</code></td><td><code>f</code> 0–1</td><td>Grand master level, at full resolution</td><td><span class="chip new">new</span> <code>GrandMasterLevel</code></td></tr>
+            <tr><td class="addr"><code>/lighting7/tempo/{master}</code></td><td><code>f</code> BPM</td><td>Set a speed master's tempo (20–300). <var>master</var> is its 1-based index; one past the last is not found.</td><td><span class="chip new">new</span> <code>SpeedMasterSetBpm</code></td></tr>
+            <tr><td class="addr"><code>/lighting7/tempo/{master}/tap</code></td><td>–</td><td>One tap</td><td><span class="chip exists">exists</span> <code>tapSpeedMaster</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>A pad press from OSC does what a surface press does, so a generic palette pad lands on whatever the desk has selected, and is refused when nothing is selected (<code>PALETTE_NEEDS_SELECTION</code>) or when the selection's attribute mask leaves out the palette's family (<code>PALETTE_OUTSIDE_MASK</code>). Look and cue pads are the predictable ones to fire from QLab.</p>
+      <p>A Look is a programmer layer, from OSC as from a busk pad: Clear takes it off, Record captures it, and in Blind it is staged rather than sent, which its log row says. A loose cue (<code>/cue/{cue}/on</code>) is a hold the programmer doesn't touch, so it is the better choice for states the operator mustn't clear by accident.</p>
+      <p>Continuous values arrive as floats and go straight to the level they set. They don't pass through the 7-bit <code>UByte</code> path MIDI uses, which would throw away most of an OSC float's precision. That is why the grand master, tempo and a stack's FX amount take floats whole. Where a float is wanted any number is accepted, since QLab sends a whole number as an int.</p>
+    </section>
+
+    <section id="names">
+      <h2>Names in addresses</h2>
+      <p>OSC addresses can't contain spaces, and several other characters (<code>#</code> <code>*</code> <code>,</code> <code>?</code> <code>[</code> <code>]</code> <code>{</code> <code>}</code>) are reserved for pattern matching. Stack, cue, Look and page names contain all of these. So a name appears in an address as its <strong>slug</strong>: lower-cased, every run of characters other than <code>a–z</code> and <code>0–9</code> replaced by one <code>-</code>, the ends trimmed. An incoming address is lower-cased before it is matched. A name with no ASCII letter or digit has no slug and so no address; the address listing says which records those are.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Slug</th></tr></thead>
+          <tbody>
+            <tr><td>Act 1</td><td><code>act-1</code></td></tr>
+            <tr><td>Pre-show &amp; walk-in</td><td><code>pre-show-walk-in</code></td></tr>
+            <tr><td>Finale (wet)</td><td><code>finale-wet</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Stack names and Look names are already unique within a project, and so are busk page names, but two names can still share a slug ("Act 1" and "Act-1"). When an address matches more than one record it is refused as <em>ambiguous</em> and the log names the candidates. The desk never guesses. Separators in the stack list are never matched, though they may share a stack's name. Cue names are not unique at all, so a <code>/cue/{cue}</code> address only works for a cue whose name is unique. Cues in a stack should be addressed by number instead.</p>
+      <p>A cue number in an address matches by value, the way the desk sorts cue numbers. <code>12.5</code> and <code>12.50</code> both reach cue 12.5.</p>
+      <p>Renaming a stack, a loose cue, a Look or a busk page changes its address, and the QLab cue that sent the old one stops working: the log shows <em>not found</em>. Numbers and positions are quieter. Renumbering a cue, an insert or delete that relabels auto numbers, moving a bank or a pad, or deleting a speed master can point an address at a different record. So every <em>done</em> row names the record it reached, and the desk warns on any of those eight changes when an address it affects has been received since the desk started.</p>
+    </section>
+
+    <section id="idempotent">
+      <h2>Landing the same twice</h2>
+      <p>A bare GO advances whatever is on deck. If a QLab cue is fired twice, skipped, or the operator goes back in QLab, the lighting and sound fall out of step and stay that way. The same is true of every toggle: a Look press sent twice turns the Look off again.</p>
+      <div class="callout">
+        <span class="label">Recommendation for cue sheets</span>
+        <p>Program QLab cues with the explicit forms: <code>/stack/act-1/cue/12/go</code> rather than <code>/stack/act-1/go</code>, and <code>/look/haze-fill/on</code> rather than <code>/look/haze-fill/press</code>. Each lands the same state however many times it arrives: a GO TO onto the cue already live, or an <code>on</code> for a Look already on, does nothing, so it doesn't re-fire the cue, reset its FX or fire its events twice. Re-firing a QLab cue repairs the lighting instead of moving it on.</p>
+      </div>
+      <p>A cue's events (a confetti tube at an offset) fire on GO TO the cue as they do on GO, on the cue's first hold. They never track: a GO TO past a cue fires none of the skipped cue's events, and GO BACK fires none. So a show run with GO TO from QLab fires each cue's events when it lands on that cue, and nothing about events changes for OSC (D11). Events still need the desk armed, which is done at the desk (D6).</p>
+      <p>The toggles and the bare GO stay in the address set for buttons an operator presses by hand (a TouchOSC GO button, a Stream Deck running an OSC plugin).</p>
+    </section>
+
+    <section id="qlab">
+      <h2>A QLab Network cue</h2>
+      <p>In QLab the desk is one Network patch: the desk's IP address, the OSC port and UDP. Each lighting cue in QLab is then a Network cue sending one OSC message on that patch.</p>
+      <div class="inspector" aria-label="Example Network cue settings">
+        <div class="bar"><span>Network cue · QLab cue 14</span><span>Lights: storm builds</span></div>
+        <dl>
+          <dt>Patch</dt><dd>Lighting desk: 10.0.0.12, port 8415, UDP</dd>
+          <dt>Type</dt><dd>OSC message</dd>
+          <dt>Message</dt><dd><code>/lighting7/stack/act-2/cue/31/go</code></dd>
+        </dl>
+      </div>
+      <p>A run of a QLab cue sheet then reads like this:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>QLab</th><th>Cue</th><th>Sends</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">1</td><td>House to half</td><td class="addr"><code>/lighting7/stack/act-1/cue/1/go</code></td></tr>
+            <tr><td class="mono">2</td><td>Preset out, overture</td><td class="addr"><code>/lighting7/stack/act-1/cue/2/go</code></td></tr>
+            <tr><td class="mono">2.1</td><td>Haze on for the storm</td><td class="addr"><code>/lighting7/look/haze-fill/on</code></td></tr>
+            <tr><td class="mono">14</td><td>Storm builds</td><td class="addr"><code>/lighting7/stack/act-2/cue/31/go</code></td></tr>
+            <tr><td class="mono">15</td><td>Lightning with thunder</td><td class="addr"><code>/lighting7/busk/storm/1/3/press</code></td></tr>
+            <tr><td class="mono">16</td><td>Storm clears</td><td class="addr"><code>/lighting7/look/haze-fill/off</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The OSC port 8415 sits beside the desk's REST port (8413) and the public listener (8414). It can be changed in settings.</p>
+    </section>
+
+    <section id="transport">
+      <h2>Transport</h2>
+      <ul>
+        <li><strong>UDP first.</strong> QLab's Network patches default to UDP, and it's one packet per message. TCP with SLIP framing (OSC 1.1) comes in session 3, when something actually needs it.</li>
+        <li><strong>A hand-rolled parser.</strong> OSC 1.0 is small: a null-padded address, a type-tag string starting with <code>,</code>, then int32, float32, string and blob arguments, big-endian and 4-byte aligned. Bundles (<code>#bundle</code>, a timetag, length-prefixed elements) are unpacked to a depth of 8 and at most 64 messages a packet. Timetags are ignored and every message runs on arrival, which is what QLab sends anyway. Writing the parser ourselves, about 200 lines, keeps the licence gate untouched and matches the desk's own ArtDMX transport. Types the parser doesn't know (<code>h</code>, <code>d</code>, <code>T</code>, <code>F</code>) are read where their size is known, so <code>T</code>/<code>F</code> can work as 1/0, and anything else drops the message with a reason in the log.</li>
+        <li><strong>Its own thread.</strong> The receive loop runs on a single <code>osc-1</code> thread and does nothing but read, check the sender and parse. It never touches the database or the show. It hands messages to a <code>Channel</code> of 64 that drops the oldest and counts each drop in its <code>onUndeliveredElement</code>, unlike the MIDI input flow, whose drops can't be counted (limitation 6 in the surface doc).</li>
+        <li><strong>One collector, guarded.</strong> A collector takes each message in turn, resolves it against the current project as a REST request does, and dispatches it inside a per-message guard. A throw, such as one from a project switch in flight, becomes a <em>failed</em> log row and the collector carries on. The same guard goes into the MIDI router, where its absence is a known follow-up.</li>
+        <li><strong>Lifecycle.</strong> The listener starts when OSC is enabled in settings, restarts on a port or bind-address change, and reports a bind failure (port in use) in <code>osc.state</code> rather than failing startup.</li>
+      </ul>
+    </section>
+
+    <section id="security">
+      <h2>Security and settings</h2>
+      <p>OSC has no authentication. Anyone who can reach the port can GO the show, so the defaults are strict:</p>
+      <ul>
+        <li><strong>Off by default</strong>, enabled by an admin on the desk's own listener. The settings route refuses the public listener altogether.</li>
+        <li><strong>A sender allowlist.</strong> Each entry is an IP address and a name ("QLab", "Sound op's iPad"). A packet from any other address is dropped before parsing, counted, and shown once per address with an <em>Allow this sender</em> action. That way the first test from QLab tells the admin exactly which address to add. A source address can be forged by anyone on the network, so the allowlist keeps out the wrong machine, not an attacker.</li>
+        <li><strong>A bind address</strong>, so the listener can sit on the show network's interface and not on the venue Wi-Fi. The default is every interface, because a desk on one cable is the common case and the allowlist still applies.</li>
+        <li><strong>Never on the public listener or the tunnel.</strong> OSC is LAN-only, and ngrok doesn't forward UDP. The settings route and the <code>osc.state</code> frame are both kept off the public listener, so sender names and LAN addresses never leave the building.</li>
+        <li><strong>No arming, triggers, fixture commands, recording or project switches.</strong> Those spend something physical, darken lamps for minutes or change stored show data, in a room the sender can't see. A QLab cue can GO a cue whose events fire, but only after someone at the desk has armed it. A stack stop from QLab drops the arm, as any stop does; nothing from OSC can raise it. They aren't in the address set, and the resolver refuses a learned binding to one (session 3).</li>
+        <li><strong>Machine-local.</strong> The settings and the allowlist are this machine's. They describe a LAN, so they never sync.</li>
+      </ul>
+    </section>
+
+    <section id="log">
+      <h2>Outcomes and the log</h2>
+      <p>When a QLab cue does nothing, the person at the desk needs to see why in one glance. Every received message is recorded with its sender, address, arguments and outcome:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Outcome</th><th>Example detail</th></tr></thead>
+          <tbody>
+            <tr><td>Done</td><td>GO TO 31 <em>Storm builds</em> in Act 2</td></tr>
+            <tr><td>Done</td><td>Already live: 31 <em>Storm builds</em> in Act 2</td></tr>
+            <tr><td>Not found</td><td>No stack <code>act-3</code> in this show</td></tr>
+            <tr><td>Ambiguous</td><td><code>act-1</code> matches the stacks "Act 1" and "Act-1"</td></tr>
+            <tr><td>Refused</td><td>Busk pad 1/4 holds a generic palette and needs a selection</td></tr>
+            <tr><td>Failed</td><td>The show was switching; nothing was sent</td></tr>
+            <tr><td>Bad message</td><td>Unknown address <code>/lighting7/stack/act-1/goo</code>; also a type tag it can't read, or a bundle too deep</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Most failures happen in the resolver, which returns them directly. A few happen inside <code>SurfaceActions</code>, whose methods mostly return <code>Unit</code> and only log a warning today. Every action the address set reaches returns a small outcome through the shared dispatcher, so its refusals reach the log too. The MIDI router ignores it.</p>
+      <p>The last 50 entries are kept in memory. Refused senders are a separate list, one row per address with a count, so a flood from one can't push real rows out. A message the queue drops never reaches the resolver, so drops are a count rather than log rows. Every address resolved since the desk started is kept in a set of its own, which the rename and renumber warning reads. A received-message counter, a dropped counter and a refused counter go into the 30-second metrics reporter.</p>
+    </section>
+
+    <section id="history">
+      <h2>History and undo</h2>
+      <p>Each allowed sender is its own history source: a new <code>HistorySource.Kind.OSC</code> keyed by the allowlist entry, named by it. History shows "QLab" against the programmer steps and show entries a QLab cue causes. A GO isn't a stored write, so most OSC traffic takes no step. A Look on or off does, as it does from a busk pad.</p>
+      <p>OSC gets no undo address. Undo from QLab would undo whatever QLab did last, which is rarely what the operator at the desk means.</p>
+    </section>
+
+    <section id="learn">
+      <h2>Learnable addresses</h2>
+      <p>Some senders can't be told what to send: a TouchOSC layout someone else built, a show-control system with fixed outputs. For those, session 3 adds an <strong>OSC device</strong> to the existing binding system:</p>
+      <ul>
+        <li>A device type <code>osc</code> whose controls are its bindings' addresses. Bindings are already keyed by <code>(project, deviceTypeKey, controlId, bank)</code>, so an address of up to 100 characters (the column's width) is a control id. Every profile today declares its controls in code, so this is the first whose controls are dynamic, which the device registry must allow.</li>
+        <li>An address with a float argument is a continuous control, and one without is a button. A float at 0 is a release, so TouchOSC's momentary buttons work as flashes.</li>
+        <li>MIDI Learn already captures "the next input"; for OSC that is the next address received from an allowed sender.</li>
+        <li>Every <code>BindingTarget</code> is then reachable, apart from the ones refused for OSC in <a href="#security">Security</a>.</li>
+        <li>Feedback goes back to the sender's address and port for bound controls: fader positions and button LEDs, through an <code>OscController</code> beside <code>KtMidiController</code>, fed by <code>SurfaceFeedbackPublisher</code>.</li>
+        <li>A <code>/lighting7/reply</code> carrying each fixed address's outcome back to the sender, behind a per-sender switch, for show-control systems that log it.</li>
+      </ul>
+      <p>The fixed <code>/lighting7/</code> address set is never shadowed by a learned binding. A learned address under <code>/lighting7/</code> is refused at bind time.</p>
+    </section>
+
+    <section id="surface">
+      <h2>REST, WS and storage</h2>
+      <h3>REST</h3>
+      <ul>
+        <li><code>GET/PUT /api/rest/install/osc</code>: <code>{enabled, bindAddress, port, senders: [{id, name, address}]}</code>. Admin only. Both are 403 <code>OSC_SETTINGS_LOCAL_ONLY</code> on the public listener; the <code>PUT</code> is 400 <code>OSC_SETTINGS_INVALID</code> for a bad port, address or duplicate sender, naming every problem at once.</li>
+        <li><code>GET /api/rest/projects/{id}/osc/addresses</code> (session 2): every address the project answers to, with what each does, the record it reaches, any ambiguity and any record with no address. It feeds the <em>Copy OSC address</em> menu items and a printable cheat sheet for the sound department. Any project, both roles.</li>
+      </ul>
+      <h3>WebSocket</h3>
+      <ul>
+        <li><code>osc.state</code>: outbound only, <code>StateFlow</code>-backed: <code>{enabled, listening, port, error?, received, dropped, refused, refusedSenders, recent: [{at, sender, address, args, outcome, detail}]}</code>. Sent to every signed-in socket on the desk's own listener, since the operator at the desk is the one who needs to see a failed QLab cue, and never to the public listener. An operator's OSC tab is built from this frame alone. Conflated to at most 4 updates a second.</li>
+      </ul>
+      <h3>Storage and sync</h3>
+      <ul>
+        <li><code>osc_settings</code> (one row) and <code>osc_senders</code>: machine-local, recorded as such in <code>sync/SyncDispositions.kt</code>. No <code>formatVersion</code> change.</li>
+        <li>Learned bindings (session 3) are ordinary <code>control_surface_bindings</code> rows and follow that table's disposition.</li>
+      </ul>
+      <h3>Observability</h3>
+      <ul>
+        <li>A GO is already a <code>cue.go</code> transaction that is always kept, whichever door it came through, so OSC adds no transaction of its own.</li>
+      </ul>
+    </section>
+
+    <section id="testing">
+      <h2>Testing</h2>
+      <ul>
+        <li><strong>Parser:</strong> byte-for-byte vectors from the OSC 1.0 specification's examples, plus bundles, bundles past the depth cap, padding edge cases, truncated packets, unknown type tags and an int where a float is wanted.</li>
+        <li><strong>Resolver:</strong> slugging, upper case, an empty slug, a separator sharing a stack's name, ambiguity, cue numbers by value, an address for a deleted stack, every row of the address table.</li>
+        <li><strong>Repeats:</strong> a GO TO onto the live cue keeps its FX phase and fires no second events; <code>on</code> twice changes nothing.</li>
+        <li><strong>The guard:</strong> a dispatch while the show is switching logs <em>failed</em> and the next message still goes.</li>
+        <li><strong>End to end:</strong> a real <code>DatagramSocket</code> on loopback sending to the listener, with a recording <code>SurfaceActions</code> (moved into shared test support) standing in for the show. Covers the allowlist, drop counting under a flood, a port that is already in use, and <code>osc.state</code> absent from a remote socket.</li>
+        <li><strong>Show safety:</strong> a fade's output timing held under a 10,000-message flood, as <code>CloudOutageOutputTimingTest</code> does for the cloud.</li>
+        <li><strong>Manual:</strong> a row in <code>manual-validation.md</code> for real QLab 5 on the show network, with UDP and the explicit address forms.</li>
+      </ul>
+    </section>
+
+    <section id="decisions">
+      <h2>Decisions</h2>
+      <div class="decisions">
+        <div class="decision"><span class="id">D1</span><div><p><strong>A fixed address set comes first; learnable addresses come later.</strong></p><p>QLab sends whatever you type, so a published address set needs no setup per cue. Learn is for senders whose addresses can't be changed.</p></div></div>
+        <div class="decision"><span class="id">D2</span><div><p><strong>Every address resolves to a <code>BindingTarget</code> dispatched through <code>SurfaceActions</code>.</strong></p><p>There is no OSC-specific show logic: OSC and MIDI share one dispatcher. New actions are added as targets, so MIDI gains them too, and an OSC press does what a surface press does, the desk selection included.</p></div></div>
+        <div class="decision"><span class="id">D3</span><div><p><strong>Names appear in addresses as slugs, and an ambiguous match is refused, never guessed.</strong></p><p>OSC forbids spaces and reserves pattern characters. A refusal is visible in the log; a guess fires the wrong cue. Separators are never matched. There is no second, exact-name argument form.</p></div></div>
+        <div class="decision"><span class="id">D4</span><div><p><strong>Explicit forms sit beside every toggle: GO TO beside GO, on and off beside press.</strong></p><p>A QLab cue fired twice must leave the lighting where it was after the first, so a GO TO onto the live cue, and an on or off that is already so, do nothing.</p></div></div>
+        <div class="decision"><span class="id">D5</span><div><p><strong>Off by default, senders allowlisted and named, machine-local, LAN-only.</strong></p><p>OSC is unauthenticated UDP, and a source address can be forged, so the allowlist keeps out the wrong machine rather than an attacker. Nothing about OSC is served on the public listener. The allowlist entry is also the history source's name.</p></div></div>
+        <div class="decision"><span class="id">D6</span><div><p><strong>No arming, triggers, fixture commands, recording, undo or project switching over OSC.</strong></p><p>Each either spends something physical, darkens the rig for minutes or changes stored data, for a sender that can't see the room. Arming stays a gesture made at the desk; a stack stop from OSC drops the arm, as any stop does.</p></div></div>
+        <div class="decision"><span class="id">D7</span><div><p><strong>OSC acts on the current project only</strong>, as MIDI does.</p></div></div>
+        <div class="decision"><span class="id">D8</span><div><p><strong>The receive path never blocks on the show.</strong></p><p>A dedicated thread that never touches the database or the show, a bounded drop-oldest channel with counted drops, and one collector with a per-message guard.</p></div></div>
+        <div class="decision"><span class="id">D9</span><div><p><strong>The OSC parser is hand-rolled: OSC 1.0 over UDP, bundles unpacked to a depth of 8, timetags ignored, any number accepted where a float is wanted.</strong></p><p>Small enough to own outright, and it adds no dependency for the licence gate.</p></div></div>
+        <div class="decision"><span class="id">D10</span><div><p><strong>Continuous OSC values bypass the 7-bit path.</strong></p><p>The grand master, tempo and a stack's FX amount take floats whole.</p></div></div>
+        <div class="decision"><span class="id">D11</span><div><p><strong>Cue events keep today's rule.</strong></p><p>A GO TO fires the cue it lands on's events, armed, as a GO does; a skipped cue's never fire. An OSC GO TO is a GO TO, so nothing changes.</p></div></div>
+        <div class="decision"><span class="id">D12</span><div><p><strong>Every signed-in window on the desk's own listener sees the address log; only admins change OSC settings and the allowlist.</strong></p><p>The operator at the desk is the one who needs to see that a QLab cue failed.</p></div></div>
+        <div class="decision"><span class="id">D13</span><div><p><strong>The default port is UDP 8415</strong>, beside 8413 and 8414, and can be changed.</p></div></div>
+        <div class="decision"><span class="id">D14</span><div><p><strong>Replies and feedback wait for session 3.</strong></p><p>QLab ignores them. They come with Learn, when a TouchOSC-style sender needs them.</p></div></div>
+      </div>
+    </section>
+
+    <section id="sessions">
+      <h2>Sessions</h2>
+      <div class="sessions">
+        <div class="session">
+          <h3>Session 1 — Listener, stacks, Looks, cues and busk</h3>
+          <p class="gate">Enough for a QLab cue sheet that runs the show.</p>
+          <ul>
+            <li><code>OscReceiver</code>, the parser, settings and the allowlist, the address log and <code>osc.state</code>.</li>
+            <li>The shared dispatcher with its per-message guard, which also closes the MIDI router's.</li>
+            <li>The resolver, for stack addresses (GO, GO TO, standby, back, pause, stop, FX amount), Looks and loose cues (on, off, press), and busk pads and pages.</li>
+            <li>New targets <code>CueStackGoTo</code>, <code>CueStackStandby</code>, <code>CueStackStop</code>, <code>LooseCueSet</code> and <code>LookSet</code>, each a no-op when already so, with outcomes returned.</li>
+            <li><code>HistorySource.Kind.OSC</code>.</li>
+            <li>Install settings → OSC, for both roles: an operator sees the status and log; an admin also gets enable, port, bind address, senders and <em>Allow this sender</em>.</li>
+            <li><code>osc-engineering.md</code> and the CLAUDE.md entries.</li>
+          </ul>
+        </div>
+        <div class="session">
+          <h3>Session 2 — Masters, tempo and finding addresses</h3>
+          <p class="gate">The rest of the fixed address set, and the tools to find each address.</p>
+          <ul>
+            <li>Blackout, grand master level, speed master BPM and tap.</li>
+            <li><code>GET …/osc/addresses</code>, <em>Copy OSC address</em> on stack, cue, Look and pad menus, and a printable cheat sheet.</li>
+            <li>The warning on renaming a stack, a loose cue, a Look or a page, renumbering a cue, an insert or delete that relabels auto numbers, moving a bank or pad, or deleting a speed master an address reaches.</li>
+          </ul>
+        </div>
+        <div class="session">
+          <h3>Session 3 — Learnable addresses, feedback and TCP</h3>
+          <p class="gate">Gated on someone using TouchOSC or another fixed-output sender.</p>
+          <ul>
+            <li>The <code>osc</code> device type, Learn over OSC, and the refusals for <code>/lighting7/</code> and the targets excluded in D6.</li>
+            <li><code>OscController</code> feedback to bound controls, and <code>/lighting7/reply</code> with each fixed address's outcome, behind a per-sender switch.</li>
+            <li>TCP with SLIP framing.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Prepared for the lighting7 repository. File references are to <code>src/main/kotlin/uk/me/cormack/lighting7/</code>; the existing control-surface design is <code>docs/midi-control-surface-engineering.md</code>.
+    </footer>
+  </main>
+</div>
