@@ -81,7 +81,8 @@ export interface FixturesTableProps {
   isSelected: (id: RowId) => boolean
   /** Name-cell click — the caller derives the intent from the mouse event. */
   onRowClick: (id: RowId, e: React.MouseEvent) => void
-  onToggleExpand: (row: GroupRow | FixtureRow) => void
+  /** `level`: an ⌥-click, which opens or closes every row of this one's level (D12). */
+  onToggleExpand: (row: GroupRow | FixtureRow, options?: { level?: boolean }) => void
   /**
    * A click landed on this cell, and that is the *whole* of what the click does: the caller
    * selects the one cell, and the editor is opened by Set, by Enter, by a typed character or by a
@@ -616,7 +617,7 @@ interface RowViewProps {
   /** The row's colour (`rowColour`), a key so the memo compares it by value. */
   tag: FixtureColour | null
   onRowClick: (id: RowId, e: React.MouseEvent) => void
-  onToggleExpand: (row: GroupRow | FixtureRow) => void
+  onToggleExpand: (row: GroupRow | FixtureRow, options?: { level?: boolean }) => void
   onBeginCellEdit: (row: Row, col: ColumnKey) => void
   onCellCommit: (row: Row, col: ColumnKey, commit: CellCommit) => void
   batchFor: (row: Row, col: ColumnKey) => CellBatch
@@ -893,7 +894,7 @@ const RowView = React.memo(function RowView({
             className="relative shrink-0 rounded p-0.5 hover:bg-accent"
             onClick={(e) => {
               e.stopPropagation()
-              onToggleExpand(row)
+              onToggleExpand(row, { level: e.altKey })
             }}
             aria-label={isExpanded ? `Collapse ${rowName}` : `Expand ${rowName}`}
           >

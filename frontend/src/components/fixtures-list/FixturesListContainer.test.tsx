@@ -82,6 +82,9 @@ vi.mock('../../store/fixtures', async (importOriginal) => ({
   useFixtureListQuery: () => ({ data: FIXTURES, isLoading: false }),
   useVisibleFixtureListQuery: () => ({ data: FIXTURES.filter((f) => !f.infrastructure), isLoading: false }),
 }))
+/** The desk's current project, which judges stored expansion against the rig; the route's by default. */
+const currentProject = vi.hoisted(() => ({ id: 1 }))
+vi.mock('@/store/projects', () => ({ useCurrentProjectQuery: () => ({ data: { id: currentProject.id } }) }))
 /** The groups a test patches in; none by default. */
 const groupList = vi.hoisted(() => ({ value: [] as unknown[] }))
 vi.mock('../../store/groups', () => ({ useGroupListQuery: () => ({ data: groupList.value, isLoading: false }) }))
@@ -148,11 +151,6 @@ vi.mock('@/store/selection', () => ({
 // The plain lists draw the kit's selection bar as their row C (CLAUDE.md §List shell), and it asks
 // the viewport's height; jsdom has no `matchMedia`, and a desk is tall.
 vi.mock('../../hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
-/** Include's one-shot request, which a test sets; none by default. */
-const include = vi.hoisted(() => ({ request: { nonce: 0, fixtureKeys: [] as string[], groupKeys: [] as string[] } }))
-vi.mock('../../store/includeSelection', () => ({
-  useIncludeSelectionRequest: () => include.request,
-}))
 vi.mock('./useCellWriters', () => ({
   useCellWriters: () => ({}),
   applyPlannedWrite: () => {},
@@ -232,6 +230,7 @@ vi.mock('react-router', () => ({
 const table = vi.hoisted(() => ({
   cellSelection: undefined as CellSelection<ColumnKey> | undefined,
   rows: [] as readonly Row[],
+  toggleExpand: null as ((row: Row, options?: { level?: boolean }) => void) | null,
   closeEditorCell: null as { rowId: string; col: ColumnKey } | null,
   /** Draw the DOM shape of an open cell editor, which is how the container finds one to close. */
   editorOpen: false,
@@ -245,6 +244,7 @@ vi.mock('./FixturesTable', () => ({
     rows: readonly Row[]
     cellSelection: CellSelection<ColumnKey>
     onBeginCellEdit: (row: Row, col: ColumnKey) => void
+    onToggleExpand: (row: Row, options?: { level?: boolean }) => void
     onBackgroundClick?: () => void
     closeEditorCell?: { rowId: string; col: ColumnKey } | null
     keyboardOpen?: CellOpenRequest<ColumnKey> | null
@@ -253,6 +253,7 @@ vi.mock('./FixturesTable', () => ({
     table.cellSelection = props.cellSelection
     if (props.revealCell) table.revealCell = props.revealCell
     table.rows = props.rows
+    table.toggleExpand = props.onToggleExpand
     if (props.closeEditorCell) table.closeEditorCell = props.closeEditorCell
     if (props.keyboardOpen) table.keyboardOpens.push(props.keyboardOpen)
     return (
@@ -286,6 +287,8 @@ const { FixturesListContainer } = await import('./FixturesListContainer')
 import { createMarqueeStore, MarqueeStoreContext, type MarqueeStore } from './marqueeContext'
 import { readProgrammerCommands } from '../programmer/commandDoors'
 import { getProgrammerTable, resetProgrammerTableStore, setProgrammerTable } from '@/lib/programmerTables'
+import { publishIncludeSelection, resetIncludeSelection } from '../../store/includeSelection'
+import { resetListExpansionStores } from '../../lib/listExpansion'
 
 /** The programmer's row C, drawn bare: its two right-hand clusters, in order. */
 const programmerToolbar = (parts: { actions: ReactNode; selection: ReactNode }) => (
@@ -312,14 +315,21 @@ beforeEach(() => {
   table.editorOpen = false
   table.keyboardOpens = []
   table.revealCell = null
-  include.request = { nonce: 0, fixtureKeys: [], groupKeys: [] }
+  currentProject.id = 1
+  resetIncludeSelection()
+  resetListExpansionStores()
+  window.sessionStorage.clear()
+  window.history.replaceState(null, '', '/projects/1/programmer')
   resetProgrammerTableStore()
   lit.real = false
   channels.values.clear()
   channels.listeners.clear()
   window.localStorage.removeItem('fixturesList.onlyLit')
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 describe('the ?select= deep link', () => {
   it('selects the fixture a plain list is linked to, and consumes the param', () => {
@@ -337,16 +347,161 @@ describe('the ?select= deep link', () => {
   })
 })
 
-describe('Include’s request', () => {
+describe('Include’s request (programmer-fixes plan D10)', () => {
+  const grid = (projectId = 1) => (
+    <FixturesListContainer projectId={projectId} grouped={false} selectionScope="programmer" respondToIncludeSelection enableDeepLinkSelect={false} />
+  )
+  const landings = () => rowSelection.setSelection.mock.calls.filter(([ids]) => [...ids].includes('fixture:a')).length
+  /** Let the deferred spend run. */
+  const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+
   it('is applied again after StrictMode’s simulated remount, whose unmount clears the selection', () => {
-    include.request = { nonce: 4, fixtureKeys: ['a'], groupKeys: [] }
-    render(
-      <StrictMode>
-        <FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" respondToIncludeSelection enableDeepLinkSelect={false} />
-      </StrictMode>,
-    )
-    const applied = rowSelection.setSelection.mock.calls.filter(([ids]) => [...ids].includes('fixture:a'))
-    expect(applied).toHaveLength(2)
+    publishIncludeSelection(['a'])
+    render(<StrictMode>{grid()}</StrictMode>)
+    expect(landings()).toBe(2)
+  })
+
+  it('lands once: a grid mounting later neither re-selects nor turns Lit off', async () => {
+    const { unmount } = render(grid())
+    act(() => publishIncludeSelection(['a']))
+    expect(landings()).toBe(1)
+    await settle()
+    unmount()
+    window.localStorage.setItem('fixturesList.onlyLit', 'true')
+    render(grid())
+    await settle()
+    expect(landings()).toBe(1)
+    expect(window.localStorage.getItem('fixturesList.onlyLit')).toBe('true')
+    fireEvent.change(screen.getByPlaceholderText('Filter fixtures…'), { target: { value: 'Wash' } })
+    await settle()
+    expect(screen.getByPlaceholderText('Filter fixtures…')).toHaveValue('Wash')
+    expect(landings()).toBe(1)
+  })
+
+  it('lands on the next grid of its project to mount within five seconds, and not after', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(10_000)
+    publishIncludeSelection(['a'])
+    vi.setSystemTime(14_000)
+    const first = render(grid())
+    expect(landings()).toBe(1)
+    await settle()
+    first.unmount()
+
+    publishIncludeSelection(['a'])
+    vi.setSystemTime(19_001)
+    render(grid())
+    expect(landings()).toBe(1)
+  })
+
+  it('never lands on another project’s grid', async () => {
+    window.history.replaceState(null, '', '/projects/2/show')
+    publishIncludeSelection(['a'])
+    window.history.replaceState(null, '', '/projects/1/programmer')
+    render(grid(1))
+    await settle()
+    expect(landings()).toBe(0)
+  })
+})
+
+describe('the rows a list has open (programmer-fixes plan D9)', () => {
+  const elementRows = () => table.rows.filter((row) => row.kind === 'element').map((row) => row.id)
+  const fixtureRow = (key: string) =>
+    table.rows.find((row) => row.kind === 'fixture' && row.fixture.key === key) as Extract<Row, { kind: 'fixture' }>
+  const groupRow = (name: string) =>
+    table.rows.find((row) => row.kind === 'group' && row.name === name) as Extract<Row, { kind: 'group' }>
+
+  it('keeps a fixture open across an unmount', () => {
+    const { unmount } = render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" />)
+    act(() => table.toggleExpand!(fixtureRow('c')))
+    expect(elementRows()).toHaveLength(2)
+    unmount()
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" />)
+    expect(elementRows()).toHaveLength(2)
+  })
+
+  it('judges nothing stale while the rig loaded is another project’s', () => {
+    window.sessionStorage.setItem('fixturesList.expansion.1.programmer', JSON.stringify({ groups: ['Gone'], fixtures: [] }))
+    currentProject.id = 2
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" />)
+    act(() => table.toggleExpand!(fixtureRow('c')))
+    expect(JSON.parse(window.sessionStorage.getItem('fixturesList.expansion.1.programmer')!)).toEqual({ groups: ['Gone'], fixtures: ['c'] })
+  })
+
+  it('keeps each project’s and each list’s apart', () => {
+    groupList.value = [{ name: 'Front', memberCount: 1, memberKeys: ['d'] }]
+    const { unmount } = render(<FixturesListContainer projectId={1} grouped selectionScope="groups" />)
+    act(() => table.toggleExpand!(groupRow('Front')))
+    expect(groupRow('Front').isExpanded).toBe(true)
+    unmount()
+    const other = render(<FixturesListContainer projectId={2} grouped selectionScope="groups" />)
+    expect(groupRow('Front').isExpanded).toBe(false)
+    other.unmount()
+    render(<FixturesListContainer projectId={1} grouped selectionScope="programmer" />)
+    expect(groupRow('Front').isExpanded).toBe(false)
+  })
+})
+
+describe('Expand all / Collapse all (programmer-fixes plan D12)', () => {
+  const button = () => screen.getByRole('button', { name: /^(Expand|Collapse) all$/ })
+  const elementRows = () => table.rows.filter((row) => row.kind === 'element').map((row) => row.id)
+  const groupRow = (name: string) =>
+    table.rows.find((row) => row.kind === 'group' && row.name === name) as Extract<Row, { kind: 'group' }> | undefined
+  const PIXEL_0 = 'element:fixture:c:c.pixel-0'
+
+  it('reads Expand all while anything shown is closed, and Collapse all once nothing is', () => {
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
+    expect(button()).toHaveAccessibleName('Expand all')
+    fireEvent.click(button())
+    expect(elementRows()).toHaveLength(2)
+    expect(button()).toHaveAccessibleName('Collapse all')
+    fireEvent.click(button())
+    expect(elementRows()).toHaveLength(0)
+  })
+
+  it('is bounded by the filter', () => {
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
+    fireEvent.change(screen.getByPlaceholderText('Filter fixtures…'), { target: { value: 'Wash' } })
+    expect(button()).toBeDisabled()
+    fireEvent.change(screen.getByPlaceholderText('Filter fixtures…'), { target: { value: '' } })
+    expect(button()).toBeEnabled()
+  })
+
+  it('leaves open the fixture whose element row holds the selection', () => {
+    const props = { projectId: 1, grouped: false, selectionScope: 'fixtures' as const }
+    const { rerender } = render(<FixturesListContainer {...props} />)
+    fireEvent.click(button())
+    rowSelection.ids = new Set([PIXEL_0])
+    rerender(<FixturesListContainer {...props} />)
+    fireEvent.click(button())
+    expect(elementRows()).toContain(PIXEL_0)
+  })
+
+  it('in grouped mode leaves open the group holding a selected member row', () => {
+    groupList.value = [{ name: 'Front', memberCount: 1, memberKeys: ['d'] }]
+    const props = { projectId: 1, grouped: true, selectionScope: 'groups' as const }
+    const { rerender } = render(<FixturesListContainer {...props} />)
+    fireEvent.click(button())
+    expect(groupRow('Front')?.isExpanded).toBe(true)
+    rowSelection.ids = new Set(['member:Front:d'])
+    rerender(<FixturesListContainer {...props} />)
+    fireEvent.click(button())
+    expect(groupRow('Front')?.isExpanded).toBe(true)
+    expect(elementRows()).toHaveLength(0)
+  })
+
+  it('⌥-click on a chevron opens or closes that row’s level alone', () => {
+    groupList.value = [{ name: 'Front', memberCount: 1, memberKeys: ['d'] }]
+    render(<FixturesListContainer projectId={1} grouped selectionScope="groups" />)
+    act(() => table.toggleExpand!(groupRow('Front')!, { level: true }))
+    expect(groupRow('Front')?.isExpanded).toBe(true)
+    expect(elementRows()).toHaveLength(0)
+    const pixelBar = table.rows.find((row) => row.kind === 'fixture' && row.fixture.key === 'c')!
+    act(() => table.toggleExpand!(pixelBar, { level: true }))
+    expect(elementRows()).toHaveLength(2)
+    act(() => table.toggleExpand!(groupRow('Front')!, { level: true }))
+    expect(groupRow('Front')?.isExpanded).toBe(false)
+    expect(elementRows()).toHaveLength(2)
   })
 })
 

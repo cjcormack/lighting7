@@ -10,6 +10,7 @@ import { useVisibleFixtureListQuery } from '@/store/fixtures'
 import { useGroupListQuery } from '@/store/groups'
 import type { CueTarget } from '@/api/cuesApi'
 import { useCueRowStore, type CueRowStoreValue } from './CueRowStore'
+import { anyClosed, applyExpandAll, heldOpen, shownExpandable, type ExpandLevel } from '@/components/fixtures-list/expandAll'
 
 /**
  * The Values grid's rows, view toggles and selection, held by the editor rather than the grid
@@ -26,6 +27,12 @@ export interface CueValuesView {
   addTarget: (target: CueTarget) => void
   toggleGroupExpanded: (name: string) => void
   toggleFixtureExpanded: (key: string) => void
+  /** Expand all (`open`) or Collapse all over [level] of the rows shown (programmer-fixes D13). */
+  expandAll: (level: ExpandLevel, open: boolean) => void
+  /** Something shown is closed, so the button reads *Expand all*. */
+  expandClosed: boolean
+  /** Nothing shown opens or closes. */
+  expandDisabled: boolean
   rowSelection: LocalListSelection
   cellSelection: CellSelection<ColumnKey>
   /** A marquee's cells, clearing a row selection first — the one selection in two shapes. */
@@ -68,7 +75,17 @@ function ViewProvider({ store, children }: { store: CueRowStoreValue; children: 
   const [added, setAdded] = useState<ReadonlySet<string>>(new Set())
   const [addedGroups, setAddedGroups] = useState<ReadonlySet<string>>(new Set())
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set())
-  const [expandToggled, setExpandToggled] = useState<ReadonlySet<string>>(new Set())
+  // The operator's word on a fixture, open or shut, over the cue's own rule (it opens where the cue
+  // holds one of its elements). Explicit rather than a toggle, so a value written into a cell — the
+  // cue now holding it — never folds the fixture under the operator.
+  const [expandChosen, setExpandChosen] = useState<ReadonlyMap<string, boolean>>(new Map())
+
+  /** Fixtures the cue holds an element of, which open by themselves. */
+  const autoOpen = useMemo(() => {
+    const open = new Set<string>()
+    for (const f of allFixtures ?? []) if ((f.elements ?? []).some((e) => store.heads.has(e.key))) open.add(f.key)
+    return open
+  }, [allFixtures, store.heads])
 
   // ── The rows (D14) ─────────────────────────────────────────────────────────────────────────────
   const rows = useMemo<Row[]>(() => {
@@ -82,11 +99,10 @@ function ViewProvider({ store, children }: { store: CueRowStoreValue; children: 
     const shown = fixtures.filter((f) =>
       ownOnly ? ownHeld(f) : held(f) || added.has(f.key) || (wholeRig && visible.has(f.key)),
     )
-    // Cells under a multi-head fixture where the cue holds them; the operator's toggle flips that.
+    // Cells under a multi-head fixture where the cue holds them, unless the operator chose otherwise.
     const expandedFixtures = new Set<string>()
-    for (const f of shown) {
-      const auto = elementKeysOf(f).some(holds)
-      if (auto !== expandToggled.has(f.key)) expandedFixtures.add(f.key)
+    for (const f of [...shown, ...(visibleFixtures ?? [])]) {
+      if (expandChosen.get(f.key) ?? autoOpen.has(f.key)) expandedFixtures.add(f.key)
     }
     const groupNames = new Set([...store.ownGroups, ...(ownOnly ? [] : addedGroups)])
     const groupSummaries = (groups ?? []).filter((g) => groupNames.has(g.name))
@@ -110,7 +126,7 @@ function ViewProvider({ store, children }: { store: CueRowStoreValue; children: 
       return [...groupRows, { kind: 'divider', id: 'divider:cue-fixtures', label: 'Fixtures' }, ...fixtureRows]
     }
     return [...groupRows, ...fixtureRows]
-  }, [allFixtures, visibleFixtures, groups, store.heads, store.ownTargets, store.ownGroups, ownOnly, wholeRig, added, addedGroups, expandedGroups, expandToggled])
+  }, [allFixtures, visibleFixtures, groups, store.heads, store.ownTargets, store.ownGroups, ownOnly, wholeRig, added, addedGroups, expandedGroups, expandChosen, autoOpen])
 
   // ── One selection, two shapes ──────────────────────────────────────────────────────────────────
   const selectableOrder = useMemo(() => rows.filter((row) => row.kind !== 'divider').map((row) => row.id), [rows])
@@ -169,12 +185,41 @@ function ViewProvider({ store, children }: { store: CueRowStoreValue; children: 
     return paletteTargetsFor(rows, selectedIds).flatMap((target) => [target.key, ...(cellsOf.get(target.key) ?? [])])
   }, [selectedIds, rows, allFixtures])
 
+  const shownTree = useMemo(() => shownExpandable(rows), [rows])
+  const isFixtureOpen = useCallback((key: string) => expandChosen.get(key) ?? autoOpen.has(key), [autoOpen, expandChosen])
+  const expandClosed = anyClosed(shownTree, (name) => expandedGroups.has(name), isFixtureOpen)
+  const expandDisabled = shownTree.groups.length === 0 && shownTree.fixtures.length === 0
+  const expandAll = useCallback(
+    (level: ExpandLevel, open: boolean) => {
+      const openFixtures = new Set(shownTree.fixtures.filter(isFixtureOpen))
+      const next = applyExpandAll(
+        { groups: expandedGroups, fixtures: openFixtures },
+        shownTree,
+        heldOpen(rows, selectedIds),
+        level,
+        open,
+      )
+      if (next.groups !== expandedGroups) setExpandedGroups(next.groups)
+      if (next.fixtures !== openFixtures) {
+        setExpandChosen((prev) => {
+          const chosen = new Map(prev)
+          for (const key of shownTree.fixtures) chosen.set(key, next.fixtures.has(key))
+          return chosen
+        })
+      }
+    },
+    [shownTree, isFixtureOpen, expandedGroups, rows, selectedIds],
+  )
+
   const addTarget = useCallback((target: CueTarget) => {
     if (target.type === 'group') setAddedGroups((prev) => new Set(prev).add(target.key))
     else setAdded((prev) => new Set(prev).add(target.key))
   }, [])
   const toggleGroupExpanded = useCallback((name: string) => setExpandedGroups((prev) => toggled(prev, name)), [])
-  const toggleFixtureExpanded = useCallback((key: string) => setExpandToggled((prev) => toggled(prev, key)), [])
+  const toggleFixtureExpanded = useCallback(
+    (key: string) => setExpandChosen((prev) => new Map(prev).set(key, !isFixtureOpen(key))),
+    [isFixtureOpen],
+  )
 
   const value = useMemo<CueValuesView>(
     () => ({
@@ -186,6 +231,9 @@ function ViewProvider({ store, children }: { store: CueRowStoreValue; children: 
       addTarget,
       toggleGroupExpanded,
       toggleFixtureExpanded,
+      expandAll,
+      expandClosed,
+      expandDisabled,
       rowSelection,
       cellSelection,
       selectCells,
@@ -196,7 +244,7 @@ function ViewProvider({ store, children }: { store: CueRowStoreValue; children: 
       selectionTargets,
       selectionHeads,
     }),
-    [rows, wholeRig, ownOnly, addTarget, toggleGroupExpanded, toggleFixtureExpanded, rowSelection, cellSelection, selectCells, selectRow, setRows, clearByLadder, rowById, selectionTargets, selectionHeads],
+    [rows, wholeRig, ownOnly, addTarget, toggleGroupExpanded, toggleFixtureExpanded, expandAll, expandClosed, expandDisabled, rowSelection, cellSelection, selectCells, selectRow, setRows, clearByLadder, rowById, selectionTargets, selectionHeads],
   )
   return <CueValuesViewContext.Provider value={value}>{children}</CueValuesViewContext.Provider>
 }
