@@ -21,6 +21,10 @@ export type StackType = 'STACK' | 'SEPARATOR'
 interface CueStackEntryBase {
   /** The entry's own id: what reorder, standby and go-to name. */
   entryId: number
+  /** The entry's uuid, which a GO TO or standby binding names; absent from a desk that predates OSC. */
+  uuid?: string
+  /** The cue's uuid; null for a marker. */
+  cueUuid?: string | null
   name: string
   /** The entry's position in its stack's list, from 0, markers counted. */
   sortOrder: number
@@ -92,6 +96,8 @@ export function entryIdOfCue(
 
 export interface CueStack {
   id: number
+  /** What a binding names the stack by; absent from a desk that predates OSC. */
+  uuid?: string
   name: string
   loop: boolean
   /** Position within the project's ordered stack list (the show order). */

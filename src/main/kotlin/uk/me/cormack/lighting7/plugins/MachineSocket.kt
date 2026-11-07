@@ -118,6 +118,19 @@ data class RemoteSessionPendingOutMessage(
     val sessions: List<uk.me.cormack.lighting7.cloud.PendingRemoteSession>,
 ) : MachineOutMessage()
 
+/**
+ * OSC in (OSC plan §3 "Wire"): whether the desk is listening, the counts, the refused senders and the
+ * last 50 messages with what each did. `StateFlow`-backed and republished at most four times a
+ * second, so the subscription is the snapshot. Every signed-in socket on the desk's own listener —
+ * the operator at the desk is who needs to see that a QLab cue did nothing (D12) — and none on the
+ * public listener (D5); outbound only, the settings being REST.
+ */
+@Serializable
+@SerialName("osc.state")
+data class OscStateOutMessage(
+    val state: uk.me.cormack.lighting7.osc.OscStateDto,
+) : MachineOutMessage()
+
 // ─── Subscriptions ──────────────────────────────────────────────────────
 
 fun setupMachineSubscriptions(scope: SocketScope) {
@@ -142,6 +155,11 @@ fun setupMachineSubscriptions(scope: SocketScope) {
     }
 
     scope.subscribe(scope.state.machineEventsFlow) { message -> scope.send(message) }
+
+    // Every socket on the desk's own listener, never a remote one (OSC plan D5, D12).
+    if (!scope.remote) {
+        scope.subscribe(scope.state.osc.state) { osc -> scope.send(OscStateOutMessage(osc)) }
+    }
 
     // The role is the one resolved at upgrade; a socket re-roled since keeps what it had until it
     // reconnects. Nothing in the frame is secret — the token never leaves the credential store.

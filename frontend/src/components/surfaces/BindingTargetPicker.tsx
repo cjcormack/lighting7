@@ -12,6 +12,7 @@ import { SpeedMasterSelect } from "@/components/fx/SpeedMasterSelect"
 import { useGroupListQuery } from "@/store/groups"
 import { usePatchListQuery } from "@/store/patches"
 import { useProjectCueStackListQuery } from "@/store/cueStacks"
+import { useProjectCueListQuery } from "@/store/cues"
 import { useRigAttributes, useTargetAttributes, type AvailableAttribute } from "@/hooks/useTargetAttributes"
 import {
   COLOUR_AXES,
@@ -27,6 +28,7 @@ import {
 } from "./recordOptions"
 import type { BindingTarget, FanAxis, TakeoverPolicy } from "@/store/surfaces"
 import type { CueTarget } from "@/api/cuesApi"
+import type { CueStack } from "@/api/cueStacksApi"
 import { SUBSELECT_MODES, type SubselectMode } from "@/api/selectionApi"
 import { useDeskWindows } from "@/store/windows"
 import { BUSK_FOCUSES, type BuskFocus } from "@/lib/buskWindow"
@@ -95,7 +97,11 @@ const BUTTON_KINDS: TargetKind[] = [
   "cueStackGo",
   "cueStackBack",
   "cueStackPause",
+  "cueStackGoTo",
+  "cueStackStandby",
+  "cueStackStop",
   "fireCue",
+  "looseCueSet",
   "fireTrigger",
   "blackout",
   "grandMasterToggle",
@@ -103,6 +109,7 @@ const BUTTON_KINDS: TargetKind[] = [
   "speedMasterTap",
   "speedMasterScale",
   "applyLook",
+  "lookSet",
   "pressPalette",
   "pressPad",
   "pickUpPad",
@@ -130,7 +137,11 @@ const KIND_LABELS: Record<TargetKind, string> = {
   cueStackGo: "Cue stack — Go",
   cueStackBack: "Cue stack — Back",
   cueStackPause: "Cue stack — Pause",
+  cueStackGoTo: "Cue stack — Go to cue",
+  cueStackStandby: "Cue stack — Standby cue",
+  cueStackStop: "Cue stack — Stop",
   fireCue: "Fire cue",
+  looseCueSet: "Cue — on / off",
   fireTrigger: "Fire trigger (needs the arm)",
   flash: "Flash",
   selectTarget: "Selection — select",
@@ -146,6 +157,7 @@ const KIND_LABELS: Record<TargetKind, string> = {
   speedMasterTap: "Speed master — Tap tempo",
   speedMasterScale: "Speed master — Tempo ×½ / ×2",
   applyLook: "Look — apply",
+  lookSet: "Look — on / off",
   pressPalette: "Palette — press",
   pressPad: "Busk pad — press",
   pickUpPad: "Hand — pick up pad",
@@ -192,6 +204,11 @@ export function BindingTargetPicker({
   // The four uuid-addressed variants need a library to pick from; one owner for the lists and for
   // the name they resolve to, shared with the inspector's binding card.
   const records = useRecordBindingOptions(projectId)
+  const { data: cues } = useProjectCueListQuery(projectId)
+  const cueOptions = useMemo(
+    () => (cues ?? []).filter((c) => c.uuid != null).map((c) => ({ uuid: c.uuid!, label: c.name, detail: null })),
+    [cues],
+  )
 
   // Every lighting fixture, plus an infrastructure one only when this binding already names it: a
   // binding that names one keeps resolving (and reads as what it is), but none is ever offered.
@@ -259,6 +276,7 @@ export function BindingTargetPicker({
           fixtureOptions={fixtureOptions}
           groupOptions={groupOptions}
           stacks={stacks ?? []}
+          cueOptions={cueOptions}
           attributes={continuousAttributes}
           records={records}
         />
@@ -426,6 +444,7 @@ function TargetBody({
   fixtureOptions,
   groupOptions,
   stacks,
+  cueOptions,
   attributes,
   records,
 }: {
@@ -435,7 +454,9 @@ function TargetBody({
   records: RecordBindingOptions
   fixtureOptions: { key: string; label: string }[]
   groupOptions: string[]
-  stacks: { id: number; name: string }[]
+  stacks: CueStack[]
+  /** Every cue by name, for a loose cue's on / off. */
+  cueOptions: RecordOption[]
   attributes: AvailableAttribute[]
 }) {
   // Changing the property drops the axis: a colour → dimmer edit that kept `saturation` would save
@@ -641,6 +662,71 @@ function TargetBody({
       </div>
     )
   }
+  if (
+    (kind === "cueStackGoTo" || kind === "cueStackStandby" || kind === "cueStackStop") &&
+    (value.type === "cueStackGoTo" || value.type === "cueStackStandby" || value.type === "cueStackStop")
+  ) {
+    const stack = stacks.find((s) => s.uuid === value.stackUuid)
+    return (
+      <div className="space-y-2">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Cue stack</Label>
+          <Select
+            value={value.stackUuid || undefined}
+            onValueChange={(stackUuid) =>
+              onChange(value.type === "cueStackStop" ? { ...value, stackUuid } : { ...value, stackUuid, entryUuid: "" })
+            }
+          >
+            <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
+            <SelectContent>
+              {stacks.filter((s) => s.uuid != null && s.type !== "SEPARATOR").map((s) => (
+                <SelectItem key={s.id} value={s.uuid!}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {value.type !== "cueStackStop" && (
+          <div className="space-y-1.5">
+            <Label className="text-xs">Cue</Label>
+            <Select value={value.entryUuid || undefined} onValueChange={(entryUuid) => onChange({ ...value, entryUuid })}>
+              <SelectTrigger><SelectValue placeholder="Choose…" /></SelectTrigger>
+              <SelectContent>
+                {(stack?.cues ?? []).filter((c) => c.id != null && c.uuid != null).map((c) => (
+                  <SelectItem key={c.entryId} value={c.uuid!}>
+                    {c.cueNumber ? `${c.cueNumber} · ${c.name}` : c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          {value.type === "cueStackGoTo"
+            ? "Goes to this cue, starting the stack if it is stopped. A press while it is already live does nothing."
+            : value.type === "cueStackStandby"
+              ? "Arms this cue as the stack's next GO."
+              : "Stops the stack, which disarms the desk as every stop does."}
+        </p>
+      </div>
+    )
+  }
+  if (kind === "looseCueSet" && value.type === "looseCueSet") {
+    return (
+      <div className="space-y-2">
+        <RecordField
+          label="Cue"
+          value={value.cueUuid}
+          onChange={(cueUuid) => onChange({ ...value, cueUuid })}
+          options={cueOptions}
+        />
+        <OnOffField on={value.on} onChange={(on) => onChange({ ...value, on })} />
+        <p className="text-xs text-muted-foreground">
+          Takes or lets go of the cue&rsquo;s loose hold, above every stack. A press that finds it
+          already so does nothing.
+        </p>
+      </div>
+    )
+  }
   if (kind === "fireCue" && value.type === "fireCue") {
     return (
       <div className="space-y-1.5">
@@ -690,6 +776,7 @@ function TargetBody({
           fixtureOptions={fixtureOptions}
           groupOptions={groupOptions}
           stacks={stacks}
+          cueOptions={cueOptions}
           attributes={attributes}
           records={records}
         />
@@ -771,6 +858,23 @@ function TargetBody({
         />
         <p className="text-xs text-muted-foreground">
           Puts the Look on whole, the same every press — never onto the selection.
+        </p>
+      </div>
+    )
+  }
+  if (kind === "lookSet" && value.type === "lookSet") {
+    return (
+      <div className="space-y-2">
+        <RecordField
+          label="Look"
+          value={value.lookUuid}
+          onChange={(lookUuid) => onChange({ ...value, lookUuid })}
+          options={records.looks}
+        />
+        <OnOffField on={value.on} onChange={(on) => onChange({ ...value, on })} />
+        <p className="text-xs text-muted-foreground">
+          Puts the Look on whole, or takes every layer of it off. A press that finds it already so
+          does nothing.
         </p>
       </div>
     )
@@ -1025,6 +1129,22 @@ function RecordField({
   )
 }
 
+/** The on / off half of an explicit-form binding (OSC plan D4). */
+function OnOffField({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">Press</Label>
+      <Select value={on ? "on" : "off"} onValueChange={(v) => onChange(v === "on")}>
+        <SelectTrigger><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="on">Turns it on</SelectItem>
+          <SelectItem value="off">Turns it off</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
 function defaultForKind(
   kind: TargetKind,
   fixtures: { key: string; label: string }[],
@@ -1044,6 +1164,15 @@ function defaultForKind(
       return { type: "cueStackPause", stackId: stacks[0]?.id ?? 0 }
     case "fireCue":
       return { type: "fireCue", cueId: 0 }
+    // Uuid-addressed, so they start empty, as the record variants below do.
+    case "cueStackGoTo":
+      return { type: "cueStackGoTo", stackUuid: "", entryUuid: "" }
+    case "cueStackStandby":
+      return { type: "cueStackStandby", stackUuid: "", entryUuid: "" }
+    case "cueStackStop":
+      return { type: "cueStackStop", stackUuid: "" }
+    case "looseCueSet":
+      return { type: "looseCueSet", cueUuid: "", on: true }
     // No fixture yet, the record variants' rule: the first fixture would bind a fire button to a
     // cannon the operator never picked. Health reads it dead until one is chosen.
     case "fireTrigger":
@@ -1097,6 +1226,8 @@ function defaultForKind(
     // the button to something the operator never picked. The body below insists on a choice.
     case "applyLook":
       return { type: "applyLook", lookUuid: "" }
+    case "lookSet":
+      return { type: "lookSet", lookUuid: "", on: true }
     case "pressPalette":
       return { type: "pressPalette", paletteUuid: "" }
     case "pressPad":

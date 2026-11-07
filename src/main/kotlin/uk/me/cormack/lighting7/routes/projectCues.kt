@@ -676,6 +676,8 @@ data class NewCue(
 @Serializable
 data class CueDetails(
     val id: Int,
+    /** What a binding names the cue by, since an id does not survive a clone. */
+    val uuid: String? = null,
     val name: String,
     /** The cue's ordered Look composition, in `sortOrder`. */
     val layers: List<CueLayerDto> = emptyList(),
@@ -725,7 +727,7 @@ data class CueDetails(
     val moveInDark: CueMoveInDarkDto = CueMoveInDarkDto(),
     /** Every entry naming the cue, in show order (stacks in show order, then position); empty when loose. */
     val entries: List<CueEntryPlaceDto> = emptyList(),
-    /** The busk pads, cue slots and `FireCue` bindings naming the cue — the list's alone, null on one cue's read. */
+    /** The busk pads, cue slots and `FireCue` / `LooseCueSet` bindings naming the cue — the list's alone, null on one cue's read. */
     val usedBy: CueUsedByDto? = null,
 )
 

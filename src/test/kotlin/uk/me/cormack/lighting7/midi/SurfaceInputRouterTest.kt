@@ -9,6 +9,8 @@ import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.perf.MidiLatencyStage
 import uk.me.cormack.lighting7.perf.MidiLatencyTracker
+import uk.me.cormack.lighting7.testsupport.RecordedCall
+import uk.me.cormack.lighting7.testsupport.RecordingSurfaceActions
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -29,7 +31,7 @@ class SurfaceInputRouterTest {
     private val deviceTypeKey = "x-touch-compact-standard"
 
     private fun buildRouter(
-        actions: RecordingActions,
+        actions: RecordingSurfaceActions,
         bindings: List<ControlSurfaceBindingService.ResolvedBinding>,
         bankState: ActiveBankState = ActiveBankState(),
         encoderBankState: EncoderBankState = EncoderBankState(),
@@ -78,7 +80,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `fader CC dispatches to writeFixtureAttribute with 7-bit value`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(
             actions,
             listOf(binding(1, "fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer"))),
@@ -89,7 +91,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `each input runs under the surface's own origin, a fader's moves keyed to fold into one step`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(
             actions,
             listOf(binding(1, "fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer"))),
@@ -105,7 +107,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `fader CC with no binding is a no-op`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, emptyList())
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 50u))
         assertTrue(actions.calls.isEmpty())
@@ -113,7 +115,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `group attribute binding dispatches to writeGroupAttribute`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(
             actions,
             listOf(binding(1, "fader-2", BindingTarget.GroupAttribute("front-wash", "dimmer"))),
@@ -124,16 +126,28 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `button press dispatches cueStackGo`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         // btn-1 = note 16 on X-Touch Compact Standard Layer A.
         val router = buildRouter(actions, listOf(binding(1, "btn-1", BindingTarget.CueStackGo(stackId = 7))))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
         assertEquals(listOf<RecordedCall>(RecordedCall.CueStackGo(7)), actions.calls.toList())
     }
 
+    /** `FU-MIDI-SHOW-GUARD`: an action that throws — `state.show` mid-switch — must not end the device's collector. */
+    @Test
+    fun `an input whose action throws is caught, and the next input still dispatches`() {
+        val actions = RecordingSurfaceActions()
+        actions.outcome = { throw IllegalStateException("show not ready") }
+        val router = buildRouter(actions, listOf(binding(1, "btn-1", BindingTarget.CueStackGo(stackId = 7))))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        actions.outcome = { ActionOutcome.DONE }
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        assertEquals(listOf<RecordedCall>(RecordedCall.CueStackGo(7), RecordedCall.CueStackGo(7)), actions.calls.toList())
+    }
+
     @Test
     fun `button release on non-Flash is a no-op`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(binding(1, "btn-1", BindingTarget.CueStackGo(7))))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 16, velocity = 0u))
@@ -143,7 +157,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `flash press and release call flash actions and track state`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val flashTracker = FlashStateTracker()
         val flash = BindingTarget.Flash(
             target = BindingTarget.FixtureAttribute("hex-1", "dimmer"),
@@ -171,7 +185,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `repeated flash press does not fire action twice`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val flash = BindingTarget.Flash(BindingTarget.FixtureAttribute("hex-1", "dimmer"), max = 200)
         val router = buildRouter(actions, listOf(binding(1, "btn-2", flash)))
 
@@ -183,7 +197,7 @@ class SurfaceInputRouterTest {
     @Test
     fun `bank button press updates ActiveBankState without binding resolution`() {
         val bankState = ActiveBankState()
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, emptyList(), bankState)
 
         // X-Touch layer-a button = Program Change 0.
@@ -194,7 +208,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `bank-scoped binding resolves only under the matching bank`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val bankState = ActiveBankState()
         val router = buildRouter(
             actions,
@@ -216,7 +230,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `Blackout target toggles global scaler via actions`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(binding(1, "btn-3", BindingTarget.Blackout)))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 18, velocity = 127u))
         assertEquals(listOf<RecordedCall>(RecordedCall.ToggleBlackout), actions.calls.toList())
@@ -225,7 +239,7 @@ class SurfaceInputRouterTest {
     @Test
     fun `SetBank target updates ActiveBankState`() {
         val bankState = ActiveBankState()
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(
             actions,
             listOf(binding(1, "btn-4", BindingTarget.SetBank(deviceTypeKey, "layer-a"))),
@@ -237,7 +251,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `encoder CC dispatches same as fader for FixtureAttribute`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         // enc-1 = CC 10 on X-Touch Compact Layer A.
         val router = buildRouter(
             actions,
@@ -249,7 +263,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `SpeedMasterTap target taps the named master on press only`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val master = "7d444840-9dc0-11d1-b245-5ffdce74fad2"
         val router = buildRouter(actions, listOf(binding(1, "btn-3", BindingTarget.SpeedMasterTap(master))))
 
@@ -262,7 +276,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `SpeedMasterScale halves or doubles the named master on press only`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val master = "7d444840-9dc0-11d1-b245-5ffdce74fad2"
         val router = buildRouter(actions, listOf(
             binding(1, "btn-3", BindingTarget.SpeedMasterScale(master, 0.5)),
@@ -279,7 +293,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `FxSpeed tells the action an encoder's turn from a fader's move`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         // fader-1 = CC 1, enc-1 = CC 10 on X-Touch Compact Layer A.
         val router = buildRouter(actions, listOf(
             binding(1, "fader-1", BindingTarget.FxSpeed),
@@ -295,7 +309,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `SpeedMasterBpm target passes the configured window through on encoder moves`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         // enc-1 = CC 10 on X-Touch Compact Layer A.
         val router = buildRouter(
             actions,
@@ -318,7 +332,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `GrandMasterFader passes the fader's value to the grand master, and ignores a press`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(
             actions,
             listOf(
@@ -335,7 +349,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `SelectionFan passes the encoder's value and its axis to the fan, and ignores a press`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val target = BindingTarget.SelectionFan(FanAxis.TILT)
         val router = buildRouter(actions, listOf(binding(1, "enc-1", target), binding(2, "btn-3", target)))
 
@@ -347,7 +361,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `StackFxAmount passes the fader's value and its stack to the stack's size, and ignores a press`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val target = BindingTarget.StackFxAmount(stackId = 4, stackUuid = "00000000-0000-0000-0000-000000000004")
         val router = buildRouter(actions, listOf(binding(1, "enc-1", target), binding(2, "btn-3", target)))
 
@@ -362,7 +376,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `a button press on a BPM target is ignored rather than jumping the tempo`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(binding(1, "btn-3", BindingTarget.SpeedMasterBpm())))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 18, velocity = 127u))
         assertTrue(actions.calls.isEmpty(), "a press carries no position, so there is no tempo to set")
@@ -370,7 +384,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `touch event is forwarded to feedback hooks`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val feedback = RecordingFeedbackHooks()
         val router = SurfaceInputRouter(
             deviceMatcher = DeviceMatcher(MidiDeviceRegistry(FakeMidiAccess(), pollIntervalMs = 60_000L, autoOpen = false)),
@@ -401,7 +415,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `feedback hooks rejection suppresses continuous dispatch`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val feedback = RecordingFeedbackHooks()
         feedback.acceptReturn = false  // always reject pickup
         val router = SurfaceInputRouter(
@@ -425,7 +439,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `dead fader binding is dropped without invoking actions`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(
             actions,
             listOf(
@@ -441,7 +455,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `dead button binding is dropped without invoking actions`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(
             actions,
             listOf(
@@ -457,7 +471,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `NoteOn with velocity 0 is treated as release`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val flashTracker = FlashStateTracker()
         val flash = BindingTarget.Flash(BindingTarget.FixtureAttribute("hex-1", "dimmer"), max = 255)
         val router = buildRouter(actions, listOf(binding(1, "btn-2", flash)), flashTracker = flashTracker)
@@ -471,7 +485,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `latency tracker records a sample on continuous dispatch`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val tracker = MidiLatencyTracker()
         val router = buildRouter(
             actions,
@@ -485,7 +499,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `latency tracker records button press and release into INGRESS_BUTTON`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val tracker = MidiLatencyTracker()
         val flash = BindingTarget.Flash(BindingTarget.FixtureAttribute("hex-1", "dimmer"), max = 255)
         val router = buildRouter(actions, listOf(binding(1, "btn-2", flash)), latencyTracker = tracker)
@@ -497,7 +511,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `latency tracker is not invoked when no binding resolves`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val tracker = MidiLatencyTracker()
         val router = buildRouter(actions, emptyList(), latencyTracker = tracker)
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
@@ -509,7 +523,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `a SelectionAttribute fader dispatches the attribute and the value`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(binding(1, "fader-1", BindingTarget.SelectionAttribute("dimmer"))))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
         assertEquals(listOf<RecordedCall>(RecordedCall.WriteSelection("dimmer", 100u)), actions.calls.toList())
@@ -517,7 +531,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `a SelectionAttribute on a button writes full and a release does nothing`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(binding(1, "btn-1", BindingTarget.SelectionAttribute("dimmer"))))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 16, velocity = 0u))
@@ -526,7 +540,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `select clear and locate buttons dispatch on press only`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val wash = CueTargetDto("group", "front-wash")
         val router = buildRouter(actions, listOf(
             binding(1, "btn-1", BindingTarget.SelectTarget(wash, BindingTarget.SelectMode.REPLACE)),
@@ -551,7 +565,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `a strip binding drives the fader, select and flash of its own controls`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val wash = CueTargetDto("group", "front-wash")
         val router = buildRouter(actions, listOf(binding(1, "strip-1", BindingTarget.Strip(wash))))
 
@@ -572,7 +586,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `a strip encoder writes whatever the device's encoder bank names`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val encoderBank = EncoderBankState()
         val wash = CueTargetDto("group", "front-wash")
         val router = buildRouter(
@@ -597,7 +611,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `an EncoderBankSet press moves the bank of the device the button is on`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val encoderBank = EncoderBankState()
         val router = buildRouter(
             actions,
@@ -616,7 +630,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `a continuous move carries the binding's colour axis to every attribute write`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(
             actions,
             listOf(
@@ -640,7 +654,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `a button press on a continuous target carries the axis with its full value`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(
             actions,
             listOf(binding(1, "btn-1", BindingTarget.SelectionAttribute("rgbColour", ColourAxis.SATURATION))),
@@ -654,7 +668,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `an EncoderBankSet press sets the attribute and the axis, and a strip encoder follows both`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val encoderBank = EncoderBankState()
         val wash = CueTargetDto("group", "front-wash")
         val router = buildRouter(
@@ -685,7 +699,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `a raw strip target never reaches dispatch`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val wash = CueTargetDto("group", "front-wash")
         // btn-2 belongs to no strip, so the Strip target sits on it undertived.
         val router = buildRouter(actions, listOf(binding(1, "btn-2", BindingTarget.Strip(wash))))
@@ -698,7 +712,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `a short select press toggles and never replaces`() = runTest {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val wash = CueTargetDto("group", "front-wash")
         val router = buildRouter(
             actions,
@@ -721,7 +735,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `holding a select button past the threshold also replaces the selection`() = runTest {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val wash = CueTargetDto("group", "front-wash")
         val router = buildRouter(
             actions,
@@ -747,7 +761,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `a REPLACE select binding acts on press and arms no hold`() = runTest {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val wash = CueTargetDto("group", "front-wash")
         val router = buildRouter(
             actions,
@@ -768,7 +782,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `a release cancels the pending replace even when the binding went dead meanwhile`() = runTest {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val wash = CueTargetDto("group", "front-wash")
         val bindingService = ControlSurfaceBindingService(FakeDatabase.instance)
         bindingService.seedCacheForTest(
@@ -811,7 +825,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `cue and stack presses carry the binding's uuid through to the actions`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(
             binding(1, "btn-1", BindingTarget.FireCue(5, cueUuid = "7d444840-9dc0-11d1-b245-5ffdce74fad2")),
             binding(2, "btn-2", BindingTarget.CueStackGo(7, stackUuid = "11111111-2222-3333-4444-555555555555")),
@@ -840,7 +854,7 @@ class SurfaceInputRouterTest {
         val lookUuid = "11111111-1111-4111-8111-111111111111"
         val paletteUuid = "22222222-2222-4222-8222-222222222222"
         val padUuid = "33333333-3333-4333-8333-333333333333"
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(
             binding(1, "btn-1", BindingTarget.ApplyLook(lookUuid)),
             binding(2, "btn-2", BindingTarget.PressPalette(paletteUuid)),
@@ -861,7 +875,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `busk page next and prev step in opposite directions`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(
             binding(1, "btn-1", BindingTarget.BuskPageNext),
             binding(2, "btn-2", BindingTarget.BuskPagePrev),
@@ -874,7 +888,7 @@ class SurfaceInputRouterTest {
     @Test
     fun `a dead record binding never reaches the actions`() {
         val lookUuid = "11111111-1111-4111-8111-111111111111"
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(
             // A Look deleted since it was bound: the press must be dropped rather than reaching a
             // `toggle` that has nothing to put on.
@@ -892,7 +906,7 @@ class SurfaceInputRouterTest {
         // The router half of `FU-MIDI-BIND-CONTROL-KIND`: `refuseWrongKind` stops such a row being
         // written, but an older row or an imported archive can still hold one, and continuous
         // dispatch must drop it rather than find some arm for it.
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(
             binding(1, "fader-1", BindingTarget.PressPalette("22222222-2222-4222-8222-222222222222")),
         ))
@@ -906,7 +920,7 @@ class SurfaceInputRouterTest {
     fun `the hand's three buttons dispatch to their own actions with their own uuids`() {
         val padUuid = "44444444-4444-4444-8444-444444444444"
         val bankUuid = "55555555-5555-4555-8555-555555555555"
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(
             binding(1, "btn-1", BindingTarget.PickUpPad(padUuid)),
             binding(2, "btn-2", BindingTarget.HandPlaceInBank(bankUuid)),
@@ -929,7 +943,7 @@ class SurfaceInputRouterTest {
     fun `a dead hand binding never reaches the actions`() {
         val padUuid = "44444444-4444-4444-8444-444444444444"
         val bankUuid = "55555555-5555-4555-8555-555555555555"
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(
             binding(1, "btn-1", BindingTarget.PickUpPad(padUuid), health = AssignmentHealth.MissingPad(padUuid)),
             binding(
@@ -946,7 +960,7 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `undo, redo and programmer undo act as the surface's own source`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(
             binding(1, "btn-1", BindingTarget.Undo),
             binding(2, "btn-2", BindingTarget.Redo),
@@ -973,7 +987,7 @@ class SurfaceInputRouterTest {
             assertEquals(ControlKind.BUTTON, targetControlKind(target), "$target")
             assertTrue(targetControlKind(target) !in dispatchableKinds(fader), "$target")
         }
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(binding(1, "fader-1", BindingTarget.Undo)))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
         assertTrue(actions.calls.isEmpty())
@@ -1004,7 +1018,7 @@ class SurfaceInputRouterTest {
 
         // And the router half: a row written before the rule existed, or imported from an archive,
         // is dropped by continuous dispatch rather than finding some arm for it.
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(binding(1, "fader-1", targets.first())))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
         assertTrue(actions.calls.isEmpty())
@@ -1012,90 +1026,13 @@ class SurfaceInputRouterTest {
 
     @Test
     fun `an Unknown target is dead and never reaches the actions`() {
-        val actions = RecordingActions()
+        val actions = RecordingSurfaceActions()
         val router = buildRouter(actions, listOf(
             binding(1, "btn-1", BindingTarget.Unknown("fromTheFuture", "{}"), health = AssignmentHealth.UnknownTarget("fromTheFuture")),
         ))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
         assertTrue(actions.calls.isEmpty())
     }
-}
-
-/** Recording fake of [SurfaceActions] for tests. Every call appends to [calls]. */
-private class RecordingActions : SurfaceActions {
-    val calls = mutableListOf<RecordedCall>()
-
-    /** The write origin each fixture write ran under. */
-    val origins = mutableListOf<uk.me.cormack.lighting7.history.WriteOrigin?>()
-    override fun writeFixtureAttribute(fixtureKey: String, attribute: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
-        calls += RecordedCall.WriteFixture(fixtureKey, attribute, midiValue7Bit, colourAxis)
-        origins += uk.me.cormack.lighting7.history.WriteOrigin.current()
-    }
-    override fun writeGroupAttribute(groupName: String, attribute: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
-        calls += RecordedCall.WriteGroup(groupName, attribute, midiValue7Bit, colourAxis)
-    }
-    override fun flashFixtureAttributePress(fixtureKey: String, attribute: String, max: UByte) {
-        calls += RecordedCall.FlashFixturePress(fixtureKey, attribute, max)
-    }
-    override fun flashGroupAttributePress(groupName: String, attribute: String, max: UByte) {
-        calls += RecordedCall.FlashGroupPress(groupName, attribute, max)
-    }
-    override fun flashFixtureAttributeRelease(fixtureKey: String, attribute: String) {
-        calls += RecordedCall.FlashFixtureRelease(fixtureKey, attribute)
-    }
-    override fun flashGroupAttributeRelease(groupName: String, attribute: String) {
-        calls += RecordedCall.FlashGroupRelease(groupName, attribute)
-    }
-    override fun cueStackGo(stackId: Int, stackUuid: String?) { calls += RecordedCall.CueStackGo(stackId, stackUuid) }
-    override fun cueStackBack(stackId: Int, stackUuid: String?) { calls += RecordedCall.CueStackBack(stackId, stackUuid) }
-    override fun cueStackPause(stackId: Int, stackUuid: String?) { calls += RecordedCall.CueStackPause(stackId, stackUuid) }
-    override fun fireCue(cueId: Int, cueUuid: String?) { calls += RecordedCall.FireCue(cueId, cueUuid) }
-    override fun writeSelectionAttribute(attribute: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
-        calls += RecordedCall.WriteSelection(attribute, midiValue7Bit, colourAxis)
-    }
-    override fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte) { calls += RecordedCall.WriteFan(axis, midiValue7Bit) }
-    override fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode) {
-        calls += RecordedCall.SelectTarget(target, mode)
-    }
-    override fun clearSelection() { calls += RecordedCall.ClearSelection }
-    override fun locateSelection() { calls += RecordedCall.LocateSelection }
-    override fun toggleBlackout(): Boolean { calls += RecordedCall.ToggleBlackout; return true }
-    override fun toggleGrandMaster(): Boolean { calls += RecordedCall.ToggleGrandMaster; return true }
-    override fun writeGrandMaster(midiValue7Bit: UByte) { calls += RecordedCall.WriteGrandMaster(midiValue7Bit) }
-    override fun writeStackFxAmount(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {
-        calls += RecordedCall.WriteStackFxAmount(stackId, stackUuid, midiValue7Bit)
-    }
-    override fun writeSpeedMasterBpm(masterUuid: String?, minBpm: Double, maxBpm: Double, midiValue7Bit: UByte) {
-        calls += RecordedCall.WriteSpeedMasterBpm(masterUuid, minBpm, maxBpm, midiValue7Bit)
-    }
-    override fun tapSpeedMaster(masterUuid: String?) {
-        calls += RecordedCall.TapSpeedMaster(masterUuid)
-    }
-    override fun scaleSpeedMaster(masterUuid: String?, factor: Double) {
-        calls += RecordedCall.ScaleSpeedMaster(masterUuid, factor)
-    }
-    override fun writeFxSpeed(midiValue7Bit: UByte, encoder: Boolean) {
-        calls += RecordedCall.WriteFxSpeed(midiValue7Bit, encoder)
-    }
-    override fun applyLook(lookUuid: String) { calls += RecordedCall.ApplyLook(lookUuid) }
-    override fun pressPalette(paletteUuid: String) { calls += RecordedCall.PressPalette(paletteUuid) }
-    override fun pressPad(padUuid: String) { calls += RecordedCall.PressPad(padUuid) }
-    override fun pickUpPad(padUuid: String) { calls += RecordedCall.PickUpPad(padUuid) }
-    override fun handPlaceInBank(bankUuid: String) { calls += RecordedCall.HandPlaceInBank(bankUuid) }
-    override fun handDrop() { calls += RecordedCall.HandDrop }
-    override fun historyMove(source: uk.me.cormack.lighting7.history.HistorySource, undo: Boolean, programmerOnly: Boolean) {
-        calls += RecordedCall.HistoryMove(source.key, undo, programmerOnly)
-    }
-    override fun buskPageStep(delta: Int) { calls += RecordedCall.BuskPageStep(delta) }
-    override fun buskPageSet(pageUuid: String) { calls += RecordedCall.BuskPageSet(pageUuid) }
-
-    val windowCommands = mutableListOf<String>()
-    val subselects = mutableListOf<uk.me.cormack.lighting7.state.SubselectMode>()
-    val selectionSteps = mutableListOf<Int>()
-    override fun buskFocusSet(windowName: String, focus: String) { windowCommands += "focus:$windowName:$focus" }
-    override fun buskSheetToggle(windowName: String) { windowCommands += "sheet:$windowName" }
-    override fun selectionStep(delta: Int) { selectionSteps += delta }
-    override fun selectionCells(mode: uk.me.cormack.lighting7.state.SubselectMode) { subselects += mode }
 }
 
 /** Recording fake of [SurfaceFeedbackHooks] for tests. */
@@ -1122,42 +1059,3 @@ private class RecordingFeedbackHooks : SurfaceFeedbackHooks {
     }
 }
 
-private sealed class RecordedCall {
-    data class WriteFan(val axis: FanAxis, val value: UByte) : RecordedCall()
-    data class WriteFixture(val fixtureKey: String, val prop: String, val value: UByte, val axis: ColourAxis? = null) : RecordedCall()
-    data class WriteGroup(val groupName: String, val prop: String, val value: UByte, val axis: ColourAxis? = null) : RecordedCall()
-    data class FlashFixturePress(val fixtureKey: String, val prop: String, val max: UByte) : RecordedCall()
-    data class FlashGroupPress(val groupName: String, val prop: String, val max: UByte) : RecordedCall()
-    data class FlashFixtureRelease(val fixtureKey: String, val prop: String) : RecordedCall()
-    data class FlashGroupRelease(val groupName: String, val prop: String) : RecordedCall()
-    data class CueStackGo(val stackId: Int, val stackUuid: String? = null) : RecordedCall()
-    data class CueStackBack(val stackId: Int, val stackUuid: String? = null) : RecordedCall()
-    data class CueStackPause(val stackId: Int, val stackUuid: String? = null) : RecordedCall()
-    data class FireCue(val cueId: Int, val cueUuid: String? = null) : RecordedCall()
-    data class WriteSelection(val prop: String, val value: UByte, val axis: ColourAxis? = null) : RecordedCall()
-    data class SelectTarget(val target: CueTargetDto, val mode: BindingTarget.SelectMode) : RecordedCall()
-    data object ClearSelection : RecordedCall()
-    data object LocateSelection : RecordedCall()
-    data object ToggleBlackout : RecordedCall()
-    data object ToggleGrandMaster : RecordedCall()
-    data class WriteGrandMaster(val value: UByte) : RecordedCall()
-    data class WriteStackFxAmount(val stackId: Int, val stackUuid: String?, val value: UByte) : RecordedCall()
-    data class ApplyLook(val lookUuid: String) : RecordedCall()
-    data class PressPalette(val paletteUuid: String) : RecordedCall()
-    data class PressPad(val padUuid: String) : RecordedCall()
-    data class PickUpPad(val padUuid: String) : RecordedCall()
-    data class HandPlaceInBank(val bankUuid: String) : RecordedCall()
-    data object HandDrop : RecordedCall()
-    data class HistoryMove(val sourceKey: String, val undo: Boolean, val programmerOnly: Boolean) : RecordedCall()
-    data class BuskPageStep(val delta: Int) : RecordedCall()
-    data class BuskPageSet(val pageUuid: String) : RecordedCall()
-    data class WriteSpeedMasterBpm(
-        val masterUuid: String?,
-        val minBpm: Double,
-        val maxBpm: Double,
-        val value: UByte,
-    ) : RecordedCall()
-    data class TapSpeedMaster(val masterUuid: String?) : RecordedCall()
-    data class ScaleSpeedMaster(val masterUuid: String?, val factor: Double) : RecordedCall()
-    data class WriteFxSpeed(val value7Bit: UByte, val encoder: Boolean) : RecordedCall()
-}

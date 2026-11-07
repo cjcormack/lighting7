@@ -263,7 +263,7 @@ written, and its row marked *in review* with its branch. A session's PR is title
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Listener, stacks, Looks, cues and busk | planned | | | |
+| 1 | Listener, stacks, Looks, cues and busk | in review | `claude/festive-dirac-ywtlap` | | |
 | 2 | Masters, tempo and finding addresses | planned | | | |
 | 3 | Learnable addresses, feedback and TCP | planned | | | |
 
@@ -322,6 +322,27 @@ the next; whoever merges the last fills its own.
   `FU-MANUAL-OSC-S1` in `docs/plans/manual-validation.md` (§6).
 - **Local:** the full `./gradlew test` (the dispatcher moves across `midi`, `routes`, `plugins`, `ai`
   and `history`) and `npm run check:quick`.
+
+**Where session 1 followed the code over this section:**
+
+- The binding picker could not name a stack, an entry or a cue by uuid: no DTO sent one. So
+  `CueStackDetails` gained `uuid`, each `CueStackCueEntry` its own `uuid` and its cue's `cueUuid`, and
+  `CueDetails` its `uuid`, all additive and optional on the client.
+- `BindingHealthEvaluator.Context` gained `validEntryUuids`; an entry a GO TO or standby names that the
+  stack no longer has reads `missingCue` (with no id), since the health vocabulary has no entry word.
+- `/stop` runs `deactivateStack` whether the stack is running or not, as the REST deactivate does, so
+  it drops the arm either way; its row says *was not running*.
+- An address under `/lighting7/` that matches no row, or with the wrong arguments, is a *bad message*
+  row, as the outcome list says.
+- `osc.state` is published from its own dispatcher, and the collector yields between messages: on one
+  shared single-threaded dispatcher a flood kept the collector busy and froze the state.
+- The service starts beside the cloud, before the show, rather than once the show is ready: settings
+  read and saved during boot, or on a desk whose show failed to start, must be the stored ones and must
+  apply. A message before the show is up is a *failed* row.
+- Added at Chris's request, beyond this section: each message is an `osc.message` Sentry transaction
+  (`TraceSampling.OP_OSC_MESSAGE`), named by its matched pattern, tagged with its outcome, with
+  `osc.resolve` and `osc.dispatch` spans — at the sample rate and at most five a second
+  (`OscHandler.TRACE_BUDGET_PER_SECOND`).
 
 ### Session 2 — Masters, tempo and finding addresses
 

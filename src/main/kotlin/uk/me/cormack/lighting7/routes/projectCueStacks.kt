@@ -736,6 +736,8 @@ data class NewCueStack(
 @Serializable
 data class CueStackDetails(
     val id: Int,
+    /** What a binding names the stack by, since an id does not survive a clone. */
+    val uuid: String? = null,
     val name: String,
     val loop: Boolean,
     val sortOrder: Int,
@@ -777,6 +779,10 @@ data class CueStackCueEntry(
     val id: Int?,
     /** The entry's own id: what reorder, standby and go-to name (P2). */
     val entryId: Int,
+    /** The entry's uuid, which a GO TO or standby binding names (OSC plan D4). */
+    val uuid: String? = null,
+    /** The cue's uuid; null for a marker. */
+    val cueUuid: String? = null,
     val name: String,
     /** The entry's position in its stack's list, from 0, markers counted. */
     val sortOrder: Int,
@@ -934,6 +940,7 @@ private fun DaoCueStack.toCueStackDetails(
     val next = manager.runState.effectiveNext(id.value, ordered, loop)
     return CueStackDetails(
         id = id.value,
+        uuid = uuid.toString(),
         name = name,
         loop = loop,
         sortOrder = sortOrder,
@@ -970,6 +977,7 @@ internal fun DaoCueStackEntry.toCueStackCueEntry(
         return CueStackCueEntry(
             id = null,
             entryId = id.value,
+            uuid = uuid.toString(),
             name = displayName,
             sortOrder = position,
             layerCount = 0,
@@ -980,6 +988,8 @@ internal fun DaoCueStackEntry.toCueStackCueEntry(
     return CueStackCueEntry(
         id = cue.id.value,
         entryId = id.value,
+        uuid = uuid.toString(),
+        cueUuid = cue.uuid.toString(),
         name = cue.name,
         sortOrder = position,
         layerCount = cue.layers.count().toInt(),

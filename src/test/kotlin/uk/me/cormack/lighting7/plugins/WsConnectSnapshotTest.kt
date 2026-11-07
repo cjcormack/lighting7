@@ -61,6 +61,9 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // The remote sessions waiting for an admin (cloud-p1 plan D13), machine band, admin sockets on
         // the desk's own listener: empty on a fresh desk, which is still what every window's toasts read.
         RemoteSessionPendingOutMessage::class,
+        // OSC in (OSC plan §3 "Wire"), machine band, every socket on the desk's own listener: off on a
+        // fresh desk, which is still what the OSC tab starts from.
+        OscStateOutMessage::class,
         // Scenery, in the show band: on a desk where nothing has gone yet its frame names no
         // element, and that empty frame is still what a Stage view starts from.
         SceneryStateOutMessage::class,

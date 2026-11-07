@@ -35,9 +35,9 @@ import java.util.concurrent.ConcurrentHashMap
  *      so subsequent events can trigger pickup.
  *   3. Resolve the binding via [ControlSurfaceBindingService.resolve] using
  *      `(deviceTypeKey, controlId, activeBank)`. Exact-bank wins over bank-agnostic.
- *   4. Dispatch by [BindingTarget] variant into [SurfaceActions]. Flash press / release
- *      is tracked per-binding by [FlashStateTracker] so overlapping holds don't corrupt
- *      each other's release state.
+ *   4. Dispatch the [BindingTarget] through [SurfaceDispatch], which the OSC collector shares,
+ *      inside its per-event guard. Flash press / release is tracked per-binding by
+ *      [FlashStateTracker] so overlapping holds don't corrupt each other's release state.
  *   5. Touch events pass through to the feedback hooks so motor writes are suppressed
  *      while a fader is held.
  */
@@ -83,6 +83,8 @@ class SurfaceInputRouter(
          */
         const val SELECT_HOLD_MS = 500L
     }
+
+    private val dispatch = SurfaceDispatch(actions, bankState, encoderBankState, flashTracker)
 
     private val inputJobs = ConcurrentHashMap<String /* displayKey */, Job>()
 
@@ -174,7 +176,12 @@ class SurfaceInputRouter(
             if (match is ResolvedInput.Continuous) coalesceKey = "surface|$displayKey|${match.controlId}"
         }
         runCatching { ensureHistory(projectIdProvider()) }
-        WriteOrigin.with(origin) { routeMatched(deviceTypeKey, displayKey, match) }
+        // Per event (`FU-MIDI-SHOW-GUARD`): a throw — `state.show` mid-switch among them — must not
+        // end the device's collector.
+        SurfaceDispatch.guarded("Surface input on $displayKey") {
+            WriteOrigin.with(origin) { routeMatched(deviceTypeKey, displayKey, match) }
+            ActionOutcome.DONE
+        }
     }
 
     private val ResolvedInput.historyControl: String?
@@ -278,27 +285,10 @@ class SurfaceInputRouter(
             "surface-in: binding={} control={} value7Bit={} target={}",
             binding.id, binding.controlId, value7Bit.toInt(), binding.target::class.simpleName,
         )
-        when (val target = binding.target) {
-            is BindingTarget.FixtureAttribute ->
-                actions.writeFixtureAttribute(target.fixtureKey, target.attribute, value7Bit, target.colourAxis)
-            is BindingTarget.GroupAttribute ->
-                actions.writeGroupAttribute(target.groupName, target.attribute, value7Bit, target.colourAxis)
-            is BindingTarget.SpeedMasterBpm ->
-                actions.writeSpeedMasterBpm(target.masterUuid, target.minBpm, target.maxBpm, value7Bit)
-            BindingTarget.GrandMasterFader -> actions.writeGrandMaster(value7Bit)
-            is BindingTarget.StackFxAmount -> actions.writeStackFxAmount(target.stackId, target.stackUuid, value7Bit)
-            is BindingTarget.SelectionAttribute ->
-                actions.writeSelectionAttribute(target.attribute, value7Bit, target.colourAxis)
-            is BindingTarget.SelectionFan -> actions.writeSelectionFan(target.axis, value7Bit)
-            BindingTarget.FxSpeed -> actions.writeFxSpeed(value7Bit, isEncoder())
-            is BindingTarget.Strip -> logger.warn(
-                "Strip binding {} reached continuous dispatch — resolve should have derived it",
-                binding.id,
-            )
-            else -> logger.debug(
-                "Ignoring continuous input on binding {} → {} (discrete target)",
-                binding.id, target::class.simpleName,
-            )
+        val outcome = dispatch.continuous(binding.target, value7Bit, isEncoder)
+        // Continuous input is control rate: what it did not do is a debug line, never a warning per move.
+        if (outcome !is ActionOutcome.Done) {
+            logger.debug("surface-in: binding {} → {}: {}", binding.id, binding.target::class.simpleName, outcome)
         }
     }
 
@@ -307,114 +297,15 @@ class SurfaceInputRouter(
         displayKey: String,
         binding: ControlSurfaceBindingService.ResolvedBinding,
     ) {
-        when (val target = binding.target) {
-            is BindingTarget.CueStackGo -> actions.cueStackGo(target.stackId, target.stackUuid)
-            is BindingTarget.CueStackBack -> actions.cueStackBack(target.stackId, target.stackUuid)
-            is BindingTarget.CueStackPause -> actions.cueStackPause(target.stackId, target.stackUuid)
-            is BindingTarget.FireCue -> actions.fireCue(target.cueId, target.cueUuid)
-            // Needs the arm, like every fire; an unarmed press is refused and announced there.
-            is BindingTarget.FireTrigger -> actions.fireTrigger(target.fixtureKey, target.trigger)
-            is BindingTarget.SelectTarget -> actions.selectTarget(target.target, target.mode)
-            is BindingTarget.ClearSelection -> actions.clearSelection()
-            is BindingTarget.LocateSelection -> actions.locateSelection()
-            // Health already marks it dead, so the gate above drops it before this arm runs.
-            is BindingTarget.Unknown -> logger.debug(
-                "Ignoring button press on binding {} → unknown target type '{}'", binding.id, target.targetType,
-            )
-            is BindingTarget.Blackout -> actions.toggleBlackout()
-            is BindingTarget.GrandMasterToggle -> actions.toggleGrandMaster()
-            is BindingTarget.SetBank -> bankState.setBank(target.deviceTypeKey, target.bank)
-            // Applies to the device the button is on, so the payload names no device and a
-            // button can never be stranded pointing at a surface that isn't attached.
-            is BindingTarget.EncoderBankSet ->
-                encoderBankState.set(deviceTypeKey, EncoderBankSelection(target.attribute, target.colourAxis))
-            // Never dispatched: resolve() derives a strip to the target of the control the event
-            // arrived on. Reaching here means the strip arm failed to fire.
-            is BindingTarget.Strip -> logger.warn(
-                "Strip binding {} reached button dispatch — resolve should have derived it", binding.id,
-            )
-            is BindingTarget.SpeedMasterTap -> actions.tapSpeedMaster(target.masterUuid)
-            is BindingTarget.SpeedMasterScale -> actions.scaleSpeedMaster(target.masterUuid, target.factor)
-            // Records: one behaviour each (D6). The Look whole, the template onto
-            // the selection, the pad through its own bank's plan — never any of the three onto
-            // whatever the other two would have chosen.
-            is BindingTarget.ApplyLook -> actions.applyLook(target.lookUuid)
-            is BindingTarget.PressPalette -> actions.pressPalette(target.paletteUuid)
-            is BindingTarget.PressPad -> actions.pressPad(target.padUuid)
-            // The hand (multi-screen plan §3.5). A hand-off like the records above: what a pick-up
-            // reads and what a place appends live in `HandService`, which the window's own doors
-            // share, so hardware and screen cannot hold different things.
-            is BindingTarget.PickUpPad -> actions.pickUpPad(target.padUuid)
-            is BindingTarget.HandPlaceInBank -> actions.handPlaceInBank(target.bankUuid)
-            BindingTarget.HandDrop -> actions.handDrop()
-            // The surface is a source of its own (undo plan D1): its key takes its own entries.
-            BindingTarget.Undo -> actions.historyMove(HistorySource.surface(displayKey), undo = true)
-            BindingTarget.Redo -> actions.historyMove(HistorySource.surface(displayKey), undo = false)
-            BindingTarget.ProgrammerUndo -> actions.historyMove(HistorySource.surface(displayKey), undo = true, programmerOnly = true)
-            BindingTarget.BuskPageNext -> actions.buskPageStep(1)
-            BindingTarget.BuskPagePrev -> actions.buskPageStep(-1)
-            is BindingTarget.BuskPageSet -> actions.buskPageSet(target.pageUuid)
-            // A window by name and the sub-selection (busk-further plan D12, D14): each a hand-off
-            // to the same op the screen's frame reaches, so a button and a chip cannot diverge.
-            is BindingTarget.BuskFocusSet -> actions.buskFocusSet(target.windowName, target.focus)
-            is BindingTarget.BuskSheetToggle -> actions.buskSheetToggle(target.windowName)
-            BindingTarget.SelectionNext -> actions.selectionStep(1)
-            BindingTarget.SelectionPrev -> actions.selectionStep(-1)
-            is BindingTarget.SelectionCells -> actions.selectionCells(target.mode)
-            is BindingTarget.SpeedMasterBpm -> logger.debug(
-                "Ignoring button press on binding {} → speed-master BPM (continuous target)",
-                binding.id,
-            )
-            BindingTarget.GrandMasterFader -> logger.debug(
-                "Ignoring button press on binding {} → grand-master fader (continuous target)",
-                binding.id,
-            )
-            is BindingTarget.StackFxAmount -> logger.debug(
-                "Ignoring button press on binding {} → stack FX amount (continuous target)",
-                binding.id,
-            )
-            is BindingTarget.SelectionFan -> logger.debug(
-                "Ignoring button press on binding {} → selection fan (continuous target)",
-                binding.id,
-            )
-            BindingTarget.FxSpeed -> logger.debug(
-                "Ignoring button press on binding {} → FX speed (continuous target)",
-                binding.id,
-            )
-            is BindingTarget.Flash -> {
-                val newlyPressed = flashTracker.pressed(binding.id)
-                if (!newlyPressed) return  // retrigger while held
-                val max = target.max.toUByte()
-                when (val inner = target.target) {
-                    is BindingTarget.FixtureAttribute -> actions.flashFixtureAttributePress(
-                        inner.fixtureKey, inner.attribute, max,
-                    )
-                    is BindingTarget.GroupAttribute -> actions.flashGroupAttributePress(
-                        inner.groupName, inner.attribute, max,
-                    )
-                    else -> {
-                        // Forbidden by Flash's init block — defensive log.
-                        logger.warn("Flash binding {} has non-property target {}", binding.id, inner::class.simpleName)
-                    }
-                }
-            }
-            is BindingTarget.FixtureAttribute,
-            is BindingTarget.GroupAttribute,
-            is BindingTarget.SelectionAttribute,
-                -> {
-                // A button press on a continuous target = write full value (max "1" in 7-bit).
-                // Behaves like a momentary full-on without release handling. v1 design choice:
-                // these targets on buttons are equivalent to Flash with max=255 but without the
-                // release step — operator should use Flash if they want that semantics.
-                when (target) {
-                    is BindingTarget.FixtureAttribute ->
-                        actions.writeFixtureAttribute(target.fixtureKey, target.attribute, 127u, target.colourAxis)
-                    is BindingTarget.GroupAttribute ->
-                        actions.writeGroupAttribute(target.groupName, target.attribute, 127u, target.colourAxis)
-                    is BindingTarget.SelectionAttribute ->
-                        actions.writeSelectionAttribute(target.attribute, 127u, target.colourAxis)
-                }
-            }
+        val origin = SurfaceDispatch.Origin(deviceTypeKey, binding.id, HistorySource.surface(displayKey))
+        // A MIDI press has no reply channel, so a press that did nothing says why in the log.
+        when (val outcome = dispatch.press(binding.target, origin)) {
+            is ActionOutcome.Done -> Unit
+            is ActionOutcome.Refused ->
+                if (outcome.code == ActionOutcome.WRONG_KIND) logger.debug("surface-in: binding {}: {}", binding.id, outcome.message)
+                else logger.warn("surface-in: binding {} refused: {}", binding.id, outcome.message)
+            is ActionOutcome.NotFound -> logger.warn("surface-in: binding {}: {}", binding.id, outcome.message)
+            is ActionOutcome.Failed -> logger.warn("surface-in: binding {} failed: {}", binding.id, outcome.message)
         }
     }
 
@@ -445,18 +336,7 @@ class SurfaceInputRouter(
     }
 
     private fun dispatchButtonRelease(binding: ControlSurfaceBindingService.ResolvedBinding) {
-        val target = binding.target
-        if (target !is BindingTarget.Flash) return
-        if (!flashTracker.clearPress(binding.id)) return
-        when (val inner = target.target) {
-            is BindingTarget.FixtureAttribute -> actions.flashFixtureAttributeRelease(
-                inner.fixtureKey, inner.attribute,
-            )
-            is BindingTarget.GroupAttribute -> actions.flashGroupAttributeRelease(
-                inner.groupName, inner.attribute,
-            )
-            else -> Unit
-        }
+        dispatch.release(binding.target, binding.id)
     }
 
     /**

@@ -1024,6 +1024,13 @@ class SurfaceFeedbackPublisher(
                             )
                             true
                         }
+                        // Lit while the Look is on, as an `ApplyLook` button is, whichever way it presses.
+                        is BindingTarget.LookSet -> {
+                            recordLeds += RecordLedEntry(
+                                entry, RecordLedKind.LOOK_APPLIED, recordRefs.lookUuid(target.lookUuid),
+                            )
+                            true
+                        }
                         is BindingTarget.PressPalette -> {
                             recordLeds += RecordLedEntry(
                                 entry, RecordLedKind.COVERS_SELECTION, recordRefs.paletteUuid(target.paletteUuid),
@@ -1226,6 +1233,7 @@ class SurfaceFeedbackPublisher(
         // function has only the binding, and a uuid → record lookup here would be a database read
         // per LED per resync.
         is BindingTarget.ApplyLook,
+        is BindingTarget.LookSet,
         is BindingTarget.PressPalette,
         is BindingTarget.PressPad,
             -> index.get().recordLedByBindingId[entry.binding.id]

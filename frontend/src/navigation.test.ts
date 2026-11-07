@@ -156,7 +156,7 @@ describe("sections", () => {
 
   it("orders Project and Desk, with Projects first on the Desk", () => {
     expect(idsIn("project")).toEqual(["project-settings", "surfaces", "project-sync"])
-    expect(idsIn("desk")).toEqual(["projects", "install-settings", "users", "sync", "remote-access", "cloud", "updates", "diagnostics"])
+    expect(idsIn("desk")).toEqual(["projects", "install-settings", "users", "sync", "remote-access", "osc", "cloud", "updates", "diagnostics"])
   })
 
   it("says Regions on the row Run's Stage would otherwise share a word with", () => {
@@ -260,12 +260,13 @@ describe("install navigation", () => {
   const item = (id: string) => navItems.find((i) => i.id === id)!
 
   it("lists every install tab but General under Install Settings, in the tabs' order", () => {
-    // `routes/InstallSettings.tsx`'s TABS: general, users, sync, remote, cloud, updates, diagnostics.
+    // `routes/InstallSettings.tsx`'s TABS: general, users, sync, remote, osc, cloud, updates, diagnostics.
     // General is the parent row itself.
     expect(navItems.filter((i) => i.parent === "install-settings").map((i) => i.path(1))).toEqual([
       "/install/users",
       "/install/sync",
       "/install/remote",
+      "/install/osc",
       "/install/cloud",
       "/install/updates",
       "/install/diagnostics",
@@ -294,6 +295,12 @@ describe("install navigation", () => {
     const admin = filterNavItems(navItems, true, true).map((i) => i.id)
     expect(admin).toContain("remote-access")
     expect(admin).toContain("updates")
+  })
+
+  it("shows OSC to both roles, lit on its own tab", () => {
+    expect(item("osc").adminOnly).toBeFalsy()
+    expect(filterNavItems(navItems, true, false).map((i) => i.id)).toContain("osc")
+    expect(mostSpecificActiveId(filterNavItems(navItems, true, false), "/install/osc")).toBe("osc")
   })
 
   it("offers both whatever project is viewed, and in a venue", () => {

@@ -236,6 +236,8 @@ export interface CueTriggerDetail {
 // Full cue from API
 export interface Cue {
   id: number
+  /** What a binding names the cue by; absent from a desk that predates OSC. */
+  uuid?: string
   name: string
   /** The cue's ordered Look composition, in `sortOrder`. */
   layers: CueLayerDetail[]
