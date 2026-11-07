@@ -1,0 +1,605 @@
+<title>Snapshot Restore</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column with a sticky contents rail on wide screens; mocks, tables and code scroll in their own boxes. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #1b2230;
+  --muted: #5a6475;
+  --rule: #dde1e8;
+  --accent: #2348a8;       /* the prompt desk's blue work light */
+  --accent-soft: #e6ecfa;
+  --standby: #a8650a;
+  --standby-soft: #fbefdc;
+  --go: #1d7a45;
+  --go-soft: #e1f3e8;
+  --stop: #a3302a;
+  --stop-soft: #f8e3e1;
+  --code-bg: #eef1f6;
+  --shade: rgba(27, 34, 48, 0.08);
+  --font-display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151d; --surface: #181d27; --fg: #e3e7ee; --muted: #9aa4b5; --rule: #2a3140;
+    --accent: #8eaaf5; --accent-soft: #1f2a45;
+    --standby: #e8a649; --standby-soft: #3a2b14;
+    --go: #5fcf8d; --go-soft: #15301f;
+    --stop: #f08a83; --stop-soft: #3a1c1a;
+    --code-bg: #1e2430;
+    --shade: rgba(0, 0, 0, 0.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151d; --surface: #181d27; --fg: #e3e7ee; --muted: #9aa4b5; --rule: #2a3140;
+  --accent: #8eaaf5; --accent-soft: #1f2a45;
+  --standby: #e8a649; --standby-soft: #3a2b14;
+  --go: #5fcf8d; --go-soft: #15301f;
+  --stop: #f08a83; --stop-soft: #3a1c1a;
+  --code-bg: #1e2430;
+  --shade: rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 4rem;
+}
+.shell { max-width: 76rem; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 3rem; }
+@media (min-width: 64rem) { .shell { grid-template-columns: 14rem minmax(0, 1fr); } }
+
+nav.toc { display: none; }
+@media (min-width: 64rem) {
+  nav.toc { display: block; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 2rem); align-self: start; padding-top: 3.25rem; font-size: 0.875rem; }
+}
+nav.toc p { font-family: var(--font-display); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem; color: var(--muted); margin: 0 0 0.75rem; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+nav.toc a { color: var(--muted); text-decoration: none; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--accent); }
+
+main { min-width: 0; max-width: 46rem; }
+
+header.doc { padding-top: 3rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--rule); margin-bottom: 2rem; }
+.eyebrow { font-family: var(--font-display); font-weight: 600; font-size: 0.8125rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 0.5rem; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; }
+h1 { font-size: clamp(2rem, 5vw, 2.75rem); font-weight: 700; margin: 0 0 1rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.5rem; font-weight: 600; margin: 3rem 0 0.75rem; scroll-margin-top: 1.5rem; }
+h3 { font-size: 1.125rem; font-weight: 600; margin: 2rem 0 0.5rem; }
+p { margin: 0 0 1rem; }
+.lede { font-size: 1.1875rem; }
+.meta { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; font-size: 0.875rem; color: var(--muted); margin: 1rem 0 0; }
+.meta b { color: var(--fg); font-weight: 700; }
+
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+:not(pre) > code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+pre { background: var(--code-bg); border-radius: 6px; padding: 1rem 1.125rem; overflow-x: auto; font-size: 0.875rem; line-height: 1.55; margin: 0 0 1.25rem; }
+pre code { font-size: inherit; }
+
+ul { padding-left: 1.25rem; margin: 0 0 1rem; }
+li { margin-bottom: 0.35rem; }
+
+.table-wrap { overflow-x: auto; margin: 0 0 1.5rem; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.9375rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--rule); }
+tr:last-child td { border-bottom: 0; }
+th { font-family: var(--font-display); font-weight: 600; font-size: 0.8125rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+td code { white-space: nowrap; background: none; padding: 0; }
+td.addr code { color: var(--accent); }
+
+.chip { display: inline-block; font-family: var(--font-display); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.1rem 0.45rem; border-radius: 999px; vertical-align: 0.1em; white-space: nowrap; }
+.chip.new { background: var(--standby-soft); color: var(--standby); }
+.chip.exists { background: var(--go-soft); color: var(--go); }
+.chip.toggle { background: var(--stop-soft); color: var(--stop); }
+
+/* Pipeline */
+.pipeline { display: flex; flex-direction: column; gap: 0.5rem; margin: 1.25rem 0 1.75rem; }
+.stage { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr); gap: 0.25rem 1rem; align-items: baseline; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.7rem 0.9rem; }
+.stage .name { font-family: var(--font-mono); font-size: 0.875rem; font-weight: 500; overflow-wrap: anywhere; }
+.stage .what { font-size: 0.9375rem; color: var(--muted); min-width: 0; }
+.stage.new { border-color: var(--standby); }
+.stage.new .name { color: var(--standby); }
+.stage.shared { border-color: var(--go); }
+.stage.shared .name { color: var(--go); }
+.arrow { font-family: var(--font-mono); color: var(--muted); padding-left: 1rem; line-height: 1; font-size: 0.875rem; }
+.legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; font-size: 0.8125rem; color: var(--muted); margin-top: 0.25rem; }
+.legend span::before { content: ""; display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 2px; margin-right: 0.35rem; vertical-align: -0.05em; border: 1.5px solid var(--rule); }
+.legend .l-new::before { border-color: var(--standby); }
+.legend .l-shared::before { border-color: var(--go); }
+@media (max-width: 30rem) { .stage { grid-template-columns: minmax(0, 1fr); } }
+
+/* Desk mocks: the sync page's History card and the review dialog, drawn in the desk's own idiom */
+.mock-label { font-family: var(--font-display); font-weight: 600; font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 1.5rem 0 0.5rem; }
+.mock { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; margin: 0 0 1.5rem; }
+.mock .card-head { padding: 0.9rem 1rem 0.5rem; }
+.mock .card-head h4 { font-family: var(--font-display); font-size: 0.9375rem; font-weight: 600; margin: 0 0 0.15rem; }
+.mock .card-head p { font-size: 0.8125rem; color: var(--muted); margin: 0; }
+.mock .scroll { overflow-x: auto; }
+.mock table { font-size: 0.8125rem; }
+.mock th { font-size: 0.6875rem; }
+.mock td { padding: 0.5rem 0.8rem; vertical-align: middle; }
+.mock td.sha { font-family: var(--font-mono); white-space: nowrap; }
+.mock td.when { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mock .badge { display: inline-block; border: 1px solid var(--rule); border-radius: 4px; padding: 0 0.35rem; font-size: 0.75rem; white-space: nowrap; }
+.mock tr.target td { background: var(--accent-soft); }
+.mock tr.restored td:first-child { box-shadow: inset 3px 0 0 var(--go); }
+.mock .kebab { font-family: var(--font-mono); color: var(--muted); border: 1px solid var(--rule); border-radius: 4px; padding: 0 0.4rem; white-space: nowrap; }
+.menu { position: relative; display: inline-block; }
+.menu .pop { position: absolute; right: 0; top: 1.6rem; z-index: 1; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 6px 18px var(--shade); padding: 0.25rem; min-width: 13.5rem; font-size: 0.8125rem; text-align: left; }
+.menu .pop span { display: block; padding: 0.35rem 0.6rem; border-radius: 4px; white-space: nowrap; }
+.menu .pop span.on { background: var(--accent-soft); color: var(--accent); }
+.menu .pop span.off { color: var(--muted); }
+.mock-row-gap td { height: 6.25rem; }
+
+.dialog { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; box-shadow: 0 10px 30px var(--shade); max-width: 34rem; margin: 0 0 1.5rem; }
+.dialog .d-head { padding: 1rem 1.1rem 0.5rem; }
+.dialog .d-head h4 { font-family: var(--font-display); font-size: 1.0625rem; margin: 0 0 0.2rem; }
+.dialog .d-head p { font-size: 0.8125rem; color: var(--muted); margin: 0; }
+.dialog .d-body { padding: 0.5rem 1.1rem 0.25rem; font-size: 0.875rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.dialog .counts { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.dialog .count { border-radius: 999px; padding: 0.1rem 0.6rem; font-size: 0.8125rem; font-weight: 700; }
+.dialog .count.back { background: var(--go-soft); color: var(--go); }
+.dialog .count.gone { background: var(--stop-soft); color: var(--stop); }
+.dialog .count.changed { background: var(--accent-soft); color: var(--accent); }
+.dialog details { border: 1px solid var(--rule); border-radius: 6px; padding: 0.4rem 0.7rem; }
+.dialog summary { cursor: pointer; font-weight: 700; }
+.dialog summary .n { color: var(--muted); font-weight: 400; }
+.dialog details ul { margin: 0.4rem 0 0.2rem; padding-left: 0; list-style: none; }
+.dialog details li { display: flex; gap: 0.5rem; align-items: baseline; margin-bottom: 0.2rem; }
+.dialog .mark { font-family: var(--font-mono); font-size: 0.75rem; width: 1rem; flex: none; text-align: center; }
+.dialog .mark.back { color: var(--go); }
+.dialog .mark.gone { color: var(--stop); }
+.dialog .mark.changed { color: var(--accent); }
+.dialog .note { border-left: 3px solid var(--standby); background: var(--standby-soft); border-radius: 0 6px 6px 0; padding: 0.45rem 0.7rem; }
+.dialog .note.info { border-left-color: var(--accent); background: var(--accent-soft); }
+.dialog .note b { display: block; }
+.dialog .d-foot { display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0.75rem 1.1rem 1rem; flex-wrap: wrap; }
+.btn { font-family: var(--font-body); font-size: 0.875rem; border-radius: 6px; padding: 0.35rem 0.85rem; border: 1px solid var(--rule); background: var(--surface); color: var(--fg); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 700; }
+
+.toast { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; justify-content: space-between; max-width: 30rem; background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--go); border-radius: 8px; box-shadow: 0 6px 18px var(--shade); padding: 0.6rem 0.9rem; font-size: 0.875rem; margin: 0 0 1.5rem; }
+.toast .t-text { min-width: 0; }
+.toast .t-text small { display: block; color: var(--muted); }
+.toast .t-undo { font-weight: 700; color: var(--accent); }
+
+/* Commit graph */
+.graph { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 0.75rem; margin: 0.5rem 0 1.5rem; }
+.graph svg { display: block; min-width: 38rem; width: 100%; height: auto; }
+.graph .node { fill: var(--surface); stroke: var(--muted); stroke-width: 2; }
+.graph .node.t { stroke: var(--accent); fill: var(--accent-soft); }
+.graph .node.b { stroke: var(--standby); fill: var(--standby-soft); }
+.graph .node.r { stroke: var(--go); fill: var(--go-soft); }
+.graph .edge { stroke: var(--muted); stroke-width: 2; fill: none; }
+.graph .copy { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 4; fill: none; }
+.graph text { fill: var(--fg); font-family: var(--font-mono); font-size: 12px; }
+.graph text.sub { fill: var(--muted); font-family: var(--font-body); font-size: 12px; }
+.graph text.acc { fill: var(--accent); font-family: var(--font-body); font-size: 12px; }
+.graph .cross { stroke: var(--stop); stroke-width: 2; }
+.graph text.stop { fill: var(--stop); font-family: var(--font-body); font-size: 12px; }
+
+/* Decisions, callouts, sessions */
+.decisions { display: flex; flex-direction: column; margin: 1rem 0 1.5rem; border-top: 1px solid var(--rule); }
+.decision { display: grid; grid-template-columns: 3rem minmax(0, 1fr); gap: 0.75rem; padding: 0.9rem 0; border-bottom: 1px solid var(--rule); }
+.decision .id { font-family: var(--font-mono); font-weight: 500; color: var(--accent); font-size: 0.9375rem; padding-top: 0.1rem; }
+.decision p { margin: 0; }
+.decision p + p { margin-top: 0.4rem; color: var(--muted); font-size: 0.9375rem; }
+
+.callout { border-left: 3px solid var(--standby); background: var(--standby-soft); padding: 0.8rem 1rem; border-radius: 0 6px 6px 0; margin: 1.25rem 0 1.5rem; }
+.callout p:last-child { margin-bottom: 0; }
+.callout .label { font-family: var(--font-display); font-weight: 600; font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--standby); display: block; margin-bottom: 0.25rem; }
+
+.questions { counter-reset: q; list-style: none; padding: 0; margin: 1rem 0 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.questions li { counter-increment: q; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 0.8rem 1rem 0.8rem 3rem; position: relative; margin: 0; }
+.questions li::before { content: "Q" counter(q); position: absolute; left: 0.9rem; top: 0.8rem; font-family: var(--font-mono); color: var(--standby); font-weight: 500; }
+.questions li p { margin: 0; }
+.questions li p + p { margin-top: 0.35rem; color: var(--muted); font-size: 0.9375rem; }
+
+.sessions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; margin: 1rem 0 1.5rem; }
+.session { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 1rem 1.1rem; min-width: 0; }
+.session h3 { margin: 0 0 0.25rem; }
+.session .gate { font-size: 0.875rem; color: var(--muted); margin: 0 0 0.6rem; }
+.session ul { margin-bottom: 0; }
+
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-size: 0.875rem; color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+
+<div class="shell">
+  <nav class="toc" aria-label="Contents">
+    <p>Contents</p>
+    <ol>
+      <li><a href="#goals">Goals</a></li>
+      <li><a href="#today">What there is today</a></li>
+      <li><a href="#ui">On the sync page</a></li>
+      <li><a href="#review">The review</a></li>
+      <li><a href="#how">What a restore does</a></li>
+      <li><a href="#forward">A commit forward, never back</a></li>
+      <li><a href="#peers">Other desks</a></li>
+      <li><a href="#live">The live show</a></li>
+      <li><a href="#undo">Undoing a restore</a></li>
+      <li><a href="#rules">Who, when, and what not</a></li>
+      <li><a href="#wire">REST</a></li>
+      <li><a href="#later">Bringing back one record</a></li>
+      <li><a href="#testing">Testing</a></li>
+      <li><a href="#decisions">Decisions</a></li>
+      <li><a href="#questions">Asked and answered</a></li>
+      <li><a href="#sessions">Sessions</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="doc">
+      <p class="eyebrow">Design · cloud sync</p>
+      <h1>Snapshot Restore</h1>
+      <p class="lede">The sync page's History lists every snapshot of a show, but nothing on the desk can go back to one. This design adds <em>Restore</em>: review what an old snapshot would change, then make it the show again as a new commit, which every other desk on the repo takes on its next sync.</p>
+      <div class="meta">
+        <span><b>Status</b> Agreed · plan: <code>docs/plans/sync-restore-plan.md</code></span>
+        <span><b>Date</b> 7 November 2026</span>
+        <span><b>Touches</b> <code>sync/</code>, <code>routes/cloudSync.kt</code>, <code>state/VenueHoldService.kt</code>, <code>frontend/src/components/cloudSync/</code></span>
+      </div>
+    </header>
+
+    <section id="goals">
+      <h2>Goals</h2>
+      <ul>
+        <li>An admin can pick any snapshot in a show's History and see, record by record, what going back to it would bring back, take away and change.</li>
+        <li>Restoring makes the show exactly what that snapshot holds, read by today's importer, without touching git by hand.</li>
+        <li>The restore travels: every desk on the repo ends up on the restored show, without anyone force-pushing or rewriting history.</li>
+        <li>A restore can be taken back, because the show as it stood just before is always a snapshot in History too.</li>
+        <li>A running show is never dipped or blacked out by a restore. It reloads the way a sync pull does.</li>
+        <li>No network is needed to restore. The local repo holds every snapshot, so a desk at a venue without internet can still go back.</li>
+      </ul>
+      <h3>Not in scope</h3>
+      <ul>
+        <li>Venues. A venue's repo holds its published versions, and its draft never syncs. Going back to a version is a separate question for the venue's own History.</li>
+        <li>Machine-local settings: universe addresses, the grand master, remote access. A restore leaves them as a pull does.</li>
+        <li>Restoring one cue, Look or palette on its own. That is <a href="#later">session 3</a>, <em>Bring back selected</em>.</li>
+        <li>An MCP tool. Restore is an admin's decision at the desk.</li>
+      </ul>
+    </section>
+
+    <section id="today">
+      <h2>What there is today</h2>
+      <p>Every snapshot is a git commit in the project's working tree (<code>sync/{projectUuid}/repo/</code>), one canonical-JSON file per record, written by <code>SnapshotEngine</code>'s wipe-then-export. <code>HistoryPanel</code> reads <code>GET …/sync/log</code> and shows commit, time, desk and message. It has no actions.</p>
+      <p>Going back today means doing it outside the desk: in a clone, rebuild an old commit's tree as a new commit, push it, and press <em>Sync now</em>, which fast-forwards and rebuilds the project through <code>ProjectImporter.replaceFromWorkingTree</code>. That works. It also needs git, gets binary files and deletion markers wrong easily, and gives no idea of what will change until it has.</p>
+      <p>Two pieces already in the engine do most of the work:</p>
+      <ul>
+        <li><code>replaceFromWorkingTree</code> rebuilds a project from a tree in one transaction, reads every older <code>formatVersion</code>, refuses a pin the desk lacks, keeps the machine overrides keyed to the project, and clears the show's undo history with a reason.</li>
+        <li><code>SnapshotEngine.snapshot</code> writes a deletion marker for every record <code>sync_state</code> knows that the database no longer has. A restore that goes through the database gets its deletion markers right with no new code.</li>
+      </ul>
+    </section>
+
+    <section id="ui">
+      <h2>On the sync page</h2>
+      <p>Each History row gains a menu. <em>Review and restore…</em> opens the review. <em>Copy commit id</em> is there for someone who wants to look in git. The newest row's restore is disabled: it already is the show, apart from edits made since, which a snapshot captures.</p>
+
+      <p class="mock-label">History card, the menu open on Thursday's snapshot</p>
+      <div class="mock" aria-label="Mock of the History card">
+        <div class="card-head">
+          <h4>History</h4>
+          <p>Recent snapshots (most recent first). Review one to see what restoring it would change.</p>
+        </div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Commit</th><th>When</th><th>Desk</th><th>Message</th><th></th></tr></thead>
+            <tbody>
+              <tr><td class="sha">a41c09e</td><td class="when">Sat 7 Nov, 18:02</td><td><span class="badge">FOH desk</span></td><td>Snapshot 2026-11-07 18:02:11Z</td><td><span class="kebab">⋯</span></td></tr>
+              <tr><td class="sha">5be7d20</td><td class="when">Fri 6 Nov, 23:48</td><td><span class="badge">Laptop</span></td><td>Merge from FOH desk</td><td><span class="kebab">⋯</span></td></tr>
+              <tr class="target"><td class="sha">3f2a91c</td><td class="when">Thu 29 Oct, 21:14</td><td><span class="badge">FOH desk</span></td><td>Tech run, end of night</td><td><span class="menu"><span class="kebab">⋯</span><span class="pop" role="menu"><span class="on">Review and restore…</span><span>Copy commit id</span></span></span></td></tr>
+              <tr class="mock-row-gap"><td class="sha">c90e1b4</td><td class="when">Thu 29 Oct, 17:30</td><td><span class="badge">FOH desk</span></td><td>Snapshot 2026-10-29 17:30:02Z</td><td><span class="kebab">⋯</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p>After a restore, the restore itself sits at the top (<em>FOH desk: Restored 3f2a91c from 2026-10-29 21:14 UTC</em>), marked in green. The row below it is the show as it stood just before: usually the snapshot the restore's first sync took, or <em>Before restoring 3f2a91c</em> when there was no sync to take one. The desk writes both messages, so the history explains itself in git and on GitHub too.</p>
+    </section>
+
+    <section id="review">
+      <h2>The review</h2>
+      <p>The review answers one question: if I restore this, what happens to the show? It groups changes by kind of record, using the names the desk's own History already gives them (<code>RecordLabeler</code>), and says three things the record list can't: the project's name, its venue pin, and what the live show will do.</p>
+
+      <p class="mock-label">Review dialog</p>
+      <div class="dialog" role="dialog" aria-label="Mock of the review dialog">
+        <div class="d-head">
+          <h4>Restore to Thu 29 Oct, 21:14?</h4>
+          <p><span class="mono">3f2a91c</span> · FOH desk · “Tech run, end of night”</p>
+        </div>
+        <div class="d-body">
+          <div class="counts">
+            <span class="count back">3 come back</span>
+            <span class="count gone">2 go</span>
+            <span class="count changed">9 change back</span>
+          </div>
+          <details open>
+            <summary>Cues <span class="n">· 6</span></summary>
+            <ul>
+              <li><span class="mark back">+</span><span>Cue “Rose garden”</span></li>
+              <li><span class="mark back">+</span><span>Cue “Thorns rise”</span></li>
+              <li><span class="mark gone">−</span><span>Cue “Spindle (new)”</span></li>
+              <li><span class="mark changed">~</span><span>Cue “Christening”</span></li>
+              <li><span class="mark changed">~</span><span>Cue “Curse”</span></li>
+              <li><span class="mark changed">~</span><span>Cue “Wake”</span></li>
+            </ul>
+          </details>
+          <details>
+            <summary>Looks <span class="n">· 3</span></summary>
+          </details>
+          <details>
+            <summary>Stack entries, palettes, fixtures <span class="n">· 5</span></summary>
+          </details>
+          <div class="note"><b>This show is live.</b>It reloads and crossfades into the snapshot, as after a sync pull. Live cues are GO'd again and the programmer is kept. Undo history (⌘Z) starts again from here.</div>
+          <div class="note info"><b>Venue: back to Commemoration Hall v3 (installed v5).</b>v4 and v5 change output, so this show will be behind its venue. It keeps running against v3 tonight and opens held next time, until you update it.</div>
+          <div class="note info"><b>Last synced 18:02.</b>The desk syncs before restoring and pushes the restore after, so other desks take it on their next sync.</div>
+        </div>
+        <div class="d-foot">
+          <button class="btn" type="button">Cancel</button>
+          <button class="btn primary" type="button">Restore</button>
+        </div>
+      </div>
+
+      <p>How each group is decided:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Group</th><th>In the show now</th><th>In the snapshot</th></tr></thead>
+          <tbody>
+            <tr><td><span class="chip exists">come back</span></td><td>absent or deleted</td><td>present</td></tr>
+            <tr><td><span class="chip toggle">go</span></td><td>present</td><td>absent or deleted</td></tr>
+            <tr><td><span class="chip new">change back</span></td><td>present</td><td>present, different</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The comparison is made in today's format. The review runs the restore inside a transaction and rolls it back: it exports the project now, imports the snapshot's tree with today's importer, exports again, and compares the two exports record by record. A snapshot written in format v31 is compared as v49 would write it, so a renamed field doesn't count as a change. Extract, Detach, Attach and Update all build their reviews the same way.</p>
+      <p>Opening the review changes nothing, so it also serves as <em>what has changed since this snapshot</em>.</p>
+    </section>
+
+    <section id="how">
+      <h2>What a restore does</h2>
+      <p>Under the per-project sync lock, so a restore never overlaps an auto-sync tick, a <em>Sync now</em> or a conflict session:</p>
+
+      <div class="pipeline" role="list" aria-label="Restore steps">
+        <div class="stage shared" role="listitem"><span class="name">1 · Sync first</span><span class="what">With a repo attached and reachable, the ordinary sync pipeline runs, so the restore starts from the latest show across desks. It snapshots any edits first, as every sync does. A sync that opens a conflict session, or fails for any reason but an unreachable repo, refuses the restore. If the repo can't be reached, the desk restores locally and says so.</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="stage new" role="listitem"><span class="name">2 · Check the review</span><span class="what">The review is computed again. If it differs from the one the admin confirmed (another desk's change came in at step 1, or someone edited the show), nothing is written. The answer is 409 with the new review, to confirm again.</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="stage shared" role="listitem"><span class="name">3 · Snapshot</span><span class="what">Edits the first sync didn't commit (there was no sync, or one landed since) are committed as <em>Before restoring 3f2a91c</em>. Either way, the newest commit is now the show as it stood.</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="stage new" role="listitem"><span class="name">4 · Import the snapshot</span><span class="what">In one transaction, which holds off every other write: if the show still matches that commit, <code>replaceFromWorkingTree</code> rebuilds it from the target's tree (extracted with <code>JGitClient.extractTree</code>, binaries included), and the history reason is <em>Restored a snapshot</em>. If a write landed in between, the restore stops with a fresh review. Its scene images and prompt-book PDF are copied into the local stores, so a picture pruned since comes back.</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="stage shared" role="listitem"><span class="name">5 · Snapshot again</span><span class="what"><code>SnapshotEngine</code> writes the restored database as <em>Restored 3f2a91c from 2026-10-29 21:14 UTC</em>, with the note if there is one. Deletion markers come from <code>sync_state</code>, as for any deletion, and the commit is in today's format.</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="stage shared" role="listitem"><span class="name">6 · Reload</span><span class="what">If the project is the live one, <code>switchProject(id, reload = true)</code> carries the running show across.</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="stage shared" role="listitem"><span class="name">7 · Push</span><span class="what">A plain push of a local-ahead branch, as <em>Sync now</em> would do. On a pull-only desk, or one that can't reach the repo, the restore stays local and goes out on the next sync.</span></div>
+        <div class="legend"><span class="l-new">New</span><span class="l-shared">Existing engine, reused</span></div>
+      </div>
+      <p>The ordering keeps the fast-forward's failure mode. If the desk dies between steps 4 and 5, the database is ahead of git. The next snapshot writes the restored show and nothing is lost. The activity log gets a <code>RESTORED</code> row naming the target and the counts.</p>
+    </section>
+
+    <section id="forward">
+      <h2>A commit forward, never back</h2>
+      <p>A restore never moves the branch backwards. It adds a commit on top whose content is the old snapshot's, and its parent is the show as it stood just before. Every other desk reaches it by a fast-forward or a three-way merge, which the engine already does correctly. A reset and force-push would leave every peer diverged with nothing shared to merge against, which is the situation Phase 5 removed force-push to avoid.</p>
+      <div class="graph" aria-label="Commit graph: the restore adds a commit whose content is copied from the target">
+        <svg viewBox="0 0 640 170" role="img" aria-labelledby="g-title">
+          <title id="g-title">Restoring 3f2a91c adds two commits on top of a41c09e. The last one's content is copied from 3f2a91c.</title>
+          <path class="edge" d="M40 80 H560" />
+          <circle class="node" cx="40" cy="80" r="9" />
+          <circle class="node t" cx="130" cy="80" r="10" />
+          <circle class="node" cx="230" cy="80" r="9" />
+          <circle class="node" cx="330" cy="80" r="9" />
+          <circle class="node b" cx="440" cy="80" r="10" />
+          <circle class="node r" cx="560" cy="80" r="11" />
+          <text x="22" y="112">c90e1b4</text>
+          <text x="112" y="112">3f2a91c</text>
+          <text class="acc" x="104" y="130">the snapshot</text>
+          <text x="212" y="112">5be7d20</text>
+          <text x="312" y="112">a41c09e</text>
+          <text class="sub" x="406" y="112">The show before</text>
+          <text class="sub" x="406" y="130">your edits since</text>
+          <text class="sub" x="530" y="112">Restored</text>
+          <text class="sub" x="518" y="130">3f2a91c's content</text>
+          <path class="copy" d="M130 68 C 180 10, 500 10, 556 66" />
+          <text class="acc" x="268" y="26">content copied, through the database</text>
+          <path class="edge" d="M560 80 L610 80" stroke-dasharray="3 4" />
+          <text class="sub" x="586" y="62">push</text>
+          <line class="cross" x1="300" y1="140" x2="312" y2="152" />
+          <line class="cross" x1="312" y1="140" x2="300" y2="152" />
+          <text class="stop" x="322" y="151">never: reset the branch to 3f2a91c and force-push</text>
+        </svg>
+      </div>
+    </section>
+
+    <section id="peers">
+      <h2>Other desks</h2>
+      <p>What another desk on the same repo does on its next sync after the restore is pushed:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>That desk</th><th>What happens</th></tr></thead>
+          <tbody>
+            <tr><td>Has no unsynced edits</td><td>Fast-forwards to the restore and rebuilds, exactly as this desk did. Its live show reloads.</td></tr>
+            <tr><td>Has edits to records the restore didn't touch</td><td>Three-way merge with no conflicts. Its edits are kept on top of the restored show.</td></tr>
+            <tr><td>Has edits to a record the restore changed back</td><td>A conflict on that record, shown in its Conflicts panel as any edit-edit conflict. <em>Remote</em> takes the restored version.</td></tr>
+            <tr><td>Still has a record the restore takes away</td><td>The restore carries a deletion marker for every record that was synced, so the record goes. If that desk edited it meanwhile, it's an edit-delete conflict.</td></tr>
+            <tr><td>Deleted a record the restore brings back</td><td>The record comes back: the restore is a later change than the deletion. An edit on the other side surfaces as a delete-edit conflict.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Syncing first (step 1) is what makes this table short. Without it, a change another desk pushed after this desk's last sync, to a record the restore leaves alone, would survive the restore without the admin ever seeing it.</p>
+    </section>
+
+    <section id="live">
+      <h2>The live show</h2>
+      <p>A restore of the current project reloads it with <code>reload = true</code>, as a sync pull does. The rig holds its levels, live cues are GO'd again, the programmer and hand-run FX come back, and what changed crossfades in over <code>RESUME_FADE_MS</code>. A cue or stack the snapshot lacks is dropped from the carry, as after a pull that deleted it.</p>
+      <div class="callout">
+        <span class="label">One change to the venue hold</span>
+        <p>A restore can move a show's pin back, from v5 to v3 in the mock. A sync pull that moves the pin judges the hold afresh, and a show behind its venue on output is held: every channel at zero but parks. Mid-show that would be a blackout. So a restore that leaves the live show behind on output does what a publish does to a running show: it keeps running against its restored pin, guarded, and opens held next time. The restore records that before it reloads, with the <code>runAgainstOnLoad</code> call Attach already makes. The review says so in advance.</p>
+      </div>
+      <p>A restore whose snapshot pins a venue version this desk doesn't hold is refused with <code>VENUE_MISSING</code> before anything is written, naming the venue and its repo. Versions only ever accumulate on a desk, so this needs a desk that never imported that version.</p>
+    </section>
+
+    <section id="undo">
+      <h2>Undoing a restore</h2>
+      <p>⌘Z can't take back a restore: rebuilding a project mints new row ids, so <code>replaceFromWorkingTree</code> clears the show's undo history, as a pull does. The History sheet shows that as a clear point, <em>Restored a snapshot</em>.</p>
+      <p>The sync history covers it instead. The commit before the restore is always the show as it stood, so undoing a restore is restoring that commit. The done toast offers it straight away:</p>
+      <div class="toast" role="status">
+        <span class="t-text">Restored to Thu 29 Oct, 21:14<small>14 records changed · pushed to the repo</small></span>
+        <span class="t-undo">Undo</span>
+      </div>
+      <p><em>Undo</em> opens the same review for the commit just before the restore, which shows the same changes in reverse. Later on, that row in History does it.</p>
+    </section>
+
+    <section id="rules">
+      <h2>Who, when, and what not</h2>
+      <ul>
+        <li><strong>Admins only.</strong> Every sync route is mounted inside <code>adminOnly</code> in <code>routes/projects.kt</code>, and the restore routes join them. This holds on both listeners, as for <em>Sync now</em>.</li>
+        <li><strong>Shows only.</strong> A venue answers <code>VENUE_DRAFT_NOT_SYNCED</code>, as its snapshot does. A version's sync subtree already answers <code>VENUE_VERSION_READ_ONLY</code>.</li>
+        <li><strong>Not during a conflict session</strong>: <code>SESSION_PENDING</code>, as a snapshot.</li>
+        <li><strong>Only a commit in the branch's history.</strong> The sha must be an ancestor of the head the History panel lists. Anything else is <code>RESTORE_COMMIT_UNKNOWN</code>.</li>
+        <li><strong>Nothing to do</strong>: when the snapshot is what the show already is, the review says so and <em>Restore</em> is disabled (<code>RESTORE_NO_CHANGES</code>).</li>
+        <li><strong>Untouched</strong>: <code>sync_configs</code>, the grand master and blackout, the effects arm, remote-access settings and runtime state, which all survive a pull and survive a restore for the same reason. <em>In production</em> keeps its current value, as a merge keeps this desk's, so a show locked for a performance stays locked.</li>
+        <li><strong>Universe addresses</strong> are machine-local, keyed by project. A restore to before an Extract makes universes the show's own again whose addresses the venue now holds; the restore copies them back, as Detach does. A restore to before an Attach can bring back universes with no address on this desk; the review names them.</li>
+        <li><strong>Show settings</strong> (name, description, stage size) come back and are listed in the review. If another project now has the old name, the show keeps its current one and the review says so.</li>
+        <li><strong>Independent of GitHub.</strong> A restore reads the local repo and pushes through the sync engine, so it keeps working when GitHub sync gives way to Lighting7 Cloud's hosted git (PRD G-5).</li>
+      </ul>
+    </section>
+
+    <section id="wire">
+      <h2>REST</h2>
+      <p>Two routes under the existing <code>/api/rest/projects/{id}/sync/</code>, admin only. There is no WS operation. The reload and the sync fire the frames a pull already fires.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Route</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="addr"><code>GET …/sync/restore/{sha}</code></td><td>The review, changing nothing: <code>{target, head, token, counts, kinds: [{folder, noun, records: [{uuid, label, change: BACK | GONE | CHANGED}]}], project: {name?}, venue?: {now, then, behind}, live, sync: {lastSyncedAt, repo, push}, noChanges}</code></td></tr>
+            <tr><td class="addr"><code>POST …/sync/restore</code></td><td><code>{sha, token, note?}</code>: steps 1–7. Answers <code>{commit, before, counts, sync?, notes}</code>, where <code>sync</code> is the push's <code>SyncRunResult</code>, or absent when it was skipped, with the reason in <code>notes</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Code</th><th>When</th></tr></thead>
+          <tbody>
+            <tr><td><code>404 RESTORE_COMMIT_UNKNOWN</code></td><td>The sha isn't in the branch's history.</td></tr>
+            <tr><td><code>409 RESTORE_REVIEW_STALE</code></td><td>The restore would now do something other than the review the token names. The body carries the new review.</td></tr>
+            <tr><td><code>409 RESTORE_NO_CHANGES</code></td><td>The snapshot is the show as it is.</td></tr>
+            <tr><td><code>400 RESTORE_INVALID</code></td><td>A note over 200 characters or with a line break; a blank sha or token.</td></tr>
+            <tr><td><code>422 RESTORE_TOO_OLD</code></td><td>The snapshot's format is older than this desk reads.</td></tr>
+            <tr><td><code>422 RESTORE_UNREADABLE</code></td><td>The snapshot's tree can't be imported for another reason.</td></tr>
+            <tr><td><code>409 SESSION_PENDING</code></td><td>A conflict session is open, or the first sync opened one.</td></tr>
+            <tr><td><code>409 VENUE_MISSING</code></td><td>The snapshot pins a venue version this desk lacks.</td></tr>
+            <tr><td><code>409 VENUE_DRAFT_NOT_SYNCED</code></td><td>The project is a venue.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The token is a hash of the review's content (target, counts and every record's change), not of the head. A snapshot that moves the head without changing what the restore would do keeps the token valid.</p>
+    </section>
+
+    <section id="later">
+      <h2>Bringing back one record</h2>
+      <p>The commonest case is probably <em>I deleted that cue on Tuesday</em>, and a whole-show restore is a blunt answer to it. The review already lists every record. Session 3 puts a check box beside each and adds <em>Bring back selected</em>:</p>
+      <ul>
+        <li>It applies through <code>ProjectImporter.restore</code>, the upsert that ⌘Z's undo uses. Row ids are kept where they can be, there is no whole-project reload, and <code>KindEffects</code> runs what the records' writes would have run.</li>
+        <li>It is journaled as an ordinary show-history entry, so ⌘Z takes it back. It is a normal edit, so the next sync carries it like any other.</li>
+        <li>A chosen record pulls in what it needs that the show lacks: a cue its stack entry, a Look layer its Look and the palettes that Look references. The review lists these as <em>also needed</em> before anything is applied. A name now taken refuses, as an undo does (<code>HISTORY_UNDO_BLOCKED</code>).</li>
+      </ul>
+      <p>It shares the review and the extraction with sessions 1 and 2 but none of their writing path, which is why it is a separate session that waits on them.</p>
+    </section>
+
+    <section id="testing">
+      <h2>Testing</h2>
+      <ul>
+        <li><strong>Round trip</strong> (<code>SnapshotRestoreTest</code>, on <code>RichProjectFixture</code>): snapshot, edit, add, delete, snapshot, restore the first. The project exports exactly as the first snapshot imports today. The restore commit carries deletion markers for synced records created since, and records deleted since come back live.</li>
+        <li><strong>Older format</strong>: a frozen tree at an older <code>formatVersion</code> restores, and the review counts no record as changed for its format alone.</li>
+        <li><strong>Binaries</strong>: a scene image removed from the store comes back from the target's tree, and so does a prompt-book PDF.</li>
+        <li><strong>Two desks</strong>, over a bare repo as <code>RemoteSyncEngine</code>'s tests do: the peer fast-forwards; the peer with an unrelated edit merges cleanly; the peer that edited a restored record gets one conflict.</li>
+        <li><strong>Refusals</strong>: an unknown sha, a stale token (with the new review returned), no changes, an open conflict session, a first sync that fails other than offline, a venue, a missing venue version and a snapshot too old to read. The database and the branch are unmoved by each.</li>
+        <li><strong>Settings and addresses</strong>: a snapshot that differs only in stage size is listed; <em>In production</em> stays on; a taken name is kept; a show restored to before an Extract gets its addresses back.</li>
+        <li><strong>Live show</strong>: the current project reloads with carry, and a restore that moves the pin behind on output leaves the running show unheld.</li>
+        <li><strong>Offline and pull-only</strong>: an unreachable remote restores locally and reports the skipped push; <code>sync.push = false</code> commits locally and never pushes.</li>
+        <li><strong>Frontend</strong>: the History row menu, the review's groups and notes, the stale-review retry, and the toast's Undo.</li>
+      </ul>
+    </section>
+
+    <section id="decisions">
+      <h2>Decisions</h2>
+      <div class="decisions">
+        <div class="decision"><span class="id">D1</span><div><p><strong>A restore is a new commit on top of the branch, never a reset or force-push.</strong></p><p>Peers reach it by fast-forward or three-way merge. A rewritten history leaves every peer diverged.</p></div></div>
+        <div class="decision"><span class="id">D2</span><div><p><strong>A restore goes through the database: the target tree is imported by today's importer, and the next snapshot writes it.</strong></p><p>Deletion markers then come from <code>sync_state</code> as for any deletion, the commit is in today's format, and an older snapshot is read the way an older archive is. Copying the old tree into git directly would get both wrong.</p></div></div>
+        <div class="decision"><span class="id">D3</span><div><p><strong>The show as it stood is always a commit before the restore, and undoing a restore is restoring that commit.</strong></p><p>⌘Z can't reach across a whole-project rebuild. The sync history can.</p></div></div>
+        <div class="decision"><span class="id">D4</span><div><p><strong>The review is the restore, rolled back, compared record by record in today's format.</strong></p><p>The same shape as Extract, Detach, Attach and Update. Hashing the two git trees would count every format change as an edit.</p></div></div>
+        <div class="decision"><span class="id">D5</span><div><p><strong>The restore syncs first when the repo can be reached and pushes after. Offline, it restores locally.</strong></p><p>Syncing first means the review covers every desk's changes. Only an unreachable repo lets the restore go on without it, so the network never stops a restore, and nothing else is papered over.</p></div></div>
+        <div class="decision"><span class="id">D6</span><div><p><strong>The confirmed review's token guards the write. A restore that would now do something else is refused with the new review.</strong></p><p>The token hashes the review's content, so a change that alters nothing in the restore doesn't trip it.</p></div></div>
+        <div class="decision"><span class="id">D7</span><div><p><strong>The venue pin, and the show's other settings, are restored with the rows.</strong></p><p>Hides, overrides and recolours name the pinned version's records, so rows from v3 under a v5 pin would be a show that never existed. See Q2.</p></div></div>
+        <div class="decision"><span class="id">D8</span><div><p><strong>A live show reloads with carry, and a restore never holds a running show.</strong></p><p>Behind on output after a restore, it runs against its pin as after a publish, and opens held next time.</p></div></div>
+        <div class="decision"><span class="id">D9</span><div><p><strong>Shows only, admins only, REST only.</strong></p><p>A venue's history is its versions. Every sync route is an admin's. No WS operation and no MCP tool.</p></div></div>
+        <div class="decision"><span class="id">D10</span><div><p><strong>Bringing back individual records is session 3 of this plan, built on undo's upsert.</strong></p><p>It needs a dependency closure and a journaled entry, which the whole-show restore doesn't.</p></div></div>
+        <div class="decision"><span class="id">D11</span><div><p><strong>A restore may carry a note</strong>, up to 200 characters on one line, appended to its commit message.</p><p>History then says why the show went back, as a snapshot's message does.</p></div></div>
+      </div>
+    </section>
+
+    <section id="questions">
+      <h2>Asked and answered</h2>
+      <ol class="questions">
+        <li><p>Should a restore sync before it starts and push when it's done (D5), or stay local until the next <em>Sync now</em>?</p><p><strong>Sync first and push after.</strong> A local-only restore would surprise the next person who presses <em>Sync now</em> on another desk.</p></li>
+        <li><p>Should the venue pin come back with the rows (D7), or should the show keep its current pin?</p><p><strong>The pin comes back.</strong> Keeping today's pin under old rows would need Update's review and its drift decisions; <em>restore, then update</em> already does that in two steps.</p></li>
+        <li><p>Is <em>Bring back selected</em> (session 3) part of this plan, or a follow-up?</p><p><strong>Session 3 of this plan</strong>, run once sessions 1–2 have been used on a real show.</p></li>
+        <li><p>Should a restore offer a note, like <em>Take snapshot</em>'s message, to say why?</p><p><strong>Yes, optional</strong>, appended to the restore's commit message (D11).</p></li>
+      </ol>
+    </section>
+
+    <section id="sessions">
+      <h2>Sessions</h2>
+      <div class="sessions">
+        <div class="session">
+          <h3>Session 1 — Review and restore on the desk</h3>
+          <p class="gate">The backend, with REST and tests. Usable through the API on its own.</p>
+          <ul>
+            <li><code>sync/SnapshotRestore.kt</code>: extraction, the rolled-back review and its token, and the seven steps under the per-project lock.</li>
+            <li><code>replaceFromWorkingTree</code> split so it can run inside a caller's transaction, with the history clear left to the caller.</li>
+            <li>The two routes, the error codes, <code>SyncLogEvent.RESTORED</code>, and the hold's run-against call for a restore.</li>
+            <li>Every backend test above.</li>
+            <li><code>docs/sync-engineering.md</code> §"Restoring a snapshot" and the CLAUDE.md lines.</li>
+          </ul>
+        </div>
+        <div class="session">
+          <h3>Session 2 — The History panel and the review</h3>
+          <p class="gate">Needs session 1.</p>
+          <ul>
+            <li>The row menu, the review dialog with its groups, notes and optional note field, the stale-review retry, progress, and the toast with Undo.</li>
+            <li>The two desk-written commit messages in the History table, and the restored row's marker.</li>
+            <li>RTK Query endpoints in <code>store/cloudSync.ts</code>, and Vitest for each.</li>
+          </ul>
+        </div>
+        <div class="session">
+          <h3>Session 3 — Bring back selected records</h3>
+          <p class="gate">Needs session 2, and sessions 1–2 used to restore a real show.</p>
+          <ul>
+            <li>Check boxes in the review, the dependency closure and its <em>also needed</em> list.</li>
+            <li>Applied through <code>ProjectImporter.restore</code> as a journaled show-history entry, so ⌘Z takes it back.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Prepared for the lighting7 repository. File references are to <code>src/main/kotlin/uk/me/cormack/lighting7/</code> and <code>frontend/src/</code>. The sync engine's contracts are in <code>docs/sync-engineering.md</code>. The show <em>Sleeping Beauty</em>, its cue and Look names, the venue <em>Commemoration Hall</em>, the commit ids and the desk names are illustrative.
+    </footer>
+  </main>
+</div>
