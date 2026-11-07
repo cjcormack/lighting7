@@ -36,7 +36,6 @@ import {AuthWsApi, createAuthWsApi} from "./authWsApi";
 import {createUsersWsApi, UsersWsApi} from "./usersWsApi";
 import {createInstallWsApi, InstallWsApi} from "./installWsApi";
 import {createUpdateWsApi, UpdateWsApi} from "./updateWsApi";
-import {createRemoteAccessWsApi, RemoteAccessWsApi} from "./remoteAccessWsApi";
 import { createOscWsApi, type OscWsApi } from "./oscWsApi";
 import {CloudWsApi, createCloudWsApi} from "./cloudWsApi";
 import {createWindowsWsApi, WindowsWsApi} from "./windowsApi";
@@ -63,7 +62,6 @@ interface LightingApi {
   users: UsersWsApi
   install: InstallWsApi
   updates: UpdateWsApi
-  remoteAccess: RemoteAccessWsApi
   osc: OscWsApi
   cloud: CloudWsApi
 
@@ -146,7 +144,6 @@ function createLightingApi(): LightingApi {
   const usersWsApi = createUsersWsApi(connection)
   const installWsApi = createInstallWsApi(connection)
   const updateWsApi = createUpdateWsApi(connection)
-  const remoteAccessWsApi = createRemoteAccessWsApi(connection)
   const oscWsApi = createOscWsApi(connection)
   const cloudWsApi = createCloudWsApi(connection)
   const fixtureApi = createFixtureApi(connection)
@@ -198,7 +195,6 @@ function createLightingApi(): LightingApi {
     users: usersWsApi,
     install: installWsApi,
     updates: updateWsApi,
-    remoteAccess: remoteAccessWsApi,
     osc: oscWsApi,
     cloud: cloudWsApi,
 

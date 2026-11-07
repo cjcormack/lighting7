@@ -39,9 +39,8 @@ import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.update.BuildInfo
 
 /**
- * The MCP server itself: JSON-RPC 2.0 in, JSON-RPC 2.0 out, no transport. `McpServerModule`
- * carries it over streamable HTTP and `cloud/McpRelay` over the cloud's control channel; tests call
- * [handle] directly.
+ * The MCP server itself: JSON-RPC 2.0 in, JSON-RPC 2.0 out, no transport. `cloud/McpRelay` carries
+ * it over the cloud's control channel; tests call [handle] directly.
  *
  * The tools are the show-running tools ([AiTools.toolDefs] — there is no script tool), the
  * show-setup tools ([SetupTools]), and `describe_rig`, which answers with the live rig in prose
@@ -54,7 +53,7 @@ import uk.me.cormack.lighting7.update.BuildInfo
 class McpProtocol(private val state: State) {
     private val log = LoggerFactory.getLogger(McpProtocol::class.java)
     private val tools = AiTools(state)
-    private val setupTools = SetupTools(state, tools, deskUrl = { runCatching { state.remoteAccess.publicUrl() }.getOrNull() })
+    private val setupTools = SetupTools(state, tools, deskUrl = { path -> runCatching { state.cloud.remoteShellUrl(path) }.getOrNull() })
     private val briefing = RigBriefing(state)
 
     private val describeRigTool = ToolDef(
@@ -198,13 +197,13 @@ class McpProtocol(private val state: State) {
 
         // MCP is always remote: a fixture command is held to Remote access's "allow fixture commands"
         // (fixture optics plan session 7), as the REST route's `requireCommandsAccess` holds a remote call.
-        if (name == RUN_FIXTURE_COMMAND && !state.remoteAccess.allowRemoteCommands) {
+        if (name == RUN_FIXTURE_COMMAND && !state.remotePolicy.allowCommands) {
             return toolResult(FIXTURE_COMMANDS_REMOTE_REFUSAL, isError = true)
         }
 
         // One tool call is one step of the programmer's history and one show entry, Claude's own (undo
         // plan D7). The project a tool names is journaled as well as the current one (§3.4).
-        val origin = WriteOrigin(historySourceOf(state, user)).apply { label = "Claude: $name" }
+        val origin = WriteOrigin(historySourceOf(user)).apply { label = "Claude: $name" }
         state.ensureHistory()
         namedProjectOf(name, arguments)?.let { state.ensureHistory(it) }
         val outcome = withContext(origin) {

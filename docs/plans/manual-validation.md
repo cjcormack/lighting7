@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-CLOUD-P1`](#fu-manual-cloud-p1) | Lighting7 Cloud's P1 exit: a phone on 4G busks the venue desk opened from the portal, Claude patches a rig through the desk's cloud URL with no tunnel, an emailed invite approved in the portal lands its operator as `OPERATOR`, unlinking, disabling, removing a membership and *End* each close a session within 5 s, the two switches refuse what they name and cannot be changed remotely, the Remote access tab, `/oauth/*`, `/mcp` and the tunnel are gone and an upgraded desk keeps its policy switches, and a running fade sees nothing of the sidecar or the cloud stopping | Cloud P1 S9, 2026-11-07 |
 | [`FU-MANUAL-OSC-S1`](#fu-manual-osc-s1) | a QLab Network cue lands cue 1 and fired again mid-fade moves nothing; a Look's `on` and `off` and a busk Look pad from QLab; a QLab machine off the allowlist shows with *Allow this sender*; an operator sees the log | OSC session 1, 2026-11-07 |
 | [`FU-MANUAL-OSC-S2`](#fu-manual-osc-s2) | the grand master follows a QLab fade cue sending floats; a copied address pasted into QLab works first time; renumbering a received cue warns on the desk | OSC session 2, 2026-11-07 |
 | [`FU-MANUAL-FX-SPEED-S4`](#fu-manual-fx-speed-s4) | ×½ and ×2 on a busked master halve and double it mid-song, a hold included, and greyed at 20 and 300; a fader and an encoder on *FX speed* move the selection's Local FX with no jump, the fader picking up at the lead FX | FX speed session 4, 2026-11-07 |
@@ -493,6 +494,35 @@ installed app's file modes and layout are the installer's.
 4. Quit the desk from its menu: no `lighting7-link` process is left running.
 
 Record the date and the two installers' growth here and in the plan's §4.
+
+---
+
+## `FU-MANUAL-CLOUD-P1`
+
+**What it proves**: the PRD's P1 exit (cloud-p1 plan §6): the desk is reached from anywhere through
+Lighting7 Cloud alone — remote sessions and Claude both — with a desk role that only a link gives, every
+way of taking access away closing it at once, and the show untouched by the sidecar or the cloud.
+
+**Why it is here**: the desk's tests run against `FakeCloud` and a fake sidecar (R5); only the owner
+can open a real desk from a real phone and connect a real Claude through the deployed cloud.
+
+**Test**, once both P1 plans are merged and deployed:
+
+1. **UC-2.** From a phone on 4G, open the venue desk from the portal and busk a look.
+2. **UC-3.** Add the desk to Claude with its cloud URL and no tunnel, and ask Claude to patch a rig.
+3. **UC-6.** Invite an operator by email from Users and approve the invite in the portal; they accept
+   with their own cloud account and land on the desk as `OPERATOR`, unable to do what an operator
+   cannot.
+4. **Revocation.** Unlinking, disabling the user, removing their membership in the portal and ending
+   the session each close an open remote session within 5 s.
+5. **Off.** *Remote sessions* off refuses a new session and closes an open one; *Claude (MCP)* off
+   refuses an MCP call while sessions still work; neither switch can be changed from a remote session.
+6. **Gone.** The Remote access tab, `/oauth/*`, `/mcp` and the tunnel are absent, and a desk upgraded
+   from a pre-P1 build keeps its policy switches and loses its grants.
+7. **The show.** During a running fade, killing the sidecar and stopping the cloud's app change nothing
+   visible on the rig.
+
+When it passes, record the date here and in the plan's §6.
 
 ---
 
@@ -3024,7 +3054,7 @@ universe beside it):
    … s*); with the programmer blind, a command is refused rather than sent.
 6. **A project switch mid-hold** ends the hold at once: a dedicated channel drops to 0 and the panel
    says it was cut short.
-7. **Remote**: from the public listener (or a phone through the tunnel), a command answers
+7. **Remote**: from a remote session through Lighting7 Cloud, a command answers
    `REMOTE_COMMANDS_DISABLED`; Install settings → Cloud → Remote access → *Allow fixture commands* lifts it,
    and MCP's `run_fixture_command` follows the same switch.
 

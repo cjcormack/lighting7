@@ -1,49 +1,98 @@
 # MCP server
 
 The desk is an [MCP](https://modelcontextprotocol.io) server, so Claude — on a phone through a
-claude.ai connector, in Claude Code, or in the desktop app — can drive the lights. (The desk once had its own
-in-app AI chat, *Lux*, calling Anthropic's API with these same show-running tools; it was removed in
-favour of this server.) The decisions behind the shape below are recorded in the project's
+claude.ai connector, in Claude Code, or in the desktop app — can drive the lights. It is reached only
+**through Lighting7 Cloud**: the cloud serves one MCP URL per install, signs each caller in and
+authorises the grant, and relays every JSON-RPC message to the desk over the control channel. The desk
+runs no OAuth server and takes no MCP request from the internet (cloud-p1 plan D15, D18). (The desk
+once had its own in-app AI chat, *Lux*, and later its own OAuth server and `/mcp` behind an ngrok
+tunnel; both are gone.) The decisions behind the tool surface are recorded in the project's
 `decisions/mcp-auth-and-scripts.md`; this doc is how it is built.
+
+## Adding a connector
+
+The desk must be adopted (Install settings → Cloud) and an admin must turn on *Claude (MCP)* in the Cloud
+tab's *Remote access* section, at the desk itself. Then, from the Lighting7 Cloud portal, copy the
+install's MCP URL and:
+
+- claude.ai → Settings → Connectors → Add custom connector → that URL. It then appears on the phone
+  and iPad apps for that account.
+- Claude Code: `claude mcp add --transport http lighting <url>`.
+
+The client signs in to Lighting7 Cloud, not to the desk, and consents there. A call runs as the desk
+user the cloud account is **linked** to (`docs/cloud-engineering.md` §"Links"), with that user's role;
+a cloud account linked to no one is refused `CLOUD_ACCOUNT_NOT_LINKED`. The connectors an account has
+granted are listed, and revoked, in the portal; the desk has no list of its own.
+
+## Through the cloud
+
+The cloud relays each call as `mcp.call {token, grant: {id, clientName}, request}`
+(`docs/cloud-protocol.md`), and `cloud/McpRelay.kt` runs it through `McpProtocol`
+(`State.mcpProtocol`), so every tool, refusal and switch below holds.
+
+On the channel's thread a call is judged only by *Claude (MCP)* (`cloud_connection.mcp_access`, off at
+adoption and set only on the desk's own listener, P1 D6): off, it is refused `MCP_ACCESS_OFF`, and the
+desk announces `mcp.off` beside `mcp.v1`. Then the queue: four calls run at once and four wait, a ninth
+is refused `DESK_BUSY` (the cloud keeps eight in flight). The rest runs on `Dispatchers.IO`, never on a
+`cloud-N` thread:
+
+1. The token is checked by `DeskTokens.verify` at the `mcp` door, so a remote session's is
+   `TOKEN_WRONG_SCOPE`; its org must be the adoption's, its `gid` the call's `grant.id`
+   (`MCP_GRANT_MISMATCH`), and no `revoke` naming its account, or everything, may cover it
+   (`TOKEN_REVOKED`, the remote sessions' deny set, `RemoteSessions.tokenRevoked`).
+2. Its `sub` is mapped through `cloud_identity_links` to a desk user: none is `CLOUD_ACCOUNT_NOT_LINKED`,
+   whose message names the two ways to link (an admin's invite, or proving once from a remote session).
+   A disabled user's call is answered as a JSON-RPC error (`-32001`), not run. The user's role is read
+   from `AuthService` per call, as a cookie's is, so a demotion counts at the next call.
+3. The call runs as that user, with `sessionTokenHash = cloud-grant:{gid}` and the call's `clientName`
+   (cut to 64 characters) on `AuthenticatedUser`. `historySourceOf` reads it as the source
+   `mcp:cloud:{gid}` named *Claude · {client}* (plain *Claude* for a client that gives no name,
+   `HistorySource.UNNAMED_CLIENT`, or calls itself Claude), so each grant's history is its own and
+   `list_history` and `undo_changes` keep two grants apart.
+4. The answer is `mcp.result {response}` with `replyTo` the call's id, through the reply queue (P1 D16);
+   a notification's has no `response`. The call's slot is free before the answer is queued, so a cloud
+   that sends its next call on hearing one finds room. Each call is its own `mcp.relay` transaction,
+   which `McpProtocol`'s `mcp.server` span joins. A result whose frame would be over 8 MiB is answered in its place
+   as a JSON-RPC error (`-32603`) saying it was too large.
+
+A refusal is `error {code, message}` with `replyTo`. A call must fit one frame, so the cloud refuses a
+body over 7 MiB before it reaches the desk: `upload_scene_image` through the cloud takes an image of
+about 5 MB, which its description says (`FU-CLOUD-MCP-CHUNKING`).
+
+**MCP is always remote.** Every relayed call answers to the policy switches a remote caller does
+(§"Remote hardening"): `run_fixture_command` is held to *Allow fixture commands*, `undo_changes` to
+*Allow scripts* where it would put a script back, and there is no tool that arms or fires.
 
 ## The public listener
 
-The MCP server is **not** on port 8413. `mcp/McpServerModule.kt` starts a second, separate Netty
-server — the **public listener** (`startPublicListener`, called from `Application.module` and
-stopped on `ApplicationStopping`) — whose application is `publicModule`:
+The other way in from outside is a **remote session**: the desk's own SPA, carried over WebRTC between
+a cloud member's browser and the bundled sidecar `lighting7-link` (`docs/cloud-engineering.md`
+§"Remote sessions"). The sidecar forwards each request into a second Netty server on the desk, the
+**public listener** (`mcp/McpServerModule.kt`'s `startPublicListener`, called from `Application.module`
+and stopped on `ApplicationStopping`), whose application is `publicModule`:
 
 ```kotlin
 installRemoteHardening(state)   // mcp/RemoteRequests.kt: every call here is remote
 moduleWithState(state)          // the whole desk: UI, REST, WebSocket
-mcpModule(state)                // MCP, OAuth and the sign-in page
 ```
 
-| Path | What |
-|------|------|
-| everything on 8413 | The desk itself — the UI, `/api/rest/…`, the `/api` WebSocket — under remote hardening |
-| `GET /.well-known/oauth-protected-resource[/mcp]` | RFC 9728 metadata |
-| `GET /.well-known/oauth-authorization-server[/mcp]` | RFC 8414 metadata |
-| `POST /oauth/register` | RFC 7591 dynamic client registration |
-| `GET`/`POST /oauth/authorize` | The sign-in-and-consent page |
-| `POST /oauth/token` | Code exchange and refresh |
-| `POST /oauth/revoke` | RFC 7009 |
-| `POST /mcp` | The MCP endpoint (streamable HTTP, JSON responses) |
+**The port split is the security boundary.** Everything that arrives on this listener is remote —
+the sidecar forwards only into it, and LAN users keep 8413 — so the desk knows for certain which
+requests came from outside **by port, never by a forwarded header**, which anyone can spoof.
+`installRemoteHardening` marks each call (`ApplicationCall.isRemote`) in the `Setup` phase and refuses
+what remote may not reach; see §"Remote hardening". **Anything mounted on this listener is reachable
+from the internet**, so a new route is a remote route whether or not its author thought about it.
 
-It carried only the MCP half until Remote access (`decisions/mcp-tunnel-ngrok.md`, Chris,
-2026-09-26: "if we do one, I'd like us to do the other"). The **port split is still the security
-boundary**, but it now draws a different line: not "what can be reached" but "what counts as
-remote". Everything that arrives on this listener is remote — the tunnel points only at it, and
-LAN users keep 8413 — so the desk knows for certain which requests came from outside **by port,
-never by a forwarded header**, which anyone can spoof. `installRemoteHardening` marks each call
-(`ApplicationCall.isRemote`) in the `Setup` phase and refuses what remote may not reach; see
-§"Remote hardening". **Anything mounted on this listener is reachable from the internet**, so a
-new route is a remote route whether or not its author thought about it.
+**A caller here is a remote session or no one.** `resolveCaller` (`auth/AuthGate.kt`) reads only
+`Authorization: Bearer <desk access token>` beside the sidecar's `Lighting7-Link` secret; a session
+cookie is never read on this listener, and password sign-in (`POST /auth/login`) is refused 403
+`REMOTE_PASSWORD_SIGN_IN`, so no cookie is ever set here either (cloud-p1 plan D18). The cloud says who
+someone is; the desk's link says which desk user that is.
 
-It binds `127.0.0.1:8414` by default, because the tunnel agent runs on the desk machine; a tunnel
-request therefore arrives from loopback, which is why no check here may read the peer address as
-"on the LAN" (`requireLanPeer` answers 404 on this listener). If it fails to bind, it logs, the
-desk carries on without it, and Remote access reports the failure rather than starting a tunnel
-to nowhere.
+It binds `127.0.0.1:8414` by default, because the sidecar runs on the desk machine; a request therefore
+arrives from loopback, which is why no check here may read the peer address as "on the LAN"
+(`requireLanPeer` answers 404 on this listener). If it fails to bind, it logs, the desk carries on
+without it, and no sidecar is started.
 
 ### Config (`local.conf`, machine-local)
 
@@ -52,96 +101,40 @@ mcp {
     enabled = true
     host = "127.0.0.1"
     port = 8414
-    # A tunnel you run yourself (Tailscale Funnel, Cloudflare): its HTTPS base, no trailing /mcp.
-    # When set it wins over Remote access's ngrok domain as the OAuth issuer.
-    publicUrl = ""
-    # Extra OAuth redirect URIs to accept, comma separated. claude.ai / claude.com and http
-    # loopback (Claude Code, the desktop app) are already allowed.
-    extraRedirectUris = ""
-    tunnel {
-        # Defaults for Remote access until it is first saved from the desk. The authtoken is not
-        # here: it only ever goes into the CredentialStore, from the Remote access tab.
-        enabled = false
-        domain = ""
-        # Run this ngrok binary instead of downloading the pinned one (dev, or an unpinned platform).
-        ngrokPath = ""
-    }
 }
 ```
 
-**The public URL is a provider, read per request** (`RemoteAccessService.publicUrl()`):
-`mcp.publicUrl` if set → else `https://<Remote access domain>` → else `http://localhost:<port>`
-(right for Claude Code on the desk machine, wrong for anything else). It is the OAuth issuer, the
-metadata, the 401 challenge and the `resource` check, so saving a domain takes effect without a
-restart — and **changing the domain changes the issuer**: every connector added under the old
-address has to be removed and added again. The Remote access tab asks before saving one.
-
-## Remote access (the ngrok tunnel)
-
-`mcp/tunnel/`. The desk runs the tunnel itself, so phone control works from a fresh install with
-nothing else to set up. What the operator does: sign up at ngrok, copy the authtoken and the free
-static domain, paste both into **Install settings → Remote access** (admin), and turn it on. The
-tab then reads *Online · https://<domain>* and shows `https://<domain>/mcp` with Copy.
-
-- **The agent is downloaded on first enable, never bundled.** ngrok's agent licence allows
-  distribution only where *we* hold the account, and every desk uses the operator's own. So
-  `NgrokInstaller` fetches the pinned build (`NgrokDistribution`: version and SHA-256 per
-  platform — darwin amd64/arm64, windows amd64/arm64, linux amd64) from ngrok's CDN into
-  `appDataDir()/ngrok/`, verifies the checksum before anything is kept, and extracts only the
-  agent. A platform with no pinned build (Linux on ARM, say) gets `NoBinary`, whose message names
-  `mcp.tunnel.ngrokPath`. Bumping ngrok means editing that table from checksums read off ngrok's
-  own download page, never from a mirror.
-- **`NgrokTunnel` supervises it.** It writes `ngrok.yml` (mode 600; the token and URLs quoted as
-  JSON strings so no value can break out of its scalar) naming one endpoint,
-  `https://<domain>` → `http://127.0.0.1:<mcp.port>`, and runs `ngrok start --all --config …`
-  with JSON logs on stdout, parsed for the started event and `ERR_NGROK_*` codes
-  (`parseLogLine`, `friendlyMessage`). A crash restarts with backoff (1 s → 60 s); an auth,
-  domain or config error does **not**, because only the operator can fix it. It starts only after
-  the public listener has bound (`onListenerStarted`).
-- **Only an agent this desk started is ever killed.** A PID file records the process and its
-  command; the next start kills that PID only if it is still running *our* agent path, so a
-  reused PID is left alone (see CLAUDE.md on never killing processes you did not start). On
-  Windows the agent is also put in a Job Object with kill-on-close, so it dies with the desk
-  however the desk dies. An orphan matters because it keeps holding the domain.
-- **State** is a `StateFlow<TunnelState>` — `Off | Installing(read, total) | Starting | Online(url)
-  | Error(code, message, retrying) | NoBinary(message)` — streamed to admin sockets as the
-  machine-scoped `tunnel.state` frame, the connect snapshot included.
-- **Settings are machine-local.** The authtoken is in the `CredentialStore` (`ngrok:authtoken`,
-  the keychain or its encrypted-file fallback, beside the GitHub tokens) and is **write-only**:
-  no answer ever carries it, only `hasAuthtoken`. Enabled, domain and allow-scripts are the one
-  row of `remote_access_settings` (`models/remoteAccess.kt`, `MachineLocal` in
-  `SyncCoverageTest`, never exported). `local.conf`'s `mcp.tunnel.*` seeds them until the first
-  save, after which the row wins.
-- **API**: `GET` / `PUT /api/rest/install/tunnel` (`routes/installTunnel.kt`), admin only. Every
-  `PUT` field is optional; an empty `authtoken` or `domain` clears it, and clearing either turns
-  remote access off. Turning it on is refused (`REMOTE_ACCESS_INVALID`) with no desk accounts, no
-  domain or no token. The `PUT` is refused on the public listener, 403 `CLOUD_SETTINGS_LOCAL_ONLY`:
-  it holds the scripts, effects and commands switches, which limit what a remote caller may do, so no
-  remote caller may change them (cloud-p1 plan D6).
-- **No plan warning.** ngrok's free plan (1 GB and 20,000 requests a month, a one-time browser
-  interstitial) is not pre-empted (Chris, 2026-09-26): we react only if a quota problem is seen.
+`mcp.publicUrl`, `mcp.extraRedirectUris` and `mcp.tunnel.*` belonged to the tunnel and the desk's OAuth
+server; a `local.conf` that still names one starts as before and logs a warning naming each
+(`McpConfig.RETIRED_KEYS`).
 
 ## Remote hardening
 
 `mcp/RemoteRequests.kt` and the call sites that read `isRemote`. On by default, not configurable
-except for scripts and the cannons:
+except for the three policy switches:
 
 - **A desk with no accounts is closed remotely.** Bootstrap-open is a LAN convenience; from
   outside, `/api…` answers 403 `REMOTE_NEEDS_ACCOUNT`, so nobody on the internet can create the
   first admin.
-- **Sign-in lockout.** The desk login (`POST /auth/login`) takes the MCP sign-in page's lockout —
-  ten failures in fifteen minutes, then 429 `SIGN_IN_LOCKED` — on remote requests only, sharing
-  that failure table. The LAN login keeps its throttle only, so a stranger hammering the tunnel
-  cannot lock the crew out at the desk.
-- **`Secure` session cookies** on this listener (the tunnel terminates HTTPS); none on the LAN,
-  where there is no HTTPS.
-- **Origin.** A state-changing request (any non-safe method) or a WebSocket upgrade outside
-  `/mcp`, `/oauth/` and `/.well-known/` must carry no `Origin` or one naming the public origin or
-  this listener's localhost; anything else is 403 `REMOTE_ORIGIN_REFUSED`. That is the WebSocket's
-  CSRF guard too, since a browser attaches cookies to a cross-site upgrade.
+- **No password sign-in, and no cookie.** `POST /auth/login` is 403 `REMOTE_PASSWORD_SIGN_IN`; a session
+  cookie is ignored. A remote caller is a remote session's bearer token (§"The public listener").
+- **The sign-in lockout.** The one password a remote caller can send is an unlinked session's
+  prove-once (`POST /cloud/link/prove`), and `AuthService.remoteSignInLockedOut` guards it: ten failures
+  in fifteen minutes for a username, then 429 `SIGN_IN_LOCKED` for the rest of the window. The table is
+  bounded by dropping expired windows and then keys naming no account, never a real account's
+  failures, so junk usernames cannot reset a real lockout. The LAN login keeps its throttle only, so a
+  stranger guessing remotely cannot lock the crew out at the desk.
+- **Origin.** A state-changing request (any non-safe method) or a WebSocket upgrade must carry no
+  `Origin`, one naming this listener's localhost, or — on a bearer request through the sidecar — the
+  origin the cloud serves this install's remote sessions from (`welcome`'s `remoteOrigin`); anything
+  else is 403 `REMOTE_ORIGIN_REFUSED`. That is the WebSocket's CSRF guard too.
 - **Not reachable remotely at all (404):** the QR password-reset and device-login flows (both lean
   on "the phone is on the desk's LAN"), `requireLanPeer`, and the API docs (`/api.json`,
   `/openapi`).
+- **The switches that limit the cloud change only at the desk** (cloud-p1 plan D6, D-17): the Cloud
+  tab's *Remote access* (`PUT /install/cloud/remote`) is 403 `CLOUD_SETTINGS_LOCAL_ONLY` on this
+  listener, as adoption, approving a session and *Quit desk* are. A compromised cloud can mint a linked
+  admin's token, so nothing it can sign may change what it is let do.
 - **Scripts are refused remotely unless an admin allows them** (Cloud → Remote access → *Allow
   scripts over remote access*). A script is arbitrary Kotlin in the desk's JVM. Refused
   (`REMOTE_SCRIPTS_DISABLED`, `requireScriptAccess`): creating, compiling and running a project
@@ -163,105 +156,36 @@ except for scripts and the cannons:
   fixture commands over remote access*; fixture optics plan session 7, D13). A reset swings a head
   through its travel and a lamp off leaves a discharge head dark for minutes, in a room a remote caller
   cannot see. Refused (`REMOTE_COMMANDS_DISABLED`, `requireCommandsAccess`, the `requireEffectsAccess`
-  twin): `POST …/patches/{id}/commands/{command}`, the one REST door — and **MCP's
+  twin): `POST …/patches/{id}/commands/{command}`, the bulk run and *Make rig safe* — and **MCP's
   `run_fixture_command`**, which `McpProtocol` holds to the same setting since MCP is always remote.
-  On the desk's own listener both roles run one behind the fixture panel's confirm. Off by
-  default; `remote_access_settings.allow_commands`, machine-local.
+  On the desk's own listener both roles run one behind the fixture panel's confirm.
+
+The three switches are `cloud/RemotePolicy.kt` over the one machine-local row of
+`remote_access_settings` (`allow_scripts`, `allow_effects`, `allow_commands`; `MachineLocal` in
+`SyncCoverageTest`, never exported), read into memory once and written only by the Cloud tab. Every
+`require*Access` and `McpProtocol` read them there. Off by default, and a desk upgraded from one with
+the tunnel keeps them (database step 13, `state/RetiredRemoteAccessMigration.kt`).
 
 **Residual risks, known and accepted:** a remote *admin* can still bring scripts in by importing a
 project or pulling a cloud-sync repo, which the gate does not cover — an admin account is trusted
-with the desk. The `tunnel.state` frame's admin check uses the role resolved when the socket
+with the desk. The `cloud.state` frame's admin check uses the role resolved when the socket
 connected, so a demoted admin keeps receiving it until they reconnect (their REST calls are
-refused at once). And a remote guesser can lock an account out *remotely* for fifteen minutes;
+refused at once). And a remote guesser can lock an account out of prove-once for fifteen minutes;
 the LAN login is unaffected.
-
-## Adding a connector
-
-A claude.ai connector (which is how iPhone and iPad reach it) is called from Anthropic's servers,
-so the listener must be reachable from the internet over HTTPS: Remote access, above, or a tunnel
-of your own — **Tailscale Funnel** (`tailscale funnel --bg 8414`) or **Cloudflare Tunnel**
-(`cloudflared tunnel --url http://localhost:8414`) — with `mcp.publicUrl` set to its URL. Then:
-
-- claude.ai → Settings → Connectors → Add custom connector → `<publicUrl>/mcp`. It then appears
-  on the phone and iPad apps for that account.
-- Claude Code: `claude mcp add --transport http lighting <publicUrl>/mcp` (or
-  `http://localhost:8414/mcp` on the desk machine, with no tunnel).
-
-Either way the client opens the desk's sign-in page, the operator signs in with their desk
-account and presses **Sign in and allow**, and the client holds a token from then on.
-
-## Auth: the desk is its own authorization server
-
-`mcp/McpAuthService.kt`. OAuth 2.1, public clients, nothing a client could hold as a secret.
-
-- **Registration** is open (clients register themselves), but a redirect URI must be on the
-  allowlist: `https://claude.ai/api/mcp/auth_callback`, the same on `claude.com`, `http`
-  loopback on any port, and `mcp.extraRedirectUris`. Clients are capped at 1000; ones older than
-  a day with no grant are pruned, and a full table evicts the oldest client with no grant and no
-  sign-in in progress rather than refusing. Sign-ins in progress are capped at 1000 the same way,
-  oldest evicted. Refusing at a cap would let anyone on the internet keep claude.ai out with a
-  few hundred junk requests; evicting means a flood has to outpace a real sign-in. A rate limit
-  at the tunnel is still the real defence against a sustained flood. An unknown client or unlisted redirect gets an error **page**,
-  never a redirect, so the endpoint can't be used to bounce a browser anywhere.
-- **PKCE S256 only**; `plain` and a missing challenge are refused. The RFC 8707 `resource`
-  parameter, when sent, must name this server (`<publicUrl>/mcp` or `<publicUrl>`).
-- **Sign-in** is the desk's own: `AuthService.verifyCredentials`, the same throttle, dummy
-  verify and disabled check the login uses. On top of it, this page has a **lockout** — ten
-  failures in fifteen minutes and it answers 429 until the window passes — because this page is
-  on the internet. The failure table is bounded by dropping
-  expired windows and then keys that name no account, never a real account's failures, so junk
-  usernames cannot reset a real lockout. The desk login shares it for remote requests (§"Remote
-  hardening"); the LAN login keeps its throttle only, so a stranger hammering the tunnel cannot
-  lock the crew out of the desk.
-- **The consent page** is server-rendered HTML with no script, `X-Frame-Options: DENY`,
-  `frame-ancestors 'none'`, `no-store` and `no-referrer`. It posts a form, which is the one place
-  the desk takes a form body. That does not reopen the CSRF hole `docs/desk-accounts.md`
-  describes: the page reads no cookie, the POST carries the password itself, and the
-  `request_id` it names is single-use and bound to an allowlisted redirect.
-- **Codes** live one minute, in memory, hashed, and are single-use: a code presented a second
-  time is refused.
-- **Tokens** are opaque: a one-hour access token and a thirty-day refresh token, stored as SHA-256
-  hashes in `mcp_oauth_grants` and cached in memory. A new or rotated grant is cached first and
-  then checked against the table and a per-user revocation counter, so a revocation that lands
-  mid-exchange or mid-refresh cannot leave a live token behind it. Refresh **rotates** both. Presenting the
-  previous refresh token again is taken as theft and revokes the whole grant.
-- **A desk with no accounts refuses** (`GET /oauth/authorize` is 403 and `/mcp` has no one to
-  authenticate as). A bootstrap-open desk is unauthenticated on the LAN by design; that must not
-  extend to the internet.
-
-A resolved token becomes an ordinary `AuthenticatedUser` with the grant's user and role, and a
-`sessionTokenHash` of `mcp-grant:<id>` so nothing mistakes it for a browser session.
-
-### Revocation
-
-Grants die on the same events as sessions. `AuthService` fires a credential-revocation listener
-from `revokeAllSessionsFor` (disable, password change by anyone, reset redemption, "sign out
-everywhere else") and from `deleteUser`; `McpAuthService` subscribes at construction, which is
-why it is eager in `State`. A token for a user who is disabled or gone also fails to resolve, as
-a second line. Users see their grants under **Connected apps** in Profile → Devices, one row per
-grant with Revoke (`GET`/`DELETE /api/rest/auth/connected-apps`, on the LAN port, any role, own
-grants only). A client can also revoke its own token at `/oauth/revoke`.
-
-### Tables
-
-`mcp_oauth_clients` and `mcp_oauth_grants` (`models/mcpOAuth.kt`) are **machine-local**
-(`SyncCoverageTest`): a grant is a credential for this desk, and a registration names this
-desk's URL. Neither is exported, synced or cloned.
 
 ## The protocol
 
 `mcp/McpProtocol.kt` is JSON-RPC 2.0 with no transport, so tests call it directly. It speaks
-protocol versions 2025-06-18, 2025-03-26 and 2024-11-05, answers every POST with a JSON body (no
-SSE, no `Mcp-Session-Id`, no server-initiated messages), answers a notification with 202, refuses
-batches, and 405s `GET`/`DELETE /mcp`. A tool answers text content, and `render_view` an `image`
-beside it (`{type: "image", data, mimeType}`, base64 — the same shape in all three versions). The `Origin` header, when present, must be the public
-URL's origin, claude.ai, claude.com or loopback (DNS-rebinding protection).
+protocol versions 2025-06-18, 2025-03-26 and 2024-11-05, answers every request with one JSON-RPC
+response (no SSE, no `Mcp-Session-Id`, no server-initiated messages), answers a notification with
+none, and refuses batches. A tool answers text content, and `render_view` an `image` beside it
+(`{type: "image", data, mimeType}`, base64 — the same shape in all three versions).
 
 ### Tools
 
 `describe_rig`, then the show-running tools (`AiTools.toolDefs`), then the show-setup tools
 below. There is **no script tool** (§"No script tool"): a script runs arbitrary Kotlin inside the
-desk's JVM, so reaching it through a tunnel would make a leaked token a shell on the desk machine;
+desk's JVM, so reaching it from outside would make a leaked token a shell on the desk machine;
 every tool here is a bounded operation on the show.
 
 `describe_rig` returns the live rig in prose (`ai/RigBriefing.kt`): fixtures, groups, the FX
@@ -893,55 +817,12 @@ detached canvas — is `frontend/docs/stage-vis-engineering.md` §"Rendering for
 
 Tests: `src/test/kotlin/.../mcp/McpSetupToolsTest.kt` and `McpSceneToolsTest.kt`; the venue split (extract, a show on the venue, `copy_to_project`, `copy_cues`, a hide, `delete_cue_stacks`, `publish_venue`, `projectId` on a project that is not current, and the guards) in `McpVenueSplitToolsTest.kt`; a cue's places (`create_cue` into a stack, a cue shared and twice in one stack addressed by number and by entry, remove, move, `delete_cues`, a shared `build_cue_stack` row, `describe_rig`'s `in:`) in `McpLookCueEditingTest.kt`; `render_view` in `McpRenderViewTest.kt` (the vocabulary, the named errors, and the whole round trip over a real signed-in socket) and `state/StageRenderServiceTest.kt`.
 
-## Through the cloud
-
-Lighting7 Cloud serves one MCP URL per install and relays each JSON-RPC message to the desk over the
-control channel as `mcp.call {token, grant: {id, clientName}, request}` (cloud-p1 plan D15,
-`docs/cloud-protocol.md`). `cloud/McpRelay.kt` runs it through the same `McpProtocol` as `/mcp`
-(`State.mcpProtocol`, one instance for both), so every tool, refusal and switch above holds through the
-cloud unchanged. The desk's own `/mcp` stays beside it until P1's session 9.
-
-On the channel's thread a call is judged only by *Claude (MCP)* (`cloud_connection.mcp_access`, off at
-adoption and set only on the desk's own listener, P1 D6): off, it is refused `MCP_ACCESS_OFF`, and the
-desk announces `mcp.off` beside `mcp.v1`. Then the queue: four calls run at once and four wait, a ninth
-is refused `DESK_BUSY` (the cloud keeps eight in flight). The rest runs on `Dispatchers.IO`, never on a
-`cloud-N` thread:
-
-1. The token is checked by `DeskTokens.verify` at the `mcp` door, so a remote session's is
-   `TOKEN_WRONG_SCOPE`; its org must be the adoption's, its `gid` the call's `grant.id`
-   (`MCP_GRANT_MISMATCH`), and no `revoke` naming its account, or everything, may cover it
-   (`TOKEN_REVOKED`, the remote sessions' deny set, `RemoteSessions.tokenRevoked`).
-2. Its `sub` is mapped through `cloud_identity_links` to a desk user: none is `CLOUD_ACCOUNT_NOT_LINKED`,
-   whose message names the two ways to link (an admin's invite, or proving once from a remote session).
-   A disabled user's call is answered as a JSON-RPC error (`-32001`), not run. The user's role is read
-   from `AuthService` per call, as a cookie's is, so a demotion counts at the next call.
-3. The call runs as that user, with `sessionTokenHash = cloud-grant:{gid}` and the call's `clientName`
-   (cut to 64 characters) on `AuthenticatedUser`. `historySourceOf` reads it as `mcp-grant:` is read, as
-   the source `mcp:cloud:{gid}` named *Claude · {client}*, so each grant's history is its own and
-   `list_history` and `undo_changes` keep two grants apart.
-4. The answer is `mcp.result {response}` with `replyTo` the call's id, through the reply queue (P1 D16);
-   a notification's has no `response`. The call's slot is free before the answer is queued, so a cloud
-   that sends its next call on hearing one finds room. Each call is its own `mcp.relay` transaction,
-   which `McpProtocol`'s `mcp.server` span joins. A result whose frame would be over 8 MiB is answered in its place
-   as a JSON-RPC error (`-32603`) saying it was too large.
-
-A refusal is `error {code, message}` with `replyTo`. A call must fit one frame, so the cloud refuses a
-body over 7 MiB before it reaches the desk: `upload_scene_image` through the cloud takes an image of
-about 5 MB, which its description says (`FU-CLOUD-MCP-CHUNKING`). `render_view` still draws only on a
-signed-in window of the desk's own listener.
-
 ## Tests
 
-`src/test/kotlin/.../mcp/McpServerTest.kt` mounts `publicModule` and runs the whole
-connect: discovery, registration, sign-in, code exchange, `initialize`, `tools/list`, a real tool
-call reaching the master clock, refresh rotation and reuse, the redirect allowlist, the lockout,
-deny, a bootstrap desk, revocation on disable and password change, and the Connected apps REST
-pair, plus that the public listener serves the desk's own API and that a saved domain becomes
-the issuer without a restart. `RemoteHardeningTest` covers §"Remote hardening" item by item and
-the tunnel settings route (the token never comes back, admin only). `mcp/tunnel/` drives the
-supervisor against a **fake `ngrok`** — a shell script printing the real agent's JSON log lines —
-through online, crash-and-restart, a bad token (not retried), a plain-text error and the orphan
-sweep (POSIX only); the installer against hand-built zip and tgz archives, including a checksum
-mismatch; and `RemoteAccessService` end to end with the fake agent. Nothing is tested against the
-real claude.ai or the real ngrok. The relay is `cloud/McpRelayTest.kt` and `McpRelayLimitsTest`, through
-`FakeCloud`'s `mcpCall` (`docs/cloud-engineering.md` §"Tests").
+`RemoteHardeningTest` covers §"Remote hardening" item by item over remote sessions a `FakeCloud`
+adoption signs (`testsupport/RemoteDesk.kt`): password sign-in refused and a cookie meaning nothing on
+the public listener, the tunnel's and the OAuth server's routes gone, the origin check, and each policy
+switch from its home on the Cloud tab. The relay is `cloud/McpRelayTest.kt` and `McpRelayLimitsTest`,
+through `FakeCloud`'s `mcpCall` (`docs/cloud-engineering.md` §"Tests"); the tools are called through
+`McpProtocol.handle` directly by the `Mcp*Test` classes. `state/RetiredRemoteAccessMigrationTest.kt` runs
+database step 13 over a frozen desk that had the tunnel. Nothing is tested against the real claude.ai.

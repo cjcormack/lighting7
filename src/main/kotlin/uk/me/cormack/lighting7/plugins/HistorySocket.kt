@@ -109,7 +109,7 @@ private const val SHOW_KIND = "SHOW"
  */
 fun setupHistorySubscriptions(scope: SocketScope) {
     val state = scope.state
-    val sourceKey = historySourceOf(state, scope.user).key
+    val sourceKey = historySourceOf(scope.user).key
     scope.subscribe(combine(state.programmerHistoryFrame, state.history.revision) { frame, _ -> frame }) { frame ->
         // The programmer's project, so the steps and the show entry are one project's even mid-switch.
         val project = frame.projectId ?: state.projectManager.currentProjectOrNull?.id?.value

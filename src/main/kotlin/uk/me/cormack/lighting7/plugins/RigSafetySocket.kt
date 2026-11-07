@@ -128,7 +128,7 @@ internal fun RigSafetyService.Snapshot.toMessage(quitAllowed: Boolean, nowMs: Lo
 
 /**
  * Whether this socket may quit the desk: on the desk's own listener, as an admin (or on a desk with no
- * accounts). The role is the one resolved at upgrade, as `tunnel.state`'s is; the route decides.
+ * accounts). The role is the one resolved at upgrade, as `cloud.state`'s is; the route decides.
  */
 internal fun SocketScope.mayQuit(): Boolean = !remote && (user == null || user.role == UserRole.ADMIN)
 

@@ -33,10 +33,10 @@ import org.jetbrains.exposed.v1.jdbc.update
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import uk.me.cormack.lighting7.auth.REMOTE_SIGN_IN_LOCKOUT_FAILURES
 import uk.me.cormack.lighting7.cloud.protocol.ErrorCode
 import uk.me.cormack.lighting7.cloud.protocol.LinkOutcome
 import uk.me.cormack.lighting7.cloud.protocol.Message
-import uk.me.cormack.lighting7.mcp.McpAuthService
 import uk.me.cormack.lighting7.mcp.publicModule
 import uk.me.cormack.lighting7.models.CloudLinkEventKind
 import uk.me.cormack.lighting7.models.CloudLinkVia
@@ -333,7 +333,7 @@ class CloudLinksTest : RouteIntegrationTest() {
         // Still the same unlinked session: a wrong password ends nothing.
         assertNotNull(sessions.find("sid-wrong"))
 
-        repeat(McpAuthService.SIGN_IN_LOCKOUT_FAILURES) { state.mcpAuthService.recordSignInFailure("op") }
+        repeat(REMOTE_SIGN_IN_LOCKOUT_FAILURES) { state.authService.recordRemoteSignInFailure("op") }
         assertRefused(http.prove(token, "op"), HttpStatusCode.TooManyRequests, "SIGN_IN_LOCKED")
         assertNull(linkOf(operatorId))
     }

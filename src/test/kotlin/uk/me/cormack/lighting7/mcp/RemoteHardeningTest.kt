@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.mcp
 
 import io.ktor.client.HttpClient
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -13,8 +14,6 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
-import io.ktor.http.setCookie
-import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -22,42 +21,50 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Test
-import uk.me.cormack.lighting7.auth.SESSION_COOKIE
-import uk.me.cormack.lighting7.mcp.tunnel.RemoteAccessException
-import uk.me.cormack.lighting7.mcp.tunnel.RemoteAccessService
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.routes.LoginRequest
 import uk.me.cormack.lighting7.routes.NewScript
+import uk.me.cormack.lighting7.testsupport.FakeCloud
+import uk.me.cormack.lighting7.testsupport.RemoteDesk
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.TEST_PASSWORD
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.loginCookieHeader
+import uk.me.cormack.lighting7.testsupport.mountPublic
 import uk.me.cormack.lighting7.testsupport.mountTestApp
+import uk.me.cormack.lighting7.testsupport.remote
 import uk.me.cormack.lighting7.testsupport.seedUser
-import uk.me.cormack.lighting7.testsupport.testAppConfig
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /**
  * The public listener's remote hardening (`mcp/RemoteRequests.kt`, `docs/mcp-engineering.md`
- * §"Remote hardening"): every request on it is remote, and remote gets a stricter desk.
+ * §"Remote hardening"): every request on it is remote, and remote gets a stricter desk. A caller
+ * there is a remote session through the cloud or no one, so the tests sign in as one ([RemoteDesk]).
  */
 class RemoteHardeningTest : RouteIntegrationTest() {
 
+    private val fake = FakeCloud().apply { heartbeatS = 1 }
+    private val desk by lazy { RemoteDesk(state, fake) }
+
+    override val extraConfig: List<Pair<String, String>> = listOf("cloud.baseUrl" to fake.baseUrl)
+
     @After
-    fun forgetToken() {
-        // The test credential store is a file under build/test-data, shared across tests.
-        runCatching { state.credentialStore.deleteBlob(RemoteAccessService.AUTHTOKEN_KEY) }
+    fun closeFake() {
+        desk.close()
     }
 
-    private fun ApplicationTestBuilder.mountPublic() {
-        environment { config = testAppConfig() }
-        application { publicModule(state) }
+    /** Seed [username] (an admin unless [role] says otherwise) and adopt the desk as the first admin seeded. */
+    private fun remoteUser(username: String, role: UserRole = UserRole.ADMIN) {
+        val user = seedUser(state, username, role = role)
+        if (!adopted) {
+            desk.adopt(user.userId)
+            adopted = true
+        }
     }
+
+    private var adopted = false
 
     private fun HttpResponse.code(): String? = runBlocking {
         Json.parseToJsonElement(bodyAsText()).jsonObject["code"]?.jsonPrimitive?.content
@@ -72,7 +79,7 @@ class RemoteHardeningTest : RouteIntegrationTest() {
 
     @Test
     fun `a desk with no accounts is closed remotely, so nobody can create the first admin`() = testApplication {
-        mountPublic()
+        mountPublic(state)
         val http = jsonClient()
         val status = http.get("/api/rest/auth/status")
         assertEquals(HttpStatusCode.Forbidden, status.status)
@@ -91,64 +98,118 @@ class RemoteHardeningTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `the session cookie is Secure remotely and not on the LAN`() {
+    fun `password sign-in is the desk's own, and a session cookie means nothing remotely`() {
         seedUser(state, "alice")
+        var cookie = ""
         testApplication {
-            mountPublic()
-            val cookie = jsonClient().login("alice").setCookie().first { it.name == SESSION_COOKIE }
-            assertTrue(cookie.secure, "remote session cookie must be Secure")
+            mountTestApp(state)
+            cookie = jsonClient().loginCookieHeader("alice")
+        }
+        testApplication {
+            mountPublic(state)
+            val http = jsonClient()
+            val login = http.login("alice")
+            assertEquals(HttpStatusCode.Forbidden, login.status)
+            assertEquals(CODE_REMOTE_PASSWORD_SIGN_IN, login.code())
+            assertNull(login.headers[HttpHeaders.SetCookie])
+            val projects = http.get("/api/rest/projects") { header(HttpHeaders.Cookie, cookie) }
+            assertEquals(HttpStatusCode.Unauthorized, projects.status)
+            val status = Json.parseToJsonElement(http.get("/api/rest/auth/status") { header(HttpHeaders.Cookie, cookie) }.bodyAsText()).jsonObject
+            assertEquals("false", status["authenticated"]!!.jsonPrimitive.content)
         }
         testApplication {
             mountTestApp(state)
-            val cookie = jsonClient().login("alice").setCookie().first { it.name == SESSION_COOKIE }
-            assertFalse(cookie.secure, "a Secure cookie would never come back over the LAN's plain HTTP")
+            assertEquals(HttpStatusCode.OK, jsonClient().get("/api/rest/projects") { header(HttpHeaders.Cookie, cookie) }.status)
         }
     }
 
     @Test
-    fun `repeated remote failures lock the account remotely but never on the LAN`() {
+    fun `no spelling of a refused path reaches its handler`() {
+        testApplication {
+            mountPublic(state)
+            val http = jsonClient()
+            // No accounts yet: every spelling of an API path is closed.
+            for (path in listOf("/api//rest/auth/status", "/%61pi/rest/auth/status")) {
+                val response = http.get(path)
+                assertEquals(HttpStatusCode.Forbidden, response.status, path)
+                assertEquals("REMOTE_NEEDS_ACCOUNT", response.code(), path)
+            }
+        }
         seedUser(state, "alice")
         testApplication {
-            mountPublic()
+            mountPublic(state)
             val http = jsonClient()
-            repeat(10) { assertEquals(HttpStatusCode.Unauthorized, http.login("alice", "wrong-password").status) }
-            val locked = http.login("alice")
-            assertEquals(HttpStatusCode.TooManyRequests, locked.status)
-            assertEquals("SIGN_IN_LOCKED", locked.code())
+            for (path in listOf("/api/rest/auth//login", "/api//rest/auth/login", "/api/rest/auth/%6Cogin")) {
+                val login = http.post(path) {
+                    contentType(ContentType.Application.Json)
+                    setBody(LoginRequest("alice", TEST_PASSWORD))
+                }
+                assertEquals(HttpStatusCode.Forbidden, login.status, path)
+                assertEquals(CODE_REMOTE_PASSWORD_SIGN_IN, login.code(), path)
+                assertNull(login.headers[HttpHeaders.SetCookie], path)
+            }
+            assertEquals(HttpStatusCode.NotFound, http.get("/api/rest/auth//reset/some-token").status)
+        }
+    }
+
+    @Test
+    fun `the tunnel, the desk's OAuth server and MCP straight to the desk are gone`() {
+        seedUser(state, "alice")
+        testApplication {
+            mountPublic(state)
+            val http = jsonClient()
+            for (path in listOf(
+                "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp",
+                "/.well-known/oauth-authorization-server", "/oauth/authorize",
+            )) {
+                assertEquals(HttpStatusCode.NotFound, http.get(path).status, path)
+            }
+            for (path in listOf("/oauth/register", "/oauth/token", "/oauth/revoke", "/mcp")) {
+                assertEquals(HttpStatusCode.NotFound, http.post(path) { contentType(ContentType.Application.Json); setBody("{}") }.status, path)
+            }
         }
         testApplication {
             mountTestApp(state)
-            assertEquals(HttpStatusCode.OK, jsonClient().login("alice").status)
+            val http = jsonClient()
+            val cookie = http.loginCookieHeader("alice")
+            // A GET of an unknown path is the SPA's page, so the routes are asked by their writes.
+            val tunnel = http.put("/api/rest/install/tunnel") {
+                header(HttpHeaders.Cookie, cookie); contentType(ContentType.Application.Json); setBody("""{"enabled":true}""")
+            }
+            assertEquals(HttpStatusCode.NotFound, tunnel.status)
+            assertEquals(HttpStatusCode.NotFound, http.delete("/api/rest/auth/connected-apps/1") { header(HttpHeaders.Cookie, cookie) }.status)
         }
     }
 
     @Test
     fun `a state-changing request from a foreign origin is refused`() = testApplication {
-        mountPublic()
-        seedUser(state, "alice")
+        mountPublic(state)
+        remoteUser("alice")
         val http = jsonClient()
-        val foreign = http.login("alice", origin = "https://evil.example")
+        suspend fun logout(origin: String?) = http.post("/api/rest/auth/logout") {
+            remote(desk.caller("alice"))
+            origin?.let { header(HttpHeaders.Origin, it) }
+        }
+        val foreign = logout("https://evil.example")
         assertEquals(HttpStatusCode.Forbidden, foreign.status)
         assertEquals("REMOTE_ORIGIN_REFUSED", foreign.code())
-        assertEquals(HttpStatusCode.OK, http.login("alice", origin = "http://localhost:8414").status)
+        assertEquals(HttpStatusCode.NoContent, logout("http://localhost:8414").status)
         // No Origin at all is not a browser, so not a cross-site request.
-        assertEquals(HttpStatusCode.OK, http.login("alice").status)
-
-        state.remoteAccess.update(domain = "desk.ngrok-free.app", hasAnyUser = true)
-        assertEquals(HttpStatusCode.OK, http.login("alice", origin = "https://desk.ngrok-free.app").status)
+        assertEquals(HttpStatusCode.NoContent, logout(null).status)
 
         // A WebSocket upgrade carries no CORS protection at all: the origin check is the lock.
         // (The test client refuses to set `Upgrade` itself, so the rule is asked directly.)
         val upgrade = remoteRefusal(state, "/api", HttpMethod.Get, "https://evil.example", webSocket = true)
         assertEquals(HttpStatusCode.Forbidden, upgrade?.first)
-        assertNull(remoteRefusal(state, "/api", HttpMethod.Get, "https://desk.ngrok-free.app", webSocket = true))
+        assertNull(remoteRefusal(state, "/api", HttpMethod.Get, "http://localhost:8414", webSocket = true))
+        assertEquals(HttpStatusCode.Forbidden, remoteRefusal(state, "/api", HttpMethod.Get, "https://desk.ngrok-free.app", webSocket = true)?.first)
         // A read from anywhere is harmless: it carries no cookie cross-site, and CORS hides the answer.
         assertEquals(HttpStatusCode.OK, http.get("/api/rest/auth/status") { header(HttpHeaders.Origin, "https://evil.example") }.status)
     }
 
     @Test
     fun `the QR redemption flows and the API docs are not there remotely`() = testApplication {
-        mountPublic()
+        mountPublic(state)
         seedUser(state, "alice")
         val http = jsonClient()
         assertEquals(HttpStatusCode.NotFound, http.get("/api/rest/auth/device/some-token").status)
@@ -164,7 +225,7 @@ class RemoteHardeningTest : RouteIntegrationTest() {
 
     @Test
     fun `scripts are refused remotely until an admin allows them`() {
-        seedUser(state, "alice")
+        remoteUser("alice")
         var scriptId = 0
         testApplication {
             mountTestApp(state)
@@ -179,12 +240,12 @@ class RemoteHardeningTest : RouteIntegrationTest() {
             scriptId = Json.parseToJsonElement(created.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content.toInt()
         }
         testApplication {
-            mountPublic()
+            mountPublic(state)
             val http = jsonClient()
-            val cookie = http.loginCookieHeader("alice")
+            val caller = desk.caller("alice")
             suspend fun send(path: String, body: String, put: Boolean = false): HttpResponse {
                 val block: io.ktor.client.request.HttpRequestBuilder.() -> Unit = {
-                    header(HttpHeaders.Cookie, cookie)
+                    remote(caller)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -197,7 +258,7 @@ class RemoteHardeningTest : RouteIntegrationTest() {
                 send("$scripts/run", """{"name":"x","script":"println(2)"}"""),
                 send("$scripts/$scriptId", """{"name":"hello","script":"println(3)"}""", put = true),
                 send("/api/rest/fx/definitions/compile", """{"script":"1"}"""),
-                http.get("/api/script-editor/versions") { header(HttpHeaders.Cookie, cookie) },
+                http.get("/api/script-editor/versions") { remote(caller) },
             )
             refused.forEach { r ->
                 assertEquals(HttpStatusCode.Forbidden, r.status, r.bodyAsText())
@@ -207,8 +268,8 @@ class RemoteHardeningTest : RouteIntegrationTest() {
             val rename = send("$scripts/$scriptId", """{"name":"renamed","script":"println(1)"}""", put = true)
             assertEquals(HttpStatusCode.OK, rename.status, rename.bodyAsText())
 
-            state.remoteAccess.update(allowScripts = true, hasAnyUser = true)
-            assertEquals(HttpStatusCode.OK, http.get("/api/script-editor/versions") { header(HttpHeaders.Cookie, cookie) }.status)
+            state.remotePolicy.update(allowScripts = true)
+            assertEquals(HttpStatusCode.OK, http.get("/api/script-editor/versions") { remote(caller) }.status)
             val edit = send("$scripts/$scriptId", """{"name":"renamed","script":"println(3)"}""", put = true)
             assertEquals(HttpStatusCode.OK, edit.status, edit.bodyAsText())
         }
@@ -216,7 +277,7 @@ class RemoteHardeningTest : RouteIntegrationTest() {
 
     @Test
     fun `fixture commands are refused remotely until an admin allows them`() {
-        seedUser(state, "alice")
+        remoteUser("alice")
         var patchId = 0
         testApplication {
             mountTestApp(state)
@@ -231,35 +292,35 @@ class RemoteHardeningTest : RouteIntegrationTest() {
             patchId = Json.parseToJsonElement(created.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content.toInt()
         }
         testApplication {
-            mountPublic()
+            mountPublic(state)
             val http = jsonClient()
-            val cookie = http.loginCookieHeader("alice")
+            val caller = desk.caller("alice")
             val path = "/api/rest/projects/$projectId/patches/$patchId/commands/resetPanTilt"
-            val refused = http.post(path) { header(HttpHeaders.Cookie, cookie) }
+            val refused = http.post(path) { remote(caller) }
             assertEquals(HttpStatusCode.Forbidden, refused.status, refused.bodyAsText())
             assertEquals("REMOTE_COMMANDS_DISABLED", refused.code())
             assertNull(state.show.commandOutput.runningOn("rev"))
 
-            state.remoteAccess.update(allowCommands = true, hasAnyUser = true)
+            state.remotePolicy.update(allowCommands = true)
             try {
-                val ran = http.post(path) { header(HttpHeaders.Cookie, cookie) }
+                val ran = http.post(path) { remote(caller) }
                 assertEquals(HttpStatusCode.OK, ran.status, ran.bodyAsText())
             } finally {
-                state.remoteAccess.update(allowCommands = false, hasAnyUser = true)
+                state.remotePolicy.update(allowCommands = false)
             }
         }
     }
 
     @Test
     fun `bulk commands and make rig safe are held to the commands setting remotely, and quit is never remote`() {
-        seedUser(state, "admin")
+        remoteUser("admin")
         testApplication {
-            mountPublic()
+            mountPublic(state)
             val http = jsonClient()
-            val cookie = http.loginCookieHeader("admin")
+            val caller = desk.caller("admin")
             for (path in listOf("projects/$projectId/commands", "projects/$projectId/rig-safe", "projects/$projectId/rig-safe/undo")) {
                 val refused = http.post("/api/rest/$path") {
-                    header(HttpHeaders.Cookie, cookie)
+                    remote(caller)
                     contentType(ContentType.Application.Json)
                     setBody("""{"role":"LAMP_OFF"}""")
                 }
@@ -269,7 +330,7 @@ class RemoteHardeningTest : RouteIntegrationTest() {
             var exited = false
             state.exitDesk = { exited = true }
             val quit = http.post("/api/rest/install/quit") {
-                header(HttpHeaders.Cookie, cookie)
+                remote(caller)
                 contentType(ContentType.Application.Json)
                 setBody("""{"force":true}""")
             }
@@ -281,84 +342,23 @@ class RemoteHardeningTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `the tunnel settings keep the authtoken write-only and are admin only`() {
+    fun `the policy switches live on the Cloud tab and outlast a restart`() {
         seedUser(state, "admin")
-        seedUser(state, "op", role = UserRole.OPERATOR)
         testApplication {
             mountTestApp(state)
             val http = jsonClient()
-            val admin = http.loginCookieHeader("admin")
-            val op = http.loginCookieHeader("op")
-            assertEquals(HttpStatusCode.Forbidden, http.get("/api/rest/install/tunnel") { header(HttpHeaders.Cookie, op) }.status)
-
-            val incomplete = http.put("/api/rest/install/tunnel") {
-                header(HttpHeaders.Cookie, admin); contentType(ContentType.Application.Json)
-                setBody("""{"enabled":true}""")
-            }
-            assertEquals(HttpStatusCode.BadRequest, incomplete.status)
-            assertEquals("REMOTE_ACCESS_INVALID", incomplete.code())
-
-            val saved = http.put("/api/rest/install/tunnel") {
-                header(HttpHeaders.Cookie, admin); contentType(ContentType.Application.Json)
-                setBody("""{"domain":"https://Desk.ngrok-free.app/","authtoken":"2abcSECRETtoken"}""")
+            val cookie = http.loginCookieHeader("admin")
+            val saved = http.put("/api/rest/install/cloud/remote") {
+                header(HttpHeaders.Cookie, cookie); contentType(ContentType.Application.Json)
+                setBody("""{"allowScripts":true,"allowCommands":true}""")
             }
             assertEquals(HttpStatusCode.OK, saved.status, saved.bodyAsText())
-            val body = saved.bodyAsText()
-            assertFalse(body.contains("2abcSECRETtoken"), body)
-            val json = Json.parseToJsonElement(body).jsonObject
-            assertEquals("desk.ngrok-free.app", json["domain"]!!.jsonPrimitive.content)
-            assertEquals("true", json["hasAuthtoken"]!!.jsonPrimitive.content)
-            assertEquals("https://desk.ngrok-free.app/mcp", json["connectorUrl"]!!.jsonPrimitive.content)
-            assertEquals("off", json["state"]!!.jsonObject["status"]!!.jsonPrimitive.content)
-            assertFalse(http.get("/api/rest/install/tunnel") { header(HttpHeaders.Cookie, admin) }.bodyAsText().contains("SECRET"))
-
-            // Clearing the token turns remote access off with it.
-            state.remoteAccess.update(enabled = true, hasAnyUser = true)
-            assertTrue(state.remoteAccess.settings.enabled)
-            val cleared = http.put("/api/rest/install/tunnel") {
-                header(HttpHeaders.Cookie, admin); contentType(ContentType.Application.Json)
-                setBody("""{"authtoken":""}""")
-            }
-            val clearedJson = Json.parseToJsonElement(cleared.bodyAsText()).jsonObject
-            assertEquals("false", clearedJson["hasAuthtoken"]!!.jsonPrimitive.content)
-            assertEquals("false", clearedJson["enabled"]!!.jsonPrimitive.content)
         }
+        assertEquals(RemotePolicySettingsOf(scripts = true, commands = true), state.remotePolicy.settings)
+        assertEquals(RemotePolicySettingsOf(scripts = true, commands = true), uk.me.cormack.lighting7.cloud.RemotePolicy(state.database).settings)
     }
 
-    @Test
-    fun `remote access cannot be turned on for a desk with no accounts`() {
-        val e = assertFailsWith<RemoteAccessException> {
-            state.remoteAccess.update(enabled = true, domain = "desk.ngrok-free.app", authtoken = "tok", hasAnyUser = false)
-        }
-        assertTrue(e.message!!.contains("account"))
-        assertFalse(state.remoteAccess.settings.enabled)
-    }
-
-    @Test
-    fun `domains are normalised, and anything but a bare host is refused`() {
-        assertEquals("desk.ngrok-free.app", RemoteAccessService.normaliseDomain(" https://Desk.ngrok-free.app/ "))
-        assertNull(RemoteAccessService.normaliseDomain("  "))
-        for (bad in listOf("desk", "desk.ngrok-free.app/path", "desk.ngrok-free.app:8080", "evil.com?x=1", "-a.example")) {
-            assertFailsWith<RemoteAccessException>(bad) { RemoteAccessService.normaliseDomain(bad) }
-        }
-    }
-
-    @Test
-    fun `the public url prefers local conf, then the ngrok domain, then localhost`() {
-        assertEquals("http://localhost:8414", state.remoteAccess.publicUrl())
-        state.remoteAccess.update(domain = "desk.ngrok-free.app", hasAnyUser = true)
-        assertEquals("https://desk.ngrok-free.app", state.remoteAccess.publicUrl())
-        val explicit = RemoteAccessService(
-            state.database,
-            state.mcpConfig.copy(explicitPublicUrl = "https://mine.example"),
-            credentialStore = { state.credentialStore },
-            workDir = kotlin.io.path.createTempDirectory("ra"),
-        )
-        try {
-            assertEquals("https://mine.example", explicit.publicUrl())
-            assertNotEquals(state.remoteAccess.publicUrl(), explicit.publicUrl())
-        } finally {
-            explicit.close()
-        }
-    }
+    @Suppress("FunctionName")
+    private fun RemotePolicySettingsOf(scripts: Boolean = false, effects: Boolean = false, commands: Boolean = false) =
+        uk.me.cormack.lighting7.cloud.RemotePolicySettings(scripts, effects, commands)
 }

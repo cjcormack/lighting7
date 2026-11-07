@@ -148,7 +148,7 @@ internal class HistoryTools(private val state: State) {
             val result = moveHistory(
                 state, projectId, source, HistoryMove(undo = true, entryId = next, confirm = confirm == true && i == 0),
                 operator = user?.role != UserRole.ADMIN,
-                scriptsAllowed = state.remoteAccess.allowRemoteScripts,
+                scriptsAllowed = state.remotePolicy.allowScripts,
             )
             val outcome = (result as? HistoryMoveResult.Show)?.outcome
             if (outcome is RecordRestorer.Outcome.Done) {
@@ -161,7 +161,7 @@ internal class HistoryTools(private val state: State) {
     }
 
     private fun sourceOf(user: AuthenticatedUser?): HistorySource? =
-        user?.let { historySourceOf(state, it) }?.takeIf { it.kind == HistorySource.Kind.MCP }
+        user?.let { historySourceOf(it) }?.takeIf { it.kind == HistorySource.Kind.MCP }
 
     private fun JsonObjectBuilder.putEntry(projectId: Int, entry: HistoryEntry) {
         put("id", entry.id)

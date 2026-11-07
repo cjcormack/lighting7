@@ -30,7 +30,7 @@ val ApplicationCall.authenticatedUser: AuthenticatedUser
 
 /** Who a request is: what [resolveCaller] answers. */
 sealed interface Caller {
-    /** A cookie session, or a remote session through the cloud linked to a local user ([bearer]). */
+    /** A cookie session on the desk's own listener, or a remote session linked to a local user ([bearer]). */
     data class SignedIn(val user: AuthenticatedUser, val bearer: BearerCheck.Linked? = null) : Caller
 
     /** A remote session whose cloud account links to no local user (cloud-p1 plan D4, D12). */
@@ -48,14 +48,14 @@ private val CallerKey = AttributeKey<Caller>("lighting7.caller")
  * Who is calling: the single definition, used by the gate, the WS upgrade in `plugins/Sockets.kt`
  * and the exempt `auth/status` route (which the gate deliberately skips). Resolved once per call.
  *
- * On the public listener a request carrying `Authorization: Bearer` is judged as a remote session
- * through the cloud and only that way (cloud-p1 plan D4): [RemoteSessions.authenticate], which also
- * demands the sidecar's `Lighting7-Link` secret. Everywhere else, and without a bearer, the session
- * cookie.
+ * On the public listener a caller is a remote session through the cloud or no one (cloud-p1 plan D4,
+ * D18): a request carrying `Authorization: Bearer` is judged by [RemoteSessions.authenticate], which
+ * also demands the sidecar's `Lighting7-Link` secret, and a session cookie is never read there. On
+ * the desk's own listener, the session cookie.
  */
 fun ApplicationCall.resolveCaller(state: State): Caller = attributes.computeIfAbsent(CallerKey) {
-    val bearer = if (isRemote) bearerToken() else null
-    if (bearer != null) {
+    if (isRemote) {
+        val bearer = bearerToken() ?: return@computeIfAbsent Caller.Anonymous
         when (val check = state.cloud.remoteSessions.authenticate(bearer, request.headers[RemoteSessions.LINK_HEADER])) {
             is BearerCheck.Linked -> Caller.SignedIn(check.user, check)
             is BearerCheck.Unlinked -> Caller.Unlinked(check)

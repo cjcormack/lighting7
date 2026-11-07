@@ -48,8 +48,8 @@ import kotlin.coroutines.cancellation.CancellationException
  * test suite, which never starts it, passes straight through.
  *
  * Each HTTP call (bar a WebSocket upgrade) runs under a scope forked fresh from the root, which puts
- * the `listener` tag and the caller on anything reported while handling it. A call under `/api/`,
- * `/mcp`, `/oauth/` or `/.well-known/` is also an `http.server` transaction, continued from the
+ * the `listener` tag and the caller on anything reported while handling it. A call under `/api/` is
+ * also an `http.server` transaction, continued from the
  * caller's `sentry-trace` / `baggage` and named by its route template — never the raw path, which
  * can carry a token. Installed first in `moduleWithState`, so its phase runs before StatusPages'
  * and the errors StatusPages logs are reported under the call's scope.
@@ -128,11 +128,11 @@ internal fun withoutSamplingInputs(baggage: List<String>?): List<String>? = bagg
 
 private val SAMPLING_INPUTS = setOf("sentry-sample_rand", "sentry-sample_rate")
 
-/** Whether a request path is traced: the API and MCP, not the UI's files, boot polling, render uploads or the browser's tunnel. */
+/** Whether a request path is traced: the API, not the UI's files, boot polling, render uploads or the browser's tunnel. */
 internal fun isTracedPath(path: String): Boolean {
     val p = path.trimEnd('/')
     if (p == "/api/rest/status" || p.startsWith("/api/rest/stage-renders/") || p == "/api/sentry") return false
-    return p.startsWith("/api/") || p == "/mcp" || p.startsWith("/mcp/") || p.startsWith("/oauth/") || p.startsWith("/.well-known/")
+    return p.startsWith("/api/")
 }
 
 /** `/api/rest/projects/{projectId}/cues/{cueId}`: path segments only, every parameter by its name. */

@@ -27,6 +27,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.junit.After
 import org.junit.Test
 import uk.me.cormack.lighting7.ai.AiTools
 import uk.me.cormack.lighting7.ai.SavedView
@@ -47,6 +48,10 @@ import uk.me.cormack.lighting7.plugins.WindowsStateOutMessage
 import uk.me.cormack.lighting7.routes.StageRenderFailureRequest
 import uk.me.cormack.lighting7.state.StageRenderService
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
+import uk.me.cormack.lighting7.testsupport.mountPublic
+import uk.me.cormack.lighting7.testsupport.remote
+import uk.me.cormack.lighting7.testsupport.RemoteDesk
+import uk.me.cormack.lighting7.testsupport.FakeCloud
 import uk.me.cormack.lighting7.testsupport.awaitOfType
 import uk.me.cormack.lighting7.testsupport.createWsClient
 import uk.me.cormack.lighting7.testsupport.loginCookieHeader
@@ -70,6 +75,16 @@ import kotlin.time.Duration.Companion.milliseconds
  * its request id, token and session, the cap, and the refusals once it is spent or remote.
  */
 class McpRenderViewTest : RouteIntegrationTest() {
+
+    private val fake = FakeCloud().apply { heartbeatS = 1 }
+    private val desk by lazy { RemoteDesk(state, fake) }
+
+    override val extraConfig: List<Pair<String, String>> = listOf("cloud.baseUrl" to fake.baseUrl)
+
+    @After
+    fun closeFake() {
+        desk.close()
+    }
 
     private val tools by lazy { SetupTools(state, AiTools(state)) }
 
@@ -229,7 +244,7 @@ class McpRenderViewTest : RouteIntegrationTest() {
     fun `a window renders it, the PNG comes back as MCP image content, and the request is spent`() = testApplication {
         withOneWindow { client, cookie ->
             val protocol = McpProtocol(state)
-            val user = AuthenticatedUser(1, UUID.randomUUID(), "claude", "Claude", UserRole.ADMIN, "mcp-grant:1")
+            val user = AuthenticatedUser(1, UUID.randomUUID(), "claude", "Claude", UserRole.ADMIN, "cloud-grant:1")
             val answer = async {
                 protocol.handle(
                     Json.parseToJsonElement(
@@ -382,20 +397,26 @@ class McpRenderViewTest : RouteIntegrationTest() {
     // ─── Never remote ───────────────────────────────────────────────────
 
     @Test
-    fun `a socket on the public listener is never asked, and the upload route is not there remotely`() = testApplication {
-        environment { config = testAppConfig() }
-        application { publicModule(state) }
-        seedUser(state, "op", UserRole.ADMIN)
-        val client = createWsClient()
-        val cookie = client.loginCookieHeader("op")
-        client.webSocket("/api", request = { header(HttpHeaders.Cookie, cookie) }) {
-            sendSerialized<InMessage>(WindowsAnnounceInMessage("tab-1", "Phone", "/projects/$projectId/busk"))
-            awaitOfType<WindowsStateOutMessage> { it.windows.isNotEmpty() }
-            assertTrue(state.stageRender.eligibleWindows(projectId).isEmpty(), "announced, signed in, and still not a render window")
-            assertEquals("RENDER_NO_WINDOW", tools.executeTool("render_view", JsonObject(mapOf("viewpoint" to JsonPrimitive("plan")))).code())
+    fun `a socket on the public listener is never asked, and the upload route is not there remotely`() {
+        desk.adopt(seedUser(state, "op", UserRole.ADMIN).userId)
+        testApplication {
+            mountPublic(state)
+            val client = createWsClient()
+            val caller = desk.caller("op")
+            client.webSocket("/api", request = { remote(caller) }) {
+                sendSerialized<InMessage>(WindowsAnnounceInMessage("tab-1", "Phone", "/projects/$projectId/busk"))
+                awaitOfType<WindowsStateOutMessage> { it.windows.isNotEmpty() }
+                assertTrue(state.stageRender.eligibleWindows(projectId).isEmpty(), "announced, signed in, and still not a render window")
+                assertEquals("RENDER_NO_WINDOW", tools.executeTool("render_view", JsonObject(mapOf("viewpoint" to JsonPrimitive("plan")))).code())
+            }
+            val upload = client.post("/api/rest/stage-renders/${UUID.randomUUID()}") {
+                remote(caller)
+                header("X-Render-Token", "any")
+                contentType(ContentType.Image.PNG)
+                setBody(png())
+            }
+            assertEquals(HttpStatusCode.NotFound, upload.status)
+            assertEquals("RENDER_REQUEST_UNKNOWN", upload.errorCode())
         }
-        val remote = client.upload(UUID.randomUUID().toString(), "any", cookie, png())
-        assertEquals(HttpStatusCode.NotFound, remote.status)
-        assertEquals("RENDER_REQUEST_UNKNOWN", remote.errorCode())
     }
 }

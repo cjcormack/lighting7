@@ -1,0 +1,524 @@
+<title>Stack Pads</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one reading column; each change is a section with what the code does now, the change, a dark desk mock-up and its edges.
+     Colour carries meaning: green = live, blue = next, amber = the record's status, violet = what this design adds. */
+  :root {
+    --bg:#f3f3f0; --panel:#ffffff; --fg:#1a1c1e; --muted:#5e6469; --line:#d8dad5; --soft:#e9eae5;
+    --add:#6a3fc0; --warn:#9a6200; --live:#1d8146; --next:#2a63c9; --no:#b8432b;
+    --sans:"Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#111315; --panel:#181b1e; --fg:#eceeec; --muted:#9ba1a3; --line:#2c3134; --soft:#1f2326;
+    --add:#bf9cf6; --warn:#f0bb52; --live:#5fd38a; --next:#80aaff; --no:#ff8f78; color-scheme:dark; } }
+  :root[data-theme="dark"] {
+    --bg:#111315; --panel:#181b1e; --fg:#eceeec; --muted:#9ba1a3; --line:#2c3134; --soft:#1f2326;
+    --add:#bf9cf6; --warn:#f0bb52; --live:#5fd38a; --next:#80aaff; --no:#ff8f78; color-scheme:dark; }
+
+  body { background:var(--bg); color:var(--fg); font-family:var(--sans); font-size:15.5px; line-height:1.55; }
+  .wrap { max-width:1060px; margin:0 auto; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:32px 72px; display:flex; flex-direction:column; gap:48px; }
+  header { display:flex; flex-direction:column; gap:12px; }
+  .eyebrow { font:500 11px var(--mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 16px; }
+  .eyebrow .status { color:var(--warn); }
+  h1 { margin:0; font-size:clamp(30px, 5vw, 46px); line-height:1.06; font-weight:700; letter-spacing:-0.02em; text-wrap:balance; max-width:22ch; }
+  .lede { margin:0; max-width:68ch; color:var(--muted); font-size:17px; }
+  body::before { content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top, 0px); z-index:10; background:var(--bg); }
+  nav.toc { position:sticky; top:env(safe-area-inset-top, 0px); z-index:3; background:var(--bg); border-bottom:1px solid var(--line); padding-block:10px; display:flex; flex-wrap:wrap; gap:6px; margin-top:-24px; }
+  nav.toc a { font-size:13px; font-weight:500; color:var(--fg); text-decoration:none; border:1px solid var(--line); border-radius:6px; padding:3px 10px; background:var(--panel); }
+  nav.toc a:hover, nav.toc a:focus-visible { border-color:var(--add); outline:none; }
+
+  section { display:flex; flex-direction:column; gap:14px; scroll-margin-top:64px; }
+  h2 { margin:0; font-size:25px; line-height:1.2; font-weight:700; letter-spacing:-0.01em; text-wrap:balance; display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; }
+  h2 .n { font:500 13px var(--mono); color:var(--add); border:1px solid currentColor; border-radius:5px; padding:1px 7px; }
+  h3 { margin:6px 0 0; font-size:16px; font-weight:600; }
+  p { margin:0; max-width:72ch; }
+  .muted { color:var(--muted); }
+  code { font-family:var(--mono); font-size:0.82em; background:var(--soft); border-radius:4px; padding:1px 4px; overflow-wrap:anywhere; }
+  ul.plain { margin:0; padding-left:20px; max-width:74ch; display:flex; flex-direction:column; gap:6px; }
+  kbd { font:500 11px var(--mono); border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; background:var(--panel); }
+  .ask { color:var(--warn); font-weight:600; }
+
+  .two { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:12px; }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; min-width:0; font-size:14.5px; display:flex; flex-direction:column; gap:6px; }
+  .box b { font-weight:600; }
+  .box .where { font:11px var(--mono); color:var(--muted); overflow-wrap:anywhere; }
+  .box.now b { color:var(--no); } .box.then b { color:var(--add); }
+
+  .tablebox { overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:9px 12px; border-bottom:1px solid var(--line); }
+  tr:last-child td { border-bottom:none; }
+  th { font:500 11px var(--mono); letter-spacing:0.05em; text-transform:uppercase; color:var(--muted); background:var(--soft); white-space:nowrap; }
+  td.n { font:500 12px var(--mono); color:var(--muted); white-space:nowrap; }
+  td.d { min-width:240px; }
+  td.k { font:500 11.5px var(--mono); white-space:nowrap; }
+  td.k.yes { color:var(--live); } td.k.no { color:var(--no); } td.k.new { color:var(--add); }
+
+  figure { margin:0; display:flex; flex-direction:column; gap:8px; }
+  figcaption { font-size:13.5px; color:var(--muted); max-width:74ch; }
+
+  /* ── mock-ups: the desk is dark, so the screens are dark in both page themes ── */
+  .screenbox { overflow-x:auto; border-radius:10px; border:1px solid var(--line); }
+  .screen { --s-bg:#0e0e11; --s-page:#121216; --s-card:#1b1b20; --s-row:#16161a; --s-bd:#2a2a31; --s-fg:#f4f4f5; --s-mfg:#a1a1aa;
+    --s-live:#4ade80; --s-next:#60a5fa; --s-amber:#f5c04a; --s-pri:#3b82f6; --s-add:#c4a1ff;
+    background:var(--s-bg); color:var(--s-fg); font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; font-size:12.5px; line-height:1.35; min-width:900px; display:flex; flex-direction:column; position:relative; }
+  .screen .m { font-family:ui-monospace, Menlo, Consolas, monospace; font-variant-numeric:tabular-nums; }
+  .screen .dim { color:var(--s-mfg); }
+  .screen .row { display:flex; align-items:center; gap:8px; }
+  .screen .sp { flex:1; }
+  .screen .btn { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 9px; border:1px solid var(--s-bd); border-radius:6px; background:var(--s-card); font-size:12px; white-space:nowrap; color:var(--s-fg); }
+  .screen .btn.pri { background:var(--s-pri); border-color:var(--s-pri); color:#fff; }
+  .screen .btn.go { background:#15803d; border-color:#16a34a; color:#fff; font-weight:700; height:34px; padding:0 18px; }
+  .screen .seg { display:inline-flex; border:1px solid var(--s-bd); border-radius:6px; overflow:hidden; }
+  .screen .seg span { padding:4px 10px; font-size:11.5px; color:var(--s-mfg); border-right:1px solid var(--s-bd); }
+  .screen .seg span:last-child { border-right:none; }
+  .screen .seg span.on { background:#27272a; color:var(--s-fg); }
+  .screen .lbl { font-size:9.5px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--s-mfg); }
+  .screen .chip { display:inline-flex; align-items:center; gap:4px; height:19px; padding:0 7px; border-radius:999px; border:1px solid var(--s-bd); font-size:10.5px; color:var(--s-mfg); white-space:nowrap; }
+  .screen .chip.on { color:var(--s-fg); background:#27272a; }
+  .screen .chip.add { color:var(--s-add); border-color:rgba(196,161,255,0.5); }
+  .screen .chip.live { color:var(--s-live); border-color:rgba(74,222,128,0.45); }
+  .screen .top { height:40px; display:flex; align-items:center; gap:10px; padding:0 12px; border-bottom:1px solid var(--s-bd); background:var(--s-page); }
+  .screen .bar { min-height:46px; display:flex; align-items:center; gap:10px; padding:6px 12px; border-top:1px solid var(--s-bd); background:var(--s-page); }
+  .screen .tabs { display:flex; gap:2px; padding:0 12px; border-bottom:1px solid var(--s-bd); height:34px; align-items:flex-end; }
+  .screen .tabs span { padding:7px 10px; font-size:12px; color:var(--s-mfg); display:inline-flex; gap:6px; align-items:center; }
+  .screen .tabs span.on { color:var(--s-fg); box-shadow:inset 0 -2px 0 var(--s-pri); }
+  .screen .tabs .div { width:1px; height:18px; background:var(--s-bd); margin:0 8px 8px; padding:0; }
+  .screen .dot { width:7px; height:7px; border-radius:50%; background:var(--s-live); box-shadow:0 0 6px rgba(74,222,128,0.6); display:inline-block; }
+  .screen .switch { width:30px; height:17px; border-radius:999px; background:#3f3f46; position:relative; flex:none; }
+  .screen .switch::after { content:""; position:absolute; top:2px; left:2px; width:13px; height:13px; border-radius:50%; background:#e4e4e7; }
+  .screen .switch.on { background:var(--s-pri); } .screen .switch.on::after { left:15px; }
+  .screen .card { border:1px solid var(--s-bd); border-radius:8px; background:var(--s-card); padding:14px; display:flex; flex-direction:column; gap:12px; }
+  .screen .field { height:28px; border:1px solid #3f3f46; border-radius:6px; background:#0f0f12; display:flex; align-items:center; padding:0 8px; }
+  .screen .ring { position:absolute; border:2px dashed rgba(196,161,255,0.75); border-radius:8px; pointer-events:none; }
+  .screen .note { position:absolute; font-size:10.5px; color:var(--s-add); font-weight:600; letter-spacing:0.02em; white-space:nowrap; }
+  .screen .pop { position:absolute; background:#1c1c22; border:1px solid #3a3a44; border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.55); padding:5px; display:flex; flex-direction:column; z-index:2; min-width:190px; }
+  .screen .pop .it { padding:6px 10px; border-radius:5px; display:flex; gap:8px; align-items:center; font-size:12.5px; }
+  .screen .pop .it.hl { background:#27272a; }
+  .screen .pop .sep { height:1px; background:#2e2e36; margin:4px 2px; }
+  .screen .pop .k { margin-left:auto; color:var(--s-mfg); font-size:11px; }
+
+  /* busk view */
+  .screen .bank { border:1px solid var(--s-bd); border-radius:10px; background:#141418; padding:10px; display:flex; flex-direction:column; gap:8px; }
+  .screen .bankhead { display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600; }
+  .screen .pads { display:grid; grid-template-columns:repeat(4, 132px); gap:8px; }
+  .screen .pad { min-height:64px; border:1px solid var(--s-bd); border-radius:8px; background:var(--s-card); padding:8px 10px; display:flex; flex-direction:column; gap:2px; position:relative; }
+  .screen .pad .nm { font-size:13px; font-weight:500; }
+  .screen .pad .dl { font-size:10px; color:var(--s-mfg); }
+  .screen .pad.look-on { border-color:#3b82f6; background:rgba(59,130,246,0.18); }
+  .screen .pad.look-on .nm { color:#93c5fd; }
+  .screen .pad.cue { gap:1px; }
+  .screen .pad.cue .num { font:700 13px ui-monospace, Menlo, monospace; }
+  .screen .pad.stack { min-height:86px; gap:3px; }
+  .screen .pad.stack .sn { font-size:10px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--s-mfg); display:flex; align-items:center; gap:5px; }
+  .screen .pad.stack .lv { display:flex; gap:6px; align-items:baseline; }
+  .screen .pad.stack .lv b { font:700 14px ui-monospace, Menlo, monospace; }
+  .screen .pad.stack .nx { font-size:10px; color:var(--s-next); }
+  .screen .pad.stack.run { border-color:#22c55e; background:rgba(34,197,94,0.14); box-shadow:0 0 0 1px rgba(34,197,94,0.35); }
+  .screen .pad.stack.run .sn { color:#86efac; }
+  .screen .fadebar { height:3px; border-radius:2px; background:#27272a; overflow:hidden; margin-top:3px; }
+  .screen .fadebar i { display:block; height:100%; background:var(--s-live); }
+  .screen .glyph { width:11px; height:11px; display:inline-block; }
+  .screen .presence { position:absolute; top:7px; right:7px; width:7px; height:7px; border-radius:50%; background:#3b82f6; }
+  .screen .libitem { display:flex; align-items:center; gap:8px; padding:7px 10px; border-bottom:1px solid #1f1f25; }
+  .screen .libitem .badge { margin-left:auto; font-size:9.5px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--s-mfg); }
+  .screen .grip { color:#52525b; font-size:13px; letter-spacing:-2px; width:12px; flex:none; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow"><span>Design record</span><span>Busk view · cue stacks · surfaces</span><span>2026-11-07</span><span>read from <code>6a5ffcf</code>, OSC plan at <code>9bc4001</code></span><span class="status">Agreed 2026-11-07</span></div>
+  <h1>Stack pads</h1>
+  <p class="lede">A busk pad that steps through a cue stack of its own: a musical number's verse, chorus and bridge on one pad or one surface button, GO by GO, or a short stack that runs itself when Carabossy enters and hands the stage back when it ends. Settings on that stack keep it out of the show's running order and say whether it adds to the main stack's look or replaces it.</p>
+</header>
+
+<nav class="toc" aria-label="Sections">
+  <a href="#summary">Summary</a>
+  <a href="#today">1 · Today</a>
+  <a href="#busk-stack">2 · Busk stacks</a>
+  <a href="#over">3 · Over the main stack</a>
+  <a href="#pad">4 · The stack pad</a>
+  <a href="#solo">5 · Solo banks</a>
+  <a href="#surfaces">6 · Surfaces and OSC</a>
+  <a href="#storage">7 · Storage and sync</a>
+  <a href="#edges">8 · Edges</a>
+  <a href="#questions">Decisions</a>
+  <a href="#plan">Plan</a>
+</nav>
+
+<section id="summary">
+  <h2>Summary</h2>
+  <div class="tablebox"><table>
+    <thead><tr><th>#</th><th>What it needs</th><th>The change</th><th>Touches</th></tr></thead>
+    <tbody>
+      <tr><td class="n">2</td><td class="d">A song's stack must be invisible to the show's GO.</td><td class="d">A stack setting, <b>In the running order</b>, on by default. Off, the stack is a <b>busk stack</b>: the Show view's boundary GO, <code>/show/advance</code>, <code>/show/activate</code> and <code>/show/go-to</code> never step into it, and it is never the playhead. It still runs from its own GO, a pad or a binding.</td><td class="n">cue_stacks, projectShow, useShowTransport, CueStackForm, tab strip</td></tr>
+      <tr><td class="n">2</td><td class="d">A song stack has to end by itself.</td><td class="d"><b>After the last cue</b>: <i>Stay</i> (today), <i>Loop</i> (today's loop) or <i>Release</i>, new: one more GO lets the stack go, so the song hands back to the main stack underneath.</td><td class="n">CueStackManager.advanceStack</td></tr>
+      <tr><td class="n">3</td><td class="d">A busk stack has to win over the main stack's cue, whichever stack was made first.</td><td class="d">Stacks rank by their <b>latest GO</b>, not by when they were made, and busk stacks sit in a band <b>above the running order</b>. Each has an <b>Over the show</b> setting: <i>Adds</i> (today's rules, for a song's chase over the base look) or <i>Replaces</i> (Carabossy: every attribute its cue sets wins outright, intensity included, and the main stack's FX on those attributes are held back). Its release <b>fades</b> back over a release time.</td><td class="n">CueHolds, CueAssignmentResolver, FxSuppression</td></tr>
+      <tr><td class="n">4</td><td class="d">A busk button that steps a stack.</td><td class="d">A fourth pad kind, <b>Stack</b>. A tap is that stack's GO: it starts it on its armed or first cue, then advances. The face shows the live cue, the next one and the fade. Its menu holds GO, Back, Release and View.</td><td class="n">busk_pads, BuskPressService, BuskPad, LibraryPalette</td></tr>
+      <tr><td class="n">5</td><td class="d">Solo banks have to mean something for it.</td><td class="d">The stack's <b>start</b> takes its siblings off, as a cue pad's press does, and a sibling pressed on releases the stack. A GO while it runs releases nothing.</td><td class="n">BuskPressService</td></tr>
+      <tr><td class="n">6</td><td class="d">The same from hardware.</td><td class="d"><code>PressPad</code> on a stack pad is its GO, lit while the stack runs. The OSC plan's <code>CueStackStop</code> binding stops a stack from a button, and its <code>/stack/{stack}/…</code> addresses let QLab GO a busk stack directly.</td><td class="n">BindingTarget, SurfaceActions, SurfaceFeedbackPublisher</td></tr>
+      <tr><td class="n">7</td><td class="d">Somewhere to keep it.</td><td class="d">Four stack columns, <code>busk_pads.cue_stack_id</code> and a rebuild of <code>busk_pads</code> for its exactly-one check (one-shot step 13). Sync goes to <code>formatVersion</code> 50, 51 and 52, one per session that adds a field.</td><td class="n">schema, migration, exporter, importer</td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted">Each section says what the code does now, with the file it was read from, then the change. The decisions, agreed with Chris on 2026-11-07, are in <a href="#questions">Decisions</a>. Names in the mock-ups (Cinderella, <i>Song 3 · Ugly Sisters</i>, cue numbers such as Q2 and Q14) are illustrative.</p>
+</section>
+
+<!-- ───────────────────────── 1 ───────────────────────── -->
+<section id="today">
+  <h2><span class="n">1</span>What the desk does today</h2>
+  <div class="two">
+    <div class="box now"><b>A pad holds a palette, a Look or a cue</b>
+      <p><code>busk_pads</code> has three nullable references and a CHECK that exactly one is set. A cue pad takes or lets go of a <em>loose hold</em> on one cue, above every stack. It never steps anything: there is no pad that names a stack.</p>
+      <span class="where">models/buskLayout.kt:160 · BuskPadKind · routes/BuskPressService.kt:209</span>
+    </div>
+    <div class="box now"><b>A surface can already GO any stack</b>
+      <p>The <code>CueStackGo(stackId)</code> binding calls <code>CueStackManager.go</code>: start the stack on its armed or first cue, else advance it. Each stack has its own run state, so a GO on one moves no other. A stack can't be <em>stopped</em> from a button: there are Go, Back and Pause bindings and no Release.</p>
+      <span class="where">midi/SurfaceActions.kt:341 · fx/CueStackManager.kt:432</span>
+    </div>
+    <div class="box now"><b>Every stack is in the running order</b>
+      <p>The show is the project's ordered list of stacks, and its playhead (<code>projects.active_stack_id</code>) walks every <code>STACK</code> row. The Show view's GO with nothing on deck calls <code>/show/advance</code>, which releases the stack it leaves and starts the next one. A song stack placed after Act 1 is where Act 1's last GO goes, and the stack the operator was running from a button is restarted from its first cue.</p>
+      <span class="where">routes/projectShow.kt:113, :285 · hooks/useShowTransport.ts:306</span>
+    </div>
+    <div class="box now"><b>The pad table's check is already on the desk</b>
+      <p>The terminology step rebuilt <code>busk_pads</code> from the model, so the operator's database holds the three-arm CHECK. SQLite cannot alter a CHECK, and a row naming only a stack fails it. Adding the column through the reconciliation alone would leave every stack pad refused at insert, so the table is rebuilt once more.</p>
+      <span class="where">state/TerminologyMigration.kt:146 · models/buskLayout.kt:180</span>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── 2 ───────────────────────── -->
+<section id="busk-stack">
+  <h2><span class="n">2</span>Busk stacks stay out of the running order</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>The only way to keep a song stack away from the show's GO is to put it first or last in the list and never step past it. The stack's own settings are its name, Loop and Move in dark.</p>
+      <span class="where">components/cues/CueStackForm.tsx · models/cueStacks.kt:21</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p><b>In the running order</b>, a switch in the stack's settings, on for every stack that exists and every new one. Off, the stack is a <b>busk stack</b>. Beside it, <b>After the last cue</b>: <i>Stay</i>, <i>Loop</i> or <i>Release</i>, the last new. A busk stack defaults to Release once the switch is turned off (Q3).</p>
+      <span class="where">cue_stacks.in_running_order · cue_stacks.release_at_end</span>
+    </div>
+  </div>
+
+  <figure>
+    <div class="screenbox"><div class="screen" style="min-height:300px" role="img" aria-label="Mock-up: the stack settings sheet for Song 3, Ugly Sisters, with In the running order switched off, After the last cue set to Release, and a Put on a busk page row.">
+      <div class="top"><b>Stack settings</b><span class="dim">· Song 3 · Ugly Sisters</span><span class="sp"></span><span class="btn">Cancel</span><span class="btn pri">Save</span></div>
+      <div style="padding:16px; display:flex; flex-direction:column; gap:10px; max-width:640px">
+        <div class="card" style="gap:10px">
+          <div class="row"><b style="font-size:13px; width:150px">Name</b><div class="field" style="width:280px">Song 3 · Ugly Sisters</div></div>
+          <div class="row" style="align-items:flex-start; gap:12px">
+            <div style="flex:1; display:flex; flex-direction:column; gap:3px">
+              <b style="font-size:13px">In the running order</b>
+              <span class="dim">Off: a busk stack. The show's GO never steps into it; run it from a pad, a surface button or its own GO.</span>
+            </div>
+            <span class="switch"></span>
+          </div>
+          <div class="row" style="gap:12px">
+            <b style="font-size:13px; width:150px">After the last cue</b>
+            <span class="seg"><span>Stay</span><span>Loop</span><span class="on">Release</span></span>
+            <span class="dim" style="font-size:11.5px">One more GO lets the stack go.</span>
+          </div>
+          <div class="row" style="gap:12px">
+            <b style="font-size:13px; width:150px">Busk pages</b>
+            <span class="btn">+ Put on a busk page…</span><span class="dim" style="font-size:11.5px">on 1 page</span>
+          </div>
+        </div>
+        <div class="card" style="gap:6px"><div class="row"><b style="font-size:13px; flex:1">Move in dark</b><span class="switch on"></span></div></div>
+      </div>
+      <div class="ring" style="left:10px; top:96px; width:640px; height:136px"></div>
+      <div class="note" style="left:662px; top:110px">new · stack settings</div>
+    </div></div>
+    <figcaption>The two new rows and the busk-page placement sit in the existing stack form. <i>Put on a busk page…</i> is the same <code>AddToBuskPageMenu</code> the cue editor, the palette editor and the Look sheet already use, and is offered only for a busk stack (Q2).</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screenbox"><div class="screen" style="min-height:178px" role="img" aria-label="Mock-up: the Show view's stack tabs. Act 1 and Act 2 are in the running order; after a divider, busk stacks Song 3 Ugly Sisters, running on Q2, and Song 5 Ball.">
+      <div class="top"><b>Cinderella</b><span class="dim">· Show</span></div>
+      <div class="tabs">
+        <span class="on"><i class="dot"></i>Act 1</span><span>Act 2</span>
+        <span class="div"></span>
+        <span class="lbl" style="padding:0 2px 9px; box-shadow:none">Busk</span>
+        <span style="outline:2px dashed rgba(196,161,255,0.75); outline-offset:-3px; border-radius:6px"><i class="dot"></i>Song 3 · Ugly Sisters <b class="m dim" style="font-weight:400">Q2</b></span><span>Song 5 · Ball</span>
+      </div>
+      <div class="bar"><span class="lbl">Act 1</span><span class="m" style="font-size:14px; font-weight:700">Q14</span><span>Kitchen, night</span><span class="dim">→ Q15 Fairy entrance</span><span class="sp"></span><span class="btn">BACK</span><span class="btn go">GO</span></div>
+      <div class="note" style="right:14px; top:52px">new · busk stacks, after the show's own</div>
+    </div></div>
+    <figcaption>Busk stacks are drawn after the show's own, past a divider, with their live cue on the tab; the Show view's stack list draws them the same way, a drag never moving a stack across the divider. Reading one gives the off-playhead banner's <i>Jump to live</i>, but never <i>Make this stack live</i>: GO still fires the playhead, here Act 1 (Q7).</figcaption>
+  </figure>
+
+  <h3>Rules</h3>
+  <ul class="plain">
+    <li><b>The running order is the stacks in it.</b> <code>orderedStacks()</code> filters on the setting, so the playhead's activate, advance and BACK skip busk stacks, and <code>/show/go-to</code> on one is 409 <code>CUE_STACK_NOT_IN_SHOW</code>. The client's boundary GO and the next-stack label beside it read the same list. The playhead stack cannot be switched out of the running order while it is the playhead (409 <code>CUE_STACK_IS_PLAYHEAD</code>), and a show stack that released at its end has nothing on deck, so the show's GO moves on to the next stack.</li>
+    <li><b>A busk stack runs exactly as any stack runs</b>, through <code>CueStackManager</code>: its GO sets the cue's tempo, follows, Move in dark, scenery, events, the stack's FX amount. Nothing in the run path reads the new switch but the priority band (§3).</li>
+    <li><b>How it sits over the show's stacks</b> is §3: above the running order, adding or replacing.</li>
+    <li><b>Release at the end</b> is a GO past the last cue entry, or a follow off the last one, releasing the stack over its release time (§3). Loop and Release are one choice, so the request refuses both on. A short stack whose cues all follow therefore runs itself from one press to its hand back.</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────── 3 ───────────────────────── -->
+<section id="over">
+  <h2><span class="n">3</span>Over the main stack</h2>
+  <p>The main stack holds the base look; a busk stack runs on top of it. Two uses want different things from "on top". A song's stack <b>adds</b>: a chase and a colour change over the base, the base still lighting what the song leaves alone. Carabossy's stack <b>replaces</b>: the warm kitchen goes, green and lightning take the stage for a few seconds, and the kitchen comes back when the stack ends. Today neither is dependable.</p>
+  <div class="two">
+    <div class="box now"><b>Intensity only goes up</b>
+      <p>Dimmer, UV and strobe are highest-takes-precedence across every live cue. A busk cue that sets the front wash to 0 while the main stack holds it at 80 % leaves it at 80 %. A stack can add light; it cannot take any away.</p>
+      <span class="where">fx/CueAssignmentResolver.kt:367, :501 · composition model §"Composition rules by AttributeCategory"</span>
+    </div>
+    <div class="box now"><b>The rest goes to whichever stack was made later</b>
+      <p>Colour, position and beam are LTP by priority, and a stack hold's priority is <code>stackId × 1 000 000 + position × 1 000 + 1</code>. A song stack made before Act 1's stack loses every colour to it, whichever started last. Only a loose press ranks by recency (<code>LOOSE_BAND + seq</code>).</p>
+      <span class="where">fx/CueApply.kt:233 · fx/CueHolds.kt:933</span>
+    </div>
+    <div class="box now"><b>The main stack's FX keep running</b>
+      <p>FX are Tier 3, above every cue's values. A dimmer chase in the main stack's cue still paints over a busk cue's dimmer 0. Cue stomp <em>removes</em> other cues' FX for good, so they would not come back when Carabossy leaves.</p>
+      <span class="where">fx/FxSuppression.kt:33 (hold-back) · fx/FxEngine.kt:2011 stompForCue (removal) · composition model §"Cue-level stomp"</span>
+    </div>
+    <div class="box now"><b>A release snaps</b>
+      <p><code>deactivateStack</code> lets the hold go with <code>Departure.SNAP</code>: the busk cue's values drop out in one frame and the main stack's look jumps back.</p>
+      <span class="where">fx/CueStackManager.kt:472</span>
+    </div>
+  </div>
+
+  <h3>The change</h3>
+  <ul class="plain">
+    <li><b>The latest GO wins, and busk stacks rank above the running order.</b> An operator's cue change on a stack (a start, a GO, a GO TO, a BACK, a pad press) makes it the newest in its band, as a loose press is today; a follow does not, so a looping chase never climbs back over your latest GO. There are two bands: the show's stacks, and above them the busk stacks, so a GO on Act 1 never overtakes Carabossy. Loose presses and the programmer stay above both. Creation order stops mattering everywhere (a stack's place in the show's list never mattered): whatever you triggered last wins its LTP attributes. Inside a stack, entry position still ranks the two cues of a crossfade.</li>
+    <li><b>Over the show: Adds or Replaces</b>, a busk stack's setting. <i>Adds</i> is today's rules inside the new band: intensity still folds by highest, so the song's chase lifts heads over the base and never darkens them. <i>Replaces</i> makes the stack's live cue the <b>floor of every attribute it sets</b>, intensity included: what is below it on that attribute no longer shows, so a head it sets to 0 goes to 0, and a head it does not name keeps the main stack's state. Its start snaps on, as every stack's start does; its GOs crossfade within it, and its release fades back to the value the stacks below compose to, with no jump. Anything above it, a cue pad pressed during Carabossy's entrance or a song stack GO'd after her, still composes over her by the attribute's usual rule.</li>
+    <li><b>Replaces holds back the FX underneath.</b> On a key a replacing cue sets, every FX at a lower priority but the programmer's, a main-stack cue's and a manual or script FX included, is <em>held back</em> rather than removed, by the replacing cue's fade: fully once it is in, handing back as it fades out. <code>FxSuppression</code> gains a fourth reason, <code>REPLACED</code>, beside stomp, the programmer and Blind. The chase keeps its phase throughout and grows back over the release. The busk stack's own FX run, and so do the programmer's.</li>
+    <li><b>A release fades</b> over the stack's <b>Release time</b> (default 2 s, 0 snaps), on every stack, whenever someone stops it: Release at the end, the pad's menu, the Show view's stop, Claude's <code>deactivate_cue_stack</code>, a solo bank releasing a sibling, the <code>CueStackStop</code> binding or OSC's <code>/stop</code>. The stack reads stopped at once; only its light fades. A stack delete, an undo, a project switch and the show's own advance and go-to still let go at once of a stack that is running; a release already under way is left to finish. The outgoing cue's rows and FX shrink by fade weight, so a replacing stack hands every key back to the main stack's value across the release.</li>
+    <li><b>The main stack keeps running underneath.</b> A GO on Act 1 while Carabossy holds the stage lands under her: visible at once on keys her cue leaves alone, and on the rest when she releases.</li>
+    <li><b>The programmer is still on top</b>, Tier 2 over both stacks.</li>
+  </ul>
+
+  <h3>One head through Carabossy's entrance</h3>
+  <p class="muted">Act 1 Q14 <i>Kitchen, night</i> is live in the main stack. The operator presses the <i>Carabossy</i> pad: a busk stack set to <i>Replaces</i>, Release at the end, release time 3 s. Its Q1 snaps green on the stage-left special and sets the front wash to 0; Q1 follows into Q2 <i>Lightning</i> after 4 s, and Q2 follows on into the release.</p>
+  <div class="tablebox"><table>
+    <thead><tr><th>Attribute</th><th>Main stack, Q14</th><th>Carabossy, Q1</th><th>Today</th><th>Adds</th><th>Replaces</th></tr></thead>
+    <tbody>
+      <tr><td>Front wash · dimmer</td><td>80 %</td><td>0 %</td><td class="k no">80 %</td><td class="k">80 %</td><td class="k new">0 %</td></tr>
+      <tr><td>Front wash · colour</td><td>warm</td><td class="muted">not set</td><td class="k">warm</td><td class="k">warm</td><td class="k">warm (dark)</td></tr>
+      <tr><td>SL special · dimmer and colour</td><td>0 %</td><td>100 % green</td><td class="k">100 % green</td><td class="k">100 % green</td><td class="k">100 % green</td></tr>
+      <tr><td>Cyc · colour</td><td>deep blue</td><td>green</td><td class="k no">blue, if Act 1 was made later</td><td class="k new">green</td><td class="k new">green</td></tr>
+      <tr><td>Movers · dimmer chase FX</td><td>running</td><td>dimmer 0</td><td class="k no">chase over 0</td><td class="k">chase over 0</td><td class="k new">held back, resumes on release</td></tr>
+      <tr><td>The release, 3 s</td><td colspan="2" class="muted">Q2 follows on into Release at the end</td><td class="k no">snaps</td><td class="k new">fades back</td><td class="k new">fades back</td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted">To black the rest of the stage out as well, Carabossy's Q1 sets the rig's dimmers to 0 explicitly, a group row like any other. Replaces reaches only what the cue sets, so a stack built for one corner of the stage leaves the rest alone.</p>
+
+  <figure>
+    <div class="screenbox"><div class="screen" style="min-height:250px; min-width:700px" role="img" aria-label="Mock-up: stack settings for Carabossy, out of the running order, Over the show set to Replaces, After the last cue Release, Release time 3 seconds.">
+      <div class="top"><b>Stack settings</b><span class="dim">· Carabossy</span><span class="sp"></span><span class="btn">Cancel</span><span class="btn pri">Save</span></div>
+      <div style="padding:16px; max-width:660px">
+        <div class="card" style="gap:10px">
+          <div class="row"><b style="font-size:13px; width:150px">In the running order</b><span class="switch"></span><span class="dim" style="font-size:11.5px">Busk stack</span></div>
+          <div class="row" style="gap:12px; align-items:flex-start; outline:2px dashed rgba(196,161,255,0.75); outline-offset:5px; border-radius:4px">
+            <b style="font-size:13px; width:150px">Over the show</b>
+            <div style="display:flex; flex-direction:column; gap:4px">
+              <span class="seg"><span>Adds</span><span class="on">Replaces</span></span>
+              <span class="dim" style="font-size:11.5px">Every attribute its cue sets wins, dimmers included; the FX under them wait.</span>
+            </div>
+          </div>
+          <div class="row" style="gap:12px"><b style="font-size:13px; width:150px">After the last cue</b><span class="seg"><span>Stay</span><span>Loop</span><span class="on">Release</span></span></div>
+          <div class="row" style="gap:12px; outline:2px dashed rgba(196,161,255,0.75); outline-offset:5px; border-radius:4px"><b style="font-size:13px; width:150px">Release time</b><div class="field m" style="width:80px">3.0 s</div><span class="sp"></span><span style="font-size:10.5px; color:var(--s-add); font-weight:600">new · every stack</span></div>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>Release time is on every stack's settings; Over the show appears once <i>In the running order</i> is off, so the show's own stacks keep highest-takes-precedence between them (Q11).</figcaption>
+  </figure>
+</section>
+
+<!-- ───────────────────────── 4 ───────────────────────── -->
+<section id="pad">
+  <h2><span class="n">4</span>The stack pad</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>A cue pad shows a number, a name and the stacks that place it; it is lit solid while held loose and outlined while only a stack holds it. A press is the loose hold's toggle. A song of five cues needs five pads, and pressing them out of order is easy at speed.</p>
+      <span class="where">components/busking/BuskPad.tsx · padFace.ts</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>A pad that names a busk stack. <b>Tap is GO</b>: stopped, it starts the stack on its armed or first cue; running, it advances. Its face is the stack's run state: the name, the live cue's number and name, the next cue, and the fade. Its hold menu: <i>GO</i>, <i>Back</i>, <i>Release</i> and <i>View</i>, which opens the stack on the Show view.</p>
+      <span class="where">BuskPadKind.CUE_STACK · runner slice's selectStackRunner</span>
+    </div>
+  </div>
+
+  <figure>
+    <div class="screenbox"><div class="screen" style="min-height:330px" role="img" aria-label="Mock-up: a busk page for Song 3. A bank called Ugly Sisters holds a running stack pad on Q2 Chorus with Q3 Bridge next and a fade bar, a stopped stack pad for the encore, and two Looks; a second bank holds colour palettes. The running pad's hold menu is open.">
+      <div class="top"><b>Busk</b><span class="seg"><span>Act 1</span><span class="on">Song 3</span><span>Song 5</span></span><span class="sp"></span><span class="chip">Edit page</span></div>
+      <div style="padding:14px; display:flex; gap:12px; align-items:flex-start">
+        <div class="bank">
+          <div class="bankhead">Ugly Sisters <span class="chip">solo</span></div>
+          <div class="pads">
+            <div class="pad stack run">
+              <span class="sn"><span class="dot"></span>Song 3 · Ugly Sisters</span>
+              <span class="lv"><b>Q2</b><span>Chorus</span></span>
+              <span class="nx">→ Q3 Bridge</span>
+              <span class="fadebar"><i style="width:62%"></i></span>
+            </div>
+            <div class="pad stack">
+              <span class="sn">Song 3 · Encore</span>
+              <span class="lv"><b class="dim">—</b><span class="dim">stopped</span></span>
+              <span class="nx" style="color:var(--s-mfg)">GO starts Q1 Bow</span>
+            </div>
+            <div class="pad look-on"><span class="nm">Sisters spot</span><span class="dl">4 values · 1 FX</span><span class="presence"></span></div>
+            <div class="pad"><span class="nm">Mirror ball</span><span class="dl">1 FX</span></div>
+          </div>
+        </div>
+        <div class="bank">
+          <div class="bankhead">Colour <span class="chip">solo</span></div>
+          <div class="pads" style="grid-template-columns:repeat(2, 104px)">
+            <div class="pad"><span class="nm">Pink</span><span class="dl">Colour</span></div>
+            <div class="pad"><span class="nm">Lime</span><span class="dl">Colour</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="pop" style="left:120px; top:136px">
+        <div class="it hl">GO <span class="k">tap</span></div>
+        <div class="it">Back</div>
+        <div class="it">Release</div>
+        <div class="sep"></div>
+        <div class="it">View</div>
+      </div>
+      <div class="ring" style="left:22px; top:80px; width:146px; height:96px"></div>
+      <div class="note" style="left:22px; top:296px">new · stack pad, running and stopped</div>
+    </div></div>
+    <figcaption>A stack pad is taller than a cue pad, to hold three lines and the fade. Running is solid green, as a held cue pad is; stopped is the plain card with the cue the next GO starts. A Look and a palette pad are unchanged beside it. The hold menu has no <i>Pick up</i>: the hand carries palettes, Looks and cues, and a stack pad stays where it is placed (§8).</figcaption>
+  </figure>
+
+  <h3>How each gesture lands</h3>
+  <div class="tablebox"><table>
+    <thead><tr><th>Gesture</th><th>Stack stopped</th><th>Stack running</th><th>On the last cue</th></tr></thead>
+    <tbody>
+      <tr><td>Tap the pad, or its <code>PressPad</code> button</td><td>Starts on the armed cue, else the first (<code>activateAtFirstCue</code>); solo siblings off (§5).</td><td>Advances one cue (<code>advanceStack FORWARD</code>), with its follows and fade.</td><td><i>Stay</i>: nothing. <i>Loop</i>: Q1. <i>Release</i>: the stack lets go over its release time and its cue hands back to whatever is under it.</td></tr>
+      <tr><td>Menu › Back</td><td>Not offered.</td><td>One cue back, no events (the stack BACK as today).</td><td>As running.</td></tr>
+      <tr><td>Menu › Release, the <code>CueStackStop</code> binding, OSC <code>/stack/{stack}/stop</code></td><td>Not offered.</td><td colspan="2">Lets the stack go over its release time (§3): its live cue fades off unless something else holds it.</td></tr>
+      <tr><td>The Show view's GO and BACK</td><td colspan="3">Never reach a busk stack: they act on the playhead, and the playhead never stands on one (§2).</td></tr>
+      <tr><td>Editing the page</td><td colspan="3">The pad drags, drops and is removed like any other. The library's filter gains <b>Stacks</b>, listing busk stacks only.</td></tr>
+    </tbody>
+  </table></div>
+
+  <figure>
+    <div class="screenbox"><div class="screen" style="min-height:204px; min-width:520px; max-width:520px" role="img" aria-label="Mock-up: the busk library palette with filters All, Palettes, Looks, Cues and the new Stacks, listing two busk stacks.">
+      <div class="top"><b>Library</b><span class="sp"></span><span class="dim">drag onto a bank</span></div>
+      <div class="row" style="padding:8px 10px; gap:6px"><span class="chip">All</span><span class="chip">Palettes</span><span class="chip">Looks</span><span class="chip">Cues</span><span class="chip on add">Stacks</span></div>
+      <div class="libitem"><span class="grip">⋮⋮</span><span>Song 3 · Ugly Sisters</span><span class="dim">4 cues · release</span><span class="badge">Stack</span></div>
+      <div class="libitem"><span class="grip">⋮⋮</span><span>Song 3 · Encore</span><span class="dim">2 cues · stay</span><span class="badge">Stack</span></div>
+      <div class="libitem"><span class="grip">⋮⋮</span><span>Song 5 · Ball</span><span class="dim">6 cues · loop</span><span class="badge">Stack</span></div>
+    </div></div>
+    <figcaption>A stack in the running order is not listed: a pad may name only a busk stack (Q2).</figcaption>
+  </figure>
+</section>
+
+<!-- ───────────────────────── 4 ───────────────────────── -->
+<section id="solo">
+  <h2><span class="n">5</span>Solo banks</h2>
+  <p>Solo has one meaning for every kind: pressing a pad on turns its siblings off (busk-layout plan D6). A stack pad keeps that meaning, with "on" read as the stack starting.</p>
+  <div class="tablebox"><table>
+    <thead><tr><th>Press</th><th>What it takes off in a solo bank</th></tr></thead>
+    <tbody>
+      <tr><td>A stack pad that <b>starts</b> its stack</td><td>What a cue pad's on press takes off: layer siblings (palettes and Looks) off whole through <code>ProgrammerLayerStack.release</code>, cue siblings' loose holds let go, and every sibling stack pad's stack released.</td></tr>
+      <tr><td>A stack pad that <b>advances</b> its stack</td><td>Nothing. The stack is already on; a GO is a step inside it.</td></tr>
+      <tr><td>A palette, Look or cue pad pressed on</td><td>As today, plus every running sibling stack is released.</td></tr>
+      <tr><td>Release, from the menu or a binding</td><td>Nothing: an off press releases nothing.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted">So a solo bank of three song stacks is a selector: starting one releases the others. In a stacking bank (solo off) the stack sits beside Looks it does not touch, which is how the mock-up's <i>Sisters spot</i> stays on through the chorus.</p>
+</section>
+
+<!-- ───────────────────────── 5 ───────────────────────── -->
+<section id="surfaces">
+  <h2><span class="n">6</span>Surfaces and OSC</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p><code>PressPad(padUuid)</code> runs the busk press service, so a bound button presses exactly as the screen does. Its LED is the pad's ring, read per kind in <code>SurfaceFeedbackPublisher</code>. Stacks have <code>CueStackGo</code>, <code>CueStackBack</code> and <code>CueStackPause</code>. The OSC plan, on main and not yet built, adds <code>CueStackStop</code>, a <code>SurfaceDispatch</code> both doors share, and addresses under <code>/lighting7/</code>.</p>
+      <span class="where">midi/BindingTarget.kt:354 · SurfaceFeedbackPublisher.kt:888, :1033 · docs/plans/osc-plan.md §3</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>A <code>PressPad</code> on a stack pad needs nothing new on the input side; its LED is <b>lit while the stack runs</b>, read from the stack's run state. Stopping a stack from a button is the OSC plan's <code>CueStackStop</code>, not a binding of this plan's, and it fades over the stack's release time like every deliberate stop. This plan's pad and surfaces sessions wait for OSC session 1 to merge (Q12).</p>
+      <span class="where">SurfaceFeedbackPublisher.padLed · BuskPressService's outcome through SurfaceDispatch</span>
+    </div>
+  </div>
+  <h3>From QLab</h3>
+  <ul class="plain">
+    <li><b>A busk stack has OSC addresses with no work here.</b> OSC names stacks by slug and skips only separators, so Carabossy is <code>/lighting7/stack/carabossy/go</code>. <code>/stack/carabossy/cue/1/go</code> is the one to put on QLab's sound cue: fired twice while cue 1 is live, it does nothing.</li>
+    <li><b>A stack pad is a predictable pad.</b> <code>/busk/{page}/{bank}/{pad}/press</code> presses it, and it names no fixtures, so the desk's selection does not change what it does. It joins the Look and cue pads the OSC plan calls predictable from QLab.</li>
+    <li><b>The running order is the playhead's, not OSC's.</b> OSC's stack addresses call the stack, never the show's playhead, so taking a stack out of the running order changes nothing for them.</li>
+  </ul>
+  <p class="muted">A surface can run a song three ways: a <code>PressPad</code> on the busk pad, which follows the pad if it moves page; <code>CueStackGo</code> on the stack itself; or an OSC address. All three are the same GO.</p>
+</section>
+
+<!-- ───────────────────────── 6 ───────────────────────── -->
+<section id="storage">
+  <h2><span class="n">7</span>Storage, sync and guards</h2>
+  <div class="tablebox"><table>
+    <thead><tr><th>Layer</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td>Schema</td><td><code>cue_stacks.in_running_order</code>, boolean, default <code>true</code>; <code>cue_stacks.release_at_end</code>, boolean, default <code>false</code>; <code>cue_stacks.over_show</code>, <code>ADDS | REPLACES</code>, default <code>ADDS</code>; <code>cue_stacks.release_time</code>, a <code>duration()</code>, default 2 s; all added by the reconciliation. <code>busk_pads.cue_stack_id</code>, a nullable reference to <code>cue_stacks</code>, and the CHECK widened to four arms.</td></tr>
+      <tr><td>Migration</td><td>One-shot <b>step 13</b>, <code>BuskPadStackMigration</code>, after step 12: the reconciliation has added <code>cue_stack_id</code>, but the table's CHECK is still the three-arm one, so while <code>sqlite_master</code>'s DDL for <code>busk_pads</code> has a CHECK that does not name <code>cue_stack_id</code>, the table is rebuilt from the model through <code>rebuildFromModel</code>, rows copied by id, after a <code>VACUUM INTO '&lt;db&gt;.pre-busk-stack-&lt;utc&gt;.db'</code> backup. A fresh database is created with the four-arm check and only marked 13. <code>BuskPadStackMigrationTest</code> runs it over a frozen step-12 database.</td></tr>
+      <tr><td>REST</td><td>The stack <code>POST</code> and <code>PUT</code> take <code>inRunningOrder</code>, <code>releaseAtEnd</code> (400 with <code>loop</code>), <code>overShow</code> (turning a stack back into the running order with none named sets Adds) and <code>releaseTimeMs</code> (400 <code>CUE_STACK_INVALID</code> naming every problem; <code>overShow: REPLACES</code> on a stack in the running order among them, Q11); <code>CueStackDetails</code> and the list carry them. The page layout <code>PUT</code> and <code>POST …/banks/{bid}/pads</code> take <code>cueStackId</code> as the fourth of the exactly-one ids; <code>BuskPadDto</code> embeds the stack's <code>{id, uuid, name}</code>. A press answers <code>kind: "CUE_STACK"</code> with <code>action</code> <code>"started"</code>, <code>"advanced"</code>, <code>"released"</code>, <code>"stayed"</code> or <code>"empty"</code>.</td></tr>
+      <tr><td>Guards</td><td>A pad naming a stack in the running order is 400 <code>BUSK_LAYOUT_REF</code>, naming it (Q2). Putting a busk stack back into the running order while pads name it is 409 <code>CUE_STACK_ON_PADS</code>, naming the pages; <code>?force=true</code> takes the pads off (Q5).</td></tr>
+      <tr><td>Deletes</td><td>A stack delete sweeps its pads inside <code>deleteCueStackRows</code>, as a cue delete does, and fires <code>busk.layoutChanged</code> for those pages. A stack rename fires it too, so the pads' embedded name moves.</td></tr>
+      <tr><td>WebSocket</td><td>No new frame. <code>programmer.keyStack</code> shows a held-back FX with <code>heldBackReason: REPLACED</code> and the busk stack above the main stack's cue. The pad's face reads <code>cueRunStateChanged</code> through the runner slice and the cue names from the stack list the busk view already loads.</td></tr>
+      <tr><td>Sync</td><td><b>v50</b> (session 1): <code>CueStackJson</code> gains <code>inRunningOrder: Boolean = true</code>, <code>releaseAtEnd: Boolean = false</code> and <code>releaseTimeMs: Long = 2000</code>. A bump rather than a silent optional field because a v49 desk would put every busk stack back into its running order and push that; <code>minReader</code> 50. <b>v51</b> (session 2): <code>overShow: String = "ADDS"</code>, <code>minReader</code> 51, since a v50 desk would run Carabossy as Adds and push it back so. <b>v52</b> (session 3): <code>BuskPadJson.cueStackUuid</code>, read with the stack map the importer already builds; a v51 reader would drop the pad as naming nothing and push the drop, so <code>minReader</code> 52. <code>RichProjectFixture</code> gains a busk stack with Replaces, Release and a 3 s release time, and a stack pad.</td></tr>
+      <tr><td>History</td><td>Both are rows in folders the journal already diffs (<code>cueStacks/</code>, <code>buskPages/</code>), so an undo restores a setting, a pad, and a deleted stack with its pads, with no new kind.</td></tr>
+      <tr><td>MCP</td><td><code>create_cue_stack</code> and <code>build_cue_stack</code> take the four stack settings, so Claude can build a song's or a character's stack. <code>get_current_state</code> names a value a replacing stack holds, and an FX it holds back, by the stack. Pads stay a screen gesture: no MCP tool builds a busk page today.</td></tr>
+      <tr><td>Priority</td><td>A stack hold's priority stops encoding the stack's id: it becomes a fixed band base (0 for the show's stacks, 1 000 000 000 for busk stacks) plus the stack's <b>rank</b> among its band's live stacks, renumbered densely on every operator GO, times the band width, plus the entry's position. A rank rather than a GO counter, because priorities are <code>Int</code>s under <code>LOOSE_BAND</code> (2 000 000 000) and a counter times a million would pass it after two thousand GOs. A renumber restamps live holds and the fades still in flight on those stacks, and the FX-amount lookup that read the stack out of a priority reads it from a priority-to-stack table instead.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ───────────────────────── 7 ───────────────────────── -->
+<section id="edges">
+  <h2><span class="n">8</span>Edges</h2>
+  <ul class="plain">
+    <li><b>Release disarms one-shot effects</b>, as every stack stop does (<code>onStackStopped</code>). A song's release mid-act drops a pyro arm made for the main stack. Kept as the safe default (Q8).</li>
+    <li><b>The programmer still sits above every stack.</b> Looks busked over the song stay on after it releases; Clear is still the operator's.</li>
+    <li><b>The show stopped</b> (no playhead): a busk stack still starts, runs and releases. Stopping the show releases the playhead stack only.</li>
+    <li><b>A project switch</b> drops every stack, busk stacks included; a <b>reload</b> carries each stack's live entry through <code>ShowCarry</code>, as today.</li>
+    <li><b>An empty busk stack</b>: a tap does nothing and the pad reads <i>no cues</i>, rather than a 400 at the press.</li>
+    <li><b>Venues</b>: a venue has no cue stacks, so nothing changes there.</li>
+    <li><b>Out of scope</b>: Clear on GO, an on-screen GO for busk stacks outside the busk view, the hand carrying a stack, and an MCP tool for busk pages.</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────── Decisions ───────────────────────── -->
+<section id="questions">
+  <h2>Decisions</h2>
+  <p>Asked and answered by Chris on 2026-11-07, in three rounds, taking the recommended answer each time. Q6 (a <code>CueStackRelease</code> binding of this plan's own) was withdrawn when the OSC plan landed with <code>CueStackStop</code>; Q9 was rewritten from "busk stacks by recency" to latest GO everywhere; Q12 was added for the OSC plan.</p>
+  <div class="tablebox"><table>
+    <thead><tr><th>#</th><th>Question</th><th>Answer</th><th>Declined</th></tr></thead>
+    <tbody>
+      <tr><td class="n">Q1</td><td class="d">The words on screen?</td><td class="d"><b>Busk stack</b>, set by the switch <b>In the running order</b>; its pad is a <b>stack pad</b>.</td><td class="d"><i>Side stack</i>; <i>Run from pads only</i>.</td></tr>
+      <tr><td class="n">Q2</td><td class="d">May a pad name a stack in the running order?</td><td class="d"><b>No</b>: refused at the write, and the library lists busk stacks only.</td><td class="d">Any stack.</td></tr>
+      <tr><td class="n">Q3</td><td class="d">After the last cue?</td><td class="d"><b>Stay, Loop or Release</b>; turning a stack into a busk stack sets Release unless Loop is on.</td><td class="d">Release added with Stay the default; no Release option.</td></tr>
+      <tr><td class="n">Q4</td><td class="d">Solo banks?</td><td class="d"><b>A start takes siblings off, and a sibling's on press releases the stack</b>; an advance takes nothing off.</td><td class="d">Stack pads ignore solo; every GO takes siblings off.</td></tr>
+      <tr><td class="n">Q5</td><td class="d">A busk stack with pads put back into the running order?</td><td class="d"><b>409 naming the pages</b>, <code>?force=true</code> taking the pads off.</td><td class="d">Take the pads off silently; keep them.</td></tr>
+      <tr><td class="n">Q6</td><td class="d">A button that stops a stack?</td><td class="d"><b>Withdrawn</b>: the OSC plan's <code>CueStackStop</code> (Q12).</td><td class="d">—</td></tr>
+      <tr><td class="n">Q7</td><td class="d">Busk stacks on the Show view?</td><td class="d"><b>After the show's tabs, past a divider</b>, with the live cue; readable and editable, never made the playhead.</td><td class="d">Hidden from the Show view; mixed in with a badge.</td></tr>
+      <tr><td class="n">Q8</td><td class="d">Does a busk stack's release drop the effects arm?</td><td class="d"><b>Yes</b>, as every stack stop does.</td><td class="d">Busk stacks never disarm.</td></tr>
+      <tr><td class="n">Q9</td><td class="d">How do stacks rank against each other for colour, position and beam?</td><td class="d"><b>Latest GO wins</b>, in two bands: busk stacks above the show's stacks. Creation order stops mattering.</td><td class="d">Busk stacks ranked by when they started; one band for every stack; recency for busk stacks only, show stacks by creation order.</td></tr>
+      <tr><td class="n">Q10</td><td class="d">A new busk stack, and FX under Replaces?</td><td class="d"><b>Adds</b>, Replaces chosen per stack; under Replaces a lower FX on a key the cue sets is <b>held back and resumes</b> on release.</td><td class="d">Replaces by default; FX underneath left running.</td></tr>
+      <tr><td class="n">Q11</td><td class="d">Release time and Replaces: which stacks?</td><td class="d"><b>Release time on every stack, Replaces on busk stacks only.</b></td><td class="d">Both on every stack; both on busk stacks only; the live cue's own fade.</td></tr>
+      <tr><td class="n">Q12</td><td class="d">Beside the OSC plan?</td><td class="d"><b>Use its <code>CueStackStop</code></b>, and the stack-pad and surfaces sessions wait for OSC session 1 to merge.</td><td class="d">Run regardless; a binding of this plan's own.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ───────────────────────── Plan ───────────────────────── -->
+<section id="plan">
+  <h2>Plan</h2>
+  <p>Four sessions in <a href="../busk-stack-plan.md"><code>docs/plans/busk-stack-plan.md</code></a>, each one PR with its backend and frontend together, run by <code>/next-session</code>. Sessions 3 and 4 need the OSC plan's session 1 merged (Q12).</p>
+  <div class="tablebox"><table>
+    <thead><tr><th>Session</th><th>What</th><th>Sync</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td class="d"><b>Busk stacks.</b> In the running order, After the last cue, Release time; the playhead skipping busk stacks; a stop that fades; the stack form, the tab strip's divider, the boundary GO.</td><td class="n">v50</td></tr>
+      <tr><td class="n">2</td><td class="d"><b>Over the show.</b> Latest GO wins in two bands; Adds and Replaces; <code>REPLACED</code> holding FX back.</td><td class="n">v51</td></tr>
+      <tr><td class="n">3</td><td class="d"><b>Stack pads.</b> <code>busk_pads.cue_stack_id</code> and migration step 13; the press, solo and guards; the pad's face and menu, the library's Stacks filter.</td><td class="n">v52</td></tr>
+      <tr><td class="n">4</td><td class="d"><b>Surfaces.</b> The stack pad's <code>PressPad</code> LED; <code>CueStackStop</code> fading over the release time.</td><td class="n">—</td></tr>
+    </tbody>
+  </table></div>
+</section>
+</div>

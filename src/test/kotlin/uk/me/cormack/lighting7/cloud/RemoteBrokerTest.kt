@@ -510,9 +510,15 @@ class RemoteBrokerTest : RouteIntegrationTest() {
         environment { config = testAppConfig() }
         application { publicModule(state) }
         val http = jsonClient()
-        val cookie = http.loginCookieHeader("admin")
+        // The admin's own session, opened as the broker would once allowed: the public listener knows no other caller.
+        assertTrue(sessions.open("sid-admin", fake.account.id, fake.account.email, "Admin") is OpenResult.Opened)
+        val token = fake.mint(installId, sid = "sid-admin")
+        val secret = sessions.newLinkSecret()
         for (answer in listOf("allow", "deny")) {
-            val refused = http.post("/api/rest/install/cloud/sessions/sid-1/$answer") { header(HttpHeaders.Cookie, cookie) }
+            val refused = http.post("/api/rest/install/cloud/sessions/sid-1/$answer") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                header(RemoteSessions.LINK_HEADER, secret)
+            }
             assertEquals(HttpStatusCode.Forbidden, refused.status, refused.bodyAsText())
             assertTrue(CloudErrorCodes.APPROVAL_LOCAL_ONLY in refused.bodyAsText())
         }

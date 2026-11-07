@@ -109,8 +109,8 @@ import java.util.UUID
 class SetupTools(
     private val state: State,
     private val aiTools: AiTools,
-    /** The desk's public base URL, for pointing the operator at a page; null when unknown. */
-    private val deskUrl: () -> String? = { null },
+    /** A link to the desk's page at a path, for pointing the operator at it; null when there is none. */
+    private val deskUrl: (path: String) -> String? = { null },
 ) {
     val toolDefs: List<ToolDef> = setupToolDefs
     private val scene = SceneSetupTools(state)
@@ -1519,7 +1519,7 @@ class SetupTools(
     // ─── The show: prompt book and cue stacks ───────────────────────────
 
     private fun noPromptBookMessage(): String {
-        val where = deskUrl()?.let { "$it/prompt-book" } ?: "the desk's Prompt Book view (/prompt-book)"
+        val where = deskUrl("/prompt-book") ?: "the desk's Prompt Book view (/prompt-book)"
         return "This project has no prompt book yet. The desk must hold the script PDF itself, and a tool cannot " +
             "upload a file: ask the operator to open $where and import the PDF, then call get_prompt_book again."
     }
