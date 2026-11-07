@@ -15,7 +15,7 @@ import { EditorReadout } from '../editor/EditorReadout'
 import { EditorFooter } from '../editor/EditorFooter'
 import { useLivePush } from '../editor/useLivePush'
 import { findFxEntry } from '../busking/buskingTypes'
-import { FxFields, type FxTypeSwap } from './FxFields'
+import { FxFields, type FxTempoHost, type FxTypeSwap } from './FxFields'
 import { useSpawningPalette } from './useSpawningPalette'
 import { useToggleFxPause } from './useFxControls'
 import {
@@ -37,6 +37,9 @@ import {
 import { useFxScope } from './useFxScope'
 import { useFxGraphLink } from './fxGraphLink'
 import { stepCountOf } from '@/lib/spreadShape'
+
+/** The live editor's Tap and typed tempo on a master hold it in the programmer (fx-speed plan D8). */
+const PROGRAMMER_TEMPO: FxTempoHost = { kind: 'programmer' }
 
 /**
  * The live effect editor (fixture-fx-sheets plan D11, D12, D12a, D15; §3.3) — the old
@@ -245,13 +248,14 @@ export function FxEditor({
       levels,
       ...(levelPair != null ? { levelParams: levelPair } : {}),
       wallClock: isWallClock(draft, entry?.timingSource ?? effect.timingSource),
+      ownPace: entry?.ownPace === true,
       steps,
       readOnly: !connected || holding,
       set: (patch, release) => write({ ...draftRef.current, ...patch }, release, OPTIONAL_FIELDS.filter((field) => field in patch)),
       setParam: (name, value, release) =>
         write({ ...draftRef.current, parameters: { ...draftRef.current.parameters, [name]: value } }, release),
     })
-  }, [connected, draft, effect.id, effect.timingSource, entry?.timingSource, holding, levels, levelPair, libraryDefaults, steps, write])
+  }, [connected, draft, effect.id, effect.timingSource, entry?.ownPace, entry?.timingSource, holding, levels, levelPair, libraryDefaults, steps, write])
   useEffect(
     () => () => {
       linkRef.current?.detach(effect.id)
@@ -382,6 +386,7 @@ export function FxEditor({
           set={set}
           setParam={setParam}
           swap={swap}
+          tempoHost={PROGRAMMER_TEMPO}
           layout={layout}
         />
       )}

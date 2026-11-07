@@ -56,7 +56,7 @@ vi.mock('@/hooks/useGelIndex', () => ({ useGelIndex: () => new Map() }))
 const sheetColours = vi.hoisted(() => ({ current: new Map<string, string>() }))
 vi.mock('@/hooks/useFixtureColourIndex', () => ({ useFixtureColourIndex: () => sheetColours.current }))
 vi.mock('./fxLabels', () => ({
-  useFxDetail: () => () => '¼ · M1',
+  useFxDetail: () => (_effect: unknown, what?: string) => (what === 'seconds' ? '2 s a cycle at 120 BPM' : '¼ · M1'),
   useCueLabel: () => (id: number) => `Q${id}`,
   usePaletteNameByUuid: () => () => undefined,
 }))
@@ -398,8 +398,8 @@ describe('FixtureSheet — the shape', () => {
     ]
     render(<FixtureSheet fixture={SPOT} host="popup" />)
     // Folded: the chip's hover says so, and only the programmer's.
-    expect(screen.getByTitle('Circle on position — held · Blind — edit').hasAttribute('data-held-blind')).toBe(true)
-    expect(screen.getByTitle('Pulse on dimmer — the cue’s').hasAttribute('data-held-blind')).toBe(false)
+    expect(screen.getByTitle('Circle on position · 2 s a cycle at 120 BPM — held · Blind — edit').hasAttribute('data-held-blind')).toBe(true)
+    expect(screen.getByTitle('Pulse on dimmer · 2 s a cycle at 120 BPM — the cue’s').hasAttribute('data-held-blind')).toBe(false)
 
     fireEvent.click(screen.getByRole('button', { name: 'Open the FX' }))
     const circle = document.querySelector('[data-effect-row="5"]') as HTMLElement
@@ -412,7 +412,7 @@ describe('FixtureSheet — the shape', () => {
     wire.effects = [makeActiveFx({ id: 9, fxType: 'Pulse', targetKey: 'spot-3', attribute: 'dimmer', programmerOwned: false, cueId: 12 })]
     render(<FixtureSheet fixture={SPOT} host="popup" />)
     // Its folded chip opens the tray, where the row names the cue — never the cue itself.
-    fireEvent.click(screen.getByTitle('Pulse on dimmer — the cue’s'))
+    fireEvent.click(screen.getByTitle('Pulse on dimmer · 2 s a cycle at 120 BPM — the cue’s'))
     expect(document.querySelector('[data-fx-tray]')?.getAttribute('data-open')).toBe('true')
     expect(screen.queryByTestId('owner-editor')).toBeNull()
     const row = document.querySelector('[data-effect-row="9"]') as HTMLElement

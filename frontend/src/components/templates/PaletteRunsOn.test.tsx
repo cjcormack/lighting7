@@ -95,7 +95,7 @@ describe('PaletteRunsOn', () => {
         entry={beatEntry}
       />,
     )
-    expect(screen.getByText('2 beats')).toBeTruthy()
+    expect(screen.getByText('×2')).toBeTruthy()
     expect(screen.getByText('M2 · Chases · 128 bpm')).toBeTruthy()
   })
 
@@ -115,14 +115,15 @@ describe('PaletteRunsOn', () => {
         entry={{ ...beatEntry, timingSource: 'WALL_CLOCK' }}
       />,
     )
-    expect(screen.getByText('2 s')).toBeTruthy()
+    // Two seconds is ×1 on the wall clock, where two beats would be ×2.
+    expect(screen.getByText('×1')).toBeTruthy()
     expect(screen.getByText('Natural — no master')).toBeTruthy()
-    expect(screen.queryByText('2 beats')).toBeNull()
+    expect(screen.queryByText('×2')).toBeNull()
   })
 
   it('reads a beat effect on its own tempo in beats, against that tempo', () => {
     render(<PaletteRunsOn projectId={1} family="COLOUR" effect={effect({ ownBpm: 96 })} entry={beatEntry} />)
-    expect(screen.getByText('2 beats')).toBeTruthy()
+    expect(screen.getByText('×2')).toBeTruthy()
     expect(screen.getByText('Own tempo · 96 bpm')).toBeTruthy()
   })
 

@@ -234,6 +234,7 @@ class FxFileLoader(
                     presets = p.metadata.presets,
                     attributeDefaults = p.metadata.attributeDefaults,
                     legacy = p.metadata.legacy,
+                    ownPace = p.metadata.ownPace,
                     stepsFrom = p.metadata.stepsFrom,
                     factory = factory,
                 ))
@@ -282,7 +283,7 @@ class FxFileLoader(
         /** The keys the frontmatter itself takes, which an indented line after a list may still be. */
         private val TOP_LEVEL_KEYS = setOf(
             "id", "name", "family", "outputType", "fxMode", "defaultTiming", "defaultDirection", "defaultCycle",
-            "timingSource", "compatibleAttributes", "aliases", "parameters", "presets", "attributeDefaults", "legacy",
+            "timingSource", "compatibleAttributes", "aliases", "parameters", "presets", "attributeDefaults", "legacy", "ownPace",
             "stepsFrom",
         )
 
@@ -332,6 +333,7 @@ class FxFileLoader(
             var compatibleAttributes = listOf<String>()
             var aliases: List<String>? = null
             var legacy = false
+            var ownPace = false
             var stepsFrom: String? = null
             val items = LIST_KEYS.keys.associateWith { mutableListOf<Map<String, String>>() }
 
@@ -424,6 +426,8 @@ class FxFileLoader(
                     "aliases" -> aliases = parseYamlArray(value)
                     "legacy" -> legacy = value.toBooleanStrictOrNull()
                         ?: throw IllegalArgumentException("legacy must be true or false, got '$value'")
+                    "ownPace" -> ownPace = value.toBooleanStrictOrNull()
+                        ?: throw IllegalArgumentException("ownPace must be true or false, got '$value'")
                     "stepsFrom" -> stepsFrom = value.takeIf { it.isNotEmpty() }
                     "parameters", "presets", "attributeDefaults" -> {
                         // An inline empty array opens no list
@@ -474,6 +478,7 @@ class FxFileLoader(
                 presets = presets,
                 attributeDefaults = attributeDefaults,
                 legacy = legacy,
+                ownPace = ownPace,
                 stepsFrom = stepsFrom,
             )
         }
@@ -617,6 +622,8 @@ data class FxFileMetadata(
     val attributeDefaults: Map<String, Map<String, String>> = emptyMap(),
     /** Kept for stored FX only (fx-settings plan D3): `legacy: true`. */
     val legacy: Boolean = false,
+    /** Reads neither its cycle nor a rate master, so has no Speed (fx-speed plan D4): `ownPace: true`. */
+    val ownPace: Boolean = false,
     /** The list parameter whose entries are this FX's steps (fx-settings plan D6): `stepsFrom: colours`. */
     val stepsFrom: String? = null,
 )

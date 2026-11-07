@@ -178,6 +178,11 @@ export interface FxLibraryEntry {
    */
   legacy?: boolean
   /**
+   * A stateful wall-clock FX that reads neither its cycle nor a rate master (fx-speed plan D4):
+   * Candle Flicker and Fluorescent Flicker. Its Speed section says it runs at its own pace.
+   */
+  ownPace?: boolean
+  /**
    * The list parameter whose entries are this FX's steps (fx-settings plan D6) — Colour Cycle's
    * `colours` — absent for an FX with none: only one that names it takes a `STEP` spread.
    */

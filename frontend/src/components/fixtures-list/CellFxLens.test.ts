@@ -51,13 +51,13 @@ describe('lensHeldReason', () => {
 })
 
 describe('lensDivision', () => {
-  it('says a fraction of a beat as its glyph, and every other division as its label', () => {
-    expect(lensDivision(effect({ cycle: 0.5 }))).toBe('½')
-    expect(lensDivision(effect({ cycle: 0.25 }))).toBe('¼')
-    expect(lensDivision(effect({ cycle: 4 }))).toBe('1 bar')
-    expect(lensDivision(effect({ cycle: 2 }))).toBe('2 beats')
-    expect(lensDivision(effect({ cycle: 4, timingSource: 'WALL_CLOCK' }))).toBe('4 s')
-    expect(lensDivision(effect({ cycle: 0.5, ownBpm: 96, timingSource: 'WALL_CLOCK' }))).toBe('½')
+  it('says the Speed, a beat FX’s and a wall-clock one’s alike', () => {
+    expect(lensDivision(effect({ cycle: 0.5 }))).toBe('×8')
+    expect(lensDivision(effect({ cycle: 4 }))).toBe('×1')
+    expect(lensDivision(effect({ cycle: 8 }))).toBe('×½')
+    expect(lensDivision(effect({ cycle: 4, timingSource: 'WALL_CLOCK' }))).toBe('×½')
+    // On Own tempo it reports the wall clock it runs on; its cycle is still beats.
+    expect(lensDivision(effect({ cycle: 0.5, ownBpm: 96, timingSource: 'WALL_CLOCK' }))).toBe('×8')
   })
 })
 

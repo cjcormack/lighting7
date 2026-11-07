@@ -1,5 +1,5 @@
 import { useSpeedMasterDisplay } from '@/store/speedMasters'
-import { fxSpeedLabel } from '@/components/fx/fxConstants'
+import { fxSpeedLabel } from '@/lib/fxSpeed'
 import { isAroundSpelling } from '@/components/fx/centreMode'
 import { fxDynamicsParts } from '@/lib/fxDynamics'
 import { followsNoMaster } from '@/lib/fxTiming'

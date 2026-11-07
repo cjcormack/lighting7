@@ -1,4 +1,4 @@
-import { SPEED_STEPS } from '@/components/fx/fxConstants'
+import { clampSpeed, cycleOf, speedOf } from '@/lib/fxSpeed'
 import { MAX_SPREAD, MAX_STEP_SPREAD } from '@/lib/spreadShape'
 import type { FxPreviewFx } from '@/store/fxPreview'
 import { SAMPLES_PER_CYCLE } from './fxGraphModel'
@@ -15,34 +15,28 @@ import { SAMPLES_PER_CYCLE } from './fxGraphModel'
  */
 
 /**
- * The cycle step nearest [beats], by ratio: Cycle's handle snaps to the steps the segment offers.
- * [also] joins the steps — the cycle the drag began on, so a cycle off the eight (a triplet, 32
- * beats) is kept until the drag leaves it for a step.
+ * The Speed handle's cycle for [cycle] (fx-speed plan §4): the nearest power of two on the log
+ * scale, as the slider's snaps, written in whole ticks (seconds to the millisecond on the wall
+ * clock). [also] joins them — the cycle the drag began on, so a Speed off the snaps (a triplet's ×⅔)
+ * is kept until the drag leaves it for one.
  */
-export function snapCycle(beats: number, also?: number): number {
-  const steps = also == null ? SPEED_STEPS.map((s) => s.value) : [...SPEED_STEPS.map((s) => s.value), also]
-  let best = steps[0]
-  for (const value of steps) {
-    if (Math.abs(Math.log(value / beats)) < Math.abs(Math.log(best / beats))) best = value
-  }
-  return best
+export function snapCycle(cycle: number, wallClock = false, also?: number): number {
+  const speed = clampSpeed(speedOf(cycle, wallClock))
+  const snapped = cycleOf(2 ** Math.round(Math.log2(speed)), wallClock)
+  if (also == null) return snapped
+  return Math.abs(Math.log(also / cycle)) < Math.abs(Math.log(snapped / cycle)) ? also : snapped
 }
 
-/** A cycle in seconds' range and resolution — the Cycle field's (0.05 s to 600 s). */
-const SECONDS_STEP = 0.05
-const SECONDS_MAX = 600
-
 /**
- * Cycle from the first cycle's right edge, dragged from [edgeX] to [x]: the cycle scaled by how far
- * the edge moved from the plot's left. A cycle in beats snaps to a step, or stays where it began; one
- * in seconds (a wall-clock FX) has no steps and moves to the nearest 0.05 s. An Own tempo's cycle is beats.
+ * The cycle from the first cycle's right edge, dragged from [edgeX] to [x]: the cycle scaled by how
+ * far the edge moved from the plot's left, snapped to a power of two's Speed or kept where it began.
+ * [seconds] is a wall-clock FX's cycle; an Own tempo's is beats.
  */
 export function cycleFromDrag(startCycle: number, plotLeft: number, edgeX: number, x: number, seconds = false): number {
   const span = edgeX - plotLeft
   if (!(span > 0) || !(startCycle > 0)) return startCycle
   const scaled = (startCycle * Math.max(1, x - plotLeft)) / span
-  if (seconds) return Math.min(SECONDS_MAX, Math.max(SECONDS_STEP, Math.round(Math.round(scaled / SECONDS_STEP) * SECONDS_STEP * 100) / 100))
-  return snapCycle(scaled, startCycle)
+  return snapCycle(scaled, seconds, startCycle)
 }
 
 /**

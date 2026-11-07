@@ -56,6 +56,12 @@ describe('describePalette — around (fixture-fx-sheets plan D16)', () => {
     expect(describePalette(circle('ADDITIVE', '90'))).not.toMatch(/around/)
   })
 
+  it('says the FX’s Speed, and its Own tempo beside it (fx-speed plan D2)', () => {
+    const base = circle('OVERRIDE', '90')
+    expect(describePalette(base)).toBe('Circle · ×8')
+    expect(describePalette({ ...base, fx: { ...base.fx!, cycle: 8, ownBpm: 96 } } as PaletteSummary)).toBe('Circle · ×½ · Own 96')
+  })
+
   it('adds ← or ↔ for a non-forward palette and the size where it is under 100 % (effects plan §4.1)', () => {
     const shaped = (over: object): PaletteSummary => {
       const base = circle('OVERRIDE', '128')

@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.fx
 
 import kotlin.math.floor
+import kotlin.math.log2
+import kotlin.math.round
 import uk.me.cormack.lighting7.models.Timing
 
 /**
@@ -23,18 +25,20 @@ internal object FxPhase {
         dynamics: FxDynamics,
         distributionOffset: Double,
         tally: RunsTally? = null,
+        shift: CycleShift? = null,
     ): Double {
         val ticksPerCycle = beatCycleTicks(division)
         if (ticksPerCycle <= 0) return 0.0
-        val elapsed = elapsed(ticks, anchorTick, dynamics)
-        return shape(
-            cycles = elapsed / ticksPerCycle,
-            basePhase = (elapsed % ticksPerCycle).toDouble() / ticksPerCycle,
-            dynamics = dynamics,
-            distributionOffset = distributionOffset,
-            groupSize = groupSize,
-            tally = tally,
-        )
+        return beatClock(ticks, anchorTick, ticksPerCycle, dynamics, shift) { cycles, basePhase ->
+            shape(
+                cycles = cycles,
+                basePhase = basePhase,
+                dynamics = dynamics,
+                distributionOffset = distributionOffset,
+                groupSize = groupSize,
+                tally = tally,
+            )
+        }
     }
 
     /** [beatPhaseAt]'s wall-clock twin, over [scaledMs] of the FX's scaled clock and its anchor [anchorMs]. */
@@ -66,13 +70,55 @@ internal object FxPhase {
      * the member's own cycle begins each time this crosses a whole number — under a triangle Order
      * (Ping-pong) the sweep's turnarounds fall elsewhere. 0 where the cycle is empty.
      */
-    fun beatOwnCyclesAt(ticks: Long, anchorTick: Long, division: Double, dynamics: FxDynamics, distributionOffset: Double): Double {
+    fun beatOwnCyclesAt(
+        ticks: Long,
+        anchorTick: Long,
+        division: Double,
+        dynamics: FxDynamics,
+        distributionOffset: Double,
+        shift: CycleShift? = null,
+    ): Double {
         val ticksPerCycle = beatCycleTicks(division)
         if (ticksPerCycle <= 0) return 0.0
-        val elapsed = elapsed(ticks, anchorTick, dynamics)
-        val basePhase = (elapsed % ticksPerCycle).toDouble() / ticksPerCycle
-        return own(elapsed / ticksPerCycle, basePhase, distributionOffset) + dynamics.phaseOffset
+        return beatClock(ticks, anchorTick, ticksPerCycle, dynamics, shift) { cycles, basePhase ->
+            own(cycles, basePhase, distributionOffset) + dynamics.phaseOffset
+        }
     }
+
+    /**
+     * A beat FX's whole cycles and the phase of the current one at [ticks], handed to [use]: integer
+     * arithmetic with no [shift], as [MasterClock.phaseForDivision] always was, so an FX never sped up
+     * is unchanged. Inline, so the per-member pass allocates nothing.
+     */
+    private inline fun beatClock(
+        ticks: Long,
+        anchorTick: Long,
+        ticksPerCycle: Long,
+        dynamics: FxDynamics,
+        shift: CycleShift?,
+        use: (cycles: Long, basePhase: Double) -> Double,
+    ): Double {
+        val elapsed = elapsed(ticks, anchorTick, dynamics)
+        val offset = shift?.at(ticks) ?: 0.0
+        if (offset == 0.0) return use(elapsed / ticksPerCycle, (elapsed % ticksPerCycle).toDouble() / ticksPerCycle)
+        val shifted = elapsed + offset
+        val cycles = floor(shifted / ticksPerCycle)
+        return use(cycles.toLong(), (shifted - cycles * ticksPerCycle) / ticksPerCycle)
+    }
+
+    /**
+     * Whether a beat cycle of [division] beats is a power of two of a beat (a snapped Speed, D1), the
+     * cycles a forever FX glides back onto its master's grid at (D6). Within a millionth, as the
+     * editor writes whole ticks; ⅛ beat is three.
+     */
+    fun isSnappedCycle(division: Double): Boolean {
+        if (division <= 0.0 || !division.isFinite()) return false
+        val exponent = log2(division)
+        return kotlin.math.abs(exponent - round(exponent)) < 1e-6
+    }
+
+    /** The cycles a glide aligns to (D6): two under Bounce, so its forward cycles start on an unmoved one's. */
+    fun glideGridCycles(direction: FxDirection): Int = if (direction == FxDirection.BOUNCE) 2 else 1
 
     /** [beatOwnCyclesAt]'s wall-clock twin. */
     fun wallClockOwnCyclesAt(scaledMs: Double, anchorMs: Double, division: Double, dynamics: FxDynamics, distributionOffset: Double): Double {
@@ -93,8 +139,15 @@ internal object FxPhase {
     /** The member's own clock, in cycles: the FX's, less this member's offset. */
     private fun own(cycles: Long, basePhase: Double, distributionOffset: Double): Double = cycles + basePhase - distributionOffset
 
-    /** A beat cycle of [division] beats in master ticks; at or below 0 the phase is always 0. */
-    fun beatCycleTicks(division: Double): Long = (MasterClock.TICKS_PER_BEAT * division).toLong()
+    /**
+     * A beat cycle of [division] beats in master ticks; at or below 0 the phase is always 0. A cycle of
+     * whole ticks lands on them, though `n / 24 × slots` is not exact in binary (fx-speed plan D1), so a
+     * step-timed FX runs the Speed its chip says; anything shorter of a tick than [TICK_EPSILON] is truncated.
+     */
+    fun beatCycleTicks(division: Double): Long = (MasterClock.TICKS_PER_BEAT * division + TICK_EPSILON).toLong()
+
+    /** How far below a whole tick a cycle may fall and still be that tick: far above a double's error, far below a tick. */
+    private const val TICK_EPSILON = 1e-6
 
     /** A wall-clock cycle of [division] seconds in milliseconds; at or below 0 the phase is always 0. */
     fun wallClockCycleMs(division: Double): Double = division * 1000.0
@@ -151,6 +204,57 @@ internal object FxPhase {
         }
         val ownCycle = floor(own + dynamics.phaseOffset).toLong()
         return dynamics.direction.apply(phase, ownCycle)
+    }
+}
+
+/**
+ * A beat FX's runtime offset onto its master's ticks (fx-speed plan D6), in ticks: what keeps its
+ * elapsed cycles, whole and fraction, across a change of cycle. Never stored, so a re-GO or a reload
+ * starts on the grid.
+ *
+ * With a glide it moves, over [glideTicks] from [glideFromTick] (one cycle), to the nearest multiple
+ * of [gridTicks], where its phase is an unmoved FX's. It never runs backwards: the grid is at most two
+ * cycles, so it moves at most one cycle in one.
+ */
+internal data class CycleShift(
+    val ticks: Double,
+    val glideFromTick: Long = NO_GLIDE,
+    val glideTicks: Long = 0,
+    val gridTicks: Long = 0,
+) {
+    /** The offset at master tick [tick]. */
+    fun at(tick: Long): Double {
+        if (glideFromTick == NO_GLIDE || glideTicks <= 0 || gridTicks <= 0) return ticks
+        val target = round(ticks / gridTicks) * gridTicks
+        val progress = ((tick - glideFromTick).toDouble() / glideTicks).coerceIn(0.0, 1.0)
+        return ticks + (target - ticks) * progress
+    }
+
+    companion object {
+        const val NO_GLIDE: Long = Long.MIN_VALUE
+
+        /**
+         * The shift that keeps [elapsed] ticks run with [from] on a cycle of [fromTicksPerCycle] ticks
+         * at the same elapsed cycles on a cycle of [toTicksPerCycle], at master tick [tick]; gliding onto
+         * a grid of [gridCycles] new cycles when it is set. Null where nothing is shifted.
+         */
+        fun across(
+            tick: Long,
+            elapsed: Long,
+            from: CycleShift?,
+            fromTicksPerCycle: Long,
+            toTicksPerCycle: Long,
+            gridCycles: Int?,
+        ): CycleShift? {
+            if (fromTicksPerCycle <= 0 || toTicksPerCycle <= 0) return from
+            val cycles = (elapsed + (from?.at(tick) ?: 0.0)) / fromTicksPerCycle
+            val ticks = cycles * toTicksPerCycle - elapsed
+            return if (gridCycles == null) {
+                CycleShift(ticks).takeUnless { ticks == 0.0 }
+            } else {
+                CycleShift(ticks, glideFromTick = tick, glideTicks = toTicksPerCycle, gridTicks = gridCycles * toTicksPerCycle)
+            }
+        }
     }
 }
 

@@ -240,7 +240,7 @@ export function FxTray({
               <button
                 key={e.id}
                 type="button"
-                title={`${e.fxType} on ${e.attribute}${via(e) ? ` via ${via(e)}` : ''}${isHeldByBlind(e, blind) ? ` — ${HELD_BLIND_WORDS}` : ''}${isCueFx(e) ? ' — the cue’s' : ' — edit'}`}
+                title={`${e.fxType} on ${e.attribute}${via(e) ? ` via ${via(e)}` : ''}${secondsTitle(fxDetail(e, 'seconds'))}${isHeldByBlind(e, blind) ? ` — ${HELD_BLIND_WORDS}` : ''}${isCueFx(e) ? ' — the cue’s' : ' — edit'}`}
                 data-held-blind={isHeldByBlind(e, blind) || undefined}
                 onClick={() => (isCueFx(e) ? setOpen(true) : edit(e))}
                 className={cn(
@@ -496,4 +496,9 @@ function CueSheet({ cueId, onClose }: { cueId: number | null; onClose: () => voi
   const { data: project } = useCurrentProjectQuery()
   if (project == null) return null
   return <OwnerEditor projectId={project.id} entry={cueId == null ? null : { kind: 'cue', id: cueId }} onClose={onClose} />
+}
+
+/** A chip's hover gains the seconds a cycle where there are some to say. */
+function secondsTitle(seconds: string): string {
+  return seconds === '' ? '' : ` · ${seconds}`
 }

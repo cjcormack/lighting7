@@ -26,6 +26,8 @@ export interface LinkedEditor {
   levelParams?: { low: string; high: string }
   /** A wall-clock FX, whose cycle is seconds whatever its master. */
   wallClock: boolean
+  /** An FX that runs at its own pace (fx-speed plan D4): the graph offers it no Speed tab. */
+  ownPace?: boolean
   /** The FX's own steps, which a `STEP` spread counts (fx-settings plan D6); null for an FX with none. */
   steps?: number | null
   readOnly: boolean

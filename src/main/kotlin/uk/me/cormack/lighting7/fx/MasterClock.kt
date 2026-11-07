@@ -67,7 +67,7 @@ class MasterClock {
          * mistake a bank must not invite.
          */
         fun phaseForDivision(tickNumber: Long, division: Double): Double {
-            val ticksPerCycle = (TICKS_PER_BEAT * division).toLong()
+            val ticksPerCycle = FxPhase.beatCycleTicks(division)
             if (ticksPerCycle <= 0) return 0.0
             val tickInCycle = tickNumber % ticksPerCycle
             return tickInCycle.toDouble() / ticksPerCycle

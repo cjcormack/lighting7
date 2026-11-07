@@ -72,9 +72,20 @@ vi.mock('@/store/groups', () => ({
   useResumeGroupFxMutation: () => [vi.fn()],
 }))
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => true }))
+const BANK = [{ uuid: 'master-1', index: 1, name: 'Main', bpm: 124 }]
 vi.mock('@/store/speedMasters', () => ({
   useMaster1Uuid: () => 'master-1',
-  useSpeedMasterLiveQuery: () => ({ data: [{ uuid: 'master-1', index: 1, name: 'Main', bpm: 124 }] }),
+  useSpeedMasterLiveQuery: (_arg?: unknown, options?: { selectFromResult?: (r: { data: typeof BANK }) => unknown }) =>
+    options?.selectFromResult ? options.selectFromResult({ data: BANK }) : { data: BANK },
+  tapSpeedMaster: vi.fn(),
+  setSpeedMasterBpm: vi.fn(),
+}))
+const programmerTempo = vi.hoisted(() => ({ tap: vi.fn(), set: vi.fn() }))
+vi.mock('@/store/programmer', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/programmer')>()),
+  useProgrammerTempo: () => ({ projectId: null, masters: [] }),
+  programmerTapTempo: programmerTempo.tap,
+  programmerSetTempo: programmerTempo.set,
 }))
 const lookup = vi.hoisted(() => ({ fixtures: [] as unknown[] }))
 vi.mock('@/hooks/useFixtureLookup', () => ({
@@ -208,9 +219,16 @@ afterEach(() => {
 })
 
 
-/** The Cycle chip's popover: its steps, its typed field and *Same cycle as…*. */
-function openCycle() {
-  fireEvent.click(screen.getByRole('button', { name: /^Cycle: / }))
+/** A Speed typed into the slider's value, as the operator types it. */
+function typeSpeed(text: string) {
+  const field = screen.getByRole('textbox', { name: 'Speed value' })
+  fireEvent.change(field, { target: { value: text } })
+  fireEvent.keyDown(field, { key: 'Enter' })
+}
+
+/** The tempo chip's menu: the masters, Own tempo or Natural, and *Same speed as…*. */
+function openTempo() {
+  fireEvent.click(screen.getByRole('button', { name: /^Tempo: / }))
 }
 
 describe('FxEditor', () => {
@@ -255,8 +273,7 @@ describe('FxEditor', () => {
     const size = screen.getByRole('slider', { name: 'Pan size' })
     fireEvent.change(size, { target: { value: '200' } })
     fireEvent.pointerUp(size)
-    openCycle()
-    fireEvent.click(screen.getByRole('radio', { name: '1 bar a cycle' }))
+    typeSpeed('1')
     updateFx.mockClear()
 
     fireEvent.click(screen.getByRole('button', { name: 'Revert' }))
@@ -271,7 +288,7 @@ describe('FxEditor', () => {
 
   it('Revert onto Own tempo sends the tempo alone and draws no master — so it is no longer dirty', () => {
     render(<FxEditor effect={makeActiveFx({ fxType: 'Pulse', attribute: 'dimmer', cycle: 2, timingSource: 'WALL_CLOCK', ownBpm: 96 })} onDone={() => {}} onStop={() => {}} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Timing: Own 96' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Tempo: Own 96' }))
     fireEvent.click(screen.getByRole('radio', { name: 'M1 · Main' }))
     expect(lastFrame()).toMatchObject({ cycle: 2, speedMasterUuid: 'master-1' })
     expect(lastFrame()).not.toHaveProperty('ownBpm')
@@ -282,7 +299,7 @@ describe('FxEditor', () => {
     expect(updateFx).toHaveBeenCalledTimes(1)
     expect(lastFrame()).toMatchObject({ ownBpm: 96, cycle: 2 })
     expect(lastFrame()).not.toHaveProperty('speedMasterUuid')
-    expect(screen.getByRole('button', { name: 'Timing: Own 96' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Tempo: Own 96' })).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Revert' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -409,13 +426,16 @@ describe('FxEditor', () => {
     expect(pauseFx).toHaveBeenCalledWith({ id: 21, fixtureKey: 'spot-3' })
   })
 
-  it('types a division the segment does not name — a triplet', () => {
+  it('types a Speed no snap names — a triplet’s, in whole ticks', () => {
     render(<FxEditor effect={aroundCircle()} onDone={() => {}} onStop={() => {}} />)
-    openCycle()
-    const field = screen.getByRole('spinbutton', { name: 'Beats a cycle' })
-    fireEvent.change(field, { target: { value: '0.333' } })
-    fireEvent.keyDown(field, { key: 'Enter' })
-    expect(lastFrame()).toMatchObject({ cycle: 0.333 })
+    typeSpeed('⅔')
+    expect(lastFrame()).toMatchObject({ cycle: 6 })
+  })
+
+  it('taps a master into the programmer from the live editor (fx-speed plan D8)', () => {
+    render(<FxEditor effect={aroundCircle()} onDone={() => {}} onStop={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Tap the master’s tempo' }))
+    expect(programmerTempo.tap).toHaveBeenCalledWith('master-1')
   })
 
   it('× stops the effect and Done goes back', () => {
@@ -496,8 +516,7 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
     const size = screen.getByRole('slider', { name: 'Pan size' })
     fireEvent.change(size, { target: { value: '120' } })
     fireEvent.pointerUp(size)
-    openCycle()
-    fireEvent.click(screen.getByRole('radio', { name: '2 beats a cycle' }))
+    typeSpeed('2')
 
     fireEvent.click(screen.getByRole('button', { name: 'Update palette' }))
     await waitFor(() => expect(savePalette).toHaveBeenCalledTimes(1))
@@ -597,7 +616,7 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
     expect(pairs[1]).not.toBe(pairs[2])
   })
 
-  it('copies the cycle and the spread of another FX once, and follows it no further', () => {
+  it('copies the speed and the spread of another FX once, and follows it no further', () => {
     const source = makeActiveFx({ id: 50, fxType: 'Pulse', attribute: 'uv', cycle: 8, order: 'REVERSE', spread: 0.5, segments: 3 })
     const { link } = linkOf({ others: [{ effect: source, name: 'Pulse', wallClock: false }] })
     const { rerender } = inspector(link)
@@ -607,8 +626,8 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
     }
 
     updateFx.mockClear()
-    openCycle()
-    pick('Same cycle as')
+    openTempo()
+    pick('Same speed as')
     expect(updateFx).toHaveBeenCalledTimes(1)
     // Master 1 is named by its uuid: the frame's absent master means "keep".
     expect(lastFrame()).toMatchObject({ cycle: 8, speedMasterUuid: 'master-1' })
@@ -631,7 +650,7 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
     expect(updateFx).not.toHaveBeenCalled()
   })
 
-  it('offers no cycle from a wall-clock FX, but one from a beat FX on its own tempo with that tempo', () => {
+  it('offers no speed from a wall-clock FX, but one from a beat FX on its own tempo with that tempo', () => {
     const wall = makeActiveFx({ id: 51, fxType: 'Flicker', timingSource: 'WALL_CLOCK', rateSpeedMasterUuid: 'master-1', cycle: 3 })
     // A beat FX on Own tempo reports the wall clock as the loop it runs on; its library entry is the beat's.
     const onOwn = makeActiveFx({ id: 52, fxType: 'Pulse', timingSource: 'WALL_CLOCK', ownBpm: 96, cycle: 2.5 })
@@ -643,8 +662,8 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
         ],
       }).link,
     )
-    openCycle()
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Same cycle as…' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    openTempo()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Same speed as…' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
     expect(screen.getByRole('menuitem', { name: /Flicker/ }).getAttribute('aria-disabled')).toBe('true')
     updateFx.mockClear()
     fireEvent.click(screen.getByRole('menuitem', { name: /Pulse on Own tempo/ }))
@@ -661,7 +680,7 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
   it('puts out a light whose control goes from under the pointer', () => {
     const { link } = linkOf()
     const { unmount } = inspector(link)
-    fireEvent.pointerEnter(screen.getByRole('button', { name: /^Cycle: / }).closest('[data-lights]')!)
+    fireEvent.pointerEnter(screen.getByRole('slider', { name: 'Speed' }).closest('[data-lights]')!)
     expect(link.setHighlight).toHaveBeenLastCalledWith('cycle')
     unmount()
     expect(link.setHighlight).toHaveBeenLastCalledWith(null)
@@ -738,8 +757,8 @@ describe('FxEditor in the FX editor’s inspector (FX editor plan D9, D11–D13,
     fireEvent.click(screen.getByRole('button', { name: 'Custom' }))
     fireEvent.click(screen.getByRole('radio', { name: 'Free' }))
     const cases: [HTMLElement, string][] = [
-      [screen.getByRole('button', { name: /^Cycle: / }), 'cycle'],
-      [screen.getByRole('button', { name: /^Timing: / }), 'cycle'],
+      [screen.getByRole('slider', { name: 'Speed' }), 'cycle'],
+      [screen.getByRole('button', { name: /^Tempo: / }), 'cycle'],
       [screen.getByRole('button', { name: /^Runs: / }), 'holding'],
       [screen.getByRole('slider', { name: 'Amount' }), 'amount'],
       [screen.getByRole('combobox', { name: 'Order' }), 'starts'],

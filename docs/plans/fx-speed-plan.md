@@ -172,8 +172,8 @@ docs it names written, and its row marked *in review* with its branch. A session
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
 | 1 | Own tempo on the desk | merged | `claude/quirky-faraday-k08oa7` | [#374](https://github.com/cjcormack/lighting7/pull/374) | `0082602` |
-| 2 | Tempo in the programmer | in review | `claude/fx-speed-0zrqvu` | | |
-| 3 | The Speed slider | planned | | | |
+| 2 | Tempo in the programmer | merged | `claude/fx-speed-0zrqvu` | [#376](https://github.com/cjcormack/lighting7/pull/376) | `b3a9373` |
+| 3 | The Speed slider | in review | `claude/jolly-keller-rfs1c3` | [#379](https://github.com/cjcormack/lighting7/pull/379) | |
 | 4 | Half, double and a speed fader | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -317,6 +317,23 @@ the next; whoever merges the last fills its own.
   unchanged. The glossary's *Cycle* row keeps a key that still finds its word once `CycleChip` goes
   (the readout's *a cycle*), moved if needed, as `glossary.test.ts` reads it.
 - **Local:** `./gradlew compileTestKotlin`, then the `fx` package; `npm run check:quick`.
+- **As built.** The shift is in ticks and its glide carries its own length and grid in ticks
+  (`CycleShift`, `FxPhase.kt`), set by `FxEngine.keepCycles` on the swap a new cycle takes, from the
+  master's current tick; an FX never sped up keeps the integer arithmetic. The grid is the whole
+  cycle's ticks, so under *One cycle for: Each head* a glide aligns each step rather than the whole
+  sequence. The vector also pins `TapTempo` and the whole ticks a typed Speed writes (×5 is 19 ticks,
+  `×5.05`). The wall-clock FX's Speed, ×1 at two seconds, makes a power of two of its cycle a snap
+  too, so the graph's Speed handle snaps a wall-clock cycle to a power of two of its Speed rather than
+  to 0.05 s. A chip says the Speed and its tempo; the seconds are its hover where the plan's labels table
+  asks — the fixture sheet's tray chips, the Applied FX table's Speed column and the Timeline's run
+  list (`useCycleSeconds`) — beside the editor's readout and the graph tab's hover. `beatCycleTicks`
+  now lands a whole tick that `n/24 × steps` misses in binary, so a step-timed FX runs its Speed. Only the live FX editor's Speed section reads the
+  programmer's holds, so a host that holds none (the palette editor, the cue FX tab) needs no store
+  for it. The Applied FX table's *Cycle* column is *Speed*; the glossary's *Cycle* row is keyed to
+  `docs/fx-engineering.md` now that no control says the word. Every instance standing in for another
+  — a swap, a split's head copy, a programmer undo — takes the shift with the run's place
+  (`carryRunState`), and a change of master or loop drops it, as its ticks are the old master's. A
+  follower master offers no Tap or tempo field in the Speed section, as the rail offers none.
 
 ### Session 4 — Half, double and a speed fader
 

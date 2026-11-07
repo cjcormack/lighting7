@@ -1135,11 +1135,22 @@ class FxEngine(
         priority = parent.priority
         dynamicsRef.set(parent.dynamics.copy(elementFilter = ElementFilter.ALL))
         carryEnvelope(parent.envelope)
-        lastPhase = parent.lastPhase
-        accumulatedScaledMs = parent.accumulatedScaledMs
-        runsStartTick = parent.runsStartTick
-        runsStartScaledMs = parent.runsStartScaledMs
-        spent = parent.spent
+        carryRunState(parent)
+    }
+
+    /**
+     * [running]'s place in its run, which every instance standing in for another takes: its phase
+     * for reporting, the wall-clock accumulator, an N-shot's anchors and spent mark, and a beat
+     * effect's [FxInstance.cycleShift] (fx-speed plan D6). One list, so a field added here reaches a
+     * swap, a restore and a split alike.
+     */
+    private fun FxInstance.carryRunState(running: FxInstance) {
+        lastPhase = running.lastPhase
+        accumulatedScaledMs = running.accumulatedScaledMs
+        runsStartTick = running.runsStartTick
+        runsStartScaledMs = running.runsStartScaledMs
+        cycleShift = running.cycleShift
+        spent = running.spent
     }
 
     /**
@@ -1474,13 +1485,14 @@ class FxEngine(
             // swap below, so applying it up front reaches whichever instance survives — and a
             // tick pass sees either none of this update or all of it, never half.
             if (edit.touchesDynamics) existing.updateDynamics(edit::applyTo)
-            // A new count runs from now: the anchors re-take on the next pass. Written from this request
-            // thread into tick-owned fields, which at worst re-anchors one pass late.
-            if (runsChanged) existing.restartRuns()
-
             val needsSwap = edit.swaps(existing)
+            // A new count runs from now: the anchors re-take on the next pass. Written from this request
+            // thread into tick-owned fields, which at worst re-anchors one pass late. A swap restarts
+            // them on the instance it builds, as a preview's copy does.
+            if (runsChanged && !needsSwap) existing.restartRuns()
+            val slotBefore = existing.speedMasterSlot
             val updated = if (needsSwap) {
-                swapFor(existing, edit, existing.dynamicsRef, existing.envelopeCell)
+                swapFor(existing, edit, existing.dynamicsRef, existing.envelopeCell, restartRuns = runsChanged)
             } else {
                 // A new Own tempo moves only the rate the accumulator advances at, so the phase is kept.
                 (edit.newClock as? FxClockMove.OntoOwnTempo)?.let { if (existing.onOwnTempo) existing.ownBpm = it.bpm }
@@ -1493,6 +1505,8 @@ class FxEngine(
                     existing.rateMasterSlot = rateSlotFor(it)
                 }
                 edit.replaceMasters?.let { assignMasters(existing, it) }
+                // A shift counts the old master's ticks: on another master the effect starts on its grid.
+                if (existing.speedMasterSlot != slotBefore) existing.cycleShift = null
                 existing
             }
 
@@ -1526,12 +1540,58 @@ class FxEngine(
             existing, edit,
             dynamicsRef = AtomicReference(edit.applyTo(existing.dynamics)),
             envelopeRef = AtomicReference(existing.envelope),
-        ).apply { if (edit.movesRuns(existing)) restartRuns() }
+            restartRuns = edit.movesRuns(existing),
+        )
 
     private fun FxInstance.restartRuns() {
         runsStartTick = FxInstance.UNANCHORED
         runsStartScaledMs = Double.NaN
+        cycleShift = null
         spent = false
+    }
+
+    /**
+     * This instance's place in its run, standing in for [running] (fx-speed plan D6): on the same clock
+     * — the same loop, and a beat effect's same master — a new cycle keeps [running]'s elapsed cycles
+     * ([keepCycles]); on another loop or master it starts on that clock, with no shift, which counts
+     * the old master's ticks. Called once the masters and the timing choice are set.
+     */
+    private fun FxInstance.followClock(running: FxInstance) {
+        val sameClock = timingSource == running.timingSource &&
+            (timingSource != TimingSource.BEAT || speedMasterSlot == running.speedMasterSlot)
+        if (sameClock) keepCycles(running) else cycleShift = null
+    }
+
+    /**
+     * Keep [running]'s elapsed cycles, whole and fraction, as this swap instance takes a new cycle on
+     * the same loop (fx-speed plan D6), so its phase, its run count and Bounce's parity hold: a beat
+     * effect through [FxInstance.cycleShift], gliding back onto its master's grid when it is a forever
+     * effect on a power of two of a beat; an effect on the wall clock, Own tempo included, by
+     * rescaling its accumulator, which has no grid to glide to.
+     */
+    private fun FxInstance.keepCycles(running: FxInstance) {
+        val from = running.timing.cycle
+        val to = timing.cycle
+        if (from == to || from <= 0.0 || to <= 0.0) return
+        val dyn = dynamics
+        if (timingSource == TimingSource.BEAT) {
+            val tick = speedMasters.clockFor(speedMasterSlot).currentTick.tickNumber
+            val elapsed = when {
+                dyn.runs == null -> tick
+                runsStartTick == FxInstance.UNANCHORED || tick < runsStartTick -> return
+                else -> tick - runsStartTick
+            }
+            val glide = FxPhase.glideGridCycles(dyn.direction).takeIf { dyn.runs == null && FxPhase.isSnappedCycle(to) }
+            // The shift this instance carried, which a restart of its runs has already let go.
+            cycleShift = CycleShift.across(
+                tick, elapsed, cycleShift,
+                FxPhase.beatCycleTicks(from), FxPhase.beatCycleTicks(to), glide,
+            )
+        } else {
+            val ratio = to / from
+            accumulatedScaledMs = running.accumulatedScaledMs * ratio
+            if (!runsStartScaledMs.isNaN()) runsStartScaledMs *= ratio
+        }
     }
 
     /**
@@ -1544,6 +1604,7 @@ class FxEngine(
         edit: FxEdit,
         dynamicsRef: AtomicReference<FxDynamics>,
         envelopeRef: AtomicReference<FxEnvelope>,
+        restartRuns: Boolean = false,
     ): FxInstance {
         val timingMove = edit.timingMove(existing)
         return FxInstance(
@@ -1559,6 +1620,7 @@ class FxEngine(
             envelopeRef = envelopeRef,
         ).apply {
             carryFrom(existing, existing)
+            if (restartRuns) restartRuns()
             edit.newRegistrationId?.let { registrationId = it }
             // Master assignment must survive the swap: [carryFrom] keeps both, and an edit moves
             // only the one it names — dropping one silently yanks an edited effect back to master 1
@@ -1581,6 +1643,7 @@ class FxEngine(
             } else {
                 (edit.newClock as? FxClockMove.OntoOwnTempo)?.let { if (onOwnTempo) ownBpm = it.bpm }
             }
+            followClock(existing)
         }
     }
 
@@ -1635,11 +1698,7 @@ class FxEngine(
         rateMasterSlot = config.rateMasterSlot
         startedAtMs = running.startedAtMs
         startedAtBeat = running.startedAtBeat
-        lastPhase = running.lastPhase
-        accumulatedScaledMs = running.accumulatedScaledMs
-        runsStartTick = running.runsStartTick
-        runsStartScaledMs = running.runsStartScaledMs
-        spent = running.spent
+        carryRunState(running)
     }
 
     /** Both of an effect's master assignments, as [updateFx]'s `replaceMasters` sets them. */
@@ -2107,6 +2166,8 @@ class FxEngine(
             carryFrom(config, running)
             speedMasterSlot = speedMasters.slotFor(speedMasterUuid)
             rateMasterSlot = rateSlotFor(rateSpeedMasterUuid)
+            // The restored cycle, not the running one: its shift is worked out afresh (D6).
+            followClock(running)
         }
 
     /**

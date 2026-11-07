@@ -206,7 +206,7 @@ describe('PaletteSheet — the columns', () => {
     expect(row(6)).toHaveTextContent('2 heads · per fixture')
     // An effect template holds no rows at all on the wire — its Value is the effect and its speed.
     expect(row(3)).toHaveTextContent('Dimmer Pulse · ')
-    expect(row(5)).toHaveTextContent('Rainbow Cycle · 4 s')
+    expect(row(5)).toHaveTextContent('Rainbow Cycle · ×½')
     expect(row(3)).toHaveTextContent('FX')
     expect(row(1)).toHaveTextContent('Value')
   })
@@ -488,7 +488,7 @@ describe('PaletteSheet — Value (session 3)', () => {
       expect(row(id).querySelector('[data-cell="value"]')).toBeNull()
     }
     expect(row(6)).toHaveTextContent('2 heads · per fixture')
-    expect(row(5)).toHaveTextContent('Rainbow Cycle · 4 s')
+    expect(row(5)).toHaveTextContent('Rainbow Cycle · ×½')
     expect(row(4).querySelector('[data-cell="value"] button')).not.toBeNull()
   })
 
