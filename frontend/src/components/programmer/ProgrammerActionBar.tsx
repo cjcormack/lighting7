@@ -156,7 +156,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   // Clear releases programmer values, programmer-band FX, held scenery and layers alike: gating it on
   // the entry count alone would leave the documented escape hatch disabled in exactly the case an
   // operator most needs it.
-  const { programmerFxCount, sceneryCount, layerCount, hasContent: hasSomethingToClear } =
+  const { programmerFxCount, sceneryCount, tempoCount, layerCount, hasContent: hasSomethingToClear } =
     useProgrammerContent(projectId)
 
   // Record reads the programmer, so it is meaningless when the programmer is empty. Include is
@@ -167,6 +167,9 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   // desk refuses one with `VENUE_RECORD_OFF` whatever this shows.
   const { isVenue } = useVenueMode(projectId)
   const canRecord = hasContent && !isVenue
+  // A Look records no tempo (fx-speed plan D10), so held tempos alone are nothing to record into one.
+  const canRecordLook = canRecord && (entryCount > 0 || programmerFxCount > 0 || sceneryCount > 0 || layerCount > 0)
+  const canRecordInto = target?.kind === 'LOOK' ? canRecordLook : canRecord
 
   // *A new palette* (programmer-toolbar plan D2): the selection's heads recorded as a palette. Read
   // through the marquee store, as `useWindowPressPair` reads it, since this row sits outside the
@@ -189,7 +192,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
 
   // ⌘K's *Programmer* group (programmer-toolbar plan D13): this row's verbs, each run as its control
   // runs it, and each missing from ⌘K while its control would be disabled.
-  const contents = contentsOf(entryCount, sceneryCount, layerCount, programmerFxCount)
+  const contents = contentsOf(entryCount, sceneryCount, layerCount, programmerFxCount, tempoCount)
   const over = fade > 0 ? `over ${fade / 1000}s` : 'snap'
   const includedLabel = [includedCue?.number, includedCue?.name].filter(Boolean).join(' ')
   const includedLookName = target?.kind === 'LOOK' ? includedTargetParts(target).name : undefined
@@ -212,7 +215,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
           : `Record into ${includedLabel || 'the included cue'}`,
       hint: target?.kind === 'LOOK' ? 'the Look you are editing' : 'the cue you are editing',
       keywords: ['record', 'merge', 'update', 'cue', 'look'],
-      canAct: canRecord && target != null,
+      canAct: canRecordInto && target != null,
       run: () => {
         if (target != null) sheets.openRecordInto(target)
       },
@@ -223,7 +226,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
       label: 'Record a new Look…',
       hint: contents,
       keywords: ['record', 'look', 'save'],
-      canAct: canRecord,
+      canAct: canRecordLook,
       run: sheets.openRecordLook,
     },
     {
@@ -321,7 +324,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
           {'Stage — '}
           {!hasSomethingToClear
             ? 'the programmer is empty'
-            : clearSentence(entryCount, programmerFxCount, sceneryCount, layerCount, fade)}
+            : clearSentence(entryCount, programmerFxCount, sceneryCount, layerCount, fade, tempoCount)}
         </TooltipContent>
       </Tooltip>
 
@@ -388,11 +391,11 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-[238px]">
             <DropdownMenuLabel className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-              {canRecord ? recordMenuLabel(entryCount, sceneryCount, layerCount) : 'The programmer is empty'}
+              {canRecord ? recordMenuLabel(entryCount, sceneryCount, layerCount, tempoCount) : 'The programmer is empty'}
             </DropdownMenuLabel>
             {target != null && (
               <MenuItem
-                disabled={!canRecord}
+                disabled={!canRecordInto}
                 icon={<Upload className="size-3.5" />}
                 title={target.kind === 'LOOK' ? (includedLookName ?? '') : includedLabel}
                 sub={target.kind === 'LOOK' ? 'Update the Look you are editing' : 'Update the cue you are editing'}
@@ -412,7 +415,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
               />
             )}
             <MenuItem
-              disabled={!canRecord}
+              disabled={!canRecordLook}
               icon={<Layers className="size-3.5" />}
               title="A new Look"
               sub="Names its own fixtures"
@@ -456,12 +459,20 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
  * will drop (it has no confirmation): *Release 3 programmer values, 1 programmer FX, 1 layer and 2
  * pieces of held scenery over 2s*. Each part only where it is held; the parts joined as a list is read.
  */
-export function clearSentence(values: number, fx: number, scenery: number, layers: number, fadeMs: number): string {
+export function clearSentence(
+  values: number,
+  fx: number,
+  scenery: number,
+  layers: number,
+  fadeMs: number,
+  tempos = 0,
+): string {
   const parts = [
     values > 0 ? `${values} programmer value${values === 1 ? '' : 's'}` : null,
     fx > 0 ? `${fx} programmer FX` : null,
     layers > 0 ? `${layers} layer${layers === 1 ? '' : 's'}` : null,
     scenery > 0 ? `${scenery} piece${scenery === 1 ? '' : 's'} of held scenery` : null,
+    tempos > 0 ? `${tempos} held tempo${tempos === 1 ? '' : 's'}` : null,
   ].filter((p): p is string => p != null)
   return ['Release', listOf(parts), fadeMs > 0 ? `over ${fadeMs / 1000}s` : null].filter(Boolean).join(' ')
 }
@@ -500,18 +511,19 @@ function MenuItem({
  * holding only scenery (scenery-programmer plan D7) or only a layer, and *Write 0 values into* would
  * say it holds nothing.
  */
-export function recordMenuLabel(values: number, scenery: number, layers = 0): string {
-  return `Write ${contentsOf(values, scenery, layers)} into`
+export function recordMenuLabel(values: number, scenery: number, layers = 0, tempos = 0): string {
+  return `Write ${contentsOf(values, scenery, layers, 0, tempos)} into`
 }
 
 /** What the programmer holds, as Record's heading and ⌘K say it: *3 values and 1 layer*. */
-function contentsOf(values: number, scenery: number, layers: number, fx = 0): string {
+function contentsOf(values: number, scenery: number, layers: number, fx = 0, tempos = 0): string {
   return listOf(
     [
-      values > 0 || (scenery === 0 && layers === 0 && fx === 0) ? `${values} value${values === 1 ? '' : 's'}` : null,
+      values > 0 || (scenery === 0 && layers === 0 && fx === 0 && tempos === 0) ? `${values} value${values === 1 ? '' : 's'}` : null,
       fx > 0 ? `${fx} FX` : null,
       layers > 0 ? `${layers} layer${layers === 1 ? '' : 's'}` : null,
       scenery > 0 ? `${scenery} piece${scenery === 1 ? '' : 's'} of scenery` : null,
+      tempos > 0 ? `${tempos} tempo${tempos === 1 ? '' : 's'}` : null,
     ].filter((p): p is string => p != null),
   )
 }

@@ -65,6 +65,7 @@ vi.mock('@/components/programmer/ProgrammerPressDoors', () => ({
   ProgrammerPaletteDoor: () => null,
 }))
 vi.mock('@/components/programmer/ProgrammerSceneryList', () => ({ useHeldSceneryCount: () => sceneryHeld.count }))
+vi.mock('@/components/programmer/ProgrammerTempoList', () => ({ ProgrammerTempoList: () => null, useHeldTempoCount: () => 0 }))
 // The three tables have their suite (`AppliedTables.test.tsx`); here each is its own row B's tabs
 // and a landmark, mounted on demand beside the one grid.
 vi.mock('@/components/applied/StackTable', async () => {

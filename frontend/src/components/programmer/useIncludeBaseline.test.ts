@@ -4,7 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { programmerWs } from '@/test/backendMock'
 
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
-vi.mock('@/store/programmer', () => ({ useProgrammerScenery: () => ({ changedSinceInclude: 0 }) }))
+const counts = { scenery: 0 as number | undefined, tempo: undefined as number | undefined }
+vi.mock('@/store/programmer', () => ({
+  useProgrammerScenery: () => ({ changedSinceInclude: counts.scenery }),
+  useProgrammerTempo: () => ({ projectId: 6, masters: [], changedSinceInclude: counts.tempo }),
+}))
 
 import { lightingApi } from '@/api/lightingApi'
 import { useIncludeBaseline } from './useIncludeBaseline'
@@ -16,7 +20,11 @@ const included = new Map([
   ['mac-1|position', entry('108,168')],
 ])
 
-afterEach(() => programmerWs.reset())
+afterEach(() => {
+  programmerWs.reset()
+  counts.scenery = 0
+  counts.tempo = undefined
+})
 
 describe('useIncludeBaseline', () => {
   it('waits for the state frame after the include target, so an Include alone counts no change', () => {
@@ -58,6 +66,21 @@ describe('useIncludeBaseline', () => {
     expect(result.current).toBe(0)
 
     act(() => programmerWs.push({ layersChangedSinceInclude: 1 }))
+    expect(result.current).toBe(1)
+  })
+
+  it('counts the held tempos the desk says the included cue does not say (fx-speed plan D10)', () => {
+    const CUE = { kind: 'CUE', cueId: 4, baseline: 1 }
+    counts.tempo = 2
+    counts.scenery = 1
+    const { result, rerender } = renderHook(() => useIncludeBaseline())
+    // No baseline yet: a tab that did not watch the Include claims nothing, tempo or not.
+    expect(result.current).toBeNull()
+    act(() => programmerWs.push({ lastIncluded: CUE, entries: included, snapshotSeq: 1 }))
+    expect(result.current).toBe(3)
+
+    counts.tempo = 0
+    rerender()
     expect(result.current).toBe(1)
   })
 

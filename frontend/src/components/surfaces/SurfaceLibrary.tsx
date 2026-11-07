@@ -661,7 +661,7 @@ export function SurfaceLibrary({
         // `null` is master 1 by the same convention as everywhere else, and master 1 always
         // exists — so these two are useful before the speed-master bank has even loaded.
         actionChip("tap", "Tap M1", { type: "speedMasterTap", masterUuid: null }),
-        actionChip("bpm", "BPM", {
+        actionChip("bpm", "Tempo", {
           type: "speedMasterBpm",
           masterUuid: null,
           minBpm: 60,

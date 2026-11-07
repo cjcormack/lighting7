@@ -63,6 +63,16 @@ export function withSceneryChanges(values: number | null, scenery: number | unde
 }
 
 /**
+ * [values] with the held tempos the included cue does not say added (fx-speed plan D10) — the desk's
+ * count, `programmer.tempoState`'s `changedSinceInclude`, for [withSceneryChanges]' reason.
+ * **`null` stays `null`**; an absent count adds nothing.
+ */
+export function withTempoChanges(values: number | null, tempo: number | undefined): number | null {
+  if (values == null) return null
+  return values + (tempo ?? 0)
+}
+
+/**
  * [values] with the layers Update would write into the included cue added — the desk's count
  * (`layersChangedSinceInclude` on the programmer's frames), for the reason [withSceneryChanges] takes
  * the desk's: a Look of scenery alone adds a layer and no value.

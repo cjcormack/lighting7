@@ -87,6 +87,11 @@ export interface RecordRequest {
    * `targets` narrows it, since scenery is addressed by element, never by the selection.
    */
   scenery?: boolean
+  /**
+   * Record the held tempos into the cue's *Tempo on GO* (fx-speed plan D10). The desk defaults it
+   * on; `false` leaves the cue's tempos as they are. Neither the mask nor `targets` narrows it.
+   */
+  tempo?: boolean
 }
 
 export interface RecordResponse {
@@ -106,6 +111,10 @@ export interface RecordResponse {
   sceneryRemoved?: number
   /** Held pieces left out because the cue already shows them there. */
   sceneryAlreadyTracked?: number
+  /** Tempo on GO rows written or replaced. Absent from a desk before fx-speed session 2. */
+  tempoWritten?: number
+  /** Tempo on GO rows a Remove deleted. */
+  tempoRemoved?: number
 }
 
 // ── Record into a Look ──────────────────────────────────────────────────────
@@ -230,6 +239,8 @@ export interface IncludeResponse {
   warnings: string[]
   /** The source's own scenery rows now held in the programmer (scenery-programmer plan D8). */
   sceneryIncluded?: number
+  /** The cue's Tempo on GO now held in the programmer (fx-speed plan D10). */
+  tempoIncluded?: number
 }
 
 /** One (fixture, property) the programmer is currently overriding. */
@@ -287,6 +298,8 @@ export interface UpdateResult {
   republishedLive: boolean
   /** Scenery change rows written back (Mode A only). */
   sceneryWritten?: number
+  /** Tempo on GO rows written back. */
+  tempoWritten?: number
   /** Rows deleted because the value Include staged from them was cleared (Mode A only). Absent from an older desk. */
   assignmentsRemoved?: number
 }

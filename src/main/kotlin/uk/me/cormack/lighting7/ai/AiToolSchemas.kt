@@ -418,11 +418,19 @@ internal val applyLookTool = ToolDef(
 
 internal val setBpmTool = ToolDef(
     name = "set_bpm",
-    description = "Set a speed master's BPM. Omitting speedMasterUuid retunes master 1 — the global tempo every unassigned FX follows.",
+    description = "Set a speed master's tempo. Omitting speedMasterUuid retunes master 1 — the global tempo every unassigned FX follows. " +
+        "Without hold it moves the master's live tempo, which the next cue that sets that master replaces — or, on a master the " +
+        "programmer holds, moves the hold. With hold: true the programmer holds the master at that tempo over its live tempo " +
+        "(record_cue then writes it into the cue's Tempo on GO, and clear_programmer releases it); while blind the hold is staged. " +
+        "`programmer.tempos` in get_current_state lists what the programmer holds.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
             put("bpm", buildJsonObject { put("type", "number"); put("minimum", 20); put("maximum", 300) })
+            put("hold", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Hold the master at this tempo in the programmer rather than moving its live tempo. Default false.")
+            })
             put("speedMasterUuid", buildJsonObject {
                 put("type", "string")
                 put("description", "Which master to retune, by uuid from the Speed Masters list. Omit for master 1.")
@@ -596,7 +604,7 @@ internal val getCurrentStateTool = ToolDef(
             "`cues` lists each cue's entries — its places in stacks, each with its entryId and number (a cue may be in several, or none: loose); " +
             "`cue_run` says what each running stack's next GO will fire, by entry and by cue; " +
             "`cue_holds` lists every live cue and what holds it — a stack's entry, or a loose hold (apply_cue, a pad); " +
-            "`programmer` is the manual overlay this surface writes through set_programmer, apply_palette, apply_look, aim_fixtures and move_scenery, clears with clear_programmer and takes off stage with set_blind (`blind`; its `scenery` lists the elements held); " +
+            "`programmer` is the manual overlay this surface writes through set_programmer, apply_palette, apply_look, aim_fixtures and move_scenery, clears with clear_programmer and takes off stage with set_blind (`blind`; its `scenery` lists the elements held, its `tempos` the speed masters held at a tempo of their own); " +
             "`selection` is the desk's shared selection (what a selection-relative surface control acts on), " +
             "reported for context — the tools on this surface take explicit targets; " +
             "`windows` lists the browser windows signed in to the desk, which is how a `selection.source` " +
@@ -983,6 +991,9 @@ internal val recordCueTool = ToolDef(
             "the cue tracks from earlier cues, its stack's set or the piece's base writes nothing, and a row the cue already " +
             "has for that piece is replaced. REMOVE deletes the cue's rows for the held pieces. The mask and targets never " +
             "narrow scenery. " +
+            "Tempos the programmer holds (set_bpm with hold; `programmer.tempos`) are written into the cue's Tempo on GO too " +
+            "unless tempo is false: a new cue takes them, MERGE and UPDATE_EXISTING replace the rows of the held masters and " +
+            "keep the rest, REMOVE deletes those rows; the mask and targets never narrow them. " +
             "Check `programmer` in get_current_state first: an empty programmer records an empty cue.",
     inputSchema = buildJsonObject {
         put("type", "object")
@@ -1018,6 +1029,10 @@ internal val recordCueTool = ToolDef(
                 put("type", "boolean")
                 put("description", "Record the scenery the programmer holds as well. Default true.")
             })
+            put("tempo", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Record the tempos the programmer holds into the cue's Tempo on GO as well. Default true.")
+            })
         })
     }
 )
@@ -1032,6 +1047,8 @@ internal val includeIntoProgrammerTool = ToolDef(
             "target), leaving everything else alone. The source's own scenery rows are held " +
             "in the programmer too (a cue row keeps its own transition time), replacing what the programmer held on " +
             "those pieces — never the scenery the cue only tracks from earlier cues. The mask does not apply to scenery. " +
+            "A cue's Tempo on GO is held in the programmer as tempos (`programmer.tempos`), which a bare " +
+            "update_from_programmer writes back. " +
             "A look's FX run in the programmer too, each on its own target, where the operator can change them in the desk's " +
             "FX editor, and update_from_programmer writes those changes back onto the look's FX (to change them yourself, " +
             "update_look's fx).",
@@ -1358,7 +1375,7 @@ internal val setProgrammerTool = ToolDef(
 internal val clearProgrammerTool = ToolDef(
     name = "clear_programmer",
     description = "Clear the programmer, as the desk's Clear does. With no targets: every value, every Look and " +
-            "palette layer, every programmer FX and the scenery it holds, so the stage falls back to what " +
+            "palette layer, every programmer FX, and the scenery and tempos it holds, so the stage falls back to what " +
             "is running. With targets: everything the programmer holds on those fixtures (their heads included) " +
             "and groups, and the FX on just them — an FX that also drives heads outside them is left " +
             "running and named in `partial`. Layers are not taken off by targets; apply_look or apply_palette " +

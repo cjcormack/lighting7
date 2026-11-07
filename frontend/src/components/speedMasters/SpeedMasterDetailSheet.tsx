@@ -376,7 +376,7 @@ export function SpeedMasterDetailSheet({
             </div>
           ) : (
             <div className="space-y-1.5">
-              <Label htmlFor="speed-master-bpm">Starting BPM</Label>
+              <Label htmlFor="speed-master-bpm">Starting tempo</Label>
               <Input
                 id="speed-master-bpm"
                 inputMode="decimal"

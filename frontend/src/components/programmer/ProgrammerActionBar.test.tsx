@@ -18,6 +18,8 @@ let effects: { programmerOwned: boolean }[] = []
 
 let heldScenery = 0
 vi.mock('./ProgrammerSceneryList', () => ({ useHeldSceneryCount: () => heldScenery }))
+let heldTempo = 0
+vi.mock('./ProgrammerTempoList', () => ({ useHeldTempoCount: () => heldTempo }))
 let layers: unknown[] = []
 
 const programmerClearAll = vi.fn()
@@ -95,6 +97,7 @@ afterEach(() => {
   effects = []
   desk.connected = true
   heldScenery = 0
+  heldTempo = 0
   layers = []
   venue.isVenue = false
   resetProgrammerFadeStore()
@@ -333,6 +336,18 @@ describe('ProgrammerActionBar', () => {
       render(<ProgrammerActionBar projectId={1} />)
       expect(screen.getByRole('button', { name: 'Record' })).not.toBeDisabled()
       expect(screen.getByRole('button', { name: 'Record destination' })).not.toBeDisabled()
+    })
+
+    it('enables Record and Clear for a programmer holding only a tempo (fx-speed plan D10)', () => {
+      heldTempo = 1
+      render(<ProgrammerActionBar projectId={1} />)
+      expect(screen.getByRole('button', { name: 'Record' })).not.toBeDisabled()
+      openRecordMenu()
+      // A Look records no tempo, so there is nothing to make one of.
+      expect(screen.getByText('A new Look').closest('[role="menuitem"]')?.getAttribute('aria-disabled')).toBe('true')
+      expect(screen.getByText('An existing cue…').closest('[role="menuitem"]')?.getAttribute('aria-disabled')).not.toBe('true')
+      expect(recordMenuLabel(0, 0, 0, 2)).toBe('Write 2 tempos into')
+      expect(clearSentence(1, 0, 0, 0, 0, 1)).toBe('Release 1 programmer value and 1 held tempo')
     })
 
     it("heads Record's menu with what it would write, scenery included", () => {

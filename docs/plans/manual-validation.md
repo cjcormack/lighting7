@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-FX-SPEED-S2`](#fu-manual-fx-speed-s2) | a tempo the operator tapped and captured on the rail outlives a GO of a cue that sets the same master, Record puts it into the cue's *Tempo on GO*, and that cue sets it after a Clear | FX speed session 2, 2026-11-07 |
 | [`FU-MANUAL-PROGRAMMER-FIXES`](#fu-manual-programmer-fixes) | the programmer's four fixes at the desk — the FX picker stays open through a colour drag and a dimmer through 0 with Lit on, or the close trace names its door; expanded element rows survive a trip to Show and back; ⌘-clicked cells with gaps take one value, *Add* doing it on the tablet; a recent set on one window lands from another's pop-up over three cells | Programmer fixes S1–S5, 2026-11-07 |
 | [`FU-MANUAL-SHOW-VIEW-FIXES`](#fu-manual-show-view-fixes) | the Show view's editing fixes on a real stack — a duplicated follow cue fires its follower, the editor pane toggled and a marquee at the bottom of a long stack, four numbers renumbered from their cells, a cue armed from its pip mid-show, *In production* off and on mid-run, a block of three cues dragged | Show view fixes S1–S5, 2026-11-06 |
 | [`FU-MANUAL-UNDO`](#fu-manual-undo) | undo and history on Sleeping Beauty — a Clear undone brings the busk back over its fade with the FX mid-phase, the store round trip is byte-for-byte, History names each window and Claude, a deleted cue comes back with its pad and anchor, a re-address undone asks first, and ⌘Z, ⇧⌘Z and the X-Touch's Undo walk both histories in order | Undo S1–S6, 2026-11-04 |
@@ -149,6 +150,27 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-FX-SPEED-S2`
+
+**What it proves**: *tempo in the programmer* (fx-speed plan session 2) — a held tempo runs over the
+live tempo a GO gives a master, and Record is the way a tempo gets into a cue.
+
+**Why it is here**: the tests read the bank's tempos; only the rig shows that a chase on a captured
+master does not stutter when a cue that sets that master is GO'd, and that the rail's *Held* reads
+right on the desk's screens.
+
+**Test**, on the dev rig, a chase on M2 and a cue stack whose Q2 sets M2 to 90 in its *Tempo on GO*:
+
+1. **Capture.** Tap M2 on the rail to about 128, then *Capture* on its card: the card reads *Held* in
+   amber and the programmer's Tempo list shows M2 at the tapped tempo.
+2. **A GO under a hold.** GO Q2: the chase keeps the tapped tempo. *Release* on the card: it drops to 90.
+3. **Record.** Capture M2 again at a new tap, *Record → A new cue*: the new cue's *Tempo on GO* holds
+   M2 at that tempo. Clear, then GO the new cue: M2 lands on it.
+4. **Blind.** Blind, then set M2's tempo in the programmer's list: the rail shows the staged tempo
+   beside the running one, and the chase does not move until Blind is left.
 
 ---
 

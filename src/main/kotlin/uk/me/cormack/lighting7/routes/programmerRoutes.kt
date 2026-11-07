@@ -102,6 +102,11 @@ internal data class ProgrammerRecordRequest(
      * addressed by element, never by the selection.
      */
     val scenery: Boolean = true,
+    /**
+     * Record the programmer's held tempos into the cue's *Tempo on GO* too (fx-speed plan D10).
+     * Not governed by [mask] or [targets] either: a tempo names a master, never a fixture.
+     */
+    val tempo: Boolean = true,
 )
 
 @Serializable
@@ -122,6 +127,10 @@ internal data class ProgrammerRecordResponse(
     val sceneryRemoved: Int = 0,
     /** Held pieces left out because the cue already shows them there — tracked, or at their base. */
     val sceneryAlreadyTracked: Int = 0,
+    /** *Tempo on GO* rows written or replaced from the programmer's held tempos. */
+    val tempoWritten: Int = 0,
+    /** *Tempo on GO* rows deleted (REMOVE). */
+    val tempoRemoved: Int = 0,
 )
 
 internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
@@ -171,6 +180,7 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
                 sortOrder = request.sortOrder,
                 targets = request.targets,
                 scenery = request.scenery,
+                tempo = request.tempo,
                 placement = request.placement ?: CueNumberPlacement.HERE,
             )
         ) {
@@ -196,6 +206,8 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
                     sceneryWritten = result.outcome.scenery.written,
                     sceneryRemoved = result.outcome.scenery.removed,
                     sceneryAlreadyTracked = result.outcome.scenery.alreadyTracked,
+                    tempoWritten = result.outcome.tempo.written,
+                    tempoRemoved = result.outcome.tempo.removed,
                 ),
             )
         }
@@ -255,6 +267,8 @@ internal data class ProgrammerIncludeResponse(
     val warnings: List<String> = emptyList(),
     /** The source's own scenery rows now held in the programmer's scenery (scenery-programmer plan D8). */
     val sceneryIncluded: Int = 0,
+    /** The cue's *Tempo on GO* now held in the programmer (fx-speed plan D10). */
+    val tempoIncluded: Int = 0,
 )
 
 internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
@@ -300,6 +314,7 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
                     skipped = result.outcome.skipped.map { it.toDto() },
                     warnings = result.outcome.warnings,
                     sceneryIncluded = result.sceneryIncluded,
+                    tempoIncluded = result.tempoIncluded,
                 ),
             )
 
@@ -355,6 +370,8 @@ internal data class ProgrammerUpdateResult(
     val sceneryWritten: Int = 0,
     /** Rows deleted because the operator cleared the value Include staged from them (Mode A only). */
     val assignmentsRemoved: Int = 0,
+    /** *Tempo on GO* rows written back from the held tempos (Mode A only). */
+    val tempoWritten: Int = 0,
 )
 
 /**

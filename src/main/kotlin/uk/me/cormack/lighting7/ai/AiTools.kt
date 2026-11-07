@@ -445,6 +445,23 @@ class AiTools(private val state: State) {
         val requested = input["speedMasterUuid"]?.jsonPrimitive?.contentOrNull
         val master = resolveSpeedMaster(requested)
             ?: return errorResult(unknownSpeedMasterMessage(requested))
+        if (input["hold"]?.jsonPrimitive?.booleanOrNull == true) {
+            val uuid = master.uuid ?: return errorResult("The project is still loading; try again")
+            return when (val outcome = state.programmerTempo.set(uuid, bpm)) {
+                is uk.me.cormack.lighting7.state.ProgrammerTempo.Outcome.Refused -> errorResult(outcome.message)
+                uk.me.cormack.lighting7.state.ProgrammerTempo.Outcome.Applied -> ToolExecutionResult(
+                    success = true,
+                    description = "Held ${master.name} at $bpm BPM in the programmer",
+                    result = buildJsonObject {
+                        put("bpm", bpm)
+                        put("held", true)
+                        put("speedMasterIndex", master.index)
+                        put("name", master.name)
+                        put("speedMasterUuid", uuid.toString())
+                    }.toString()
+                )
+            }
+        }
         // The bank looks the uuid up again, so a master deleted between the two lookups makes
         // this a dropped write — report that rather than the success the resolve implied. A
         // follower is refused distinctly: the fix is to unlink it or retune master 1, not to
@@ -895,6 +912,9 @@ class AiTools(private val state: State) {
                     // The scenery the programmer holds (move_scenery, the rail's Scenery band): each element
                     // by name with the states held. Staged rather than shown while `blind`.
                     put("scenery", programmerSceneryJson())
+                    // The tempos it holds (set_bpm with hold, the FX editor's Tap, a rail card's
+                    // Capture): each master by name; `staged` while `blind` and not yet running.
+                    put("tempos", programmerTemposJson())
                 })
             }
             if ("selection" in include) {
@@ -1502,6 +1522,23 @@ class AiTools(private val state: State) {
         )
     }
 
+    /** The programmer's held tempos for `get_current_state`: `[{speedMaster, speedMasterUuid, bpm, staged?}]`. */
+    private fun programmerTemposJson(): JsonArray {
+        val snapshot = state.programmerTempo.flow.value
+        if (snapshot.holds.isEmpty()) return JsonArray(emptyList())
+        val names = state.show.fxEngine.speedMasters.masterStates().mapNotNull { m -> m.uuid?.let { it to m.name } }.toMap()
+        return buildJsonArray {
+            for ((uuid, bpm) in snapshot.holds) {
+                addJsonObject {
+                    put("speedMaster", names[uuid] ?: uuid.toString())
+                    put("speedMasterUuid", uuid.toString())
+                    put("bpm", bpm)
+                    if (snapshot.landed[uuid] != bpm) put("staged", true)
+                }
+            }
+        }
+    }
+
     /** The programmer's scenery for `get_current_state`: `[{element, elementUuid, visible?, open?, trimM?}]`. */
     private fun programmerSceneryJson(): JsonArray {
         val snapshot = state.programmerScenery.flow.value
@@ -2006,6 +2043,7 @@ class AiTools(private val state: State) {
             sortOrder = input["sortOrder"]?.jsonPrimitive?.intOrNull,
             targets = input.targetList("targets").getOrElse { return errorResult(it.message ?: "Bad targets") },
             scenery = input["scenery"]?.jsonPrimitive?.booleanOrNull ?: true,
+            tempo = input["tempo"]?.jsonPrimitive?.booleanOrNull ?: true,
         )
 
         return when (result) {
@@ -2016,7 +2054,8 @@ class AiTools(private val state: State) {
                 description = (if (result.outcome.created) "Recorded new cue" else "Recorded into cue") +
                     " '${result.details.name}' (id=${result.outcome.cueId}) — " +
                     "${result.outcome.assignmentsWritten} value(s), ${result.outcome.fxWritten} FX" +
-                    (if (result.outcome.scenery.written > 0) ", ${result.outcome.scenery.written} scenery change(s)" else ""),
+                    (if (result.outcome.scenery.written > 0) ", ${result.outcome.scenery.written} scenery change(s)" else "") +
+                    (if (result.outcome.tempo.written > 0) ", ${result.outcome.tempo.written} tempo(s)" else ""),
                 result = buildJsonObject {
                     put("cueId", result.outcome.cueId)
                     put("cueName", result.details.name)
@@ -2028,6 +2067,8 @@ class AiTools(private val state: State) {
                     put("sceneryWritten", result.outcome.scenery.written)
                     put("sceneryRemoved", result.outcome.scenery.removed)
                     put("sceneryAlreadyTracked", result.outcome.scenery.alreadyTracked)
+                    put("tempoWritten", result.outcome.tempo.written)
+                    put("tempoRemoved", result.outcome.tempo.removed)
                     put("republishedLive", result.republishedLive)
                     putSkips(result.skipped)
                     putStrings("warnings", result.outcome.warnings)

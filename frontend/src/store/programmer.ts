@@ -8,7 +8,9 @@ import type {
   ProgrammerAppliedSource,
   ProgrammerLayer,
   ProgrammerTargetType,
+  ProgrammerTempo,
 } from '../api/programmerWsApi'
+import { NO_PROGRAMMER_TEMPO } from '../api/programmerWsApi'
 import { NO_PROGRAMMER_SCENERY, type ProgrammerScenery, type SceneryState } from '../api/sceneryApi'
 
 export type {
@@ -21,6 +23,8 @@ export type {
   ProgrammerLayer,
   ProgrammerState,
   ProgrammerTargetType,
+  ProgrammerTempo,
+  ProgrammerTempoEntry,
   ProvenanceEntry,
   ProvenanceSource,
 } from '../api/programmerWsApi'
@@ -337,6 +341,48 @@ export function programmerSetScenery(elementUuid: string, state: SceneryState, f
 /** Let one element go, or every one with no uuid; it flies home on [fadeMs] when above 0. */
 export function programmerClearScenery(elementUuid?: string, fadeMs?: number) {
   lightingApi.programmer.clearScenery(elementUuid, fadeMs ? fadeMs : undefined)
+}
+
+/**
+ * The programmer's held tempos (fx-speed plan D8), form 3 as the scenery is: one cache entry fed by
+ * `programmer.tempoState`, seeded from its last frame.
+ */
+export const programmerTempoApi = restApi.injectEndpoints({
+  endpoints: (build) => ({
+    programmerTempo: build.query<ProgrammerTempo, void>({
+      queryFn: () => ({ data: lightingApi.programmer.tempo() }),
+      async onCacheEntryAdded(_, { cacheDataLoaded, updateCachedData, cacheEntryRemoved }) {
+        await cacheDataLoaded
+        const subscription = lightingApi.programmer.subscribeToTempo((tempo) => {
+          updateCachedData(() => tempo)
+        })
+        await cacheEntryRemoved
+        subscription.unsubscribe()
+      },
+    }),
+  }),
+  overrideExisting: false,
+})
+
+/** What the programmer holds of the tempos; nothing before the first frame. */
+export function useProgrammerTempo(enabled = true): ProgrammerTempo {
+  const { data } = programmerTempoApi.useProgrammerTempoQuery(undefined, { skip: !enabled })
+  return data ?? NO_PROGRAMMER_TEMPO
+}
+
+/** Hold a master at [bpm] in the programmer, or move its hold. */
+export function programmerSetTempo(speedMasterUuid: string, bpm: number) {
+  lightingApi.programmer.setTempo(speedMasterUuid, bpm)
+}
+
+/** *Capture*: hold a master at the tempo it is running at. */
+export function programmerHoldTempo(speedMasterUuid: string) {
+  lightingApi.programmer.holdTempo(speedMasterUuid)
+}
+
+/** Release one held tempo, or every one with no uuid. */
+export function programmerClearTempo(speedMasterUuid?: string) {
+  lightingApi.programmer.clearTempo(speedMasterUuid)
 }
 
 // ── Layer ops ───────────────────────────────────────────────────────────────

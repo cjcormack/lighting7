@@ -723,6 +723,70 @@ describe('createProgrammerApi', () => {
     expect(spy).toHaveBeenCalledTimes(1)
   })
 
+  describe('the programmer\'s held tempos (fx-speed plan D8)', () => {
+    it('sends the four tempo frames in the wire shapes', () => {
+      const { conn, sent } = fakeWsConnection()
+      const api = createProgrammerApi(conn)
+
+      api.setTempo('m2', 132)
+      api.tapTempo('m2')
+      api.holdTempo('m3')
+      api.clearTempo('m2')
+      api.clearTempo()
+
+      expect(sent).toEqual([
+        { type: 'programmer.setTempo', speedMasterUuid: 'm2', bpm: 132 },
+        { type: 'programmer.tapTempo', speedMasterUuid: 'm2' },
+        { type: 'programmer.holdTempo', speedMasterUuid: 'm3' },
+        { type: 'programmer.clearTempo', speedMasterUuid: 'm2' },
+        { type: 'programmer.clearTempo' },
+      ])
+    })
+
+    it('bridges programmer.tempoState on its own channel, snapshot to a late subscriber', () => {
+      const { conn, frame } = fakeWsConnection()
+      const api = createProgrammerApi(conn)
+      const coarse = vi.fn()
+      api.subscribe(coarse)
+      const early = vi.fn()
+      api.subscribeToTempo(early)
+      expect(early).not.toHaveBeenCalled()
+      expect(api.tempo()).toEqual({ projectId: null, masters: [] })
+
+      frame({
+        type: 'programmer.tempoState',
+        projectId: 6,
+        masters: [
+          { speedMasterUuid: 'm2', bpm: 132 },
+          { speedMasterUuid: 'm3', bpm: 96, staged: true },
+          { speedMasterUuid: 'm4', bpm: 120, staged: true, released: true },
+          { bpm: 100 },
+          { speedMasterUuid: 'm5', bpm: 'fast' },
+        ],
+        changedSinceInclude: 1,
+      })
+      const held = {
+        projectId: 6,
+        masters: [
+          { speedMasterUuid: 'm2', bpm: 132 },
+          { speedMasterUuid: 'm3', bpm: 96, staged: true },
+          { speedMasterUuid: 'm4', bpm: 120, staged: true, released: true },
+        ],
+        changedSinceInclude: 1,
+      }
+      expect(early).toHaveBeenCalledWith(held)
+      expect(api.tempo()).toEqual(held)
+      expect(coarse).not.toHaveBeenCalled()
+
+      const late = vi.fn()
+      api.subscribeToTempo(late)
+      expect(late).toHaveBeenCalledWith(held)
+
+      frame({ type: 'programmer.tempoState', projectId: 6, masters: [] })
+      expect(api.tempo()).toEqual({ projectId: 6, masters: [] })
+    })
+  })
+
   describe('the programmer\'s scenery (scenery-programmer plan D1)', () => {
     it('sends setScenery and clearScenery in the documented shapes', () => {
       const { conn, sent } = fakeWsConnection()

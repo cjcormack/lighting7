@@ -74,12 +74,53 @@ carries no tempo.
 Masters are persisted per project (`speed_masters` table, portable in sync — the stored bpm
 is the *starting* tempo; live changes write through with a 750 ms trailing debounce).
 
-**A cue can set masters' tempo** (venue-visit plan S16, D20): a cue's `speedMasters` list is written
-to the bank as `MANUAL` tempo writes on every GO into one of its entries and every loose press of it,
-never on a reload's re-GO (`fx/CueTempo.kt`, `docs/cues-engineering.md` §"Speed masters on a cue").
-A tap or a typed tempo afterwards wins until the next cue that sets that master; a follower is
-skipped, as it refuses every tempo write. A master a cue names is a use for the delete guard
-(`cueTempoCount`).
+**A cue can set masters' tempo** (venue-visit plan S16, D20): a cue's `speedMasters` list — its
+*Tempo on GO* — is written to the bank's **live** tempo on every GO into one of its entries and every
+loose press of it, never on a reload's re-GO (`fx/CueTempo.kt`, `SpeedMasterBank.setLiveBpm`,
+`docs/cues-engineering.md` §"Speed masters on a cue"). A tap or a typed tempo afterwards wins until
+the next cue that sets that master; a follower is skipped, as it refuses every tempo write. A master a
+cue names is a use for the delete guard (`cueTempoCount`).
+
+### Live and held tempo
+
+Each master keeps a **live** tempo — the last a GO, a press, a tap, a typed tempo gave it — and may
+run a **hold** over it, the programmer's (fx-speed plan D8, D9). The clock runs the hold while there is
+one; `MasterState.liveBpm` and `.held` say which is which. Who moves what:
+
+| Write | Master not held | Master held |
+|---|---|---|
+| `programmer.setTempo` / `.tapTempo`, MCP `set_bpm` with `hold` | holds it | moves the hold |
+| `programmer.holdTempo` (*Capture*) | holds it at the tempo it runs at | nothing |
+| A rail or surface tap, typed tempo, MCP `set_bpm`, a script (`setBpm`, `tap`) | moves live, runs it | moves the hold |
+| The master sheet's `PUT` with `bpm` (`setStartingBpm`) | writes the stored row and live, runs it | writes the stored row and live, moves the hold |
+| A cue's GO or press (`setLiveBpm`) | moves live, runs it | moves live; the hold keeps running |
+| ✕, *Release*, Clear | | the live tempo runs |
+| Linked as a follower, or deleted | | the hold is dropped |
+
+So a tap always changes what is on screen, and a GO never takes a held master away from the operator.
+The holds belong to `state/ProgrammerTempo.kt`, State-level and project-scoped like the programmer's
+scenery, which hands the bank only the holds that changed (`SpeedMasterBank.changeHolds`), so a hold the
+bank has just moved on its own is never put back. The bank reports a hold it moved or dropped itself
+through `onHoldChanged` — a rail tap, a master deleted or linked as a follower, whether its hold had
+landed or was only staged — and the programmer reads what runs back from the bank (`holdOf`) rather than
+trusting the report, so its list follows a rail tap. The live tempo is the bank's to answer (`liveBpm`):
+under a hold the one kept beside it, on a follower its leader's live tempo times the ratio, otherwise
+what the clock runs, a script's raw clock write included. `Change.liveBpm` is what the debounced
+starting-tempo write-through persists, never a hold nor a follower's tempo derived from one. A follower
+refuses a hold as it refuses every tempo write. `SpeedMasterBank.load` keeps each surviving master's
+live tempo and hold across a create, rename or delete.
+
+**Blind stages holds** (D11): `ProgrammerTempo.Snapshot.holds` is what the programmer holds (what Record
+takes), `.landed` what the bank runs. Entering Blind changes nothing on stage; a set, a tap or a release
+in Blind waits in `holds` until leaving Blind lands it. A rail or surface tap in Blind on a master whose
+hold is only staged moves its live tempo, which is what is on stage, and leaves the staged hold to land;
+one on a landed hold moves it, and the staged hold too unless Blind has changed that one; one on a hold
+released in Blind that still runs moves it and the live tempo both, so leaving Blind lands what the tap
+set rather than the tempo before it. A hold is a
+programmer step for undo (`ProgrammerSnapshot.tempo`), Clear releases every hold, a project switch drops
+them and a carried reload keeps them, less any whose master the reload removed. Record, Include and Update
+carry them into and out of a cue's *Tempo on GO* (`routes/programmerTempoRecord.kt`,
+`docs/lighting-composition-model.md`).
 
 ### Family routing and follow (time signature)
 

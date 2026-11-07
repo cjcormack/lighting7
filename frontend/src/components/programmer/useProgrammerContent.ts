@@ -1,12 +1,14 @@
 import { useActiveFxQuery } from '@/store/fixtureFx'
 import { useProgrammerLayersQuery, useProgrammerSummaryQuery } from '@/store/programmer'
 import { useHeldSceneryCount } from './ProgrammerSceneryList'
+import { useHeldTempoCount } from './ProgrammerTempoList'
 
 /** What the programmer holds, by kind, and whether it holds anything Record could write or Clear take off. */
 export interface ProgrammerContent {
   entryCount: number
   programmerFxCount: number
   sceneryCount: number
+  tempoCount: number
   layerCount: number
   hasContent: boolean
 }
@@ -16,7 +18,8 @@ export interface ProgrammerContent {
  *
  * Values are not the whole of it. A busking FX is a programmer-band FX with no value entry behind
  * it; held scenery is written by Record and dropped by Clear (scenery-programmer plan D1, D7); and a
- * Look of only scenery puts a layer on the programmer and no value. Any one of the four is content.
+ * Look of only scenery puts a layer on the programmer and no value; a held tempo is Record's and
+ * Clear's too (fx-speed plan D8, D10). Any one of them is content.
  */
 export function useProgrammerContent(projectId: number): ProgrammerContent {
   // Narrowed to the counts, so a host re-renders when one moves rather than on every FX refetch.
@@ -29,6 +32,7 @@ export function useProgrammerContent(projectId: number): ProgrammerContent {
     }),
   })
   const sceneryCount = useHeldSceneryCount(projectId)
+  const tempoCount = useHeldTempoCount(projectId)
   const { layerCount } = useProgrammerLayersQuery(undefined, {
     selectFromResult: ({ data }) => ({ layerCount: data?.length ?? 0 }),
   })
@@ -36,7 +40,8 @@ export function useProgrammerContent(projectId: number): ProgrammerContent {
     entryCount,
     programmerFxCount,
     sceneryCount,
+    tempoCount,
     layerCount,
-    hasContent: entryCount > 0 || programmerFxCount > 0 || sceneryCount > 0 || layerCount > 0,
+    hasContent: entryCount > 0 || programmerFxCount > 0 || sceneryCount > 0 || tempoCount > 0 || layerCount > 0,
   }
 }

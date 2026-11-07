@@ -342,4 +342,7 @@ class MasterClock {
     fun tap() {
         tapTempo.tap()?.let { setBpm(it) }
     }
+
+    /** Count a tap and answer the tempo it estimates, without setting it; null until two taps. */
+    fun tapEstimate(): Double? = tapTempo.tap()?.coerceIn(MIN_BPM, MAX_BPM)
 }

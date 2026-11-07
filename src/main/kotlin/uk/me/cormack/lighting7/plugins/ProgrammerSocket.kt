@@ -49,6 +49,8 @@ import uk.me.cormack.lighting7.routes.clearProgrammerCompletely
 import uk.me.cormack.lighting7.routes.heldOutsideSource
 import uk.me.cormack.lighting7.routes.resolveLayerSource
 import uk.me.cormack.lighting7.models.sceneryStateObject
+import kotlinx.coroutines.flow.transform
+import uk.me.cormack.lighting7.state.ProgrammerTempo
 import uk.me.cormack.lighting7.state.ProgrammerScenery
 import uk.me.cormack.lighting7.state.State
 import java.awt.Color
@@ -170,6 +172,34 @@ data class ProgrammerClearSceneryInMessage(
     val elementUuid: String? = null,
     val fadeMs: Long? = null,
 ) : ProgrammerInMessage()
+
+/**
+ * Hold one speed master at [bpm] in the programmer, or move its hold (fx-speed plan D8): the master
+ * runs it at once, over its live tempo, and Record writes it into a cue's *Tempo on GO*. Blind
+ * stages it. A follower or an unknown master answers `programmer.error`. An operator gesture of
+ * `programmer.set`'s tier, so `FU-AUTH-WS-PER-MESSAGE` does not fire.
+ */
+@Serializable
+@SerialName("programmer.setTempo")
+data class ProgrammerSetTempoInMessage(
+    val speedMasterUuid: String,
+    val bpm: Double,
+) : ProgrammerInMessage()
+
+/** One tap on a master, counted by the desk; the first on an unheld master holds it where it runs. */
+@Serializable
+@SerialName("programmer.tapTempo")
+data class ProgrammerTapTempoInMessage(val speedMasterUuid: String) : ProgrammerInMessage()
+
+/** *Capture*: hold a master at the tempo it is running at now. Nothing if already held. */
+@Serializable
+@SerialName("programmer.holdTempo")
+data class ProgrammerHoldTempoInMessage(val speedMasterUuid: String) : ProgrammerInMessage()
+
+/** Let one master's hold go, or every hold with no [speedMasterUuid]: it lands its live tempo. */
+@Serializable
+@SerialName("programmer.clearTempo")
+data class ProgrammerClearTempoInMessage(val speedMasterUuid: String? = null) : ProgrammerInMessage()
 
 /**
  * Ask what sits under one property, top first — park, the programmer's own effects, each owner's
@@ -529,6 +559,45 @@ internal fun ProgrammerScenery.Snapshot.toMessage() = ProgrammerSceneryStateOutM
     changedSinceInclude = changedSinceInclude,
 )
 
+/**
+ * One master the programmer holds in [ProgrammerTempoStateOutMessage]. [staged] while the programmer
+ * is blind and [bpm] is not what runs yet; [released] for a hold let go in Blind that still runs,
+ * [bpm] the tempo it runs at — no longer held, so Record leaves it out.
+ */
+@Serializable
+data class ProgrammerTempoEntryDto(
+    val speedMasterUuid: String,
+    val bpm: Double,
+    val staged: Boolean? = null,
+    val released: Boolean? = null,
+)
+
+/**
+ * The programmer's tempos (fx-speed plan D8): every master it holds, in the order first held.
+ * `StateFlow`-backed ([uk.me.cormack.lighting7.state.ProgrammerTempo.flow]), so the subscription is
+ * the connect snapshot. [masters] is always encoded, as scenery's [ProgrammerSceneryStateOutMessage.elements].
+ * [changedSinceInclude] counts the held tempos the included cue does not say; absent until an
+ * Include, a Record or an Update set a baseline.
+ */
+@Serializable
+@SerialName("programmer.tempoState")
+data class ProgrammerTempoStateOutMessage(
+    val projectId: Int? = null,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val masters: List<ProgrammerTempoEntryDto> = emptyList(),
+    val changedSinceInclude: Int? = null,
+) : ProgrammerOutMessage()
+
+internal fun ProgrammerTempo.Snapshot.toMessage() = ProgrammerTempoStateOutMessage(
+    projectId = projectId,
+    masters = holds.map { (uuid, bpm) ->
+        ProgrammerTempoEntryDto(uuid.toString(), bpm, staged = true.takeIf { landed[uuid] != bpm })
+    } + landed.filterKeys { it !in holds }.map { (uuid, bpm) ->
+        ProgrammerTempoEntryDto(uuid.toString(), bpm, staged = true, released = true)
+    },
+    changedSinceInclude = changedSinceInclude,
+)
+
 /** One parked channel on a `PARK` layer of [KeyStackLayerDto]. */
 @Serializable
 data class KeyStackParkedChannelDto(val universe: Int, val channel: Int, val value: Int)
@@ -874,6 +943,8 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
     }) { scope.send(it) }
     // The programmer's scenery: a StateFlow, so this is its connect snapshot as well as its broadcast.
     scope.subscribe(scope.state.programmerScenery.flow) { scope.send(it.toMessage()) }
+    // A rail drag on a held master moves the hold ~20 times a second; the list needs no more than ten.
+    scope.subscribe(scope.state.programmerTempo.flow.transform { emit(it); kotlinx.coroutines.delay(100) }) { scope.send(it.toMessage()) }
 }
 
 /**
@@ -990,6 +1061,7 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
             state.show.fxEngine.programmer.setBlind(message.blind, message.fadeMs ?: 0)
             // Blind takes the programmer off stage, its Looks' scenery with it.
             state.sceneryService.onBlindChanged()
+            state.programmerTempo.onBlindChanged()
             // Blind rehearses every fire and holds the cannons' arm channels down (session 9).
             state.effectsService.onBlindChanged()
             ProgrammerBlindStateOutMessage(state.show.programmerStore.blind)
@@ -1010,6 +1082,20 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
             } else {
                 state.programmerScenery.release(uuid, message.fadeMs)
                 state.programmerScenery.flow.value.toMessage()
+            }
+        }
+
+        is ProgrammerSetTempoInMessage -> tempoWrite(state, message.speedMasterUuid) { state.programmerTempo.set(it, message.bpm) }
+        is ProgrammerTapTempoInMessage -> tempoWrite(state, message.speedMasterUuid) { state.programmerTempo.tap(it) }
+        is ProgrammerHoldTempoInMessage -> tempoWrite(state, message.speedMasterUuid) { state.programmerTempo.capture(it) }
+        is ProgrammerClearTempoInMessage -> {
+            val raw = message.speedMasterUuid?.trim()
+            val uuid = raw?.let { runCatching { java.util.UUID.fromString(it) }.getOrNull() }
+            if (raw != null && uuid == null) {
+                ProgrammerErrorOutMessage("Tempo refused: speedMasterUuid must be a uuid")
+            } else {
+                state.programmerTempo.release(uuid)
+                state.programmerTempo.flow.value.toMessage()
             }
         }
 
@@ -1603,3 +1689,13 @@ private fun uk.me.cormack.lighting7.fx.KeyStack.toDto(engine: uk.me.cormack.ligh
         )
     },
 )
+
+/** A tempo frame's write, answered with the state or the refusal. */
+private inline fun tempoWrite(state: State, raw: String, write: (java.util.UUID) -> ProgrammerTempo.Outcome): ProgrammerOutMessage {
+    val uuid = runCatching { java.util.UUID.fromString(raw.trim()) }.getOrNull()
+        ?: return ProgrammerErrorOutMessage("Tempo refused: speedMasterUuid must be a uuid")
+    return when (val outcome = write(uuid)) {
+        ProgrammerTempo.Outcome.Applied -> state.programmerTempo.flow.value.toMessage()
+        is ProgrammerTempo.Outcome.Refused -> ProgrammerErrorOutMessage("Tempo refused: ${outcome.message}")
+    }
+}
