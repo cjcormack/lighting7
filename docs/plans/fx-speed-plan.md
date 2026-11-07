@@ -134,7 +134,7 @@ cycle `cycle ÷ 2` seconds. A tap moves only the rate, so it never jumps the pha
   ×1 means in their descriptions.
 - **Frames:** `programmer.setTempo {speedMasterUuid, bpm}`, `programmer.tapTempo {speedMasterUuid}`,
   `programmer.holdTempo {speedMasterUuid}`, `programmer.clearTempo {speedMasterUuid?}`, answered and
-  broadcast as `programmer.tempoState {projectId, masters: [{speedMasterUuid, bpm, staged?}],
+  broadcast as `programmer.tempoState {projectId, masters: [{speedMasterUuid, bpm, staged?, released?}],
   changedSinceInclude?}` (StateFlow-backed, refusals as `programmer.error`); `speedMasters.scale
   {speedMasterUuid, factor}`. Each inbound frame has its `TraceSampling.WS_MESSAGES` row.
 - **Bindings:** `BindingTarget.SpeedMasterScale(masterUuid?, factor)` and `BindingTarget.FxSpeed`.
@@ -171,8 +171,8 @@ docs it names written, and its row marked *in review* with its branch. A session
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Own tempo on the desk | in review | `claude/quirky-faraday-k08oa7` | | |
-| 2 | Tempo in the programmer | planned | | | |
+| 1 | Own tempo on the desk | in review | `claude/quirky-faraday-k08oa7` | [#374](https://github.com/cjcormack/lighting7/pull/374) | `0082602` |
+| 2 | Tempo in the programmer | in review | `claude/fx-speed-0zrqvu` | | |
 | 3 | The Speed slider | planned | | | |
 | 4 | Half, double and a speed fader | planned | | | |
 
@@ -271,6 +271,18 @@ the next; whoever merges the last fills its own.
   *Capture*).
 - **Local:** `./gradlew compileTestKotlin`, then the `fx`, `state`, `routes`, `plugins`, `ai`,
   `history`, `show`, `midi` and `telemetry` packages; `npm run check:quick`.
+- **As built, where the code moved the plan:** the holds live on `State`, as the programmer's scenery
+  does, not on the show, so a carried reload keeps them through `ProgrammerTempo.attach(reload)` and
+  `ShowCarry` carries nothing new; the bank takes only the holds that changed
+  (`SpeedMasterBank.changeHolds`), so a hold it has just moved is never put back, and reports one it
+  moved or dropped itself through `onHoldChanged`, which the programmer reads back from the bank. D11
+  does not say what a rail tap in Blind does to a hold released in Blind that still runs: it moves the
+  hold, as on any held master, and the live tempo too, so leaving Blind lands the tapped tempo rather
+  than losing it. `programmer.tempoState`'s entries carry a
+  `released` flag beside `staged`, for a hold let go in Blind that still runs. The Record request takes
+  `tempo` and answers `tempoWritten` and `tempoRemoved`; Include answers `tempoIncluded`, Update's
+  results `tempoWritten`. A Look as the include target clears the tempo baseline, since its Update
+  writes no tempo.
 
 ### Session 3 — The Speed slider
 

@@ -612,6 +612,10 @@ resolved `value`.
 | `programmer.patchLayer` | `layerId`, `enabled?`, `amount?`, `attributeMask?`, `blendMode?`, `targets?` (a palette layer's only; refused for a Look's as `addLayer` refuses it), `stomp?`, `fadeMs?` | `programmer.layerState` \| `programmer.error` |
 | `programmer.setScenery` | `elementUuid`, `state: {visible?, open?, trimM?}`, `fadeMs?` | `programmer.sceneryState` \| `programmer.error` |
 | `programmer.clearScenery` | `elementUuid?` (absent: everything held), `fadeMs?` | `programmer.sceneryState` \| `programmer.error` |
+| `programmer.setTempo` | `speedMasterUuid`, `bpm` (20–300) | `programmer.tempoState` \| `programmer.error` |
+| `programmer.tapTempo` | `speedMasterUuid` | `programmer.tempoState` \| `programmer.error` |
+| `programmer.holdTempo` | `speedMasterUuid` | `programmer.tempoState` \| `programmer.error` |
+| `programmer.clearTempo` | `speedMasterUuid?` (absent: every hold) | `programmer.tempoState` \| `programmer.error` |
 | `programmer.keyStack` | `targetType`, `targetKey`, `attribute`, `requestId?` | `programmer.keyStack` (to this socket only) |
 | `programmer.clearTarget` | `targetType`, `targetKey`, `fadeMs?`, `requestId?` | `programmer.targetCleared` (to this socket only) |
 
@@ -624,6 +628,16 @@ is a drawn drape's …`). `fadeMs` above 0 is the move's clock; otherwise the pi
 home on; Clear (`programmer.clearAll`) releases everything on its own. Both are **operator gestures
 of `programmer.set`'s tier** — nothing admin-only gains a WS command — so `FU-AUTH-WS-PER-MESSAGE`
 does not fire.
+
+**The programmer's tempos** (fx-speed plan D8, D11): `setTempo` holds a speed master at a tempo, or
+moves its hold; `tapTempo` is one tap, counted by the desk's tap rule (the first on an unheld master
+holds it where it runs); `holdTempo` is a rail card's *Capture*, at the tempo it runs at; `clearTempo`
+lets one go or all. The hold runs at once over the master's live tempo (`docs/fx-engineering.md`
+§"Live and held tempo"); a follower or an unknown master answers `programmer.error`. While the
+programmer is blind a change is staged: `tempoState` marks it `staged`, and a hold let go in Blind
+that still runs is listed `staged, released` at the tempo it runs. `speedMasters.state` and
+`.changed` say the tempo running, the hold while held, so the rail needs nothing else. The same tier
+as the scenery frames, so `FU-AUTH-WS-PER-MESSAGE` does not fire.
 
 **The attribute stack and Release** (fixture-fx-sheets plan W1, W2). `keyStack` asks what sits
 under one attribute, top first — the read behind the fixture sheet's source chip. It is a
@@ -1160,6 +1174,7 @@ re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineeri
 | `programmer.includeTarget` | `target: IncludedTargetDto?` | **Broadcast** — set by Include or Record, cleared by Clear |
 | `programmer.error` | `message: String`, `code?: String` (`LOOK_LAYER_TARGETED`; absent for the rest) | Unicast reply |
 | `programmer.sceneryState` | `projectId?`, `elements: [{elementUuid, state}]`, `changedSinceInclude?` | Connect snapshot + **broadcast** — `StateFlow`-backed (`ProgrammerScenery.flow`); also the reply to `setScenery` / `clearScenery` |
+| `programmer.tempoState` | `projectId?`, `masters: [{speedMasterUuid, bpm, staged?, released?}]`, `changedSinceInclude?` | Connect snapshot + **broadcast** — `StateFlow`-backed (`ProgrammerTempo.flow`); also the reply to the four tempo frames |
 | `provenanceState` | `entries: [ProvenanceEntryDto]`, `programmerRevision: Long` | **Broadcast** — on every layer event, coalesced to ≤1 per 50 ms |
 | `programmer.keyStack` | `requestId?`, `targetType`, `targetKey`, `attribute`, `blind`, `stacks: [{targetKey, layers: [KeyStackLayerDto]}]`, `error?` | Unicast reply — one stack for a fixture, one per member for a group |
 | `programmer.targetCleared` | `requestId?`, `targetType`, `targetKey`, `values: Int`, `fx: Int`, `partial: [{fxId, fxType, targetKey, isGroupTarget, attribute}]`, `error?` | Unicast reply |

@@ -28,6 +28,7 @@ import {
   type ProgrammerTablesChoice,
 } from './ProgrammerTableTabs'
 import { ProgrammerAddFxDoor } from './ProgrammerAddFx'
+import { ProgrammerTempoList } from './ProgrammerTempoList'
 import { ProgrammerLookDoor, ProgrammerPaletteDoor } from './ProgrammerPressDoors'
 import { useCommandDoor } from './commandDoors'
 import { ReplacementNotesProvider } from './useReplacementNotes'
@@ -122,9 +123,10 @@ export function ProgrammerTables({ projectId, values }: { projectId: number; val
             )}
           </div>
         )}
-        {/* The hand's place on the programmer's stack, under whichever table shows — drawn only while
-            something that can become a layer is held — and ⌘K's *Add FX on the selection…*, *Add a
+        {/* The held tempos and the hand's place on the programmer's stack, under whichever table shows — each drawn only while
+            it holds something — and ⌘K's *Add FX on the selection…*, *Add a
             Look…* and *Apply a palette…* doors, which draw nothing. All of them outlive a tab switch. */}
+        <ProgrammerTempoList projectId={projectId} className="mx-3 my-1.5 shrink-0" />
         <HandProgrammerLayerStrip className="mx-3 my-1.5 w-auto shrink-0" />
         <ProgrammerAddFxDoor projectId={projectId} />
         <ProgrammerLookDoor projectId={projectId} />

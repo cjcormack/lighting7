@@ -31,6 +31,9 @@ import {
   masterFamilyLabel,
 } from '@/lib/speedMasterModel'
 import { useIsDeskConnected } from '@/store/status'
+import { programmerClearTempo, programmerHoldTempo, useProgrammerTempo } from '@/store/programmer'
+import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
+import { listedTempoIn, masterHoldOf, type MasterHold } from '@/lib/heldTempo'
 import { DESK_OFFLINE_LABEL } from '@/api/wsGesture'
 import type { SpeedMaster } from '@/api/speedMastersApi'
 import type { SpeedMasterLiveState } from '@/api/speedMastersWsApi'
@@ -101,6 +104,8 @@ export function BuskSpeedRail() {
   const [sheetMasterId, setSheetMasterId] = useState<number | null>(null)
   const sheetMaster =
     sheetMasterId == null ? null : ((rows ?? []).find((r) => r.id === sheetMasterId) ?? null)
+  const held = listedTempoIn(useProgrammerTempo(), projectIdNum)
+  const blind = useProgrammerBlind()
 
   return (
     <div data-busk-speed-rail className="flex min-h-0 min-w-0 flex-1 flex-col gap-2.5 overflow-y-auto border-l p-3">
@@ -113,6 +118,8 @@ export function BuskSpeedRail() {
             bank={live ?? []}
             projectId={projectIdNum}
             row={row}
+            hold={masterHoldOf(held, master.uuid)}
+            blind={blind}
             onOpenSettings={row == null ? undefined : () => setSheetMasterId(row.id)}
           />
         )
@@ -193,6 +200,8 @@ function MasterCard({
   bank,
   projectId,
   row,
+  hold,
+  blind,
   onOpenSettings,
 }: {
   master: SpeedMasterLiveState
@@ -201,6 +210,10 @@ function MasterCard({
   projectId: number
   /** The REST row behind this live frame, absent until the list arrives. */
   row: SpeedMaster | undefined
+  /** What the programmer holds of this master (fx-speed plan D8). */
+  hold: MasterHold
+  /** The programmer is blind, so a hold's tempo may be staged beside the running one. */
+  blind: boolean
   /** Absent with no `row`: there would be nothing for the sheet to edit. */
   onOpenSettings: (() => void) | undefined
 }) {
@@ -321,7 +334,7 @@ function MasterCard({
       }}
       className={cn(
         'relative overflow-hidden rounded-lg border bg-card',
-        sliding ? 'border-primary ring-1 ring-primary/50' : 'border-border',
+        sliding ? 'border-primary ring-1 ring-primary/50' : hold.held ? 'border-amber-500' : 'border-border',
       )}
     >
       {/* The fader's travel, drawn behind the card's own content rather than as a control of its
@@ -354,6 +367,15 @@ function MasterCard({
               {family}
             </span>
           )}
+          {hold.held && (
+            <span
+              data-tempo-held
+              className="shrink-0 rounded-full border border-amber-500 px-1.5 py-px text-[9px] font-bold tracking-[0.06em] text-amber-700 dark:text-amber-300"
+              title="Held in the programmer: Record stores it, Clear releases it"
+            >
+              Held
+            </span>
+          )}
           {onOpenSettings && (
             <button
               type="button"
@@ -377,7 +399,7 @@ function MasterCard({
                 onChange={(e) => change(e.target.value)}
                 onBlur={commit}
                 onKeyDown={onKeyDown}
-                aria-label={`Master ${master.index} BPM`}
+                aria-label={`Master ${master.index} tempo`}
                 className={cn(
                   'w-[5ch] border-b border-primary bg-transparent font-mono font-bold leading-none tabular-nums outline-none',
                   isMaster1 ? 'text-3xl' : 'text-lg',
@@ -402,6 +424,24 @@ function MasterCard({
                 {formatBpm(shownBpm)}
               </button>
             )}
+            {blind && hold.stagedBpm != null && (
+              <span
+                data-tempo-staged
+                className="font-mono text-xs font-bold tabular-nums text-amber-700 dark:text-amber-300"
+                title="Staged in Blind: lands when Blind goes off"
+              >
+                → {formatBpm(hold.stagedBpm)}
+              </span>
+            )}
+            {blind && hold.releasing && (
+              <span
+                data-tempo-releasing
+                className="text-[10px] text-muted-foreground"
+                title="Released in Blind: runs until Blind goes off"
+              >
+                releasing
+              </span>
+            )}
             {isMaster1 ? (
               <span className="text-[10px] text-muted-foreground">BPM</span>
             ) : follow ? (
@@ -420,12 +460,26 @@ function MasterCard({
           {/* A follower's TAP is not disabled, it is absent — the chips take the cell instead, so
             linking a master swaps one control for another rather than leaving a dead button. */}
           {!follow && !isMaster1 && (
-            <TapButton master={master} connected={connected} className="h-8 px-3.5" />
+            <TapButton master={master} connected={connected} className="h-8 px-3.5 pointer-coarse:h-11" />
+          )}
+          {!isMaster1 && (
+            <HoldButton
+              master={master}
+              held={hold.held}
+              connected={connected}
+              lockedReason={lockedReason}
+              className="h-8 px-2.5 pointer-coarse:h-11"
+            />
           )}
         </div>
 
         {/* Master 1 can never follow (the server refuses it a ratio), so its TAP needs no guard. */}
-        {isMaster1 && <TapButton master={master} connected={connected} className="h-11 w-full" />}
+        {isMaster1 && (
+          <div className="flex gap-2">
+            <TapButton master={master} connected={connected} className="h-11 flex-1" />
+            <HoldButton master={master} held={hold.held} connected={connected} lockedReason={null} className="h-11 px-3" />
+          </div>
+        )}
 
         {follow && (
           <RatioChips
@@ -465,6 +519,55 @@ function TapButton({
       )}
     >
       TAP
+    </button>
+  )
+}
+
+/**
+ * *Capture* on an unheld master — the programmer holds it at the tempo it runs at now — and
+ * *Release* on a held one (fx-speed plan D8). Disabled on a follower, whose tempo is its leader's.
+ */
+function HoldButton({
+  master,
+  held,
+  connected,
+  lockedReason,
+  className,
+}: {
+  master: SpeedMasterLiveState
+  held: boolean
+  connected: boolean
+  lockedReason: string | null
+  className?: string
+}) {
+  const uuid = master.uuid
+  const label = held ? 'Release' : 'Capture'
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (uuid == null) return
+        if (held) programmerClearTempo(uuid)
+        else programmerHoldTempo(uuid)
+      }}
+      disabled={!connected || uuid == null || lockedReason != null}
+      title={
+        lockedReason ??
+        (!connected
+          ? DESK_OFFLINE_LABEL
+          : held
+            ? 'Let the programmer’s hold go: the master runs at its live tempo'
+            : 'Hold this tempo in the programmer, so Record stores it')
+      }
+      aria-label={`${label} master ${master.index}`}
+      className={cn(
+        'flex shrink-0 items-center justify-center rounded-md border text-xs font-semibold transition-colors',
+        'hover:bg-accent disabled:pointer-events-none disabled:opacity-50',
+        held && 'border-amber-500 text-amber-700 dark:text-amber-300',
+        className,
+      )}
+    >
+      {label}
     </button>
   )
 }

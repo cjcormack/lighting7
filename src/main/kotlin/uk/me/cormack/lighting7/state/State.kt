@@ -834,6 +834,18 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
+     * The programmer's tempos (fx-speed plan D8): the speed masters it holds at a tempo of their own —
+     * `programmer.tempoState`. Runtime only and project-scoped, attached with [programmerScenery];
+     * Clear releases them. See [ProgrammerTempo].
+     */
+    val programmerTempo: ProgrammerTempo by lazy {
+        ProgrammerTempo(
+            bankOf = { showOrNull?.speedMasterBank },
+            isBlind = { showOrNull?.programmerStore?.blind == true },
+        ).also { tempo -> tempo.beforeMutation = { showOrNull?.programmerHistory?.beforeMutation() } }
+    }
+
+    /**
      * The live show's programmer history (`history.state`, undo plan §3.7): here rather than on the show
      * so a socket's one subscription outlives a project switch; each show's history publishes into it.
      */
@@ -1066,6 +1078,7 @@ class State(val config: ApplicationConfig) {
         surfaceInputRouter.start(GlobalScope)
         attachBindingHealthListener()
         programmerScenery.attach(runCatching { projectManager.currentProject.id.value }.getOrNull())
+        programmerTempo.attach(runCatching { projectManager.currentProject.id.value }.getOrNull())
         sceneryService.attach(show, GlobalScope)
         effectsService.attach(show)
         rigSafety.attach(show)
@@ -1107,6 +1120,7 @@ class State(val config: ApplicationConfig) {
                 // programmer's scenery names the old project's elements, so it goes first. A reload
                 // keeps both: its show GO'd the live cues again and carried the programmer.
                 programmerScenery.attach(runCatching { projectManager.currentProject.id.value }.getOrNull(), reload = reload)
+                programmerTempo.attach(runCatching { projectManager.currentProject.id.value }.getOrNull(), reload = reload)
                 sceneryService.attach(projectManager.show, GlobalScope, reload = reload)
                 // The arm drops on a project switch: the new show's cannons start disarmed, its tubes
                 // are read afresh, and nothing the old show scheduled fires (stage-view plan session 9).

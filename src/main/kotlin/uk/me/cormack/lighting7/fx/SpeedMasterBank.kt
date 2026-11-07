@@ -65,6 +65,14 @@ data class SpeedMasterSnapshot(
  * Effects hold a persisted `speedMasterUuid` and a runtime slot index bound by the engine
  * ([slotFor]); the hot path is an array index, never a UUID map lookup. [version] bumps on
  * any membership change so the engine knows to re-bind.
+ *
+ * **Live and held** (fx-speed plan D9): each master keeps a **live** tempo — the last a GO, a
+ * press, a tap or a typed tempo gave it — and may run a **hold** over it, the programmer's
+ * ([uk.me.cormack.lighting7.state.ProgrammerTempo], pushed through [changeHolds]). The clock runs
+ * the hold while there is one. A tap or typed tempo ([setBpm], [tap]) on a held master moves the
+ * hold, a GO ([setLiveBpm]) moves only the live tempo, the starting tempo ([setStartingBpm]) moves
+ * both, and releasing the hold lands the live tempo. [Change.liveBpm] is what the starting-tempo
+ * write-through persists, never a hold.
  */
 class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
 
@@ -88,6 +96,10 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
          * degraded it to, rather than as a link that isn't running.
          */
         val followTargetUuid: UUID? = null,
+        /** The live tempo under a hold; [bpm] while nothing holds it. */
+        val liveBpm: Double = bpm,
+        /** Whether the programmer's hold is what [bpm] runs. */
+        val held: Boolean = false,
     )
 
     /**
@@ -132,13 +144,17 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         }
     }
 
-    /** One master's tempo moved (setBpm / tap). Streamed to clients and the persister. */
+    /**
+     * One master's tempo moved (setBpm / tap). Streamed to clients and the persister: [bpm] is
+     * the tempo running, [liveBpm] the live tempo the persister writes (the two differ under a hold).
+     */
     data class Change(
         val uuid: UUID?,
         val index: Int,
         val bpm: Double,
         val source: SpeedMasterSource,
         val timestampMs: Long,
+        val liveBpm: Double = bpm,
     )
 
     /**
@@ -160,6 +176,10 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         val clock: MasterClock,
         @Volatile var source: SpeedMasterSource,
         @Volatile var family: String? = null,
+        /** The live tempo under [hold]; while nothing holds it the clock's own tempo is live. */
+        @Volatile var live: Double = clock.bpm.value,
+        /** The programmer's hold, which the clock runs over [live]. Never on a follower. */
+        @Volatile var hold: Double? = null,
         /**
          * The live link, or null for a manual master. Set from the row at [load] and cleared
          * there when the row's target is dangling or loops — so everything downstream can read
@@ -356,8 +376,28 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
             followNum = entry.follow?.num,
             followDen = entry.follow?.den,
             followTargetUuid = entry.leader?.uuid,
+            liveBpm = liveOf(entry),
+            held = entry.hold != null,
         )
     }
+
+    /**
+     * A master's live tempo: under a hold the one kept beside it, on a follower its leader's live
+     * tempo times the ratio (so a leader's hold never reaches a follower's stored row), else what
+     * the clock runs — which a script's raw clock write moves too.
+     */
+    private fun liveOf(entry: Entry): Double {
+        val follow = entry.follow
+        val leader = entry.leader
+        return when {
+            follow != null && leader != null -> liveOf(leader) * follow.num / follow.den
+            entry.hold != null -> entry.live
+            else -> entry.clock.bpm.value
+        }
+    }
+
+    /** The hold [uuid]'s master runs, or null when it runs its live tempo or the bank lacks it. */
+    fun holdOf(uuid: UUID): Double? = entryFor(uuid)?.hold
 
     /** One coherent sample of every master for a single engine pass. */
     fun snapshotFrame(): Frame {
@@ -393,6 +433,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
      * master 1, whose uuid changes on the first load.
      */
     fun load(rows: List<SpeedMasterSnapshot>) {
+        var dropped: List<UUID> = emptyList()
         val swept: List<Entry> = synchronized(lock) {
             val previous = bindings.slots
             val previousByUuid = previous.mapNotNull { e -> e.uuid?.let { it to e } }.toMap()
@@ -412,7 +453,10 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
                     val entry = if (existing.uuid == row.uuid && existing.index == row.index) {
                         existing
                     } else {
-                        Entry(row.uuid, row.index, row.name, existing.clock, existing.source)
+                        Entry(
+                            row.uuid, row.index, row.name, existing.clock, existing.source,
+                            live = existing.live, hold = existing.hold.takeIf { existing.uuid == row.uuid },
+                        )
                     }
                     // Refreshed on the reuse branch as much as the rebuild branch: a usage or
                     // ratio edit arrives as a reload of the same uuid, and stale values here
@@ -451,11 +495,19 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
 
             val kept = newSlots.mapTo(HashSet()) { it.clock }
             previous.filter { it.clock !in kept }.forEach { it.clock.stop() }
+            val keptUuids = newSlots.mapNotNullTo(HashSet()) { it.uuid }
+            // Every master gone, held here or not: a hold staged in Blind never reached the bank.
+            val gone = previous.mapNotNull { it.uuid }.filter { it !in keptUuids }
 
             val slotByUuid = newSlots.withIndex()
                 .mapNotNull { (i, e) -> e.uuid?.let { it to i } }
                 .toMap()
             val driveOrder = resolveFollowGraph(newSlots, slotByUuid)
+            // D9: a held master linked as a follower loses its hold — its tempo is its leader's now —
+            // and so does one only staged, which the caller hears of here too.
+            val linked = newSlots.filter { it.follow != null }
+            linked.forEach { it.hold = null }
+            dropped = gone + linked.mapNotNull { it.uuid }
 
             bindings = Bindings(
                 slots = newSlots.toTypedArray(),
@@ -473,6 +525,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
             clamped + sweepFollowersLocked()
         }
         swept.forEach { emitChange(it) }
+        dropped.forEach { onHoldChanged?.invoke(it, null) }
     }
 
     /**
@@ -612,22 +665,110 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
     }
 
     /**
-     * Retune one master (null → master 1). [source] records how — MANUAL for typed, TAP for
-     * tapped. An unknown uuid is a dropped write, not a fallback (see [entryFor]); a follower
-     * is refused before its clock is touched (D5). A write to master 1 sweeps its followers.
+     * Retune one master (null → master 1) — the rail's, a surface's, MCP's or a script's typed
+     * tempo. [source] records how — MANUAL for typed, TAP for tapped. On a held master it moves
+     * the hold (D9), so the write always changes what runs; otherwise the live tempo. An unknown
+     * uuid is a dropped write, not a fallback (see [entryFor]); a follower is refused before its
+     * clock is touched (D5). A write to master 1 sweeps its followers.
      */
     fun setBpm(uuid: UUID?, bpm: Double, source: SpeedMasterSource): TempoWriteOutcome =
-        tempoWrite(uuid) { entry ->
-            entry.clock.setBpm(bpm)
-            entry.source = source
-        }
+        tempoWrite(uuid) { entry -> moveRunning(entry, bpm, source) }
 
-    /** Tap one master's tempo (null → master 1). Same refusal rules as [setBpm]. */
+    /** Tap one master's tempo (null → master 1), by [setBpm]'s rule. Same refusal rules. */
     fun tap(uuid: UUID?): TempoWriteOutcome =
         tempoWrite(uuid) { entry ->
-            entry.clock.tap()
-            entry.source = SpeedMasterSource.TAP
+            val estimate = entry.clock.tapEstimate()
+            if (estimate != null) {
+                moveRunning(entry, estimate, SpeedMasterSource.TAP)
+            } else {
+                if (entry.hold == null) entry.source = SpeedMasterSource.TAP
+                false
+            }
         }
+
+    /**
+     * A cue's tempo on GO, or a press's (D9): the live tempo moves, and runs unless the master is
+     * held, whose hold keeps running. Same refusal rules as [setBpm].
+     */
+    fun setLiveBpm(uuid: UUID?, bpm: Double, source: SpeedMasterSource): TempoWriteOutcome =
+        tempoWrite(uuid) { entry ->
+            val value = bpm.coerceIn(MasterClock.MIN_BPM, MasterClock.MAX_BPM)
+            if (entry.hold == null) {
+                entry.clock.setBpm(value)
+                entry.source = source
+            } else {
+                entry.live = value
+            }
+            false
+        }
+
+    /**
+     * The master sheet's tempo — the stored starting tempo (D9): it moves the live tempo and, on a
+     * held master, the hold too. Same refusal rules as [setBpm].
+     */
+    fun setStartingBpm(uuid: UUID?, bpm: Double): TempoWriteOutcome =
+        tempoWrite(uuid) { entry ->
+            val value = bpm.coerceIn(MasterClock.MIN_BPM, MasterClock.MAX_BPM)
+            entry.source = SpeedMasterSource.MANUAL
+            val held = entry.hold != null
+            if (held) {
+                entry.hold = value
+                entry.live = value
+            }
+            entry.clock.setBpm(value)
+            held
+        }
+
+    /**
+     * Change the programmer's holds on the masters named, each to its tempo or, with null, released
+     * to its live tempo; a master not named is left as it is, so a hold the bank has just moved on
+     * its own is never put back. Answers the masters it would not hold — unknown here, or following
+     * another — whose hold the caller should drop. Fires no [onHoldChanged]: the caller is its source.
+     */
+    fun changeHolds(changes: Map<UUID, Double?>): Set<UUID> {
+        val refused = HashSet<UUID>()
+        val moved: List<Entry> = synchronized(lock) {
+            val current = bindings
+            val out = ArrayList<Entry>()
+            for ((uuid, bpm) in changes) {
+                val entry = current.slotByUuid[uuid]?.let { current.slots.getOrNull(it) }
+                if (entry == null || entry.follow != null) {
+                    if (bpm != null) refused += uuid
+                    continue
+                }
+                val want = bpm?.coerceIn(MasterClock.MIN_BPM, MasterClock.MAX_BPM)
+                if (want == entry.hold) continue
+                if (entry.hold == null) entry.live = entry.clock.bpm.value
+                entry.hold = want
+                val before = entry.clock.bpm.value
+                entry.clock.setBpm(want ?: entry.live)
+                if (entry.clock.bpm.value != before) out += entry
+            }
+            if (out.isEmpty()) out else out + sweepFollowersLocked()
+        }
+        moved.forEach { emitChange(it) }
+        return refused
+    }
+
+    /** The holds the bank runs, by master. */
+    internal fun holds(): Map<UUID, Double> =
+        bindings.slots.mapNotNull { e -> e.uuid?.let { uuid -> e.hold?.let { uuid to it } } }.toMap()
+
+    /**
+     * Retune what runs: the hold when there is one, else the live tempo. Answers whether a hold
+     * moved, which [tempoWrite] reports through [onHoldChanged].
+     */
+    private fun moveRunning(entry: Entry, bpm: Double, source: SpeedMasterSource): Boolean {
+        val value = bpm.coerceIn(MasterClock.MIN_BPM, MasterClock.MAX_BPM)
+        entry.clock.setBpm(value)
+        return if (entry.hold != null) {
+            entry.hold = value
+            true
+        } else {
+            entry.source = source
+            false
+        }
+    }
 
     /**
      * The shared write path. The lock is held over the clock writes only — [emitChange] (and
@@ -635,7 +776,8 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
      * the bank — and master 1's change is emitted before its followers', which is the causal
      * order a client wants.
      */
-    private inline fun tempoWrite(uuid: UUID?, write: (Entry) -> Unit): TempoWriteOutcome {
+    private inline fun tempoWrite(uuid: UUID?, write: (Entry) -> Boolean): TempoWriteOutcome {
+        var heldMove: Pair<UUID, Double>? = null
         val moved: List<Entry> = synchronized(lock) {
             val entry = entryFor(uuid) ?: return TempoWriteOutcome.UnknownMaster
             entry.follow?.let {
@@ -644,7 +786,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
                     leaderName = entry.leader?.name ?: "Master 1",
                 )
             }
-            write(entry)
+            if (write(entry)) heldMove = entry.uuid?.let { u -> entry.hold?.let { u to it } }
             // Any master can now have followers, so every write sweeps. The sweep's no-change
             // filter makes that free for the (usual) case of a write to a master nothing
             // follows — where the old slot-0 test was the shape of the answer, not an
@@ -652,6 +794,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
             listOf(entry) + sweepFollowersLocked()
         }
         moved.forEach { emitChange(it) }
+        heldMove?.let { (uuid, bpm) -> onHoldChanged?.invoke(uuid, bpm) }
         return TempoWriteOutcome.Applied
     }
 
@@ -721,6 +864,14 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
     @Volatile
     var onChangeSync: ((Change) -> Unit)? = null
 
+    /**
+     * A hold the bank moved or dropped on its own — a tap or typed tempo on a held master (the
+     * new tempo), a held master deleted or linked as a follower (null). Invoked outside [lock],
+     * after the change is emitted; [changeHolds] never calls it.
+     */
+    @Volatile
+    var onHoldChanged: ((UUID, Double?) -> Unit)? = null
+
     private fun emitChange(entry: Entry) {
         val change = Change(
             uuid = entry.uuid,
@@ -728,6 +879,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
             bpm = entry.clock.bpm.value,
             source = entry.source,
             timestampMs = System.currentTimeMillis(),
+            liveBpm = liveOf(entry),
         )
         onChangeSync?.invoke(change)
         _changes.tryEmit(change)

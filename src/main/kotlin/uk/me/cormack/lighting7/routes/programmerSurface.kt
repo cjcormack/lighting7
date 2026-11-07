@@ -92,6 +92,8 @@ internal fun performProgrammerRecord(
      * [source] and [targets] say, since scenery is addressed by element and never by the selection.
      */
     scenery: Boolean = true,
+    /** Record the programmer's held tempos into the cue's *Tempo on GO* too (fx-speed plan D10), likewise unmasked. */
+    tempo: Boolean = true,
     /** Where a new cue's [cueNumber] reading out of order at [sortOrder] puts it. */
     placement: CueNumberPlacement = CueNumberPlacement.HERE,
 ): RecordCoreResult {
@@ -111,6 +113,7 @@ internal fun performProgrammerRecord(
     val recordedLayerIds = state.show.programmerStore.layers.mapTo(HashSet()) { it.layerId }
     val recording = collectProgrammerRecording(state, source, mask, includeFx, scope)
     val held = if (scenery) heldSceneryOf(state, project.id.value) else emptyMap()
+    val heldTempos = if (tempo) heldTemposOf(state, project.id.value) else emptyMap()
 
     data class Written(val outcome: CueWriteOutcome, val details: CueDetails, val entry: DaoCueStackEntry?)
 
@@ -151,6 +154,7 @@ internal fun performProgrammerRecord(
             val cue = DaoCue.findById(outcome.cueId)!!
             // After the cue exists, so what it would track is read at its own place in the list.
             val withScenery = outcome.withScenery(writeHeldSceneryIntoCue(cue, held, mode))
+                .copy(tempo = writeHeldTemposIntoCue(cue, heldTempos, mode))
             val entry = stack?.let { entryInStack(it.id.value, cue.id.value) }
             Written(withScenery, cue.toCueDetails(true, state.show.fixtures, references = state.show.paletteReferences), entry) to null
         } else {
@@ -161,6 +165,7 @@ internal fun performProgrammerRecord(
             }
             val outcome = writeRecordingIntoCue(state, cue, recording, mode, mask, scope)
                 .withScenery(writeHeldSceneryIntoCue(cue, held, mode))
+                .copy(tempo = writeHeldTemposIntoCue(cue, heldTempos, mode))
             val entry = includedEntryId?.let { DaoCueStackEntry.findById(it) }?.takeIf { it.cueId == cue.id.value }
             Written(outcome, cue.toCueDetails(true, state.show.fixtures, contextEntryId = entry?.id?.value, references = state.show.paletteReferences), entry) to null
         }
@@ -198,6 +203,7 @@ internal fun performProgrammerRecord(
         project.id.value,
         written = scenery && mode != RecordMode.REMOVE && written.outcome.scenery.warnings.isEmpty(),
     )
+    state.programmerTempo.rebaseline(project.id.value, written = tempo && mode != RecordMode.REMOVE)
 
     // A scenery row changes the stack list's `CueStackCueEntry.scenery`.
     val sceneryMoved = written.outcome.scenery.written + written.outcome.scenery.removed > 0
@@ -253,7 +259,13 @@ internal fun defaultRecordedCueName(project: DaoProject, stack: DaoCueStack?): S
 
 internal sealed interface IncludeCoreResult {
     /** [sceneryIncluded]: how many of the source's own scenery rows the overlay now holds (D8). */
-    data class Cue(val cueData: CueApplyData, val outcome: IncludeOutcome, val sceneryIncluded: Int = 0) : IncludeCoreResult
+    data class Cue(
+        val cueData: CueApplyData,
+        val outcome: IncludeOutcome,
+        val sceneryIncluded: Int = 0,
+        /** How many of the cue's *Tempo on GO* the programmer now holds (fx-speed plan D10). */
+        val tempoIncluded: Int = 0,
+    ) : IncludeCoreResult
     data class Look(
         val lookId: Int,
         val lookName: String,
@@ -302,11 +314,12 @@ internal fun performProgrammerInclude(
         val sceneryIncluded = state.programmerScenery.include(project.id.value, rows, fadeMs)
         // A Look Include always moves the include target, so the baseline moves with it.
         state.programmerScenery.includedBaseline(project.id.value, rows)
+        state.programmerTempo.forgetBaseline(project.id.value)
         return IncludeCoreResult.Look(lookId, lookName, outcome, sceneryIncluded)
     }
 
     var refused: IncludeCoreResult.Failure? = null
-    val (cueData, sceneryRows) = transaction(state.database) {
+    val (cueData, rows) = transaction(state.database) {
         val cue = DaoCue.findById(cueId!!)?.takeIf { it.project.id == project.id }
             ?: return@transaction null
         // The caller names the entry, if any (cue model plan P7); nothing picks one for a shared cue.
@@ -317,10 +330,13 @@ internal fun performProgrammerInclude(
                     return@transaction null
                 }
         }
-        buildCueApplyData(cue, entry) to cueSceneryForInclude(cue)
+        buildCueApplyData(cue, entry) to (cueSceneryForInclude(cue) to cueTemposForInclude(cue))
     } ?: return refused ?: IncludeCoreResult.Failure("Cue not found in current project", notFound = true)
+    val (sceneryRows, tempoRows) = rows
 
     val sceneryIncluded = state.programmerScenery.include(project.id.value, sceneryRows, fadeMs)
+    // The cue's *Tempo on GO*, held (fx-speed plan D10): Update writes them back.
+    val tempoIncluded = state.programmerTempo.include(project.id.value, tempoRows)
     val outcome = includeCueIntoProgrammer(state, cueData, mask, fadeMs, sceneryIncluded)
 
     // `layersInstalled` is load-bearing here, not decorative: a cue built entirely from layers
@@ -333,7 +349,7 @@ internal fun performProgrammerInclude(
     // as deleted on the next Update. Before the target moves, so no layer frame counts the new
     // target against the old source's stack.
     state.show.programmerStore.includedLayerSnapshot = state.show.programmerStore.layers
-    if (outcome.entriesWritten > 0 || outcome.fxSpawned > 0 || outcome.layersInstalled > 0 || sceneryIncluded > 0) {
+    if (outcome.entriesWritten > 0 || outcome.fxSpawned > 0 || outcome.layersInstalled > 0 || sceneryIncluded > 0 || tempoIncluded > 0) {
         val target = includedTargetFor(cueData, entryId)
         state.show.programmerStore.recordedValues = null
         refreshSourceKeys(state, target)
@@ -342,9 +358,10 @@ internal fun performProgrammerInclude(
         // The scenery baseline follows the target: an Include that staged nothing leaves both on
         // the source before it, or every held piece would read as changed against an empty one.
         state.programmerScenery.includedBaseline(project.id.value, sceneryRows)
+        state.programmerTempo.includedBaseline(project.id.value, tempoRows)
     }
 
-    return IncludeCoreResult.Cue(cueData, outcome, sceneryIncluded)
+    return IncludeCoreResult.Cue(cueData, outcome, sceneryIncluded, tempoIncluded)
 }
 
 // ── Update ──────────────────────────────────────────────────────────────────
@@ -416,6 +433,8 @@ internal fun performProgrammerUpdate(
     // not, for the reason it leaves the layer stack alone below: scenery held over a cue the operator
     // never included says nothing about which of the named cues it belongs to.
     val held = if (modeLabel == "A") heldSceneryOf(state, project.id.value) else emptyMap()
+    // And its held tempos into the cue's *Tempo on GO* (fx-speed plan D10), for the same reason Mode A only.
+    val heldTempos = if (modeLabel == "A") heldTemposOf(state, project.id.value) else emptyMap()
 
     // Mode A writes only what changed since Include (which is what preserves references the
     // operator didn't touch); Mode B writes each cue exactly the keys it was under.
@@ -460,6 +479,7 @@ internal fun performProgrammerUpdate(
             cue.adHocFx.filter { it.uuid.toString() in retired }.forEach { it.delete() }
             val written = writeRecordingIntoCue(state, cue, recording, RecordMode.MERGE, mask)
                 .withScenery(writeHeldSceneryIntoCue(cue, held, RecordMode.MERGE))
+                .copy(tempo = writeHeldTemposIntoCue(cue, heldTempos, RecordMode.MERGE))
                 .withRemoved(removeClearedFromCue(cue, cleared, state.show.fixtures, state.show.paletteReferences))
             if (modeLabel == "A") {
                 val stack = state.show.programmerStore.layers
@@ -507,9 +527,11 @@ internal fun performProgrammerUpdate(
             republishedLive = republishCueIfLive(state, cueId),
             sceneryWritten = written.scenery.written,
             assignmentsRemoved = written.assignmentsRemoved,
+            tempoWritten = written.tempo.written,
         )
         warnings += written.warnings
         if (modeLabel == "A" && written.scenery.warnings.isEmpty()) state.programmerScenery.rebaseline(project.id.value, written = true)
+        if (modeLabel == "A") state.programmerTempo.rebaseline(project.id.value, written = true)
     }
 
     if (results.isNotEmpty()) {

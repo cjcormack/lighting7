@@ -27,19 +27,19 @@ describe('describeTarget', () => {
         minBpm: 90,
         maxBpm: 150,
       }),
-    ).toBe('Speed master BPM · 90–150')
+    ).toBe('Speed master tempo · 90–150')
 
     expect(describeTarget({ type: 'speedMasterTap', masterUuid: 'aaaa-2' }))
-      .toBe('Speed master tap')
+      .toBe('Speed master tap tempo')
   })
 
   it('marks an unkeyed tempo binding as master 1', () => {
     // null is master 1 everywhere in this feature; spelling it out beats an unexplained gap.
     expect(
       describeTarget({ type: 'speedMasterBpm', masterUuid: null, minBpm: 60, maxBpm: 180 }),
-    ).toBe('Speed master BPM · 60–180 · M1')
+    ).toBe('Speed master tempo · 60–180 · M1')
     expect(describeTarget({ type: 'speedMasterTap', masterUuid: null }))
-      .toBe('Speed master tap · M1')
+      .toBe('Speed master tap tempo · M1')
   })
 
   it('unwraps a flash target recursively', () => {

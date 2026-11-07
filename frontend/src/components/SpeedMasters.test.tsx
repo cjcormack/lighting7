@@ -33,6 +33,11 @@ vi.mock('../store/status', () => ({
   useIsDeskConnected: () => deskConnected.current,
 }))
 
+const heldTempos: { current: { speedMasterUuid: string; bpm: number; released?: boolean }[] } = { current: [] }
+vi.mock('../store/programmer', () => ({
+  useProgrammerTempo: () => ({ projectId: null, masters: heldTempos.current }),
+}))
+
 import { SpeedMasters, SpeedMastersChip, selectedMasterStore } from './SpeedMasters'
 
 afterEach(() => {
@@ -201,7 +206,7 @@ describe('SpeedMasters — the tile arms', () => {
     render(<SpeedMasters />)
 
     fireEvent.click(screen.getAllByText('120')[0])
-    const input = screen.getByLabelText('Master 1 BPM')
+    const input = screen.getByLabelText('Master 1 tempo')
     fireEvent.change(input, { target: { value: '128' } })
     fireEvent.keyDown(input, { key: 'Enter' })
 
@@ -255,7 +260,7 @@ describe('SpeedMastersChip — the phone arm', () => {
     openChip()
 
     fireEvent.click(screen.getByText('60'))
-    const input = screen.getByLabelText('Master 2 BPM')
+    const input = screen.getByLabelText('Master 2 tempo')
     fireEvent.change(input, { target: { value: '96' } })
     fireEvent.keyDown(input, { key: 'Enter' })
 
@@ -267,12 +272,21 @@ describe('SpeedMastersChip — the phone arm', () => {
     openChip()
 
     fireEvent.click(screen.getByText('60'))
-    fireEvent.change(screen.getByLabelText('Master 2 BPM'), { target: { value: '9' } })
+    fireEvent.change(screen.getByLabelText('Master 2 tempo'), { target: { value: '9' } })
 
     // Another surface taps the master mid-edit; the field must keep the draft.
     liveMasters = [master(1), master(2, { bpm: 87, source: 'TAP' })]
     fireEvent.click(screen.getByLabelText('Tap tempo for master 1'))
-    expect((screen.getByLabelText('Master 2 BPM') as HTMLInputElement).value).toBe('9')
+    expect((screen.getByLabelText('Master 2 tempo') as HTMLInputElement).value).toBe('9')
+  })
+
+  it("says a master's live tempo was tapped, but not while the programmer holds it", () => {
+    liveMasters = [master(1), master(2, { bpm: 87, source: 'TAP' })]
+    expect(render(<SpeedMasters />).container.textContent).toContain('· tap')
+    cleanup()
+    heldTempos.current = [{ speedMasterUuid: master(2).uuid!, bpm: 87 }]
+    expect(render(<SpeedMasters />).container.textContent).not.toContain('· tap')
+    heldTempos.current = []
   })
 
   it('escape reverts to the live value without sending anything', () => {
@@ -280,7 +294,7 @@ describe('SpeedMastersChip — the phone arm', () => {
     openChip()
 
     fireEvent.click(screen.getByText('60'))
-    const input = screen.getByLabelText('Master 2 BPM')
+    const input = screen.getByLabelText('Master 2 tempo')
     fireEvent.change(input, { target: { value: '999' } })
     fireEvent.keyDown(input, { key: 'Escape' })
 
@@ -295,7 +309,7 @@ describe('SpeedMastersChip — the phone arm', () => {
     openChip()
 
     fireEvent.click(screen.getByText('60'))
-    const input = screen.getByLabelText('Master 2 BPM')
+    const input = screen.getByLabelText('Master 2 tempo')
     fireEvent.change(input, { target: { value: 'fast' } })
     fireEvent.keyDown(input, { key: 'Enter' })
 
@@ -327,7 +341,7 @@ describe('a master that follows master 1', () => {
 
     fireEvent.click(screen.getByText('60'))
 
-    expect(screen.queryByLabelText('Master 2 BPM')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Master 2 tempo')).not.toBeInTheDocument()
     expect(setSpeedMasterBpm).not.toHaveBeenCalled()
   })
 

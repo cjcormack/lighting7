@@ -555,6 +555,7 @@ export function lightingApiMock() {
         lastIncluded: () => programmerWs.state.lastIncluded,
         // The programmer's scenery has its own frame and subscription; the mock holds none.
         scenery: () => ({ projectId: null, elements: [] }),
+        tempo: () => ({ projectId: null, masters: [] }),
         getKeyState: (targetKey: string, attribute: string) => ({
           entry: programmerWs.state.entries.get(`${targetKey}|${attribute}`),
           provenance: programmerWs.state.provenance.get(`${targetKey}|${attribute}`),
@@ -570,6 +571,7 @@ export function lightingApiMock() {
         subscribeToKey: noopSub,
         subscribeToErrors: noopSub,
         subscribeToScenery: noopSub,
+        subscribeToTempo: noopSub,
         // The writers have to be spelled out too, and this is the cost of not being the Proxy any
         // more: it answered every unknown member, so a surface that merely *called* `programmerSet`
         // used to be safe under the mock. Without these, rendering one throws
@@ -586,6 +588,10 @@ export function lightingApiMock() {
         patchLayer: () => {},
         setScenery: () => {},
         clearScenery: () => {},
+        setTempo: () => {},
+        tapTempo: () => {},
+        holdTempo: () => {},
+        clearTempo: () => {},
         // The two request/reply frames (fixture-fx-sheets W1, W2) answer promises. A test that cares
         // about the answer spies on these; the defaults are an empty stack and an empty release.
         keyStack: (targetType: string, targetKey: string, attribute: string) =>

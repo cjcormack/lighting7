@@ -107,11 +107,11 @@ export function describeTarget(target: BindingTarget): string {
     // live bank, and a call site that wants "M2 · Chorus" can resolve it via
     // useSpeedMasterDisplay. `null` is master 1 by the same convention as everywhere else.
     case "speedMasterBpm":
-      return `Speed master BPM · ${target.minBpm}–${target.maxBpm}${
+      return `Speed master tempo · ${target.minBpm}–${target.maxBpm}${
         target.masterUuid == null ? " · M1" : ""
       }`
     case "speedMasterTap":
-      return `Speed master tap${target.masterUuid == null ? " · M1" : ""}`
+      return `Speed master tap tempo${target.masterUuid == null ? " · M1" : ""}`
     // The selection-relative arms name no target of their own, so `Sel` is doing real work: it is
     // the whole difference between "this control writes colour on the movers" and "this control
     // writes colour on whatever is selected".

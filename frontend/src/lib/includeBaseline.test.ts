@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ProgrammerEntry } from '@/api/programmerWsApi'
-import { diffAgainstBaseline, snapshotEntries, withLayerChanges, withSceneryChanges } from './includeBaseline'
+import { diffAgainstBaseline, snapshotEntries, withLayerChanges, withSceneryChanges, withTempoChanges } from './includeBaseline'
 
 const snap = (o: Record<string, string>) => new Map(Object.entries(o))
 
@@ -56,6 +56,14 @@ describe('withLayerChanges', () => {
   it('adds nothing for an absent count, and keeps an unknown value count unknown', () => {
     expect(withLayerChanges(0, undefined)).toBe(0)
     expect(withLayerChanges(null, 1)).toBeNull()
+  })
+})
+
+describe('withTempoChanges', () => {
+  it('adds the held tempos the included cue does not say, and keeps an unknown count unknown', () => {
+    expect(withTempoChanges(0, 2)).toBe(2)
+    expect(withTempoChanges(1, undefined)).toBe(1)
+    expect(withTempoChanges(null, 2)).toBeNull()
   })
 })
 

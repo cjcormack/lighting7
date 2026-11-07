@@ -214,7 +214,7 @@ export function SpeedMasterSheet({ projectId, masters, bank, isCurrentProject, o
       },
       {
         key: 'bpm',
-        label: 'BPM',
+        label: 'Tempo',
         kind: 'bpm',
         width: '96px',
         // Rounded to the tenth the face shows: a tapped tempo is a long float, and the editor's field

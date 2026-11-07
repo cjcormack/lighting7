@@ -86,7 +86,7 @@ describe('SpeedMasterDetailSheet', () => {
     renderSheet(master({ notes: 'half-time position waves' }))
 
     expect(screen.getByLabelText('Name')).toHaveValue('Slow Wash')
-    expect(screen.getByLabelText('Starting BPM')).toHaveValue('64')
+    expect(screen.getByLabelText('Starting tempo')).toHaveValue('64')
     expect(screen.getByLabelText('Notes')).toHaveValue('half-time position waves')
   })
 
@@ -121,7 +121,7 @@ describe('SpeedMasterDetailSheet', () => {
   it('rejects a starting BPM outside the clock range before sending it', () => {
     renderSheet(master())
 
-    fireEvent.change(screen.getByLabelText('Starting BPM'), { target: { value: '900' } })
+    fireEvent.change(screen.getByLabelText('Starting tempo'), { target: { value: '900' } })
 
     expect(screen.getByText('Must be between 20 and 300.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
@@ -184,7 +184,7 @@ describe('SpeedMasterDetailSheet', () => {
     renderSheet(master())
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Chorus' } })
-    fireEvent.change(screen.getByLabelText('Starting BPM'), { target: { value: '96' } })
+    fireEvent.change(screen.getByLabelText('Starting tempo'), { target: { value: '96' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(saveMaster).toHaveBeenCalledTimes(1))
@@ -204,7 +204,7 @@ describe('SpeedMasterDetailSheet', () => {
     renderSheet(master({ id: 1, masterIndex: 1, name: 'Master 1' }))
 
     expect(screen.queryByRole('radio', { name: 'Follow' })).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Starting BPM')).toBeInTheDocument()
+    expect(screen.getByLabelText('Starting tempo')).toBeInTheDocument()
   })
 
   it('hides the starting BPM while following, and shows what the ratio resolves to', () => {
@@ -212,7 +212,7 @@ describe('SpeedMasterDetailSheet', () => {
     // linked — and the server refuses a PUT carrying both.
     renderSheet(master({ followNum: 1, followDen: 2 }))
 
-    expect(screen.queryByLabelText('Starting BPM')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Starting tempo')).not.toBeInTheDocument()
     // Master 1 is mocked at 120, so half time is 60.
     expect(screen.getByText('60')).toBeInTheDocument()
   })

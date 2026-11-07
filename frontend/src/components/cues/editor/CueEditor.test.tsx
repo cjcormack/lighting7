@@ -337,7 +337,7 @@ describe('CueEditor', () => {
     })
 
     // A BPM commits on Enter; one outside 20–300 is never sent.
-    const bpm = within(section).getByRole('spinbutton', { name: 'M2 · Chase BPM' })
+    const bpm = within(section).getByRole('spinbutton', { name: 'M2 · Chase tempo' })
     fireEvent.focus(bpm)
     fireEvent.change(bpm, { target: { value: '500' } })
     fireEvent.keyDown(bpm, { key: 'Enter' })
@@ -391,7 +391,7 @@ describe('CueEditor', () => {
     await act(async () => {
       resolve(makeCue({ speedMasters: [{ speedMasterUuid: 'm2', bpm: 128 }, { speedMasterUuid: 'm1', bpm: 121 }] }))
     })
-    expect(within(section()).getByRole('spinbutton', { name: 'M1 · House BPM' })).toHaveProperty('value', '121')
+    expect(within(section()).getByRole('spinbutton', { name: 'M1 · House tempo' })).toHaveProperty('value', '121')
   })
 
   it('says a GO skips a follower or a deleted master', () => {

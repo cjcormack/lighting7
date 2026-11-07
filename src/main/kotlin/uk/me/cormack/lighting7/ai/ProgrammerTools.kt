@@ -198,6 +198,7 @@ internal class ProgrammerTools(private val state: State) {
         val fadeMs = fadeMs(input).getOrElse { return errorResult(it.message ?: "Bad arguments") }
         state.show.fxEngine.programmer.setBlind(blind, fadeMs)
         state.sceneryService.onBlindChanged()
+        state.programmerTempo.onBlindChanged()
         state.effectsService.onBlindChanged()
         val now = state.show.programmerStore.blind
         return ToolExecutionResult(

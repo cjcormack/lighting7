@@ -940,4 +940,165 @@ class SpeedMasterBankTest {
             "tick numbers must never repeat or go backwards across a tempo change",
         )
     }
+
+    // ─── Live and held (fx-speed plan D9, §3's table) ───────────────────
+
+    private fun held(): Triple<SpeedMasterBank, UUID, MutableList<Pair<UUID, Double?>>> {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1), snapshot(u2, 2, bpm = 100.0)))
+        val moves = mutableListOf<Pair<UUID, Double?>>()
+        bank.onHoldChanged = { uuid, bpm -> moves += uuid to bpm }
+        return Triple(bank, u2, moves)
+    }
+
+    private fun SpeedMasterBank.state(uuid: UUID) = masterStates().single { it.uuid == uuid }
+
+    @Test
+    fun `a hold runs at once over the live tempo, and its release lands the live tempo`() {
+        val (bank, u2, moves) = held()
+        assertEquals(emptySet<UUID>(), bank.changeHolds(mapOf(u2 to 140.0)))
+        assertEquals(140.0, bank.state(u2).bpm)
+        assertEquals(100.0, bank.state(u2).liveBpm)
+        assertTrue(bank.state(u2).held)
+
+        bank.changeHolds(mapOf(u2 to null))
+        assertEquals(100.0, bank.state(u2).bpm)
+        assertEquals(false, bank.state(u2).held)
+        assertTrue(moves.isEmpty(), "the programmer's own push is not reported back to it")
+    }
+
+    @Test
+    fun `a rail tempo on an unheld master moves live and runs it`() {
+        val (bank, u2, moves) = held()
+        bank.setBpm(u2, 110.0, SpeedMasterSource.MANUAL)
+        assertEquals(110.0, bank.state(u2).bpm)
+        assertEquals(110.0, bank.state(u2).liveBpm)
+        assertTrue(moves.isEmpty())
+    }
+
+    @Test
+    fun `a rail tempo or tap on a held master moves the hold, not live`() {
+        val (bank, u2, moves) = held()
+        bank.changeHolds(mapOf(u2 to 140.0))
+        bank.setBpm(u2, 150.0, SpeedMasterSource.MANUAL)
+        assertEquals(150.0, bank.state(u2).bpm)
+        assertEquals(100.0, bank.state(u2).liveBpm, "the live tempo underneath is untouched")
+        assertEquals(listOf<Pair<UUID, Double?>>(u2 to 150.0), moves)
+        assertEquals(mapOf(u2 to 150.0), bank.holds())
+
+        bank.tap(u2)
+        bank.tap(u2)
+        assertEquals(100.0, bank.state(u2).liveBpm)
+        assertTrue(bank.state(u2).held)
+        assertEquals(bank.state(u2).bpm, bank.holds().getValue(u2))
+    }
+
+    @Test
+    fun `a GO under a hold moves live and the hold keeps running`() {
+        val (bank, u2, moves) = held()
+        bank.changeHolds(mapOf(u2 to 140.0))
+        assertEquals(1, bank.setCueTempos("Q1", listOf(uk.me.cormack.lighting7.models.CueSpeedMasterDto(u2.toString(), 90.0))))
+        assertEquals(140.0, bank.state(u2).bpm)
+        assertEquals(90.0, bank.state(u2).liveBpm)
+        bank.changeHolds(mapOf(u2 to null))
+        assertEquals(90.0, bank.state(u2).bpm, "Release lands the tempo the GO gave it")
+        assertTrue(moves.isEmpty())
+    }
+
+    @Test
+    fun `a GO compares the live tempo, so one setting what a hold covers still moves live`() {
+        val (bank, u2, _) = held()
+        bank.changeHolds(mapOf(u2 to 90.0))
+        assertEquals(1, bank.setCueTempos("Q1", listOf(uk.me.cormack.lighting7.models.CueSpeedMasterDto(u2.toString(), 90.0))))
+        assertEquals(90.0, bank.state(u2).liveBpm)
+        assertEquals(0, bank.setCueTempos("Q1", listOf(uk.me.cormack.lighting7.models.CueSpeedMasterDto(u2.toString(), 90.0))))
+    }
+
+    @Test
+    fun `the starting tempo writes live and moves a hold`() {
+        val (bank, u2, moves) = held()
+        bank.setStartingBpm(u2, 80.0)
+        assertEquals(80.0, bank.state(u2).bpm)
+        assertEquals(80.0, bank.state(u2).liveBpm)
+
+        bank.changeHolds(mapOf(u2 to 140.0))
+        bank.setStartingBpm(u2, 70.0)
+        assertEquals(70.0, bank.state(u2).bpm)
+        assertEquals(70.0, bank.state(u2).liveBpm)
+        assertEquals(listOf<Pair<UUID, Double?>>(u2 to 70.0), moves)
+    }
+
+    @Test
+    fun `a held master linked as a follower loses its hold`() {
+        val (bank, u2, moves) = held()
+        val u1 = bank.master1Uuid()!!
+        bank.changeHolds(mapOf(u2 to 140.0))
+        bank.load(listOf(snapshot(u1, 1), snapshot(u2, 2, bpm = 100.0, follow = 1 to 2)))
+        assertEquals(false, bank.state(u2).held)
+        assertEquals(60.0, bank.state(u2).bpm, "it runs its leader's tempo")
+        assertEquals(listOf<Pair<UUID, Double?>>(u2 to null), moves)
+    }
+
+    @Test
+    fun `a deleted held master is reported dropped, and a rename keeps the hold`() {
+        val (bank, u2, moves) = held()
+        val u1 = bank.master1Uuid()!!
+        bank.changeHolds(mapOf(u2 to 140.0))
+        bank.load(listOf(snapshot(u1, 1), snapshot(u2, 2, name = "Chase", bpm = 100.0)))
+        assertEquals(140.0, bank.state(u2).bpm)
+        assertTrue(moves.isEmpty())
+        bank.load(listOf(snapshot(u1, 1)))
+        assertEquals(listOf<Pair<UUID, Double?>>(u2 to null), moves)
+    }
+
+    @Test
+    fun `a follower refuses a hold`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1), snapshot(u2, 2, follow = 1 to 2)))
+        assertEquals(setOf(u2), bank.changeHolds(mapOf(u2 to 140.0)))
+        assertEquals(false, bank.state(u2).held)
+        assertEquals(setOf(u2), bank.changeHolds(mapOf(u2 to 140.0)), "and keeps refusing it")
+    }
+
+    @Test
+    fun `the write-through persists the live tempo under a hold`() {
+        val (bank, u2, _) = held()
+        val changes = mutableListOf<SpeedMasterBank.Change>()
+        bank.onChangeSync = { changes += it }
+        bank.changeHolds(mapOf(u2 to 140.0))
+        bank.setBpm(u2, 150.0, SpeedMasterSource.TAP)
+        bank.setLiveBpm(u2, 95.0, SpeedMasterSource.MANUAL)
+        assertTrue(changes.isNotEmpty())
+        assertTrue(changes.all { it.liveBpm in setOf(100.0, 95.0) }, "a hold is never what is persisted: $changes")
+        assertEquals(95.0, changes.last().liveBpm)
+        assertEquals(150.0, changes.last().bpm, "while the clients see the tempo running")
+    }
+
+    @Test
+    fun `a GO retunes a master a script moved through its raw clock`() {
+        val (bank, u2, _) = held()
+        bank.clockFor(bank.slotFor(u2)).setBpm(140.0)
+        assertEquals(1, bank.setCueTempos("Q1", listOf(uk.me.cormack.lighting7.models.CueSpeedMasterDto(u2.toString(), 100.0))))
+        assertEquals(100.0, bank.state(u2).bpm)
+    }
+
+    @Test
+    fun `a follower's persisted tempo follows its leader's live tempo, never its hold`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        val u3 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1), snapshot(u2, 2, bpm = 100.0), snapshot(u3, 3, follow = 2 to 1, followTarget = u2)))
+        val changes = mutableListOf<SpeedMasterBank.Change>()
+        bank.onChangeSync = { changes += it }
+        bank.changeHolds(mapOf(u2 to 140.0))
+        assertEquals(280.0, bank.state(u3).bpm, "the follower runs off its leader's hold")
+        assertEquals(200.0, bank.state(u3).liveBpm)
+        assertEquals(200.0, changes.last { it.uuid == u3 }.liveBpm)
+    }
 }
+

@@ -5,10 +5,11 @@ import {
   snapshotEntries,
   withLayerChanges,
   withSceneryChanges,
+  withTempoChanges,
   type ValueSnapshot,
 } from '@/lib/includeBaseline'
 import { includedTargetKey } from '@/lib/includedTarget'
-import { useProgrammerScenery } from '@/store/programmer'
+import { useProgrammerScenery, useProgrammerTempo } from '@/store/programmer'
 
 /**
  * How many values have moved since this tab watched Include load something — or `null` if it did
@@ -37,6 +38,7 @@ import { useProgrammerScenery } from '@/store/programmer'
  * (`changedSinceInclude` on `programmer.sceneryState`) — see `withSceneryChanges`. So do the layers
  * Update would write into an included cue (`layersChangedSinceInclude`, `withLayerChanges`), since a
  * Look of scenery alone adds a layer and no value; a layer's own values are not counted as values.
+ * Held tempos too (fx-speed plan D10), by the desk's count on `programmer.tempoState`.
  */
 export function useIncludeBaseline(): number | null {
   const baselineRef = useRef<ValueSnapshot | null>(null)
@@ -88,5 +90,6 @@ export function useIncludeBaseline(): number | null {
   }, [])
 
   const scenery = useProgrammerScenery()
-  return withSceneryChanges(dirty, scenery.changedSinceInclude)
+  const tempo = useProgrammerTempo()
+  return withTempoChanges(withSceneryChanges(dirty, scenery.changedSinceInclude), tempo.changedSinceInclude)
 }

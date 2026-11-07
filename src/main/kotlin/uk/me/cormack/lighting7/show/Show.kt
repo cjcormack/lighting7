@@ -632,7 +632,7 @@ class Show(
                     val master = DaoSpeedMaster
                         .find { (DaoSpeedMasters.project eq project.id) and (DaoSpeedMasters.uuid eq uuid) }
                         .firstOrNull() ?: continue
-                    master.bpm = change.bpm
+                    master.bpm = change.liveBpm
                     master.source = change.source.name
                 }
             }
@@ -667,14 +667,15 @@ class Show(
 
     /**
      * Retune a live clock after a REST bpm write, but only when the write was for *this*
-     * show's project — a bpm typed into a non-current project must land in its row only.
+     * show's project — a bpm typed into a non-current project must land in its row only. It is
+     * the starting tempo, so it moves the live tempo and a hold both (fx-speed plan D9).
      */
     fun setSpeedMasterBpmIfCurrent(projectId: Int, masterUuid: java.util.UUID, bpm: Double) {
         if (projectId != project.id.value) return
         // Outcome deliberately dropped: the REST route refuses a bpm on a follower before it
         // gets here, and an unknown uuid means the master was deleted between the row write
         // and this retune — the stored default still landed, which is all that write meant.
-        speedMasterBank.setBpm(masterUuid, bpm, SpeedMasterSource.MANUAL)
+        speedMasterBank.setStartingBpm(masterUuid, bpm)
     }
 
     /**
@@ -953,6 +954,7 @@ private class ShowProgrammerHolders(private val show: Show) : ProgrammerHolders 
         localFx = show.fxEngine.localFxSnapshot(),
         locate = show.locateManager.snapshot(),
         scenery = show.state.programmerScenery.snapshot(),
+        tempo = show.state.programmerTempo.snapshot(),
     )
 
     override fun restore(snapshot: ProgrammerSnapshot, fadeMs: Long) {
@@ -973,5 +975,6 @@ private class ShowProgrammerHolders(private val show: Show) : ProgrammerHolders 
         show.fxEngine.programmer.restore(store, fadeMs)
         show.programmerLayerStack.reinstate(fadeMs)
         show.state.programmerScenery.restore(snapshot.scenery, fadeMs)
+        show.state.programmerTempo.restore(snapshot.tempo)
     }
 }

@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-FX-SPEED-S2`](#fu-manual-fx-speed-s2) | a tempo the operator tapped and captured on the rail outlives a GO of a cue that sets the same master, Record puts it into the cue's *Tempo on GO*, and that cue sets it after a Clear | FX speed session 2, 2026-11-07 |
 | [`FU-MANUAL-CLOUD-P1-S5`](#fu-manual-cloud-p1-s5) | an installed MSI and Mac pkg carry the sidecar for their machine and the desk runs it: `link` reads `RUNNING` with *Remote sessions* on, the installers' sizes against the build before | Cloud P1 S5, 2026-11-06 |
 | [`FU-MANUAL-PALETTE-REFERENCES-S4`](#fu-manual-palette-references-s4) | a Look recorded from heads that follow a palette still follows it on the rig — retuned live with no GO, a tap in the focused Look writing references and a second taking them off — and *Copy the values* on the Look sheet and in the cue editor turns them to literals with nothing moving | Palette references S4, 2026-11-05 |
 | [`FU-MANUAL-CLOUD-P1A`](#fu-manual-cloud-p1a) | Lighting7 Cloud's P1a gate: the desk's SPA opened from the portal is usable through the shell on desktop Chrome, Firefox and Safari and iOS Safari, Direct and Relayed (TURN on 443 too), within NFR-PERF-1's times, a 100 MB upload, two token refreshes, *End* closing it within 5 s, ten minutes of fades relayed and a cached second visit under 2 s — **passed 2026-11-06 but for the performance checks**, steps 2 and 7, which are deferred | Cloud P1 S4, 2026-11-06 |
@@ -145,6 +146,27 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-FX-SPEED-S2`
+
+**What it proves**: *tempo in the programmer* (fx-speed plan session 2) — a held tempo runs over the
+live tempo a GO gives a master, and Record is the way a tempo gets into a cue.
+
+**Why it is here**: the tests read the bank's tempos; only the rig shows that a chase on a captured
+master does not stutter when a cue that sets that master is GO'd, and that the rail's *Held* reads
+right on the desk's screens.
+
+**Test**, on the dev rig, a chase on M2 and a cue stack whose Q2 sets M2 to 90 in its *Tempo on GO*:
+
+1. **Capture.** Tap M2 on the rail to about 128, then *Capture* on its card: the card reads *Held* in
+   amber and the programmer's Tempo list shows M2 at the tapped tempo.
+2. **A GO under a hold.** GO Q2: the chase keeps the tapped tempo. *Release* on the card: it drops to 90.
+3. **Record.** Capture M2 again at a new tap, *Record → A new cue*: the new cue's *Tempo on GO* holds
+   M2 at that tempo. Clear, then GO the new cue: M2 lands on it.
+4. **Blind.** Blind, then set M2's tempo in the programmer's list: the rail shows the staged tempo
+   beside the running one, and the chase does not move until Blind is left.
 
 ---
 

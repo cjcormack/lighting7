@@ -15,6 +15,7 @@ import {
   formatFollowRatio,
 } from '../lib/speedMasterModel'
 import { useIsDeskConnected } from '../store/status'
+import { useProgrammerTempo } from '../store/programmer'
 import { DESK_OFFLINE_LABEL } from '../api/wsGesture'
 import type { SpeedMasterLiveState } from '../api/speedMastersWsApi'
 
@@ -446,6 +447,8 @@ function MasterTile({ master, bank }: { master: TileMaster; bank: readonly TileM
   // — so against a dead socket the operator taps a bar's worth of beats and the number never
   // moves. The tile keeps *showing* the tempo; only the two writes stop.
   const connected = useIsDeskConnected()
+  // A held master runs the programmer's tempo; its source says how the live tempo under it was set.
+  const held = useProgrammerTempo().masters.some((m) => m.speedMasterUuid === master.uuid && !m.released)
   // A follower's tempo is derived from its leader, and the server refuses both writes on it
   // (SPEED_MASTER_FOLLOWER). So the tile trades TAP for the ratio and stops offering the draft
   // — the refusal still exists as a backstop for writers with no affordance to remove (a MIDI
@@ -473,7 +476,7 @@ function MasterTile({ master, bank }: { master: TileMaster; bank: readonly TileM
           {/* Only the ≥1000px arm is on screen above 1000, so this one span serves both the wide
               tile's "M1 · BPM" and the railed tile's bare "M1" without a prop or a branch. */}
           {master.name && <span className="hidden @[1000px]:inline"> · {master.name}</span>}
-          {master.source === 'TAP' && !editing && ' · tap'}
+          {master.source === 'TAP' && !editing && !held && ' · tap'}
         </span>
         {editing ? (
           <input
@@ -483,7 +486,7 @@ function MasterTile({ master, bank }: { master: TileMaster; bank: readonly TileM
             onChange={(e) => change(e.target.value)}
             onBlur={commit}
             onKeyDown={onKeyDown}
-            aria-label={`Master ${master.index} BPM`}
+            aria-label={`Master ${master.index} tempo`}
             className="w-[5ch] border-b border-primary bg-transparent font-mono text-lg font-bold leading-none text-foreground outline-none @max-[700px]:text-[15px]"
           />
         ) : (
@@ -571,7 +574,7 @@ function MasterRow({ master, bank }: { master: TileMaster; bank: readonly TileMa
           onChange={(e) => change(e.target.value)}
           onBlur={commit}
           onKeyDown={onKeyDown}
-          aria-label={`Master ${master.index} BPM`}
+          aria-label={`Master ${master.index} tempo`}
           className="w-[5ch] border-b border-primary bg-transparent text-right font-mono text-sm font-bold leading-none outline-none"
         />
       ) : (

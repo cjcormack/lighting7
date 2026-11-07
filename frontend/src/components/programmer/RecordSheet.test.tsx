@@ -22,7 +22,12 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }))
 vi.mock('react-redux', () => ({ useSelector: () => [] }))
 vi.mock('@/store/selectionSlice', () => ({ selectTargetKeys: () => [] }))
-vi.mock('@/store/programmer', () => ({ useProgrammerRevision: () => 0, useProgrammerScenery: () => ({ projectId: 6, elements: [] }) }))
+vi.mock('@/store/programmer', () => ({
+  useProgrammerRevision: () => 0,
+  useProgrammerScenery: () => ({ projectId: 6, elements: [] }),
+  useProgrammerTempo: () => ({ projectId: 6, masters: [] }),
+}))
+vi.mock('@/store/speedMasters', () => ({ useSpeedMasterLiveQuery: () => ({ data: [] }) }))
 vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }), useVisibleFixtureListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/cueStacks', () => ({
