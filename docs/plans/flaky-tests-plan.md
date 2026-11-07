@@ -46,7 +46,6 @@ The plan's own rules:
 
 | Test | Seen failing | Suspected cause | Session |
 |---|---|---|---|
-| `WindowsSocketTest` "viewOptions is rebroadcast as-is and an announced options map comes back on state", `TestTimedOutException` at `RouteIntegrationTest`'s 60 s rule | On #347's CI run 41968017539 (fbff1a4, 2026-11-05), 1 of 4408 tests, about 2.5 min into the Backend job's `:test`; 3 of 3 runs of the class alone on the same commit locally, 5–11 s each | Not traced. The change on that commit touches only `cloud.state`, which none of the test's `awaitOfType` waits read. Every wait in the test is an unbounded `receiveDeserialized` loop, so a frame that never comes shows up only as the 60 s rule. A candidate is the `StateFlow` conflation `awaitOfType`'s KDoc describes, which once timed this class's departure waits out on a slow runner, but no wait here looks for a value the socket already had | |
 
 ## 4. Fixed
 
@@ -54,6 +53,7 @@ The plan's own rules:
 
 | Test | Fixed in | What it was |
 |---|---|---|
+| `WindowsSocketTest` "viewOptions is rebroadcast as-is and an announced options map comes back on state", `TestTimedOutException` at `RouteIntegrationTest`'s 60 s rule | session 6 | Seen on #347's CI run 41968017539 (fbff1a4, 2026-11-05), 1 of 4408 tests; 3 of 3 runs of the class alone passed. Traced, a code race (D3): `SocketScope.subscribe` only scheduled its collector, so screen 2 could send `windows.viewOptions` straight after its snapshot, before its collector of the replay-0 command broadcast had subscribed, and wait for its own echo until the 60 s rule. A 500 ms delay on that collector's start timed the case out at the rule, with two other command cases in the class. `subscribe` now starts its collector undispatched, so it has subscribed before it returns. `SocketScopeSubscribeTest` holds the scope's dispatcher, so only an undispatched start can subscribe before `subscribe` returns, and failed 5 of 5 runs on main |
 | `useEditCuePreview.test.tsx` (frontend) "asks again once a slow preview settles, when an edit lands while it is in flight" | 77097f0 | Seen locally in `npm run check:quick` beside a Gradle test run (2026-10-31, on or near main's ade1846; the commit was not recorded), 1 of 1; 8 of 8 alone on the same tree. Traced, a test timing fault (D3): the preview answered on a 400 ms real timer, and the second edit's 300 ms debounce had to fire inside it, so the case held only while the gap between the second request going out and the test's next `listChanged` stayed under about 100 ms. Under load the edit landed late, its timer fired after the request had settled, and the third request went out before the case's "still 2" assertion. Pinned to one core beside six busy loops, the old case failed 1 of 10 runs with `expected [ …(3) ] to have a length of 2 but got 3`. The case now runs `setTimeout` on the fake clock and holds each preview answer until it releases it, so the timer always fires while the request is pending; with the hook's wait-for-the-request path removed it fails every run. Under the same load the file passed 20 of 20 runs |
 | `RigSafetyRoutesTest` "output during the cool-down drops it, and making safe again keeps each lamp's cool time", at its assertion "each lamp still says when its mains can be cut" | session 5 | Seen locally running the `routes` package with six others on `claude/fx-settings-s2` before its first commit (2026-10-26, Linux cloud container), 1 of 1 package runs; 14 of 14 alone. Traced, a code race (D3): `CommandOutput` completed a hold's `done` before its end hook told the restrike ledger, so a *Make rig safe* run could finish, and the test move its clock 240 s on, before the ledger stamped a lamp's off time from that clock. The hook now runs first. "a run is not finished until the restrike ledger holds its lamps" forces the gap: it failed 5 of 5 runs on main |
 | `ProjectActionPlaces.test.tsx` (frontend), *for a show behind its venue*: `Test timed out in 5000ms` | session 4 | Seen locally in a full `npm run check` on `claude/fx-editor-followups-s2` (2026-10-26, Linux cloud container, a backend suite and two review agents running beside it), 1 of 1; passed alone. Traced: load on a synchronous case that rendered three surfaces (the Projects card, the home's ⋮ and ⌘K), about 0.5 s alone and 0.8 s for the file's cold first case. Vitest fails a synchronous test that returns after its 5 s. Pinned to one core beside six busy loops, the first case timed out in 5 of 5 runs on main, at 7.5 to 8.5 s. Each case is now one test per place, each comparing that place's actions with the set written out, so no test renders more than once |
@@ -88,7 +88,8 @@ A session's PR is titled *Flaky tests: session N — title*.
 | 2 | Rig safety's timing | merged | `claude/flaky-tests-s2` | [#300](https://github.com/cjcormack/lighting7/pull/300) | 9dc4e15 |
 | 3 | The sheet's commit floor | merged | `claude/flaky-tests-s3` | [#301](https://github.com/cjcormack/lighting7/pull/301) | 5194d0d |
 | 4 | Timeouts under load | merged | `claude/flaky-tests-s4` | [#303](https://github.com/cjcormack/lighting7/pull/303) | f932c5d |
-| 5 | The ledger after the clock moves | in review | `claude/flaky-tests-s5` | | |
+| 5 | The ledger after the clock moves | merged | `claude/flaky-tests-s5` | [#308](https://github.com/cjcormack/lighting7/pull/308) | 5ff756b |
+| 6 | A socket's own broadcast | in review | `claude/elegant-bell-n17686` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -295,6 +296,47 @@ can be cut" is its assertion message, not a second case.
 - **D5.** The class, including the new test, 20 times under an 8-process CPU soak (load 4 to 11):
   20 of 20 passed. The `routes` package run that first failed it was not repeated under load; the
   soak stood in for it.
+
+### Session 6 — A socket's own broadcast
+
+Rows: the `WindowsSocketTest` viewOptions row.
+
+- **What is there (read, not reproduced).** `setupWindowsSubscriptions` subscribes to two flows:
+  the registry's `windows` `StateFlow`, which is the connect snapshot, and its `commands`, a
+  replay-0 `SharedFlow`. `SocketScope.subscribe` starts each collector with `launchIn(session)`,
+  which only schedules it. In the failing case, screen 2 sends `windows.viewOptions` as soon as its
+  snapshot arrives, then waits for the echo of its own command. If its `commands` collector has not
+  subscribed by the time the command is broadcast, nothing is replayed, and the wait runs into the
+  60 s rule. The class's other command cases first wait for their announce to come back, which
+  gives the collector time to start.
+- **Reproduce (D2).** Delay the `commands` collector's start while diagnosing, and expect the case
+  to time out at the 60 s rule. Then write a forcing test that emits on a replay-0 flow as soon as
+  `subscribe` returns, and check that it fails on `main`.
+- **Code or test (D3).** A client meets the same gap: a window that has just connected can miss a
+  command aimed at it or its own echo. So can any replay-0 broadcast a socket subscribes to
+  (`effects.fired`, a session revocation). So this is the code's to fix, in `subscribe`, not in the
+  test.
+- **Tests.** The class, the forcing test and, since `subscribe` carries every socket family, the
+  full backend suite locally.
+- **Recipe for D5.** The class and the forcing test 20 times under an 8-process CPU soak.
+- **Docs.** `docs/websocket-engineering.md`, beside the rule for `subscribeShow`.
+- **Result (2026-11-07, Linux cloud container, 4 cores).** The trace held, and it is D3's code case.
+  With the `commands` collector's start delayed 500 ms, the row's case timed out at the 60 s rule, as
+  on CI. So did "show, rename, fullscreen and follow are rebroadcast…" and "a follow aimed at a
+  disconnected window…": their announce round trip is shorter than the delay. `subscribe` now
+  launches its collector with `CoroutineStart.UNDISPATCHED`, so the collector runs in `subscribe`
+  up to its first suspension, which for a hot flow is after it has subscribed. That covers every
+  replay-0 family subscribed through `subscribe` at once. A `StateFlow`'s current value is now sent
+  from setup itself. `subscribeShow` keeps its gap, because its buffer starts the upstream in a
+  coroutine of its own. A socket that sets a tempo straight after connecting could still miss its
+  own `speedMasters.changed`. Nothing has been seen failing that way, so it is left as it is. The
+  forcing test, `SocketScopeSubscribeTest`, gives the scope a dispatcher that runs nothing until
+  the test drains it, so a dispatched start cannot win by luck. It then counts the flow's
+  subscribers as soon as `subscribe` returns, and emits once. With main's start it failed 5 of 5
+  runs (`subscribers 0, received nothing`). The full backend suite passed with the fix
+  (4626 tests).
+- **D5.** The class and the forcing test, 20 times under an 8-process CPU soak (load 6 to 14):
+  20 of 20 passed. The old code was not run under the soak; the forcing test stands in for it.
 
 ## 6. Adding a session
 

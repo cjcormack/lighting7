@@ -226,6 +226,18 @@ snapshot is what lands it on the new count. `grandMaster.state`,
 `stackFxAmount.state` and `surfaceScaler.state` predate the helper and spell the same
 `flatMapLatest` out by hand. `ShowFollowingSubscriptionsTest` holds a socket open across a switch.
 
+**`subscribe` has subscribed when it returns.** It starts its collector undispatched, so a hot flow
+handed straight in has this socket's subscriber before setup moves on, and so before the frame loop
+handles anything the socket sends. A replay-0 broadcast has nothing to replay, so a collector that
+started later could miss one the socket had just set off. That happened to `WindowsSocketTest`'s
+window, which sent `windows.viewOptions` straight after its snapshot and never heard its own echo.
+`effects.fired` and a session revocation have the same gap. A `StateFlow` handed straight in
+therefore has its current value sent from setup itself. A flow through a channel-based operator
+(`buffer`, `conflate`, `combine`, `flatMapLatest`, `flowOn`) starts its upstream in a coroutine of
+its own and gets no such guarantee. That covers every `subscribeShow`, `history.state`,
+`grandMaster.state`, `stackFxAmount.state` and the surface scaler and devices frames, so the burst
+still has no guaranteed order (§"Connection lifecycle"). `SocketScopeSubscribeTest` holds this.
+
 ## Domain families
 
 | Family | File | In | Out | Handler | Subscriptions |

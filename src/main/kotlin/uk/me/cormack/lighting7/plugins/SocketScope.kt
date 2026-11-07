@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.plugins
 
 import io.ktor.server.websocket.*
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -10,8 +11,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.serialization.SerialName
 import uk.me.cormack.lighting7.perf.DeskMetrics
@@ -128,8 +127,18 @@ class SocketScope(
         }
     }
 
+    /**
+     * Collect [flow] for the socket's life, sending each value through [onEach].
+     *
+     * The collector runs here up to its first suspension, so a hot flow handed straight in has
+     * this socket's subscriber before [subscribe] returns, and so before the socket handles its
+     * first inbound frame. Started later, it could miss a replay-0 broadcast this socket had
+     * itself set off, such as the echo of its own `windows.viewOptions`. A flow through a
+     * channel-based operator (`buffer`, `conflate`, `combine`, `flatMapLatest`, `flowOn`, so every
+     * [subscribeShow]) still starts its upstream in a coroutine of its own.
+     */
     fun <T> subscribe(flow: Flow<T>, onEach: suspend (T) -> Unit) {
-        jobs += flow.onEach(onEach).launchIn(session)
+        jobs += session.launch(start = CoroutineStart.UNDISPATCHED) { flow.collect { onEach(it) } }
     }
 
     /**
@@ -163,9 +172,9 @@ class SocketScope(
      * has never happened; a family backed by a `StateFlow` needs nothing here, because
      * [subscribe] already delivers that flow's current value.
      *
-     * A launch rather than a straight `send` because setup runs on the connection handler's own
-     * coroutine, before it reaches the frame loop. Tracked in [jobs] like a subscription, so a
-     * connection that hangs up mid-burst doesn't leave a send pending against a dead socket.
+     * Launched, so the snapshot is built and sent off the connection handler's coroutine. Tracked
+     * in [jobs] like a subscription, so a connection that hangs up mid-burst doesn't leave a send
+     * pending against a dead socket.
      */
     fun sendSnapshot(block: suspend SocketScope.() -> Unit) {
         jobs += session.launch { block() }
