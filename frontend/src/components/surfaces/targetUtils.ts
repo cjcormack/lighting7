@@ -105,8 +105,12 @@ export function describeTarget(target: BindingTarget): string {
       return `Flash ${describeTarget(target.target)}`
     case "blackout":
       return "Blackout"
+    case "blackoutSet":
+      return `Blackout ${target.on ? "on" : "off"}`
     case "grandMasterToggle":
       return "Grand Master"
+    case "grandMasterLevel":
+      return `Grand Master to ${Math.round(target.level)} %`
     case "grandMasterFader":
       return "Grand Master fader"
     case "stackFxAmount":
@@ -122,6 +126,8 @@ export function describeTarget(target: BindingTarget): string {
       }`
     case "speedMasterTap":
       return `Speed master tap tempo${target.masterUuid == null ? " · M1" : ""}`
+    case "speedMasterSetBpm":
+      return `Speed master to ${target.bpm} BPM${target.masterUuid == null ? " · M1" : ""}`
     case "speedMasterScale":
       return `Speed master tempo ${target.factor === 2 ? "×2" : "×½"}${target.masterUuid == null ? " · M1" : ""}`
     // The selection-relative arms name no target of their own, so `Sel` is doing real work: it is

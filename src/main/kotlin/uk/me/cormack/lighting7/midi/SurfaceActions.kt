@@ -137,6 +137,12 @@ interface SurfaceActions {
     fun toggleBlackout(): Boolean
     fun toggleGrandMaster(): Boolean
 
+    /** Set blackout [on] or off; already so is done, D4's no-op. */
+    fun setBlackout(on: Boolean): ActionOutcome
+
+    /** Set the grand master's level taken whole, [percent] 0–100 (OSC plan D10). */
+    fun setGrandMasterLevel(percent: Double): ActionOutcome
+
     /** Set the grand master's level from a continuous control, 0..127 across 0–100 %. */
     fun writeGrandMaster(midiValue7Bit: UByte)
 
@@ -157,7 +163,13 @@ interface SurfaceActions {
     fun writeSpeedMasterBpm(masterUuid: String?, minBpm: Double, maxBpm: Double, midiValue7Bit: UByte)
 
     /** Tap a speed master's tempo ([masterUuid] null → master 1). */
-    fun tapSpeedMaster(masterUuid: String?)
+    fun tapSpeedMaster(masterUuid: String?): ActionOutcome
+
+    /**
+     * Set a speed master's tempo taken whole ([masterUuid] null → master 1), 20–300 BPM: a typed
+     * tempo's write, so on a held master it moves the hold, and a follower refuses it.
+     */
+    fun setSpeedMasterBpm(masterUuid: String?, bpm: Double): ActionOutcome
 
     /** Halve or double a speed master's tempo ([masterUuid] null → master 1), fx-speed plan D12. */
     fun scaleSpeedMaster(masterUuid: String?, factor: Double) {}
@@ -452,6 +464,16 @@ class DefaultSurfaceActions(
 
     override fun toggleBlackout(): Boolean = globalScalerState.toggleBlackout()
     override fun toggleGrandMaster(): Boolean = globalScalerState.toggleGrandMaster()
+
+    override fun setBlackout(on: Boolean): ActionOutcome =
+        if (globalScalerState.setBlackout(on)) ActionOutcome.Done(if (on) "on" else "off")
+        else ActionOutcome.Done(if (on) "already on" else "already off")
+
+    override fun setGrandMasterLevel(percent: Double): ActionOutcome {
+        val scaler = globalScalerState
+        scaler.setGrandMasterLevel(percent.coerceIn(0.0, 100.0))
+        return ActionOutcome.Done("${scaler.grandMasterLevel.value.roundToInt()} %")
+    }
 
     override fun writeGrandMaster(midiValue7Bit: UByte) =
         globalScalerState.setGrandMasterLevel(grandMasterLevelOf7Bit(midiValue7Bit))
@@ -856,18 +878,25 @@ class DefaultSurfaceActions(
         minBpm: Double,
         maxBpm: Double,
         midiValue7Bit: UByte,
-    ) = withSpeedMasterTarget(masterUuid) { uuid ->
-        val bpm = minBpm + (maxBpm - minBpm) * (midiValue7Bit.toInt() / 127.0)
-        // MasterClock.setBpm coerces into 20..300 itself; the binding's window is a
-        // sub-range on top of that, not a replacement for it.
-        speedMasters.setBpm(uuid, bpm, SpeedMasterSource.MANUAL)
+    ) {
+        withSpeedMasterTarget(masterUuid) { uuid ->
+            val bpm = minBpm + (maxBpm - minBpm) * (midiValue7Bit.toInt() / 127.0)
+            // MasterClock.setBpm coerces into 20..300 itself; the binding's window is a
+            // sub-range on top of that, not a replacement for it.
+            speedMasters.setBpm(uuid, bpm, SpeedMasterSource.MANUAL)
+        }
     }
 
-    override fun tapSpeedMaster(masterUuid: String?) =
+    override fun tapSpeedMaster(masterUuid: String?): ActionOutcome =
         withSpeedMasterTarget(masterUuid) { speedMasters.tap(it) }
 
-    override fun scaleSpeedMaster(masterUuid: String?, factor: Double) =
+    override fun setSpeedMasterBpm(masterUuid: String?, bpm: Double): ActionOutcome =
+        withSpeedMasterTarget(masterUuid) { speedMasters.setBpm(it, bpm, SpeedMasterSource.MANUAL) }
+            .let { if (it is ActionOutcome.Done) ActionOutcome.Done("${"%.1f".format(java.util.Locale.ROOT, bpm)} BPM") else it }
+
+    override fun scaleSpeedMaster(masterUuid: String?, factor: Double) {
         withSpeedMasterTarget(masterUuid) { speedMasters.scale(it, factor) }
+    }
 
     /**
      * Resolve a tempo-write target, mirroring `SpeedMasterSocket.withWriteTarget`: null or
@@ -884,32 +913,37 @@ class DefaultSurfaceActions(
     private inline fun withSpeedMasterTarget(
         raw: String?,
         write: (java.util.UUID?) -> SpeedMasterBank.TempoWriteOutcome,
-    ) {
+    ): ActionOutcome {
         val outcome = if (raw == null) {
             write(null)
         } else {
             val uuid = speedMasterUuidOrNull(raw)
             if (uuid == null) {
                 warnTempoWriteDropped("Surface tempo write dropped: binding target '$raw' is not a uuid")
-                return
+                return ActionOutcome.NotFound("No speed master $raw in this show")
             }
             write(uuid)
         }
-        when (outcome) {
-            is SpeedMasterBank.TempoWriteOutcome.Applied -> {}
+        return when (outcome) {
+            is SpeedMasterBank.TempoWriteOutcome.Applied -> ActionOutcome.DONE
 
-            is SpeedMasterBank.TempoWriteOutcome.UnknownMaster -> warnTempoWriteDropped(
-                "Surface tempo write dropped: no speed master with uuid '$raw' — " +
-                    "re-learn the binding if the master was deleted",
-            )
+            is SpeedMasterBank.TempoWriteOutcome.UnknownMaster -> {
+                warnTempoWriteDropped(
+                    "Surface tempo write dropped: no speed master with uuid '$raw' — " +
+                        "re-learn the binding if the master was deleted",
+                )
+                ActionOutcome.NotFound("No speed master $raw in this show")
+            }
 
-            is SpeedMasterBank.TempoWriteOutcome.RefusedFollower -> warnTempoWriteDropped(
-                "Surface tempo write refused: ${outcome.describe}",
-            )
+            is SpeedMasterBank.TempoWriteOutcome.RefusedFollower -> {
+                warnTempoWriteDropped("Surface tempo write refused: ${outcome.describe}")
+                ActionOutcome.Refused(ActionOutcome.SPEED_MASTER_FOLLOWER, outcome.describe)
+            }
 
-            is SpeedMasterBank.TempoWriteOutcome.OutOfRange -> warnTempoWriteDropped(
-                "Surface tempo write refused: ${outcome.describe}",
-            )
+            is SpeedMasterBank.TempoWriteOutcome.OutOfRange -> {
+                warnTempoWriteDropped("Surface tempo write refused: ${outcome.describe}")
+                ActionOutcome.Refused(ActionOutcome.SPEED_MASTER_RANGE, outcome.describe)
+            }
         }
     }
 

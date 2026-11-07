@@ -153,6 +153,9 @@ export function targetControlKind(target: BindingTarget): ControlKind | null {
     case 'grandMasterToggle':
     case 'setBank':
     case 'speedMasterTap':
+    case 'speedMasterSetBpm':
+    case 'blackoutSet':
+    case 'grandMasterLevel':
     case 'speedMasterScale':
     case 'applyLook':
     case 'lookSet':

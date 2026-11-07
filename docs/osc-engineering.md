@@ -3,14 +3,15 @@
 QLab and other show-control senders drive the desk over OSC: a Network cue sends one message, an
 address and optional arguments, and the desk does what the address names. The plan is
 [`plans/osc-plan.md`](plans/osc-plan.md); this document is what is built. Session 1 is the listener,
-stacks, Looks, loose cues and busk pads. Masters and tempo, and finding addresses, are session 2's;
-learnable addresses, feedback and TCP session 3's.
+stacks, Looks, loose cues and busk pads; session 2 masters and tempo, and finding addresses: the
+listing, *Copy OSC address*, the cheat sheet and the moved-address warning. Learnable addresses,
+feedback and TCP are session 3's.
 
 ## The address set
 
 Every address starts `/lighting7/` and acts on the **current project** (D7). The table is
-`osc/OscAddresses.kt`'s `entries`, the one copy the resolver, the tests and (session 2) the address
-listing read (P2):
+`osc/OscAddresses.kt`'s `entries`, the one copy the resolver, the tests and the address listing read
+(P2):
 
 | Address | Args | Does | Target |
 |---|---|---|---|
@@ -27,6 +28,10 @@ listing read (P2):
 | `/look/{look}/press` | – | Toggle the Look | `ApplyLook` |
 | `/busk/{page}/{bank}/{pad}/press` | – | Press a pad, on the desk selection | `PressPad` |
 | `/busk/{page}/show` | – | Show that busk page | `BuskPageSet` |
+| `/blackout` | number, optional | Set blackout, non-zero on; toggle with no argument | `BlackoutSet` · `Blackout` |
+| `/grandmaster` | number 0–1 | The grand master's level, taken whole and clamped | `GrandMasterLevel` |
+| `/tempo/{master}` | number, BPM | Set a speed master's tempo, 20–300 | `SpeedMasterSetBpm` |
+| `/tempo/{master}/tap` | – | One tap | `SpeedMasterTap` |
 
 **Names are slugs** (D3): `slugOf` in `models/slug.kt`, shared with the MCP setup tools — lower
 case, every run of anything but ASCII letters and digits one `-`, trimmed, at most 100 characters.
@@ -35,7 +40,14 @@ two records share is **ambiguous** and refused, naming both; a separator is neve
 slugs to nothing has no address. Cue names are not unique, so `/cue/{cue}` works only for one whose
 name is; a cue in a stack is addressed by number, matched by value (`cueNumberValue`: `12.5` and
 `12.50` are one cue). `{bank}` counts banks down each column, columns left to right, rows top to
-bottom; `{pad}` counts a bank's pads, a malformed pad taking no place.
+bottom; `{pad}` counts a bank's pads, a malformed pad taking no place. `{master}` is a speed master's
+display index — `/tempo/2` is M2 — and an index the show has no master at is not found.
+
+**Values are taken whole** (D10): the grand master's 0–1 becomes 0–100 % and a tempo is a BPM, rather
+than through the 128 steps a MIDI fader has. A number outside 0–1 for the grand master is clamped; a
+tempo outside 20–300, or a non-finite number anywhere, is a *bad message* and moves nothing. A tempo
+is a typed tempo's write, so on a master the programmer holds it moves the hold, and a master that
+follows another refuses it (`SPEED_MASTER_FOLLOWER`). `/blackout 1` sent twice is *already on*.
 
 The resolver reads the database for every message, in one transaction, as a REST request does
 (`DbOscLookup`). A rename is answered by the very next message, so nothing is cached and nothing
@@ -61,7 +73,9 @@ loose cues, with Looks where the operator may take them over.
 Every address resolves to a `BindingTarget` and runs through `midi/SurfaceDispatch.kt`, the dispatch
 a MIDI surface's router uses (D2): `press` for a button target, `level` for a value taken whole. So a
 new action is added as a target, and a MIDI surface gains it too — the five targets above that are
-new are in the binding picker. The actions answer an `ActionOutcome` (`Done(detail)`,
+new are in the binding picker, and so are session 2's three: *Blackout — on / off*, *Grand Master —
+set level* and *Speed master — Set tempo*, each a button that lands one state. The actions answer an
+`ActionOutcome` (`Done(detail)`,
 `Refused(code, message)`, `NotFound(message)`, `Failed(message)`), which becomes the log row.
 
 ## The receive path
@@ -108,12 +122,12 @@ they never sync, and need no migration.
 
 `osc.state` (`plugins/MachineSocket.kt`) goes to every socket on the desk's own listener, operators'
 included (D12), and none on the public one: `{enabled, listening, port, error?, received, dropped,
-refused, refusedSenders, recent}`, at most four times a second. Each of the last 50 messages is a
+refused, refusedSenders, recent, warnings}`, at most four times a second. Each of the last 50 messages is a
 row — time, sender (the allowlist's name), address, arguments, outcome and a one-line detail naming
 what it reached (*GO TO 31 Storm builds in Act 2*) or why it did nothing (*No stack `act-3` in this
 show*). Outcomes: **done**, **not found**, **ambiguous**, **refused**, **failed**, **bad message**.
 A dropped message never reaches the collector, so drops are a count, not rows. Every address resolved
-since the desk started is kept, lower-cased (at most 1,000), for session 2's rename warning.
+since the desk started is kept, lower-cased and by project (at most 1,000), with what it reached.
 `osc.messages` (`result`: `received`, `dropped`, `refused`) goes into the 30-second metrics.
 
 Each message is also an `osc.message` Sentry transaction, named by the pattern it matched rather than
@@ -121,9 +135,51 @@ the address it carried, tagged with its outcome, with spans for the resolve and 
 time it waited in the channel — at the sample rate and at most five a second, so a flood runs
 untraced past the budget. See `docs/observability-engineering.md` §"Where transactions start".
 
-Numbers and positions move where names fail loudly: renumbering a cue, an insert that relabels auto
-numbers, or moving a bank or a pad can point an address at a different record. That is why every
-*done* row names the record it reached.
+## Finding addresses
+
+`GET /api/rest/projects/{id}/osc/addresses` (`routes/projectOsc.kt`) is every address the project
+answers to: `{prefix, patterns, addresses: [{address, pattern, args, does, reaches, target, record?}],
+ambiguous: [{message, records, addresses}], unaddressed: [{kind, id, uuid, name, reason}]}`. It is made
+from the table and answered by the resolver (P2): each placeholder is filled with every value the
+project has — every stack's slug, each stack's cue numbers, every page's banks and pads, every master's
+index — and each address so made is run through `resolve`, so a row says exactly what a message would
+do. A slug two records share is one `ambiguous` row naming them and the addresses it makes; a name with
+no ASCII letter or digit, or a cue entry with no number, is `unaddressed`. `record` (`{kind, id, uuid}`,
+`STACK | ENTRY | CUE | LOOK | PAGE | PAD | MASTER`) is what the client finds a record's addresses by. Any
+project, both roles, and never on the public listener (403 `OSC_LOCAL_ONLY`, D5), so the client draws no
+*Copy OSC address* in remote mode; the reads, and each record's slug, are worked out once a request.
+
+**Copy OSC address** is a submenu on a stack's ⋯ (the Show view), a cue's ⋯ (`CueActions`: the entry's
+GO TO and standby, then the cue's loose hold), a busk pad's hold menu, and an *OSC address* button on
+a Look's sheet (`components/osc/CopyOscAddressMenu.tsx`). It reads the listing as it opens, so it
+follows a rename, and says why where a record has none. **Print cheat sheet**, on the OSC tab, opens
+every address of the current show as one printable page (`lib/oscCheatSheet.ts`), by kind, with the
+names that have none.
+
+## Addresses that move
+
+Names fail loudly: a renamed stack's address answers *not found*. Numbers and positions do not:
+renumbering a cue, an insert or delete that relabels auto numbers, moving a bank or a pad, or deleting
+a speed master (a new one takes the next free index, which can be the deleted one's) can point an
+address at a different record. So every *done* row names the record it reached, and the desk warns.
+
+`OscService.attach(fixtures)` listens to the live show's `cueStackListChanged`, `cueListChanged`,
+`lookListChanged`, `speedMasterListChanged` and `buskLayoutChanged`. Each only signals a conflated
+channel, and so does attaching a show — a reload or a switch brings its changes with it, a sync
+pull's rename among them; 300 ms later the collector (`checkReceived`) re-reads what every address
+received in the current project reaches (`OscAddresses.reachAll`, the resolver with a nominal argument,
+every list read once) and compares it with what it reached when last read, by the record it names
+(`identityOf`: the kind and uuid, never the value a tempo carries; for an address naming no record,
+`/blackout` with or without its flag, its row, which nothing moves). One that now reaches another record, or none, is a line of a warning —
+`osc.state`'s `warnings: [{id, at, changes: [{address, was, now?, reason?}]}]`, the last 10, newest
+first — and the new answer becomes what it reached, so one change warns once. A GO fires
+`cueStackListChanged` too, which costs a re-read of the received addresses and warns nothing. The
+warning is said after the change, with Undo to take it back, rather than asked before it: the eight
+changes are made in a dozen places, and only the desk knows what a renumber relabels.
+`components/osc/OscAddressAnnouncer.tsx`, mounted by `Layout`, toasts each warning newer than those
+this window has seen — never one from the snapshot a window connects to — and the OSC tab lists them.
+Warning ids start from the desk's boot clock, so a window that outlives a restart still reads the next
+one as new.
 
 ## History
 

@@ -10,13 +10,17 @@ import { Label } from '@/components/ui/label'
 import { formatError } from '@/lib/formatError'
 import { useAuthStatusQuery } from '@/store/auth'
 import {
+  useLazyOscAddressesQuery,
   useOscSettingsQuery,
   useOscState,
   useSaveOscSettingsMutation,
   type OscSettings,
   type OscSettingsRequest,
 } from '@/store/osc'
-import type { OscLogRow, OscOutcome, OscState } from '@/api/oscWsApi'
+import type { OscAddressWarning, OscLogRow, OscOutcome, OscState } from '@/api/oscWsApi'
+import { useCurrentProjectQuery } from '@/store/projects'
+import { describeAddressChange } from '@/lib/oscAddresses'
+import { openCheatSheetWindow, printOscCheatSheet } from '@/lib/oscCheatSheet'
 
 /**
  * The OSC tab (lighting7 OSC plan §4, `docs/osc-engineering.md`): whether the desk is listening for
@@ -46,6 +50,8 @@ export function OscPanel() {
       {state != null && state.refusedSenders.length > 0 && (
         <RefusedCard state={state} isAdmin={isAdmin} onAllow={setAllowing} />
       )}
+      <CheatSheetCard />
+      {(state?.warnings?.length ?? 0) > 0 && <WarningsCard warnings={state!.warnings!} />}
       <LogCard rows={state?.recent ?? []} />
     </div>
   )
@@ -272,6 +278,65 @@ const OUTCOME_WORDS: Record<OscOutcome, string> = {
 function OutcomeChip({ outcome }: { outcome: OscOutcome }) {
   const variant = outcome === 'DONE' ? 'secondary' : outcome === 'FAILED' ? 'destructive' : 'outline'
   return <Badge variant={variant}>{OUTCOME_WORDS[outcome]}</Badge>
+}
+
+/** The addresses the current show answers to, as a printable page for the sound department. */
+function CheatSheetCard() {
+  const { data: project } = useCurrentProjectQuery()
+  const [read, { isFetching }] = useLazyOscAddressesQuery()
+  const open = async () => {
+    if (project == null) return
+    const win = openCheatSheetWindow()
+    if (win == null) {
+      toast.error('The browser blocked the cheat sheet’s window')
+      return
+    }
+    try {
+      printOscCheatSheet(win, await read(project.id).unwrap(), project.name)
+    } catch (err) {
+      win.close()
+      toast.error(`Couldn’t read the addresses: ${formatError(err)}`)
+    }
+  }
+  return (
+    <Card className="p-4 space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-sm font-medium">Addresses</div>
+        <Button variant="outline" size="sm" disabled={project == null || isFetching} onClick={() => void open()}>
+          {isFetching && <Loader2 className="size-3.5 animate-spin" />}
+          Print cheat sheet
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Every address {project != null ? <em>{project.name}</em> : 'this show'} answers to, for the sound
+        department. A stack&rsquo;s, a cue&rsquo;s, a Look&rsquo;s and a busk pad&rsquo;s menu each have{' '}
+        <em>Copy OSC address</em>.
+      </p>
+    </Card>
+  )
+}
+
+/** Addresses a sender has used that a change since moved: newest first, as the desk keeps them. */
+function WarningsCard({ warnings }: { warnings: OscAddressWarning[] }) {
+  return (
+    <Card className="p-4 space-y-2">
+      <div className="text-sm font-medium">Addresses that moved</div>
+      <ul className="divide-y">
+        {warnings.map((warning) => (
+          <li key={warning.id} className="grid grid-cols-[auto_1fr] gap-x-3 py-1.5 text-sm">
+            <span className="text-xs text-muted-foreground tabular-nums">{timeOf(warning.at)}</span>
+            <ul className="space-y-0.5">
+              {warning.changes.map((change) => (
+                <li key={change.address} className="text-xs break-all">
+                  {describeAddressChange(change)}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  )
 }
 
 function LogCard({ rows }: { rows: OscLogRow[] }) {

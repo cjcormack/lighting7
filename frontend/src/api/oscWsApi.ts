@@ -23,6 +23,24 @@ export interface OscRefusedSender {
   lastAt: string
 }
 
+/**
+ * A received address a change moved: it reached `was` and now reaches `now`, or nothing (`now`
+ * null, `reason` why). Mirrors `OscAddressChangeDto`.
+ */
+export interface OscAddressChange {
+  address: string
+  was: string | null
+  now: string | null
+  reason?: string | null
+}
+
+/** One change's moved addresses; `id` only grows, so a window announces those it has not seen. */
+export interface OscAddressWarning {
+  id: number
+  at: string
+  changes: OscAddressChange[]
+}
+
 /** Mirrors `OscStateDto` in lighting7's `osc/OscService.kt`. Counts are since the desk started. */
 export interface OscState {
   enabled: boolean
@@ -37,6 +55,8 @@ export interface OscState {
   refusedSenders: OscRefusedSender[]
   /** Newest first, at most 50. */
   recent: OscLogRow[]
+  /** Received addresses a change moved, newest first, at most 10. Absent from a session-1 desk. */
+  warnings?: OscAddressWarning[]
 }
 
 /**

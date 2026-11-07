@@ -667,6 +667,8 @@ export function SurfaceLibrary({
       strip: null,
       chips: [
         actionChip("blackout", "Blackout", { type: "blackout" }),
+        actionChip("blackout-on", "Blackout on", { type: "blackoutSet", on: true }),
+        actionChip("blackout-off", "Blackout off", { type: "blackoutSet", on: false }),
         actionChip("gm", "Grand master", { type: "grandMasterToggle" }),
         actionChip("gm-fader", "GM fader", { type: "grandMasterFader" }),
         ...banks.map((bank) =>

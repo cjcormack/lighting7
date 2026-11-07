@@ -1075,6 +1075,11 @@ class State(val config: ApplicationConfig) {
 
     val osc: uk.me.cormack.lighting7.osc.OscService by oscDelegate
 
+    /** Point OSC's moved-address warning at [show], where anything started OSC. */
+    private fun attachOsc(show: Show) {
+        if (oscDelegate.isInitialized()) runCatching { osc.attach(show.fixtures) }
+    }
+
     /** Close the OSC listener if anything started it; reading [osc] here would build one to close. */
     fun closeOsc() {
         if (oscDelegate.isInitialized()) runCatching { osc.close() }
@@ -1127,6 +1132,7 @@ class State(val config: ApplicationConfig) {
         sceneryService.attach(show, GlobalScope)
         effectsService.attach(show)
         rigSafety.attach(show)
+        attachOsc(show)
         // Re-attach the feedback publisher to the new show's fixture listener on project
         // switch so motor / LED drive follows the composition model of the active project.
         projectChangedJob = GlobalScope.launch {
@@ -1173,6 +1179,7 @@ class State(val config: ApplicationConfig) {
                 // A bulk run belongs to the show being left, and another show's output is not the safe
                 // rig *Ready to switch off* described; what *Undo* would strike is kept per project.
                 rigSafety.attach(projectManager.show)
+                attachOsc(projectManager.show)
                 // Patch / cue / stack row identities flip on project switch; re-evaluate
                 // cached binding health against the new show.
                 controlSurfaceBindingService.invalidateHealth(projectManager.currentProject.id.value)

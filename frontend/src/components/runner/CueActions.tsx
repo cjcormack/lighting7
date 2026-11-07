@@ -49,6 +49,7 @@ import type { CueToDelete } from '@/components/cues/CueDeleteDialog'
 import { useCueActionDialogs } from './cueActionDialogs'
 import { TIMELINE_LAST_FOLD_CLASS } from './timelineFolds'
 import { isRemoteMode } from '@/lib/remoteMode'
+import { CopyOscAddressMenu } from '@/components/osc/CopyOscAddressMenu'
 
 /** One row the actions act on: a cue, and the entry it was opened from (null for a loose cue). */
 export interface CueActionRow {
@@ -462,6 +463,14 @@ export function CueActions({
           ))}
         </DropdownMenuSubContent>
       </DropdownMenuSub>
+      {/* The addresses QLab sends to reach this place and this cue (lighting7 OSC plan §4). */}
+      {one != null && (
+        <CopyOscAddressMenu
+          projectId={projectId}
+          records={[...(one.entryId != null ? [{ kind: 'ENTRY' as const, id: one.entryId }] : []), { kind: 'CUE', id: one.cueId }]}
+          menu="dropdown"
+        />
+      )}
       {/* A link names this origin, which only the cloud's shell can open in remote mode. */}
       {!isRemoteMode() && (
         <DropdownMenuItem

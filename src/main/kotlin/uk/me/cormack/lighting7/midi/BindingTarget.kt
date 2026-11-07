@@ -23,8 +23,8 @@ import uk.me.cormack.lighting7.state.SubselectMode
  *   - **Discrete** ([CueStackGo], [CueStackBack], [CueStackPause], [CueStackGoTo], [CueStackStandby],
  *     [CueStackStop], [FireCue], [LooseCueSet], [SpeedMasterTap], [SpeedMasterScale], [FireTrigger]) —
  *     button press invokes a service call.
- *   - **Momentary / global / meta** ([Flash], [Blackout], [GrandMasterToggle], [SetBank]) —
- *     press / release change transport-level state.
+ *   - **Momentary / global / meta** ([Flash], [Blackout], [BlackoutSet], [GrandMasterToggle],
+ *     [GrandMasterLevel], [SpeedMasterSetBpm], [SetBank]) — press / release change transport-level state.
  *   - **Selection-relative** ([SelectionAttribute], [SelectionFan], [SelectTarget], [ClearSelection],
  *     [LocateSelection]) — the desk's selection (`state.DeskSelection`) is the target set, so
  *     one fader or button reaches whatever the operator has selected rather than one fixed thing.
@@ -169,6 +169,14 @@ sealed class BindingTarget {
     @SerialName("blackout")
     data object Blackout : BindingTarget()
 
+    /**
+     * Set blackout [on] or off on press — [Blackout]'s explicit form (OSC plan D4): pressed twice,
+     * it lands the same state.
+     */
+    @Serializable
+    @SerialName("blackoutSet")
+    data class BlackoutSet(val on: Boolean) : BindingTarget()
+
     /** Toggle Grand Master (global intensity scaler) on press: to 0, and back to its last level. */
     @Serializable
     @SerialName("grandMasterToggle")
@@ -178,6 +186,18 @@ sealed class BindingTarget {
     @Serializable
     @SerialName("grandMasterFader")
     data object GrandMasterFader : BindingTarget()
+
+    /**
+     * Set the grand master to [level] percent, 0–100, on press — a level taken whole (OSC plan D10),
+     * which an OSC `/grandmaster` builds from the number it carries.
+     */
+    @Serializable
+    @SerialName("grandMasterLevel")
+    data class GrandMasterLevel(val level: Double) : BindingTarget() {
+        init {
+            require(level.isFinite() && level in 0.0..100.0) { "GrandMasterLevel level must be in 0..100" }
+        }
+    }
 
     /**
      * Set a cue stack's FX amount (effects plan D10) from a fader / encoder: 0..127 across
@@ -227,6 +247,21 @@ sealed class BindingTarget {
         companion object {
             const val DEFAULT_MIN_BPM = 60.0
             const val DEFAULT_MAX_BPM = 180.0
+        }
+    }
+
+    /**
+     * Set a speed master's tempo to [bpm] on press ([masterUuid] null → master 1), a tempo taken
+     * whole (OSC plan D10). A tempo write like [SpeedMasterTap]'s: on a held master it moves the hold,
+     * and a follower refuses it.
+     */
+    @Serializable
+    @SerialName("speedMasterSetBpm")
+    data class SpeedMasterSetBpm(val masterUuid: String? = null, val bpm: Double) : BindingTarget() {
+        init {
+            require(bpm.isFinite() && bpm >= MasterClock.MIN_BPM && bpm <= MasterClock.MAX_BPM) {
+                "SpeedMasterSetBpm bpm must sit within ${MasterClock.MIN_BPM}..${MasterClock.MAX_BPM}"
+            }
         }
     }
 
