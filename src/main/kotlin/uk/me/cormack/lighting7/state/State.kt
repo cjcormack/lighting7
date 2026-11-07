@@ -86,6 +86,9 @@ class State(val config: ApplicationConfig) {
     /** When [initDatabase] opened and reconciled the schema: the boot trace's first span, taken before Sentry starts. */
     var databaseInitWindow: Pair<java.time.Instant, java.time.Instant>? = null
         private set
+
+    /** Set when database step 13 met the tunnel's schema this start: its credential and files go once [credentialStore] exists. */
+    private var retiredRemoteAccess = false
     val database = initDatabase()
     val projectManager = ProjectManager(database) { this }
 
@@ -113,37 +116,15 @@ class State(val config: ApplicationConfig) {
     /** The browser's envelope spool behind `POST /api/sentry`; only `Application.module()` forwards it. */
     val browserTunnel = uk.me.cormack.lighting7.telemetry.BrowserTunnel(telemetry, appDataDir().resolve("sentry-browser"))
 
-    /** The `mcp { }` block: the MCP listener's port, bind address and public URL. */
+    /** The `mcp { }` block: the public listener's port and bind address. */
     val mcpConfig = uk.me.cormack.lighting7.mcp.McpConfig.from(config)
 
-    /**
-     * OAuth for the MCP listener. Eager, not lazy, and after [authService]: it registers for
-     * [AuthService]'s credential revocations in its constructor, and a revocation it missed
-     * (a password change before anything touched MCP) would leave a grant alive.
-     */
-    val mcpAuthService = uk.me.cormack.lighting7.mcp.McpAuthService(
-        database, authService, mcpConfig, publicUrl = { remoteAccess.publicUrl() },
-    )
-
-    /**
-     * Remote access: the ngrok tunnel to the public listener, its machine-local settings and the
-     * desk's public URL. Lazy, like [updateService], so the many tests that build a `State`
-     * never construct a supervisor; [shutdown] checks the delegate for the same reason.
-     */
-    private val remoteAccessDelegate = lazy {
-        uk.me.cormack.lighting7.mcp.tunnel.RemoteAccessService(
-            database = database,
-            mcpConfig = mcpConfig,
-            credentialStore = { credentialStore },
-            workDir = appDataDir().resolve("ngrok"),
-        )
-    }
-
-    val remoteAccess: uk.me.cormack.lighting7.mcp.tunnel.RemoteAccessService by remoteAccessDelegate
+    /** What a remote caller may do beyond running the show: the scripts, effects and commands switches. */
+    val remotePolicy = uk.me.cormack.lighting7.cloud.RemotePolicy(database)
 
     /**
      * Lighting7 Cloud: this desk's adoption and its `cloud.state` (cloud-p0 plan). Lazy, like
-     * [remoteAccess], and started only by `Application.module()`, so a test's `State` polls nothing.
+     * [updateService], and started only by `Application.module()`, so a test's `State` polls nothing.
      */
     private val cloudDelegate = lazy {
         uk.me.cormack.lighting7.cloud.CloudService(
@@ -375,6 +356,10 @@ class State(val config: ApplicationConfig) {
                 ?: error("Install row missing — `ensureInstallRow` should have created it on startup.")
         }
         CredentialStoreFactory.create(backend, fallbackPath, installUuid)
+    }
+
+    init {
+        if (retiredRemoteAccess) RetiredRemoteAccessMigration.retireLeftovers({ credentialStore }, appDataDir().resolve("ngrok"))
     }
 
     /**
@@ -1198,7 +1183,6 @@ class State(val config: ApplicationConfig) {
         // Via the delegate, not the property: reading `updateService` here would construct the
         // service purely to close it, on every test that builds a State and shuts it down.
         if (updateServiceDelegate.isInitialized()) runCatching { updateService.close() }
-        if (remoteAccessDelegate.isInitialized()) runCatching { remoteAccess.close() }
         if (cloudDelegate.isInitialized()) runCatching { cloud.close() }
 
         runCatching { projectManager.show.close() }
@@ -1480,6 +1464,10 @@ class State(val config: ApplicationConfig) {
         // fx-speed plan step 12: every stored FX on Seconds onto Own tempo, or Natural, and the column
         // dropped, backed up first when one moves. After step 11. `OwnTempoMigration.kt`.
         OwnTempoMigration.runIfNeeded(ds, database, dbPath)
+
+        // cloud-p1 plan step 13: the tunnel's and the desk's OAuth server's tables and columns dropped,
+        // backed up first when a client or grant goes. After step 12. `RetiredRemoteAccessMigration.kt`.
+        retiredRemoteAccess = RetiredRemoteAccessMigration.runIfNeeded(ds, database, dbPath)?.legacy == true
 
         databaseInitWindow = startedAt to java.time.Instant.now()
         return database

@@ -36,8 +36,6 @@ import uk.me.cormack.lighting7.models.DaoLookRows
 import uk.me.cormack.lighting7.models.DaoLookScenery
 import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoMachineOverrides
-import uk.me.cormack.lighting7.models.DaoMcpOAuthClients
-import uk.me.cormack.lighting7.models.DaoMcpOAuthGrants
 import uk.me.cormack.lighting7.models.DaoOAuthIdentities
 import uk.me.cormack.lighting7.models.DaoPaletteFx
 import uk.me.cormack.lighting7.models.DaoPaletteRows
@@ -181,9 +179,7 @@ object SyncDispositions {
         DaoSyncLogEntries to SyncDisposition.MachineLocal("local sync activity log"),
         DaoUsers to SyncDisposition.MachineLocal("desk-local user accounts; never leave this machine"),
         DaoUserSessions to SyncDisposition.MachineLocal("live login sessions for this desk"),
-        DaoMcpOAuthClients to SyncDisposition.MachineLocal("OAuth clients registered with this desk's MCP server"),
-        DaoMcpOAuthGrants to SyncDisposition.MachineLocal("MCP OAuth grants: per-desk credentials, like sessions"),
-        DaoRemoteAccessSettingsTable to SyncDisposition.MachineLocal("this desk's ngrok tunnel: its public domain and whether it is on"),
+        DaoRemoteAccessSettingsTable to SyncDisposition.MachineLocal("what this desk lets a remote caller do: scripts, effects, fixture commands"),
         DaoTelemetrySettingsTable to SyncDisposition.MachineLocal("this install's consent to send errors and logs to Sentry"),
         DaoPasswordResetTokens to SyncDisposition.MachineLocal("short-lived local password reset tokens"),
         DaoEffectTubeStates to SyncDisposition.MachineLocal("which confetti tubes on this rig are spent: the physical cannon, not the show"),

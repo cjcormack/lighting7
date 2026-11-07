@@ -2007,7 +2007,7 @@ and have `stageJpackageInput`'s verifier fail an unsigned one on a release build
 
 Lighting7 Cloud relays each MCP call and its result in one control-channel frame of at most 8 MiB
 (cloud-p1 plan D15). The cloud refuses a request body over 7 MiB (`REQUEST_TOO_LARGE`), so
-`upload_scene_image` through the cloud takes an image of about 5 MB rather than the 16 MB `/mcp` takes,
+`upload_scene_image` through the cloud takes an image of about 5 MB rather than the 16 MB the tool allows,
 and the desk answers a result over the frame limit with a JSON-RPC error (`cloud/McpRelay.kt`).
 
 **Trigger**: an operator's Claude, through the cloud, needs a larger image than that, or a tool answers

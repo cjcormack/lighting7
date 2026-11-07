@@ -14,10 +14,11 @@ import io.ktor.server.response.respondText
 import io.ktor.http.ContentType
 import io.ktor.util.AttributeKey
 import kotlinx.serialization.json.Json
+import java.net.URI
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.auth.routingNormalisedPath
 import uk.me.cormack.lighting7.routes.ErrorResponse
 import uk.me.cormack.lighting7.state.State
-import java.net.URI
 
 private val log = LoggerFactory.getLogger("RemoteRequests")
 
@@ -25,12 +26,15 @@ private val RemoteRequestKey = AttributeKey<Boolean>("lighting7.remoteRequest")
 
 /**
  * True for every request that arrived on the public listener (`mcp.port`) — which is what the
- * ngrok tunnel points at, so everything on it is treated as coming from the internet. Decided
- * **by port, never by a header**: the tunnel's requests reach the desk from 127.0.0.1, so the
- * peer address says nothing, and a forwarded header is whatever the caller chose to send.
+ * sidecar forwards remote sessions into, so everything on it is treated as coming from the internet.
+ * Decided **by port, never by a header**: the sidecar's requests reach the desk from 127.0.0.1, so
+ * the peer address says nothing, and a forwarded header is whatever the caller chose to send.
  */
 val ApplicationCall.isRemote: Boolean
     get() = attributes.getOrNull(RemoteRequestKey) == true
+
+/** Password sign-in, refused on the public listener: a remote caller signs in through the cloud. */
+const val CODE_REMOTE_PASSWORD_SIGN_IN = "REMOTE_PASSWORD_SIGN_IN"
 
 /** A script, or an undo that would put one back, refused over remote access. */
 const val CODE_REMOTE_SCRIPTS_DISABLED = "REMOTE_SCRIPTS_DISABLED"
@@ -41,11 +45,11 @@ class RemoteScriptsDisabledException :
 
 /** Whether this caller may compile, run or save a script: always on the LAN, per the setting remotely. */
 fun ApplicationCall.scriptsAllowed(state: State): Boolean =
-    !isRemote || state.remoteAccess.allowRemoteScripts
+    !isRemote || state.remotePolicy.allowScripts
 
 /**
- * Refuse a script-authoring or script-running request that came through the tunnel while
- * Remote access's "allow scripts" is off. A script runs as the desk process, so a stolen remote
+ * Refuse a script-authoring or script-running request from the public listener while Remote
+ * access's "allow scripts" is off. A script runs as the desk process, so a stolen remote
  * session would otherwise be code execution on the show machine.
  */
 fun ApplicationCall.requireScriptAccess(state: State) {
@@ -58,10 +62,10 @@ class RemoteEffectsDisabledException :
 
 /** Whether this caller may arm the desk, fire a one-shot trigger or reload one: always on the LAN, per the setting remotely. */
 fun ApplicationCall.effectsAllowed(state: State): Boolean =
-    !isRemote || state.remoteAccess.allowRemoteEffects
+    !isRemote || state.remotePolicy.allowEffects
 
 /**
- * Refuse an arm, a fire or a reload that came through the tunnel while Remote access's "allow arming
+ * Refuse an arm, a fire or a reload from the public listener while Remote access's "allow arming
  * and firing" is off (stage-view plan session 9, P2, D16) — the [requireScriptAccess] twin. A cannon
  * spends something physical in a room a remote caller cannot see, so it is off unless an admin turns
  * it on; on the desk's own listener both roles may arm and fire.
@@ -76,10 +80,10 @@ class RemoteCommandsDisabledException :
 
 /** Whether this caller may run a fixture command: always on the LAN, per the setting remotely. */
 fun ApplicationCall.commandsAllowed(state: State): Boolean =
-    !isRemote || state.remoteAccess.allowRemoteCommands
+    !isRemote || state.remotePolicy.allowCommands
 
 /**
- * Refuse a fixture command — a reset, a lamp strike, a lamp off — that came through the tunnel while
+ * Refuse a fixture command — a reset, a lamp strike, a lamp off — from the public listener while
  * Remote access's "allow fixture commands" is off (fixture optics plan session 7, D13), the
  * [requireEffectsAccess] twin. A lamp off is a dark head for eight minutes and a reset swings it through
  * its travel, in a room a remote caller cannot see; on the desk's own listener both roles may run one,
@@ -96,24 +100,31 @@ private val errorJson = Json { explicitNulls = false }
  * refuses what must never be done from outside —
  *
  * - **Anything under `/api` on a desk with no accounts.** A zero-user desk is bootstrap-open on
- *   the LAN by design; through a tunnel it would let anyone create the first admin.
+ *   the LAN by design; from outside it would let anyone create the first admin.
  * - **The two QR redemption flows** (`/auth/reset/…`, `/auth/device/…`). "Same network" is their
- *   whole trust boundary, and a tunnel request arrives from loopback, so the LAN-peer check alone
+ *   whole trust boundary, and a remote request arrives from loopback, so the LAN-peer check alone
  *   would wave it through. 404, so a probe learns nothing.
  * - **The API docs** (`/api.json`, `/openapi`): a map of the API is no use to a remote operator.
+ * - **What the desk's own OAuth server and MCP endpoint answered** (`/mcp`, `/oauth/…`,
+ *   `/.well-known/…`), 404 rather than the SPA's page, so a connector added before MCP moved to
+ *   Lighting7 Cloud fails plainly.
+ * - **Password sign-in** (`/auth/login`). A remote caller signs in through Lighting7 Cloud with a
+ *   bearer token; the public listener sets and reads no session cookie (`auth/AuthGate.kt`).
  * - **A state-changing request or WebSocket upgrade from a foreign `Origin`.** On the LAN the
  *   desk's CSRF answer is SameSite=Lax plus JSON-only bodies; a browser's WebSocket carries no
- *   such guarantee, so remotely the origin must be the desk's own public URL (or loopback on this
- *   port, or for a request through the sidecar the cloud's origin for this install). A request with
- *   no `Origin` is not a browser and passes. `/mcp` and `/oauth/…` keep their own rules.
+ *   such guarantee, so remotely the origin must be loopback on this port, or for a request through
+ *   the sidecar the cloud's origin for this install. A request with no `Origin` is not a browser
+ *   and passes.
  */
 internal fun Application.installRemoteHardening(state: State) {
     intercept(ApplicationCallPipeline.Setup) {
         call.attributes.put(RemoteRequestKey, true)
         val path = call.request.path()
+        // Judged on the path the router will dispatch, so `//` or a percent-encoded segment cannot
+        // spell its way past a refusal to the handler it names.
         val refusal = remoteRefusal(
             state,
-            path,
+            routingNormalisedPath(path),
             call.request.httpMethod,
             call.request.header(HttpHeaders.Origin),
             isWebSocketUpgrade(call),
@@ -139,7 +150,9 @@ internal fun remoteRefusal(
     webSocket: Boolean,
     bearer: Boolean = false,
 ): Pair<HttpStatusCode, ErrorResponse>? {
-    if (path == "/api.json" || path == "/openapi" || path.startsWith("/openapi/")) {
+    if (path == "/api.json" || path == "/openapi" || path.startsWith("/openapi/") ||
+        path == "/mcp" || path.startsWith("/oauth/") || path.startsWith("/.well-known/")
+    ) {
         return HttpStatusCode.NotFound to ErrorResponse("Not found")
     }
     // Ahead of the no-accounts refusal, so a probe of a freshly exposed desk learns nothing here.
@@ -153,9 +166,14 @@ internal fun remoteRefusal(
             "REMOTE_NEEDS_ACCOUNT",
         )
     }
-    val ownRules = path == "/mcp" || path.startsWith("/oauth/") || path.startsWith("/.well-known/")
+    if (path == "/api/rest/auth/login") {
+        return HttpStatusCode.Forbidden to ErrorResponse(
+            "Sign in to this desk through Lighting7 Cloud. Password sign-in is only on the desk itself.",
+            CODE_REMOTE_PASSWORD_SIGN_IN,
+        )
+    }
     val stateChanging = webSocket || method !in SAFE_METHODS
-    if (!ownRules && stateChanging && !remoteOriginAllowed(origin, state, bearer)) {
+    if (stateChanging && !remoteOriginAllowed(origin, state, bearer)) {
         return HttpStatusCode.Forbidden to ErrorResponse(
             "This request came from a page that isn't the desk.",
             "REMOTE_ORIGIN_REFUSED",
@@ -167,17 +185,16 @@ internal fun remoteRefusal(
 private val SAFE_METHODS = setOf(HttpMethod.Get, HttpMethod.Head, HttpMethod.Options)
 
 /**
- * The desk's own public origin, or loopback on the public port, and for a [bearer] request through the
- * sidecar the origin the cloud serves this install's remote sessions from (cloud-p1 plan D4), which
- * the sidecar forwards as the request's. Missing = not a browser.
+ * Loopback on the public port, and for a [bearer] request through the sidecar the origin the cloud
+ * serves this install's remote sessions from (cloud-p1 plan D4), which the sidecar forwards as the
+ * request's. Missing = not a browser.
  */
 internal fun remoteOriginAllowed(origin: String?, state: State, bearer: Boolean = false): Boolean {
     if (origin == null) return true
     val o = origin.trimEnd('/').lowercase()
     val port = state.mcpConfig.port
     if (bearer && state.cloud.remoteOrigin?.let { it == o } == true) return true
-    return o == originOf(state.remoteAccess.publicUrl())?.lowercase() ||
-        o == "http://localhost:$port" ||
+    return o == "http://localhost:$port" ||
         o == "http://127.0.0.1:$port" ||
         o == "http://[::1]:$port"
 }

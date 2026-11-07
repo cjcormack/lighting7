@@ -14,10 +14,10 @@ class RecordLabelerTest {
 class HistorySourceNameTest {
     @Test
     fun `a Claude grant is named by its client unless the client is Claude or unnamed`() {
-        assertEquals("Claude · Cursor", HistorySource.mcp("mcp-grant:1", "Cursor").name)
-        assertEquals("Claude", HistorySource.mcp("mcp-grant:1", "Claude").name)
-        assertEquals("Claude", HistorySource.mcp("mcp-grant:1", "MCP client").name)
-        assertEquals("Claude", HistorySource.mcp("mcp-grant:1").name)
-        assertEquals("mcp:1", HistorySource.mcp("mcp-grant:1", "Cursor").key)
+        assertEquals("Claude · Cursor", HistorySource.mcp("cloud-grant:1", "Cursor").name)
+        assertEquals("Claude", HistorySource.mcp("cloud-grant:1", "Claude").name)
+        assertEquals("Claude", HistorySource.mcp("cloud-grant:1", "MCP client").name)
+        assertEquals("Claude", HistorySource.mcp("cloud-grant:1").name)
+        assertEquals("mcp:cloud:1", HistorySource.mcp("cloud-grant:1", "Cursor").key)
     }
 }

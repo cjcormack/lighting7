@@ -137,7 +137,7 @@ class McpRelayTest : RouteIntegrationTest() {
 
     @Test
     fun `a fixture command through the cloud is held to its switch`() {
-        assertFalse(state.remoteAccess.allowRemoteCommands)
+        assertFalse(state.remotePolicy.allowCommands)
         val (error, text) = toolResult(toolCall("run_fixture_command", """{"fixtureKey":"x","command":"reset"}"""))
         assertTrue(error, text)
         assertEquals(FIXTURE_COMMANDS_REMOTE_REFUSAL, text)

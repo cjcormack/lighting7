@@ -25,7 +25,6 @@ import {
   Palette,
   Activity,
   Users,
-  Globe,
   Download,
   Maximize2,
   Minimize2,
@@ -107,7 +106,7 @@ export interface NavItem {
   /**
    * Hidden from OPERATOR accounts. Set it wherever the destination's API is admin only on the
    * backend — `adminOnly {}` (`auth/AuthGate.kt`), or `requireAdmin()` on every handler a page
-   * reads, as Remote access's `/install/tunnel` does — so neither the sidebar, its settings tab
+   * reads — so neither the sidebar, its settings tab
    * nor Cmd+K offers a page that can only answer 403. Not on a page an operator can read whose
    * *actions* are admin-only (Updates). Not a permission check — the backend is that.
    */
@@ -459,20 +458,6 @@ export const navItems: NavItem[] = [
     parent: "install-settings",
     adminOnly: true,
   },
-  // Remote access and Updates mirror their `InstallSettings` tabs' role rules: Remote access is
-  // hidden from operators (every `/install/tunnel` call is `requireAdmin`); Updates is shown to
-  // everyone, because the version and a pending restart are anyone's to read and the panel
-  // disables its admin-only actions itself.
-  {
-    id: "remote-access",
-    label: "Remote Access",
-    icon: Globe,
-    path: () => "/install/remote",
-    pathMatch: "/install/remote",
-    section: "desk",
-    parent: "install-settings",
-    adminOnly: true,
-  },
   // Lighting7 Cloud: every `/install/cloud` route is in `adminOnly`.
   {
     id: "cloud",
@@ -485,6 +470,8 @@ export const navItems: NavItem[] = [
     parent: "install-settings",
     adminOnly: true,
   },
+  // Updates is shown to everyone, as its `InstallSettings` tab is: the version and a pending restart
+  // are anyone's to read, and the panel disables its admin-only actions itself.
   {
     id: "updates",
     label: "Updates",

@@ -103,7 +103,7 @@ fun Application.configureErrorHandling() {
             logger.warn("Forbidden request on {}: {}", call.request.local.uri, cause.message)
             call.respond(HttpStatusCode.Forbidden, ErrorResponse(cause.message ?: "Not permitted", "forbidden"))
         }
-        // A script request through the tunnel while Remote access's "allow scripts" is off
+        // A script request from the public listener while Remote access's "allow scripts" is off
         // (`mcp/RemoteRequests.kt`). Expected, so WARN; the code lets the UI say why.
         exception<RemoteScriptsDisabledException> { call, cause ->
             logger.warn("Refused remote script request on {}", call.request.local.uri)
@@ -132,12 +132,12 @@ fun Application.configureErrorHandling() {
             logger.warn("Refused a targeted Look layer on {}: {}", call.request.local.uri, cause.message)
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "A Look's layer names no targets", LookLayerTargetedException.CODE))
         }
-        // An arm, fire or reload through the tunnel while "allow arming and firing" is off.
+        // An arm, fire or reload from the public listener while "allow arming and firing" is off.
         exception<RemoteEffectsDisabledException> { call, cause ->
             logger.warn("Refused remote effects request on {}", call.request.local.uri)
             call.respond(HttpStatusCode.Forbidden, ErrorResponse(cause.message ?: "Arming and firing are turned off for remote access", "REMOTE_EFFECTS_DISABLED"))
         }
-        // A fixture command through the tunnel while "allow fixture commands" is off (fixture optics session 7).
+        // A fixture command from the public listener while "allow fixture commands" is off (fixture optics session 7).
         exception<RemoteCommandsDisabledException> { call, cause ->
             logger.warn("Refused remote command request on {}", call.request.local.uri)
             call.respond(HttpStatusCode.Forbidden, ErrorResponse(cause.message ?: "Fixture commands are turned off for remote access", "REMOTE_COMMANDS_DISABLED"))

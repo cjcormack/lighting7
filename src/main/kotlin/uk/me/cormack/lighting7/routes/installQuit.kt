@@ -16,7 +16,7 @@ import uk.me.cormack.lighting7.state.State
  * cleanly, a moment after answering 202.
  *
  * - **Admin only, and never remote**: 403 [CODE_QUIT_LOCAL_ONLY] on the public listener, whatever
- *   the role — a tunnel must not be able to switch the desk off.
+ *   the role — a remote caller must not be able to switch the desk off.
  * - **It warns when the rig is not marked safe**: 409 [CODE_RIG_NOT_SAFE] unless *Ready to switch
  *   off* holds, the rig is made safe and only cooling (quitting cuts no fixture's mains), or the
  *   caller sends `force`, which the confirm sends once the operator has read why.

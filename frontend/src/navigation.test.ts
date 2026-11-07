@@ -156,7 +156,7 @@ describe("sections", () => {
 
   it("orders Project and Desk, with Projects first on the Desk", () => {
     expect(idsIn("project")).toEqual(["project-settings", "surfaces", "project-sync"])
-    expect(idsIn("desk")).toEqual(["projects", "install-settings", "users", "sync", "remote-access", "cloud", "updates", "diagnostics"])
+    expect(idsIn("desk")).toEqual(["projects", "install-settings", "users", "sync", "cloud", "updates", "diagnostics"])
   })
 
   it("says Regions on the row Run's Stage would otherwise share a word with", () => {
@@ -222,8 +222,8 @@ describe("⌘K labels", () => {
 
 describe("admin-only navigation", () => {
   // Every entry whose destination's API is admin only on the backend: `adminOnly {}` in
-  // lighting7's auth/AuthGate.kt, or `requireAdmin()` on every handler (Remote access's tunnel).
-  const adminOnlyIds = ["users", "sync", "project-sync", "remote-access", "cloud"]
+  // lighting7's auth/AuthGate.kt, or `requireAdmin()` on every handler.
+  const adminOnlyIds = ["users", "sync", "project-sync", "cloud"]
 
   it("marks the entries whose APIs are admin-gated", () => {
     for (const id of adminOnlyIds) {
@@ -252,47 +252,46 @@ describe("admin-only navigation", () => {
 })
 
 /**
- * Venue-visit plan S2: Remote access and Updates join the install nav, mirroring their
- * `InstallSettings` tabs. Neither is its own route — `/install/:tab` serves both — so what the
- * registry has to get right is the path, the row it lights and the role rule.
+ * Venue-visit plan S2: the install tabs join the install nav, mirroring `InstallSettings`. None is
+ * its own route — `/install/:tab` serves them — so what the registry has to get right is the path,
+ * the row it lights and the role rule.
  */
 describe("install navigation", () => {
   const item = (id: string) => navItems.find((i) => i.id === id)!
 
   it("lists every install tab but General under Install Settings, in the tabs' order", () => {
-    // `routes/InstallSettings.tsx`'s TABS: general, users, sync, remote, cloud, updates, diagnostics.
+    // `routes/InstallSettings.tsx`'s TABS: general, users, sync, cloud, updates, diagnostics.
     // General is the parent row itself.
     expect(navItems.filter((i) => i.parent === "install-settings").map((i) => i.path(1))).toEqual([
       "/install/users",
       "/install/sync",
-      "/install/remote",
       "/install/cloud",
       "/install/updates",
       "/install/diagnostics",
     ])
   })
 
-  it("lights Remote Access and Updates on their own tabs, and the parent on General", () => {
+  it("lights Cloud and Updates on their own tabs, and the parent on General", () => {
     const visible = filterNavItems(navItems, true, true)
-    expect(mostSpecificActiveId(visible, "/install/remote")).toBe("remote-access")
+    expect(mostSpecificActiveId(visible, "/install/cloud")).toBe("cloud")
     expect(mostSpecificActiveId(visible, "/install/updates")).toBe("updates")
     expect(mostSpecificActiveId(visible, "/install")).toBe("install-settings")
-    expect(item("remote-access").section).toBe("desk")
+    expect(item("cloud").section).toBe("desk")
     expect(item("updates").section).toBe("desk")
   })
 
-  it("keeps Remote Access from operators and shows Updates to everyone", () => {
-    expect(item("remote-access").adminOnly).toBe(true)
+  it("keeps Cloud from operators and shows Updates to everyone", () => {
+    expect(item("cloud").adminOnly).toBe(true)
     expect(item("updates").adminOnly).toBeFalsy()
 
     const operator = filterNavItems(navItems, true, false).map((i) => i.id)
-    expect(operator).not.toContain("remote-access")
+    expect(operator).not.toContain("cloud")
     expect(operator).toContain("updates")
-    // With the row gone, an operator who reaches `/install/remote` by URL sees the parent lit.
-    expect(mostSpecificActiveId(filterNavItems(navItems, true, false), "/install/remote")).toBe("install-settings")
+    // With the row gone, an operator who reaches `/install/cloud` by URL sees the parent lit.
+    expect(mostSpecificActiveId(filterNavItems(navItems, true, false), "/install/cloud")).toBe("install-settings")
 
     const admin = filterNavItems(navItems, true, true).map((i) => i.id)
-    expect(admin).toContain("remote-access")
+    expect(admin).toContain("cloud")
     expect(admin).toContain("updates")
   })
 
@@ -301,7 +300,7 @@ describe("install navigation", () => {
       filterNavItems(navItems, false, true).map((i) => i.id),
       filterNavItems(navItems, true, true, true).map((i) => i.id),
     ]) {
-      expect(ids).toContain("remote-access")
+      expect(ids).toContain("cloud")
       expect(ids).toContain("updates")
     }
   })

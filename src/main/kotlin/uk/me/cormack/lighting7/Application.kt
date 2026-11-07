@@ -94,16 +94,14 @@ fun Application.module() {
         log.warn("no users configured — the API is unauthenticated until an admin is created")
     }
 
-    // The public listener (`mcp.port`): the whole desk plus MCP and OAuth, every request on it
-    // treated as remote — it is what the Remote access tunnel points at. Its routes answer "still
+    // The public listener (`mcp.port`): the whole desk, every request on it treated as remote — it
+    // is what the sidecar forwards remote sessions into. Its routes answer "still
     // starting" until the show is ready, like the LAN port's, so it can come up before the show.
     val publicListener = startPublicListener(state)
     // On its own scope, off the show's path: a pending adoption resumes polling.
     state.cloud.start()
     monitor.subscribe(ApplicationStopping) {
         runCatching { state.cloud.close() }
-        // Tunnel first, so ngrok stops forwarding before the listener goes.
-        runCatching { state.remoteAccess.close() }
         publicListener?.stop(1_000, 2_000)
     }
 

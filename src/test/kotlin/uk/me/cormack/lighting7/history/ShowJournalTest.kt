@@ -232,11 +232,11 @@ class ShowJournalTest : RouteIntegrationTest() {
         val other = seedMinimalProject(state, projectName = "Other show").also {
             transaction(state.database) { DaoProject[it].isCurrent = false }
         }
-        val claude = AuthenticatedUser(1, UUID.randomUUID(), "chris", "Chris", UserRole.ADMIN, "mcp-grant:7")
+        val claude = AuthenticatedUser(1, UUID.randomUUID(), "chris", "Chris", UserRole.ADMIN, "cloud-grant:7")
         call(claude, "create_cue_stack", """{"name":"Act 2"}""")
         val entry = entries().single()
         assertEquals(HistorySource.Kind.MCP, entry.source.kind)
-        assertEquals("mcp:7", entry.source.key)
+        assertEquals("mcp:cloud:7", entry.source.key)
 
         call(claude, "set_stage", """{"projectId":$other,"stage":{"widthM":10,"depthM":8}}""")
         assertTrue(entries(other).isNotEmpty(), "journaled on the project it named")

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useNavigate, useParams } from "react-router"
+import { Navigate, useNavigate, useParams } from "react-router"
 import { toast } from "sonner"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,23 +14,21 @@ import { UsersTab } from "@/components/users/UsersTab"
 import { DiagnosticsContent } from "./Diagnostics"
 import { CloudSyncHubBody } from "./CloudSync"
 import { UpdatePanel } from "@/components/updates/UpdatePanel"
-import { RemoteAccessPanel } from "@/components/remoteAccess/RemoteAccessPanel"
 import { CloudPanel } from "@/components/cloud/CloudPanel"
 import { TelemetryCard } from "@/components/telemetry/TelemetryCard"
 import { useShownTabs } from "@/navigation"
 
-const TABS = ["general", "users", "sync", "remote", "cloud", "updates", "diagnostics"] as const
+const TABS = ["general", "users", "sync", "cloud", "updates", "diagnostics"] as const
 type Tab = (typeof TABS)[number]
 
 /**
  * The nav row each tab opens: a tab is offered exactly where its row is (navigation plan P2), so
- * Users, Sync, Remote access and Cloud go from an operator, whom every call behind them refuses.
+ * Users, Sync and Cloud go from an operator, whom every call behind them refuses.
  */
 const TAB_NAV_IDS: Record<Tab, string> = {
   general: "install-settings",
   users: "users",
   sync: "sync",
-  remote: "remote-access",
   cloud: "cloud",
   updates: "updates",
   diagnostics: "diagnostics",
@@ -48,6 +46,9 @@ export function InstallSettings() {
   const activeTab: Tab = isTab(tab) && shown.has(tab) ? tab : "general"
   const { data: authStatus } = useAuthStatusQuery()
   const isAdmin = authStatus?.user?.role === "ADMIN"
+
+  // An old /install/remote link opens Cloud, which holds Remote access's switches.
+  if (tab === "remote") return <Navigate to="/install/cloud" replace />
 
   const handleTabChange = (value: string) => {
     const next = isTab(value) ? value : "general"
@@ -68,7 +69,6 @@ export function InstallSettings() {
             <TabsTrigger value="general">General</TabsTrigger>
             {shown.has("users") && <TabsTrigger value="users">Users</TabsTrigger>}
             {shown.has("sync") && <TabsTrigger value="sync">Sync</TabsTrigger>}
-            {shown.has("remote") && <TabsTrigger value="remote">Remote access</TabsTrigger>}
             {shown.has("cloud") && <TabsTrigger value="cloud">Cloud</TabsTrigger>}
             {/* Shown to everyone: the version, and whether the desk is about to restart, are
                 things anyone standing at it should be able to read. The actions inside are
@@ -82,13 +82,12 @@ export function InstallSettings() {
         {activeTab === "general" && (
           <div className="space-y-4">
             <GeneralTab />
-            {/* Admin only, like Remote access: the PUT is `requireAdmin`. */}
+            {/* Admin only: the PUT is `requireAdmin`. */}
             {isAdmin && <TelemetryCard />}
           </div>
         )}
         {activeTab === "users" && <UsersTab />}
         {activeTab === "sync" && <CloudSyncHubBody />}
-        {activeTab === "remote" && <RemoteAccessPanel />}
         {activeTab === "cloud" && <CloudPanel />}
         {activeTab === "updates" && <UpdatePanel />}
         {activeTab === "diagnostics" && <DiagnosticsContent />}

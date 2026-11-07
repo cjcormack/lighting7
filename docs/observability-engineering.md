@@ -142,7 +142,7 @@ in-process Sentry whose transport sends nothing (`withTestSentry`).
 
 | Transaction | Op | Started by | Spans |
 |---|---|---|---|
-| A call under `/api/`, `/mcp`, `/oauth/`, `/.well-known/` | `http.server` | `plugins/SentryTracing.kt` | DB, outbound HTTP, the operations below |
+| A call under `/api/` | `http.server` | `plugins/SentryTracing.kt` | DB, outbound HTTP, the operations below |
 | A gesture WS frame | `websocket.message` | `traceMessage` in the socket loop | the same |
 | Boot | `app.boot` | `module()` | `boot.phase` `starting` (with `db.init`, recorded before Sentry started), `show_init` (with `fx.compile`, a child per FX whose `cache` is `memory`, `disk` or `compiled`: the
 parallel workers' threads hold no scope, so the cache lookup is this attribute rather than a
@@ -153,7 +153,7 @@ parallel workers' threads hold no scope, so the cache lookup is this attribute r
 | Venue operations | `venue.publish`, `venue.update`, `venue.extract`, `venue.detach`, `venue.attach` | `venue/` | `venue.diff`, `venue.snapshot`, `venue.behind`; `venue.dry_run` marks the review |
 | Script compile | `script.compile` | `Show.script`, on a miss in the show's own cache | `cache.get` on the compiled-jar cache, with `cache.hit` |
 | MCP call through the cloud | `mcp.relay`, `mcp.call` | `cloud/McpRelay.kt` | the `mcp.server` span below |
-| MCP tool call | `mcp.server` span, `tools/call <tool>` | `McpProtocol` | under the `/mcp` call's transaction, or a relayed call's `mcp.relay` |
+| MCP tool call | `mcp.server` span, `tools/call <tool>` | `McpProtocol` | under the relayed call's `mcp.relay` |
 
 An HTTP call is continued from the caller's `sentry-trace` / `baggage` and named by its **route
 template** (`GET /api/rest/auth/reset/{token}`), never the raw path. A call no API route took — a
@@ -241,7 +241,6 @@ and the user-script runner take it alone.
 - The UI's files, `/api/rest/status` (boot polling), `/api.json`, `/openapi`, stage-render uploads,
   the browser's tunnel (`/api/sentry`: a transaction per browser envelope would double the volume)
   and the WebSocket upgrade itself.
-- The ngrok agent's download, which uses `java.net.http` rather than Ktor.
 
 ### Adding a span
 
