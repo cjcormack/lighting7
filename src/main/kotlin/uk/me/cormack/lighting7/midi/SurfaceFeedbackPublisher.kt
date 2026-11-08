@@ -158,6 +158,8 @@ class SurfaceFeedbackPublisher(
      * because that is the whole of what this class asks of it.
      */
     private val cueLooseHeldProvider: ((cueId: Int) -> Boolean)? = null,
+    /** Whether a cue stack runs, for a `PressPad` on a **stack** pad (busk-stack plan §4): lit while it does. */
+    private val stackRunningProvider: ((stackId: Int) -> Boolean)? = null,
     /**
      * What each busk pad presses and what id each busk page has — the database half of a record LED.
      *
@@ -253,14 +255,15 @@ class SurfaceFeedbackPublisher(
      *
      * [layerUuid] is a Look's or template's uuid, for the applied-state read; [cue] is the cue id
      * for a pad holding a cue, whose ring comes from the cue's loose hold instead and has nothing to
-     * do with the layer stack at all. Exactly one is set. Both null means the record
-     * has gone — health says so, and the LED is dark.
+     * do with the layer stack at all; [stack] is a stack pad's stack. At most one is set. All null
+     * means the record has gone — health says so, and the LED is dark.
      */
     private data class RecordLedEntry(
         val entry: LedEntry,
         val kind: RecordLedKind,
         val layerUuid: UUID?,
         val cue: Int? = null,
+        val stack: Int? = null,
     )
 
     /**
@@ -271,7 +274,7 @@ class SurfaceFeedbackPublisher(
      * and a Look pad alike. [COVERS_SELECTION] is a palette's selection-scoped fold, and dark on an
      * empty selection is right there — that is also when the press is dropped.
      */
-    private enum class RecordLedKind { LOOK_APPLIED, COVERS_SELECTION, CUE_LIVE }
+    private enum class RecordLedKind { LOOK_APPLIED, COVERS_SELECTION, CUE_LIVE, STACK_RUNNING }
 
     /**
      * Continuous entry for a tempo-bound control. Deliberately *not* a [ContinuousEntry]:
@@ -402,8 +405,8 @@ class SurfaceFeedbackPublisher(
         override fun lookListChanged() { rebuildAndResync() }
         override fun paletteListChanged() { rebuildAndResync() }
         override fun buskLayoutChanged(pageIds: List<Int>) { rebuildAndResync() }
-        // A cue pad's ring is its stack's live cue, so a GO or a release moves it. Discrete — this
-        // fires on transitions, not per fade frame.
+        // A cue pad's ring is its loose hold and a stack pad's its stack running, so a GO or a stop
+        // moves them. Discrete — this fires on transitions, not per fade frame.
         override fun cueRunStateChanged(runState: CueRunState) { resyncRecordLeds() }
         override fun cueHoldsChanged() { resyncRecordLeds() }
     }
@@ -898,6 +901,7 @@ class SurfaceFeedbackPublisher(
                     ref.sourceUuid,
                 )
                 is PadRef.Cue -> RecordLedEntry(entry, RecordLedKind.CUE_LIVE, null, ref.cueId)
+                is PadRef.Stack -> RecordLedEntry(entry, RecordLedKind.STACK_RUNNING, null, stack = ref.stackId)
                 // The pad is gone; health says so and the LED stays dark.
                 null -> RecordLedEntry(entry, RecordLedKind.COVERS_SELECTION, null)
             }
@@ -1264,6 +1268,9 @@ class SurfaceFeedbackPublisher(
         RecordLedKind.CUE_LIVE -> record.cue?.let { cueId ->
             runCatching { cueLooseHeldProvider?.invoke(cueId) }.getOrNull() == true
         } ?: false
+        RecordLedKind.STACK_RUNNING -> record.stack?.let { stackId ->
+            runCatching { stackRunningProvider?.invoke(stackId) }.getOrNull() == true
+        } ?: false
         RecordLedKind.LOOK_APPLIED -> {
             val uuid = record.layerUuid
             uuid != null && applied.any { it.source.uuid == uuid }
@@ -1544,10 +1551,9 @@ data class BuskRefs(
 /**
  * What one busk pad presses, as much of it as an LED needs.
  *
- * Two arms rather than one, because the ring is read from two different places: a template's or a
- * Look's from the programmer's applied state, and a cue's from its stack's live cue. That is the
- * whole reason `PressPad`'s LED is not simply "read `appliedState`" — the busk view's own cue pads
- * light from `useActiveCueIds` for the same reason.
+ * One arm per place the ring is read from: a template's or a Look's from the programmer's applied
+ * state, a cue's from its loose hold, and a stack's from whether the stack runs. That is the whole
+ * reason `PressPad`'s LED is not simply "read `appliedState`".
  */
 sealed interface PadRef {
     /** A template or a Look, by the uuid `ProgrammerLayerStack.appliedState` reports. */
@@ -1555,4 +1561,7 @@ sealed interface PadRef {
 
     /** A cue pad's cue; its LED is the cue's loose hold. */
     data class Cue(val cueId: Int) : PadRef
+
+    /** A stack pad's busk stack; its LED is lit while the stack runs. */
+    data class Stack(val stackId: Int) : PadRef
 }

@@ -392,9 +392,9 @@ written, and its row marked *in review* with its branch. A session's PR is title
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
 | 1 | Busk stacks and the running order | merged | `claude/blissful-pasteur-r0ys12` | [#392](https://github.com/cjcormack/lighting7/pull/392) | `d1a99f6` |
-| 2 | Over the show | in review | `claude/busk-stack-s8cddn` | [#395](https://github.com/cjcormack/lighting7/pull/395) | `e1c4094` |
-| 3 | Stack pads | in review | `claude/busk-stack-t9q7si` | | |
-| 4 | Surfaces | planned | | | |
+| 2 | Over the show | merged | `claude/busk-stack-s8cddn` | [#395](https://github.com/cjcormack/lighting7/pull/395) | `e1c4094` |
+| 3 | Stack pads | merged | `claude/busk-stack-t9q7si` | [#398](https://github.com/cjcormack/lighting7/pull/398) | `ed8b961` |
+| 4 | Surfaces | in review | `claude/adoring-davinci-y7dtej` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -639,6 +639,12 @@ that branch with a merge commit, never a rebase (root `CLAUDE.md` §"Git workflo
   `FU-MANUAL-BUSK-STACK-S4`.
 - **Local:** `./gradlew compileTestKotlin`, then `./gradlew test` for the `midi`, `osc` and `fx`
   packages.
+- **As built:**
+  - The LED reads `CueStackManager.isStackActive`, so it goes dark the moment a stop lands, while the
+    release still fades (D6's "reads stopped at once").
+  - A stop on a stack whose release is still running changes nothing (§3 "Release" item 3), so it does
+    not drop an arm taken during that release, at this door as at the REST deactivate and MCP. D6's
+    "Any stop drops the effects arm" says otherwise; which wins is open.
 
 ## 6. Operator checks
 

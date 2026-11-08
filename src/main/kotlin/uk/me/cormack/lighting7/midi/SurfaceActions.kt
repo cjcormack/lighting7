@@ -121,7 +121,11 @@ interface SurfaceActions {
     /** Arm [entryUuid] as [stackUuid]'s next GO. */
     fun cueStackStandby(stackUuid: String, entryUuid: String): ActionOutcome
 
-    /** Stop [stackUuid], which drops the desk's arm as every stop does — running or not, as the REST deactivate does. */
+    /**
+     * Stop [stackUuid] as an operator does, its cues fading over its release time (busk-stack plan D6),
+     * as the REST deactivate does. It drops the desk's arm, running or stopped, except on a stack whose
+     * release is still running, which the press leaves as it is.
+     */
     fun cueStackStop(stackUuid: String): ActionOutcome
 
     /** Take or let go of [cueUuid]'s loose hold; nothing if it already is so (D4). */
@@ -437,7 +441,7 @@ class DefaultSurfaceActions(
     override fun cueStackStop(stackUuid: String): ActionOutcome {
         val stack = resolveStack(0, stackUuid) ?: return stackNotFound(stackUuid)
         val running = cueStackManager.isStackActive(stack.id)
-        cueStackManager.deactivateStack(stack.id, state)
+        cueStackManager.stopStack(state, stack.id)
         state.show.fixtures.cueStackListChanged()
         return if (running) ActionOutcome.DONE else ActionOutcome.Done("was not running")
     }

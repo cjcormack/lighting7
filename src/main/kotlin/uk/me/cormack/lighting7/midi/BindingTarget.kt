@@ -117,7 +117,7 @@ sealed class BindingTarget {
     @SerialName("cueStackStandby")
     data class CueStackStandby(val stackUuid: String, val entryUuid: String) : BindingTarget()
 
-    /** Stop a stack on press — which drops the desk's arm, as every stack stop does. */
+    /** Stop a stack on press, fading over its release time — which drops the desk's arm, as every stack stop does. */
     @Serializable
     @SerialName("cueStackStop")
     data class CueStackStop(val stackUuid: String) : BindingTarget()
