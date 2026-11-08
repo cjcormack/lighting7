@@ -2,11 +2,11 @@
 
 QLab and other show-control senders drive the desk over OSC: a Network cue sends one message, an
 address and optional arguments, and the desk does what the address names. The plan is
-[`plans/osc-plan.md`](plans/osc-plan.md); this document is what is built. Session 1 is the listener,
-stacks, Looks, loose cues and busk pads; session 2 masters and tempo, and finding addresses: the
-listing, *Copy OSC address*, the cheat sheet and the moved-address warning; session 3 TCP and
-replies. Learnable addresses, and the fader and LED feedback a learned sender would want, wait for
-one to be in use (`FU-OSC-LEARN` in `plans/followups.md`).
+[`plans/completed/osc-plan.md`](plans/completed/osc-plan.md); this document is what is built.
+Session 1 is the listener, stacks, Looks, loose cues and busk pads; session 2 masters and tempo, and
+finding addresses: the listing, *Copy OSC address*, the cheat sheet and the moved-address warning;
+session 3 TCP and replies. Learnable addresses, and the fader and LED feedback a learned sender
+would want, wait for one to be in use (`FU-OSC-LEARN` in `plans/followups.md`).
 
 ## The address set
 
