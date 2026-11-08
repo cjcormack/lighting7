@@ -258,7 +258,7 @@ class AutoSyncScheduler(
         } catch (t: Throwable) {
             // Loop continuity matters — never let an unexpected throwable kill auto-sync
             // for a project until the user notices. Nothing else writes a row for this
-            // path: a network failure reaches us as a bare RuntimeException from
+            // path: a network failure reaches us as a GitTransportException from
             // JGitClient (only 401/403 become GitAuthException), so it never passes
             // through the engine's SyncException handler.
             syncLogger.error(

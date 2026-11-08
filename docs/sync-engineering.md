@@ -1994,10 +1994,80 @@ All endpoints live under `/api/rest/projects/{projectId}/sync/...`:
 | POST | `/resolve` | Set `LOCAL` / `REMOTE` per record |
 | POST | `/apply` | Apply resolutions, commit, push |
 | POST | `/abort` | Drop the active session |
+| GET | `/restore/{sha}` | What restoring that snapshot would do (§"Restoring a snapshot") |
+| POST | `/restore` | `{sha, token, note?}`: restore it as a new commit on top |
 
 JGit calls are blocking and run inside `withContext(Dispatchers.IO) {…}`;
 the snapshot engine wraps that boundary itself, route handlers wrap their
 own log/status calls.
+
+### Restoring a snapshot
+
+`sync/SnapshotRestore.kt` (sync-restore plan, `docs/plans/sync-restore-plan.md`) puts a show back to
+one of its snapshots — HEAD or an ancestor of it — as a **new commit on top**, never a reset or a
+force-push, so a peer reaches it by fast-forward or merge like any other commit. It goes **through the
+database**: the target's tree is extracted to a scratch directory (`JGitClient.extractTree`, binaries
+included), imported by `ProjectImporter.replaceInTransaction` — `replaceFromWorkingTree` without its
+history clear — and the next snapshot writes it. So deletion markers come from `sync_state` as they do
+for any deletion, the commit is in today's format, and an older snapshot is read as an older archive is.
+Shows only, admins only, REST only: a venue answers `VENUE_DRAFT_NOT_SYNCED`.
+
+**The review is the restore rolled back.** In one transaction: the project exported to memory
+(`exportRecords`), the target imported, exported again, judged against its venue (`ShowBehind.judge`),
+rolled back. The two exports are compared by record key and hash, both in today's format — never two git
+trees, which would count a format change as an edit — into `BACK` (only in the target), `GONE` (only
+now) and `CHANGED`, grouped by folder in the exporter's order and labelled by `RecordLabeler.name`. The
+project record is not listed: the fields that differ are `project` (name, description, stage size,
+origin) and `venue` (the pin, `behind` at the restored pin, and `runAgainst`). Two of the project's
+fields never come back: *In production* stays as it is now, and so does the name when another project
+now holds the snapshot's (`project.nameKept`). The review's `token` is the SHA-256 of the target sha,
+every listed record's `(folder, uuid, change)` and the `project`, `venue` and `addresses` fields — never
+the head, so a snapshot that changes nothing listed keeps it. `noChanges` is no record, no project field
+and the same pin.
+
+**Addresses follow the records.** A universe or patch the target makes the show's own again, whose uuid
+the show's venue (now's pin or the target's) holds a machine override for — a snapshot from before an
+Extract — gets that override copied to the show's id, as Detach copies one (`addresses.copied`). A
+restored universe left with no address on this desk — its rows went in an Attach — is named in
+`addresses.missing`.
+
+**The restore**, under the project's sync lock for its whole run (`RemoteSyncEngine.restore`):
+
+1. **Sync first**, with a repo attached, through the engine's own run under the lock it holds. A
+   conflict session, from before or opened now, refuses `SESSION_PENDING`; a remote that can't be reached
+   — a `GitTransportException` (JGit's transport failure under a name of its own, a 30-second idle
+   timeout among them), `AUTH_FAILED`, `MISSING_CREDENTIALS`, `OAUTH_REAUTH_REQUIRED`, `PUSH_REJECTED` —
+   restores on this desk only, said in `notes` (a push's refused credentials arrive as a
+   `GitAuthException` and count the same); any other failure refuses with its code, a failed import of
+   the pulled tree as `RESTORE_UNREADABLE` (or its own `VENUE_MISSING` / `PROJECT_MISMATCH`). A bad
+   note or a blank sha or token is refused before this step.
+2. **Check**: the review computed again; `noChanges` → `RESTORE_NO_CHANGES`, a different token →
+   `RESTORE_REVIEW_STALE` with the new review in the body.
+3. **Snapshot** `Before restoring {shortSha}`, usually nothing after the first sync. `before` is HEAD
+   now: the show as it stood, and restoring it is the undo.
+4. **Import**, in one transaction: the project exported again and compared with `before`'s records; a
+   write that landed since step 3 refuses `RESTORE_REVIEW_STALE` (the step-3 snapshot stays). Then the
+   import and the override copies; after it commits, the history's clear point (*Restored a snapshot*)
+   and both stores hydrated from the scratch tree (`PromptScriptRepoSync`, `SceneImageRepoSync`), so a
+   PDF or an image the store had lost comes back.
+5. **Snapshot** `Restored {shortSha} from {yyyy-MM-dd HH:mm} UTC[: note]` with a
+   `Restored-From: {full sha}` trailer after a blank line, which `CommitInfo.restoredFrom` reads (only
+   as a line of its own). The activity log gets one `RESTORED` row with the counts.
+6. **Reload** the live show with carry; when the review said `runAgainst` — the restored pin is behind
+   its venue on output and the show is not held now — `VenueHoldService.runAgainstOnLoad` first, so the
+   running show is never held by its own restore.
+7. **Push**, when the first sync reached the remote and the desk pushes: the engine's run again, merging
+   as any sync does. A diverged merge takes the remote's name, description and stage size
+   (`mergeProjectPin` keeps only the pin, the origin and *In production*), and `notes` says which it
+   took. A push that fails here is a note, never a failed restore: the restore has committed, and the
+   next sync pushes it. A pull-only desk keeps the restore in its working tree and says so.
+
+The database moves before git (steps 4, 5), as a fast-forward does. The POST emits `cloudSyncStarted`
+and `cloudSyncDone` / `cloudSyncFailed` — no `cloudSyncDone` when the push opened a conflict session,
+which announced itself — and `projectDetailsChanged` for the show and the venues it was and is on.
+Step 4 compares a script's body as git stores it, with CRLF line endings made LF by the working tree's
+`eol=lf`. No table, column or `formatVersion` change: a restore commit is
+an ordinary snapshot with a trailer in its message.
 
 ## Remote sync (Phase 4)
 
@@ -2381,6 +2451,11 @@ HTTPS — the username is the literal placeholder `x-access-token`, the
 password is the token. `GitCredentials.forGitHubToken(...)` (formerly
 `forGitHubPat`) builds the JGit credentials provider for either source.
 
+**Fetch and push give up after 30 seconds without a byte** (`JGitClient.TRANSPORT_TIMEOUT_SECONDS`,
+JGit's `setTimeout`), so a hung remote never holds a project's sync lock indefinitely. A transport
+failure that is not about credentials is a `GitTransportException`; one that is stays a
+`GitAuthException`. Both are `RuntimeException`s, as the auto-sync scheduler's catch-all expects.
+
 **Engine commits are never signed.** JGit reads the machine user's
 `~/.gitconfig`, so a desk whose owner signs their own commits
 (`commit.gpgsign = true`) would otherwise sign snapshots and merges too — and
@@ -2397,6 +2472,12 @@ person.
 | `OAUTH_REAUTH_REQUIRED` | 401 | OAuth identity present but refresh token rejected — user must re-connect. |
 | `AUTH_FAILED` | 401 | Credentials present but GitHub rejected the push/fetch. |
 | `MISSING_PAT` | 401 | Legacy alias for `MISSING_CREDENTIALS`; retained for one release. |
+| `RESTORE_COMMIT_UNKNOWN` | 404 | The snapshot to restore isn't HEAD or an ancestor of it, or the show has no history. |
+| `RESTORE_REVIEW_STALE` | 409 | The restore would now do something else, or a write landed during it; the body carries `review`. |
+| `RESTORE_NO_CHANGES` | 409 | The snapshot is the show as it is. |
+| `RESTORE_INVALID` | 400 | A note over 200 characters or holding a line break; a blank sha or token. |
+| `RESTORE_TOO_OLD` | 422 | The snapshot's archive is older than `MIN_SUPPORTED_FORMAT_VERSION`. |
+| `RESTORE_UNREADABLE` | 422 | Any other failure to import the snapshot's tree (or the first sync's pulled one). |
 
 [jk]: https://github.com/javakeyring/java-keyring
 
@@ -2910,6 +2991,8 @@ Stable event codes (see [`SyncLogEvent`](../src/main/kotlin/uk/me/cormack/lighti
 | `SNAPSHOT_NOOP` | `SnapshotEngine.snapshot` | Nothing to commit. Suppressed for an `AUTO` run. |
 | `AUTO_SYNC_SKIPPED` | `AutoSyncScheduler` | Conflict session pending. Written once on entry, not per tick. |
 | `AUTO_SYNC_RECOVERED` | `AutoSyncScheduler` | Ticks succeeding again after one or more failures. |
+| `RESTORED` | `SnapshotRestore.restore` | *Restored {shortSha} from {when} UTC: n back, n gone, n changed*. |
+| `RESTORE_FAILED` | `RemoteSyncEngine.restore` (catch) | A refused or failed restore, `{code}: {message}`. |
 
 `AUTO_SYNC_TICK` was retired — it was written immediately before `RUN_STARTED` and carried
 nothing extra. The frontend renders `event` as an opaque string, so rows written before the

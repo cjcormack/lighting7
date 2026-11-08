@@ -154,6 +154,34 @@ class RemoteSyncEngine(
             }
         }
 
+    private val snapshotRestore = SnapshotRestore(state)
+
+    /** What restoring [sha] would do (sync-restore plan §3), under the project lock. */
+    suspend fun reviewRestore(projectId: Int, sha: String): RestoreReviewDto =
+        withProjectLock(projectId, failEvent = null) { snapshotRestore.review(projectId, sha) }
+
+    /**
+     * Restore [sha] (sync-restore plan §3), under the project lock for its whole run: its first sync
+     * and its push are this engine's own runs, made under the lock it already holds.
+     */
+    suspend fun restore(
+        projectId: Int,
+        projectUuid: UUID,
+        installUuid: UUID,
+        installFriendlyName: String,
+        sha: String,
+        token: String,
+        note: String?,
+    ): RestoreResultDto = withProjectLock(projectId, SyncLogEvent.RESTORE_FAILED) {
+        val engine = object : SnapshotRestore.Engine {
+            override suspend fun sync(): SyncRunResult =
+                doRun(projectId, projectUuid, installUuid, installFriendlyName, SyncTrigger.MANUAL)
+
+            override suspend fun reload(projectId: Int) = reloadShowIfActive(projectId)
+        }
+        snapshotRestore.restore(engine, projectId, projectUuid, installUuid, installFriendlyName, sha, token, note)
+    }
+
     suspend fun applySession(
         projectId: Int,
         projectUuid: UUID,
@@ -1459,9 +1487,21 @@ enum class SyncErrorCode {
     VENUE_DRAFT_NOT_SYNCED,
     /** A venue repo's tag is not a version this desk can read (no `venueVersion.json`, another venue's). */
     VENUE_REPO_INVALID,
+    /** The snapshot to restore isn't HEAD or an ancestor of it, or the show has no history (sync-restore plan §3). */
+    RESTORE_COMMIT_UNKNOWN,
+    /** The restore would now do something other than its review said, or a write landed during it. */
+    RESTORE_REVIEW_STALE,
+    /** The snapshot to restore is the show as it is. */
+    RESTORE_NO_CHANGES,
+    /** A restore's note over 200 characters or holding a line break, or a blank sha or token. */
+    RESTORE_INVALID,
+    /** The snapshot's archive is older than this desk reads. */
+    RESTORE_TOO_OLD,
+    /** The snapshot's tree could not be imported for any other reason. */
+    RESTORE_UNREADABLE,
 }
 
-class SyncException(val code: SyncErrorCode, message: String, cause: Throwable? = null) :
+open class SyncException(val code: SyncErrorCode, message: String, cause: Throwable? = null) :
     RuntimeException(message, cause)
 
 @Suppress("DEPRECATION")
@@ -1479,4 +1519,8 @@ fun SyncErrorCode.toHttpStatus(): HttpStatusCode = when (this) {
     SyncErrorCode.VENUE_DRAFT_NOT_SYNCED, SyncErrorCode.VENUE_REPO_INVALID ->
         HttpStatusCode.Conflict
     SyncErrorCode.SESSION_NOT_FOUND -> HttpStatusCode.NotFound
+    SyncErrorCode.RESTORE_COMMIT_UNKNOWN -> HttpStatusCode.NotFound
+    SyncErrorCode.RESTORE_REVIEW_STALE, SyncErrorCode.RESTORE_NO_CHANGES -> HttpStatusCode.Conflict
+    SyncErrorCode.RESTORE_INVALID -> HttpStatusCode.BadRequest
+    SyncErrorCode.RESTORE_TOO_OLD, SyncErrorCode.RESTORE_UNREADABLE -> HttpStatusCode.UnprocessableEntity
 }

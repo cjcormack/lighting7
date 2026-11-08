@@ -62,13 +62,16 @@ class SnapshotEngine(private val state: State) {
         installFriendlyName: String,
         message: String?,
         logNoop: Boolean = true,
+        /** A trailer for the message body, after a blank line (a restore's `Restored-From:`). */
+        trailer: String? = null,
     ): SnapshotResponse {
         val path = workingTree.pathFor(projectUuid)
         val summary = message?.takeIf { it.isNotBlank() }?.trim()
             ?: "Snapshot ${nowUtc().toIsoUtc()}"
         val shortInstall = installUuid.toString().take(8)
         val authorEmail = "$shortInstall@$INSTALL_EMAIL_DOMAIN"
-        val commitMessage = "$installFriendlyName: $summary [install:$shortInstall]"
+        val commitMessage = "$installFriendlyName: $summary [install:$shortInstall]" +
+            (trailer?.let { "\n\n$it" } ?: "")
 
         val response = withContext(Dispatchers.IO) {
             workingTree.ensureInitialised(path).use { repo ->
