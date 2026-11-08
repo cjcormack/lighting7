@@ -7,6 +7,7 @@ import {
 } from '../store/cueStacks'
 import { useShowTransport } from './useShowTransport'
 import { ignoreReportedError } from '../store/errorToastMiddleware'
+import { nextInRunningOrder, runningOrder } from '../lib/runningOrder'
 import { cueRowById } from '@/api/cueStacksApi'
 
 /**
@@ -74,7 +75,8 @@ export function useShowBarProps(
     frameRateProgress,
   })
   const activeCue = cueRowById(transport.activeStack?.cues, transport.activeCueId)
-  const standbyCue = cueRowById(transport.activeStack?.cues, transport.standbyCueId)
+  // Nothing on deck after a Release at the end, though the desk names the stack's first cue as next.
+  const standbyCue = transport.nothingOnDeck ? null : cueRowById(transport.activeStack?.cues, transport.standbyCueId)
 
   /**
    * The stack a boundary GO will move to, when this one has nothing left on deck. Lifted out of
@@ -83,15 +85,14 @@ export function useShowBarProps(
    * piece of the bar's wiring only Run had.
    */
   const nextStack = useMemo(() => {
-    if (transport.standbyCueId != null || activeStackId == null || !stacks) return null
-    const runnable = stacks.filter((s) => s.type === 'STACK')
-    const i = runnable.findIndex((s) => s.id === activeStackId)
-    return i >= 0 ? (runnable[i + 1] ?? null) : null
-  }, [transport.standbyCueId, stacks, activeStackId])
+    if (!transport.nothingOnDeck || transport.goReleases) return null
+    return nextInRunningOrder(stacks, activeStackId)
+  }, [transport.nothingOnDeck, transport.goReleases, stacks, activeStackId])
 
   const [activateShow] = useActivateProgramMutation()
   const [deactivateShow] = useDeactivateProgramMutation()
-  const runnableStackCount = stacks?.filter((s) => s.type === 'STACK').length ?? 0
+  // Whether the show can start: `/show/activate` starts the running order's first stack.
+  const runnableStackCount = runningOrder(stacks).length
 
   // Both `.catch()` blocks swallow deliberately: `errorToastMiddleware` reports the failure, and
   // this is only here to stop the unhandled rejection.

@@ -97,6 +97,7 @@ export function CueAnchorPickerSheet({
   onClose: () => void
 }) {
   const rows = useMemo(() => groupCuesByStack(cueOrder), [cueOrder])
+  // Every stack, busk stacks included (busk-stack plan D4): any stack's cue may be anchored in the book.
   const runnableStacks = useMemo(() => stacks.filter((s) => s.type === 'STACK'), [stacks])
   const existingStackNames = useMemo(() => new Set(runnableStacks.map((s) => s.name)), [runnableStacks])
 

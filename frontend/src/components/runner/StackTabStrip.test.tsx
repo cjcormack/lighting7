@@ -211,3 +211,43 @@ describe('StackTabStrip', () => {
     expect(screen.queryByLabelText('Scroll stacks right')).toBeNull()
   })
 })
+
+describe('StackTabStrip · busk stacks', () => {
+  it('one show stack and one busk stack draw the strip, the busk stack after a Busk divider', () => {
+    const song = stack(2, { name: 'Song', sortOrder: 0, inRunningOrder: false })
+    render(
+      <StackTabStrip
+        stacks={[song, stack(1, { sortOrder: 1 })]}
+        selectedStackId={1}
+        liveStackId={1}
+        runnableStackCount={2}
+        onSelectStack={() => {}}
+      />,
+    )
+    const scroller = screen.getByLabelText('Stack tabs')
+    const words = Array.from(scroller.children).map((c) => c.textContent)
+    expect(words[0]).toContain('Act 1')
+    expect(words[1]).toBe('Busk')
+    expect(words[2]).toContain('Song')
+  })
+
+  it('a running busk stack carries a live dot and its live entry’s number', () => {
+    const song = stack(2, {
+      name: 'Song',
+      inRunningOrder: false,
+      activeCueId: 5,
+      activeEntryId: 51,
+      // The cue twice: the live place is the second, Q3.
+      cues: [
+        { id: 5, entryId: 50, name: 'Verse', sortOrder: 0, layerCount: 0, adHocFxCount: 0, cueNumber: '1', cueType: 'STANDARD', scenery: [] } as never,
+        { id: 5, entryId: 51, name: 'Verse', sortOrder: 1, layerCount: 0, adHocFxCount: 0, cueNumber: '3', cueType: 'STANDARD', scenery: [] } as never,
+      ],
+    })
+    render(
+      <StackTabStrip stacks={[stack(1), song]} selectedStackId={1} liveStackId={1} runnableStackCount={2} onSelectStack={() => {}} />,
+    )
+    const tab = screen.getByRole('button', { name: /Song/ })
+    expect(tab).toHaveTextContent('Q3')
+    expect(tab.querySelector('[aria-label="Live"]')).not.toBeNull()
+  })
+})

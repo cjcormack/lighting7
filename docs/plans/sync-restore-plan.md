@@ -321,7 +321,7 @@ written, and its row marked *in review* with its branch. A session's PR is title
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Review and restore on the desk | in review | `claude/relaxed-planck-rbdr44` | [#393](https://github.com/cjcormack/lighting7/pull/393) | `2a4fa05` |
+| 1 | Review and restore on the desk | merged | `claude/relaxed-planck-rbdr44` | [#393](https://github.com/cjcormack/lighting7/pull/393) | `7ac6eaa` |
 | 2 | The History panel and the review | in review | `claude/sync-restore-fy9kx9` | | |
 | 3 | Bring back selected records | planned | | | |
 

@@ -18,7 +18,10 @@ import kotlinx.coroutines.flow.update
  * Which stack weighs an instance is [weighingStackOf]: its cue's highest hold, never the
  * first-hold tag [FxInstance.cueStackId] (§11, question 21).
  */
-class StackFxAmounts {
+class StackFxAmounts(
+    /** Where each running and releasing stack composes, which an instance's priority names ([weighingStackOf]). */
+    private val ranks: StackRanks? = null,
+) {
     private val amounts = MutableStateFlow<Map<Int, Double>>(emptyMap())
 
     /** Every stack below full, by id. The `stackFxAmount.state` frame and the surfaces' feedback. */
@@ -56,7 +59,7 @@ class StackFxAmounts {
     fun weightOf(effect: FxInstance): Double {
         val all = amounts.value
         if (all.isEmpty()) return FULL
-        val stackId = weighingStackOf(effect) ?: return FULL
+        val stackId = weighingStackOf(effect, ranks) ?: return FULL
         return all[stackId] ?: FULL
     }
 
@@ -68,15 +71,16 @@ class StackFxAmounts {
 /**
  * The stack whose FX amount weighs [effect]: the stack of its cue's highest hold, which is what its
  * [FxInstance.priority] is — `CueHolds` restamps every instance of a cue whenever its top hold
- * changes, and retags an instance a cue adopts or takes back. Null for an effect no cue owns, and
- * for a cue whose top hold is a loose press (`CueHolds.LOOSE_BAND`), which a press holds at 100 %.
+ * changes, and retags an instance a cue adopts or takes back — read back through [ranks]. Null for an
+ * effect no cue owns, and for a cue whose top hold is a loose press (`CueHolds.LOOSE_BAND`), which a
+ * press holds at 100 %.
  *
  * A **leaving** instance keeps its cue and its priority, so it shrinks from the FX amount of the stack
- * that let it go rather than jumping to full as its fade starts.
+ * that let it go rather than jumping to full as its fade starts: a releasing stack keeps its rank
+ * until its release ends, and a rank change restamps a fading instance with its stack's
+ * (busk-stack plan §3 "Priority").
  */
-internal fun weighingStackOf(effect: FxInstance): Int? {
+internal fun weighingStackOf(effect: FxInstance, ranks: StackRanks?): Int? {
     if (effect.cueId == null) return null
-    val priority = effect.priority
-    if (priority < STACK_PRIORITY_BAND || priority >= CueHolds.LOOSE_BAND) return null
-    return stackOfDerivedPriority(priority)
+    return ranks?.stackAt(effect.priority)
 }

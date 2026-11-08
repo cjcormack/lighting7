@@ -31,6 +31,9 @@ cue_stacks
 ├── name (varchar 255)
 ├── project_id (FK → projects)
 ├── loop (boolean, default false)
+├── in_running_order (boolean, default true — off is a busk stack)
+├── release_at_end (boolean, default false — After the last cue: Release)
+├── release_time (Duration, default 2 s — a stop's fade; nanoseconds on disk)
 └── unique(project_id, name)
 
 cue_stack_entries (cue model plan session 1 — `models/cueStackEntries.kt`)
@@ -233,6 +236,83 @@ numbers swapping places would otherwise be a transient duplicate.
 - **Per-cue auto-advance** allows some cues to auto-advance while others wait for manual progression
 - **EasingCurve enum** (LINEAR, SINE_IN_OUT, CUBIC_IN_OUT, etc.) stored as string for extensibility
 
+## The running order and busk stacks
+
+The show is the project's ordered stacks, and its playhead is `projects.active_stack_id`. The
+**running order** is the stacks in it: `STACK` rows with **In the running order** on
+(`cue_stacks.in_running_order`, busk-stack plan D1, D2). A stack with it off is a **busk stack** — a
+song or a moment run from its own GO, a pad, a binding, MCP or OSC — which the playhead never reaches:
+`/show/activate`, `/show/advance` in either direction and the client's boundary GO and next-stack label
+walk only the running order (`orderedStacks` in `routes/projectShow.kt`, `lib/runningOrder.ts` on the
+client), and `/show/go-to` on one is 409 `CUE_STACK_NOT_IN_SHOW`. Every stack that existed before the
+column, and every new one, is in it.
+
+A busk stack is never the playhead (D4): taking the playhead stack out of the running order is 409
+`CUE_STACK_IS_PLAYHEAD` (stop the show or move the playhead first), and an undo that does it clears
+the playhead, as an undo of the stack's delete does (`RecordRestorer.stopLeavingStacks`); import and
+pull already clear it. The Show view lists busk stacks after the show's own, past a *Busk* divider, on
+the tab strip and the stack list, each running one with a live dot and its live cue's number; the
+off-playhead banner offers *Jump to live* but not *Make this stack live* for one. A drag in the stack
+list reorders within its side of the divider; which side a stack is on is its setting's.
+
+### After the last cue: Stay, Loop or Release
+
+What a GO past the last cue entry does is one choice (D3): **Stay** on it (as before), **Loop** to the
+first, or **Release** the stack (`release_at_end`). Loop and Release together are 400
+`CUE_STACK_INVALID`, judged on the stored stack with the request laid over it, as is a release time
+outside 0–60 s; the `PUT`'s three run settings, like `moveInDark`, keep what is stored when absent. A
+`POST` or `PUT` that makes a busk stack and names no `releaseAtEnd` sets it unless the stack loops
+(`CueStackRunSettings.resolve`, which MCP's `create_cue_stack` and `build_cue_stack` share).
+
+A busk stack also says how it sits **over the show** (D7, `over_show`): **Adds**, the default, composes
+its cues with the show's by the usual rules, in the busk band above every show stack; **Replaces**
+makes every key its cue sets its own, intensity included, the FX under it held back until it releases
+(§"Holds"; `docs/lighting-composition-model.md` §"Replacing stacks"). Replaces on a stack in the running
+order is `CUE_STACK_INVALID`, and a `PUT` that puts a stack back into the running order and names no
+`overShow` sets Adds.
+
+Release at the end is `advanceStack` FORWARD from the last cue entry with nothing armed: it stops the
+stack as [the stop](#a-stop-fades) does and answers `ActivateResult.released`, which the REST advance
+words as the stack stopped (`CueStackDeactivateResponse.released`) and MCP's `go_cue_stack` and
+`advance_cue_stack` as a release. A follow off the last cue releases it the same way, from inside the
+follow's own job, after its last suspension, so the stop's cancel of that job is harmless. The run
+state carries `releasedAtEnd` (`CueRunState`, `cueRunStateChanged`, omitted when false) until the
+stack's next start, and `stacksWithRunState` includes such a stack, so a window that connects later
+learns it; the desk still names the first cue as next, which is what a start would fire.
+
+The Show view's GO reads two predicates (`lib/runningOrder.ts`): **GO releases** — the playhead stack
+is set to Release, live, with nothing armed — sends GO to the stack's own advance, which releases it;
+**nothing on deck** — no next cue, or the stack released at its end — makes GO the boundary GO into the
+next stack in the running order. On the last stack the phone's GO reads END.
+
+### A stop fades
+
+A deliberate stop is `CueStackManager.stopStack` (D6): the REST deactivate, `/show/deactivate`, MCP's
+`deactivate_cue_stack` and Release at the end. The stack reads stopped at once — out of the live table,
+its follow cancelled, its run state stopped — and each cue it had on stage (its live cue and,
+mid-crossfade, the cue that fade was taking out) fades from the weight it stood at to 0 over the
+stack's **Release time** (`release_time`, default 2 s), its FX shrinking with it, or stays at full where
+another hold (a loose press, another stack) keeps it. It is never left at part weight. The rest of the
+teardown — the stack's own cue-less FX, Move in dark, the standby, scenery and the desk's arm — runs as
+before. A release time of 0 is the old snap. A replacing stack's release hands every key it set back to what
+the stacks below it compose to, by the same weight.
+
+The mechanics: the crossfade driver's **release** (`CueCrossfadeDriver.startRelease`) holds every cue
+of the stop with the weight it started from, ramped as w₀ × (1 − eased) and dropped at the end;
+`cancel`, `forgetOutgoing` and the end of the fade treat each as outgoing. The stop takes the in-flight
+GO fade off the stack without moving its weights (`detach`), and lets its hold go with
+`Departure.RELEASE`, which skips `takeOff`'s pin to full that a GO's `FADE_OUT` keeps.
+
+- A stop on a stack already stopped and still releasing changes nothing: the release runs on.
+- A GO or restart mid-release snaps its new cue on, as every start does, and cancels the release; the
+  releasing rows snap off unless another hold keeps them.
+- A stack delete, a project switch, the undo restorer and the show's advance and go-to from an active
+  stack let go at once (`deactivateStack`), cutting a release short. The advance and go-to leave a
+  stack that is stopped and still releasing alone (`isReleasing`), so a GO into Act 2 during Act 1's
+  release lets it finish; a stack stopped with no release running is torn down as before, its standby
+  with it.
+- *Make this stack live* keeps today's snap: the REST deactivate takes `snap: true`.
+
 ## Runtime: CueStackManager and the hold registry
 
 `CueStackManager` (`fx/CueStackManager.kt`) runs stacks: which **entry** each live stack is on, its
@@ -272,13 +352,30 @@ The registry decides three things:
 - **`release` of its last hold takes it off** — triggers and timed FX stopped, FX removed
   or shrinking to nothing over the GO's fade, its rows dropped or left at full weight for the
   caller's crossfade to take down. Any other release only restamps.
-- **A cue's priority is its highest hold's.** A stack hold composes at the entry's
-  `cueDerivedPriority` (the stack band plus the entry's position, markers counted); a loose hold at
-  `LOOSE_BAND + seq` (`2_000_000_000 +`), above every stack, the newest press on top (D10). So a pad
-  pressed over a running stack wins on every LTP attribute until it is let go, and the stack takes
-  over again on release with nothing re-fired. A write that shifts entry positions (reorder, add-cue,
-  sort, a cue created, recorded or deleted mid-list, an entry or a marker added or removed) calls
-  `holds.restampEntries(stackEntryPriorities(stack))`, which re-ranks only the stack holds it names.
+- **A cue's priority is its highest hold's.** A stack hold composes at its stack's band and rank,
+  then the entry's position, markers counted (`stackPriority`; busk-stack plan D5, P3: **latest GO
+  wins**, show stacks below busk stacks — `docs/lighting-composition-model.md` §"Holds and the loose
+  band"); a loose hold at `LOOSE_BAND + seq` (`2_000_000_000 +`), above every stack, the newest press
+  on top (D10). So a pad pressed over a running stack wins on every LTP attribute until it is let go,
+  and the stack takes over again on release with nothing re-fired. A write that shifts entry
+  positions (reorder, add-cue, sort, a cue created, recorded or deleted mid-list, an entry or a marker
+  added or removed) calls `holds.restampEntries(stackEntryPositions(stack))`, `stackId → entryId →
+  position`, which re-ranks only the stack holds of the stacks it names, each at its stack's rank.
+- **The ranks** (`CueHolds.ranks`, `fx/StackRanks.kt`): an operator's GO — start, GO, GO TO, BACK,
+  the REST and MCP doors, a pad — takes the top of its band (`activateEntry(…, operator = true)`, the
+  default); a follow (`scheduleAutoAdvance`) and a reload's re-GO keep the stack's rank. A stop gives
+  it up once its release ends (`CueCrossfadeDriver.onReleaseEnded`), a snap stop at once, and the
+  stack PUT moving a live stack into or out of the running order takes the top of its new band
+  (`onBandChanged`). `applyRankChanges` restamps every moved stack's holds, the rows and leaving
+  effects its crossfade or release still has fading (`fadingCuesOf`) and its Move in dark
+  contributor. A 1 000th running stack in one band is 409 `CUE_STACK_LIMIT` on the activate, advance
+  and go-to routes.
+- **Replaces** (D7): a hold of a busk stack on *Over the show: Replaces* (`DaoCueStack.replacesShow`,
+  read at the GO) gives its cue a **replace group**, beside its priority as `CueStamp`, which the
+  layer stamps on its rows and keeps while they fade; the resolver folds such a key to the stack's
+  rows over whatever is under them, and the effects under it are held back by its weight
+  (`docs/lighting-composition-model.md` §"Replacing stacks"). A change to the setting lands at the
+  stack's next GO.
 
 So FX envelopes follow the holds, as the rows' weights do (effects plan §3.5): a GO between
 two entries of a cue that stays held moves no envelope, a GO onto a cue another stack or a press
@@ -333,9 +430,9 @@ the Look cache) would deadlock the two until Hikari timed out.
 
 What holds every live cue is published as **`cueHolds.state`** — `State.cueHoldsFrame`, a
 `StateFlow` that outlives a show so a socket survives a project switch (§"WebSocket"). Runtime only:
-never persisted, never synced. A same-project reload carries the stacks' entries, their standbys and
-the loose cues in press order (`ShowCarry`), re-taking each loose hold without firing its events; a
-project switch starts empty.
+never persisted, never synced. A same-project reload carries the stacks' entries, their ranks, their
+standbys and the loose cues in press order (`ShowCarry`), restoring the ranks before the re-GOs and
+re-taking each loose hold without firing its events; a project switch starts empty.
 
 ### Edited since GO and Update stage
 
@@ -467,7 +564,8 @@ there, which GO reads as "stay on the current entry" and "next" reads as "nothin
 | `advanceStack(state, stackId, direction, scope)` | Advance forward/backward respecting loop; BACKWARD fires no events |
 | `goToEntry(state, stackId, entryId, scope)` | Jump to a specific entry |
 | `go(state, stackId, scope)` / `activateAtFirstCue(...)` | GO a live stack, or start a stopped one on its effective next |
-| `deactivateStack(stackId, state)` | Release the stack's hold, cancel its fade and timers |
+| `stopStack(state, stackId)` | The deliberate stop: reads stopped at once, its cues fading over the release time (§"A stop fades") |
+| `deactivateStack(stackId, state)` | Release the stack's hold at once, cancel its fade (a release included) and timers |
 | `getActiveEntryId(stackId)` / `getActiveCueId(stackId)` | The live entry, and the cue it names (or null) |
 | `getActiveStackIds()` / `isStackActive(stackId)` | Live stacks |
 
@@ -513,10 +611,10 @@ On `cueStackManager.runState` (`CueRunStateTracker`):
 5. The **incoming** entry's follow schedules the auto-advance, even when it names the cue that was
    already live (D7).
 6. Publish the run state, then the scenery (`SceneryService.onEntryLive`) — §"Scenery" below.
-   `deactivateStack` likewise ends with `onStackStopped`
+   Every stop (`stopStack`, `deactivateStack`, through `afterStop`) likewise ends with `onStackStopped`
 7. The cue's **events** fire inside step 2's acquire — on the cue's **first** hold only (D15), and
    never on the BACKWARD arm of `advanceStack`. A GO onto a cue another stack or a press already
-   holds fires none. `deactivateStack` drops the desk's arm (`onStackStopped`)
+   holds fires none. Every stop drops the desk's arm (`onStackStopped`)
 
 A loose press runs the same acquire with a `Loose` hold and no crossfade: the cue's FX, rows,
 stomp, timed FX, triggers and events come on exactly as a GO's would (the old separate apply
@@ -772,7 +870,7 @@ All endpoints under `/api/rest/projects/{projectId}/cue-stacks`.
 | POST | `/{stackId}/renumber` | Number cue entries in stack order from a whole number: `{ entryIds, start, step? }` (§"Renumber"). Answers the stack |
 | DELETE | `/{stackId}/entries/{entryId}` | Remove from stack: the entry and its anchor go, the cue stays. The live entry's removal moves nothing until the next GO (`cues-engineering.md` §"Cue Stack Membership") |
 | POST | `/{stackId}/activate` | Activate stack: optional `{ entryId }`; absent starts at the armed standby, else the first cue entry. HTTP 400 for a marker or another stack's entry |
-| POST | `/{stackId}/deactivate` | Deactivate stack |
+| POST | `/{stackId}/deactivate` | Stop the stack, fading over its release time; `{snap: true}` lets go at once |
 | POST | `/{stackId}/advance` | Advance through cue entries only (markers skipped): body `{ direction: "FORWARD"\|"BACKWARD" }` |
 | POST | `/{stackId}/go-to` | Go to a specific entry: body `{ entryId }` — HTTP 400 for a marker or another stack's entry |
 | POST | `/{stackId}/standby` | Arm the next GO: body `{ entryId }`; `{ entryId: null }` disarms. HTTP 400 for a marker or another stack's entry |
@@ -1015,7 +1113,7 @@ name), `programmerLook` (Look and name) or `programmer` (`SceneryResolver.holder
 
 **The hook.** `state/SceneryService.kt` holds the result as a `StateFlow`, `scenery.state` on the
 socket. It recomputes on every activation (`onEntryLive(stackId, entryId, cueId)`) and
-`deactivateStack` (`onStackStopped`), so every GO path reports — REST, MIDI, auto-advance — and on
+every stop (`onStackStopped`, from `afterStop`), so every GO path reports — REST, MIDI, auto-advance — and on
 every loose hold (`onLooseHeld` / `onLooseReleased`): a busk pad, a cue slot, `/cues/{id}/apply`
 and the AI's `apply_cue`. A loose cue is a **track of its own** beside the stacks' (keyed `-cueId`
 so it never meets a stack id), its scenery the cue's own changes over its tracked state, ranked by
@@ -1128,7 +1226,7 @@ into the cue, only while the desk is armed (stage-view plan session 9; `cues-eng
   blocks the GO and nothing runs inside a caller's transaction (the pool is one SQLite connection).
   A fire touches memory and the trigger output, and the spent tube is written by the service's own
   worker thread, scenery's arrangement.
-- **A stack stop drops the arm.** `deactivateStack` calls `effectsService.onStackStopped`, which
+- **A stack stop drops the arm.** Every stop (`stopStack` and `deactivateStack`, through `afterStop`) calls `effectsService.onStackStopped`, which
   disarms the desk — any stack stopping is a stop, and the pending events of an armed GO find the
   arm gone when their offset comes and are announced as skipped.
 
@@ -1244,7 +1342,7 @@ by name.
 - `activate_cue_stack` — Activate, or GO to one entry (`entryId` or `number`). With no entry named
   it routes to `activateAtFirstCue`, so it honours an armed standby exactly as the REST route and
   the surface do
-- `deactivate_cue_stack` — Deactivate
+- `deactivate_cue_stack` — Stop, fading over the stack's release time (`stopStack`)
 - `go_cue_stack` — GO: fire whatever is on deck, starting the stack if it is stopped. It calls
   `CueStackManager.go`, which is also what `SurfaceActions.cueStackGo` calls — the active-or-not
   branch is GO's whole meaning, so the model, the tablet and the physical GO button press one

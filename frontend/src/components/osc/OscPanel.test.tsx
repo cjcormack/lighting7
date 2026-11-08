@@ -147,6 +147,51 @@ describe('OscPanel', () => {
     expect(screen.getByRole('button', { name: 'Enable' })).toBeTruthy()
   })
 
+  it('keeps a sender typed but not saved through Enable, so Save still sends it', async () => {
+    mocks.settings = settings({ enabled: false, senders: [] })
+    const view = render(<OscPanel />)
+    fireEvent.click(screen.getByRole('button', { name: /Add sender/ }))
+    fireEvent.change(screen.getByLabelText('Sender name'), { target: { value: 'Sound Mac' } })
+    fireEvent.change(screen.getByLabelText('Sender address'), { target: { value: '192.168.1.40' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Enable' }))
+    })
+    expect(mocks.save).toHaveBeenLastCalledWith({ enabled: true, port: 8415, bindAddress: null, senders: [] })
+
+    // The desk answers with what it stores, and the cache moves under the draft.
+    mocks.settings = settings({ enabled: true, senders: [] })
+    view.rerender(<OscPanel />)
+    expect((screen.getByLabelText('Sender name') as HTMLInputElement).value).toBe('Sound Mac')
+    expect((screen.getByLabelText('Sender address') as HTMLInputElement).value).toBe('192.168.1.40')
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    })
+    expect(mocks.save).toHaveBeenLastCalledWith({
+      enabled: true,
+      port: 8415,
+      bindAddress: null,
+      senders: [{ id: undefined, name: 'Sound Mac', address: '192.168.1.40', replies: false }],
+    })
+  })
+
+  it('follows the stored document where nothing was edited, and takes what a Save stored', async () => {
+    const view = render(<OscPanel />)
+    mocks.settings = settings({ port: 9000 })
+    view.rerender(<OscPanel />)
+    expect((screen.getByLabelText('Port, UDP and TCP') as HTMLInputElement).value).toBe('9000')
+
+    fireEvent.change(screen.getAllByLabelText('Sender name')[0], { target: { value: 'QLab 2' } })
+    mocks.save.mockImplementationOnce(() => ({
+      unwrap: () => Promise.resolve(settings({ port: 9000, senders: [{ id: 1, name: 'QLab 2', address: '192.168.1.20' }] })),
+    }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    })
+    mocks.settings = settings({ port: 9000, senders: [{ id: 1, name: 'QLab 2', address: '192.168.1.20' }] })
+    view.rerender(<OscPanel />)
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true)
+  })
+
   it('allows a refused sender with its address filled in, asking for a name', async () => {
     render(<OscPanel />)
     fireEvent.click(screen.getByRole('button', { name: 'Allow this sender' }))

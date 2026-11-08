@@ -113,6 +113,35 @@ class MoveInDarkServiceTest : RouteIntegrationTest() {
         state.show.fxEngine.cueLayer.hasAssignments(MoveInDarkService.contributorId(stackId))
 
     @Test
+    fun `a contributor stays in its stack's rank when another live stack's stop renumbers it`() = testApplication {
+        mountTestApp(state)
+        val rig = seed(on = true)
+        val (other, otherEntry) = transaction(state.database) {
+            val project = DaoProject.findById(projectId)!!
+            val stack = DaoCueStack.new {
+                this.project = project
+                name = "Other"; loop = false; type = CueStackType.STACK.name; sortOrder = 1
+            }
+            val cue = DaoCue.new { this.project = project; name = "Empty" }
+            stack.id.value to DaoCueStackEntry.new { this.stack = stack; this.cue = cue; ordinal = 1.0; cueNumber = "1" }.id.value
+        }
+        manager.activateEntry(state, other, otherEntry)
+        manager.activateEntry(state, rig.stackId, rig.q10)
+        awaitUntil("Q10 lit") { value(dimmer) == 255 }
+        manager.activateEntry(state, rig.stackId, rig.q11)
+        awaitUntil("the head in Q12's place") { value(pan) == 200 && value(tilt) == 100 }
+        assertEquals(2, manager.holds.ranks.placeOf(rig.stackId)?.rank)
+
+        manager.deactivateStack(other, state)
+
+        assertEquals(1, manager.holds.ranks.placeOf(rig.stackId)?.rank)
+        val contributor = state.show.fxEngine.cueLayer.publishedPriorityOf(MoveInDarkService.contributorId(rig.stackId))!!
+        assertEquals(rig.stackId, manager.holds.ranks.stackAt(contributor), "the contributor moved down with its stack")
+        assertTrue(contributor > manager.holds.priorityOf(rig.q11Cue)!!, "and is still above its stack's live cue")
+        assertEquals(200, value(pan), "the head stays where it was moved")
+    }
+
+    @Test
     fun `a dark head moves to the next cue that lights it, and that cue's GO moves nothing`() = testApplication {
         mountTestApp(state)
         val rig = seed(on = true)

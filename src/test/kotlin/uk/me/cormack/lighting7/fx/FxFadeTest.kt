@@ -218,7 +218,7 @@ class FxFadeTest : RouteIntegrationTest() {
         assertEquals(started, continuing.startedAtMs)
         assertFull(continuing, "and is not faded")
         assertFalse(continuing.leaving)
-        assertEquals(cueDerivedPriority(s, 1), continuing.priority, "at the incoming cue's priority")
+        assertEquals(stackPriority(holds.ranks.placeOf(s), 1), continuing.priority, "at the incoming cue's priority")
         val arriving = q2Fx.single { it.id != id }
         assertNear(0.0, levelAfter(arriving, 0), "the Sine arrives from nothing")
         assertTrue(continuing.composeOrder < arriving.composeOrder, "composing in Q2's layer order")
@@ -465,7 +465,7 @@ class FxFadeTest : RouteIntegrationTest() {
 
         // A GO's two halves with a press landing between them.
         val acquired = holds.acquire(
-            state, data, CueHold.Stack(s, entries[1]), cueDerivedPriority(data), CueHolds.Arrival.SNAP,
+            state, data, CueHold.Stack(s, entries[1]), cueDerivedPriority(data, holds.ranks), CueHolds.Arrival.SNAP,
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default), fireEvents = false, stackTag = s, adoptFrom = q1,
         )
         assertSame(pulse, one(q2))
@@ -535,7 +535,7 @@ class FxFadeTest : RouteIntegrationTest() {
         assertFull(pulse, "and is not faded")
         assertEquals(row2, pulse.layerFxUuid, "stamped with Q2's row")
         assertEquals(run, pulse.runUuid)
-        assertEquals(cueDerivedPriority(s, 1), pulse.priority)
+        assertEquals(stackPriority(holds.ranks.placeOf(s), 1), pulse.priority)
     }
 
     @Test
@@ -688,7 +688,7 @@ class FxFadeTest : RouteIntegrationTest() {
         val data = transaction(state.database) { buildCueGoData(DaoCue[q2], DaoCueStackEntry[entries[1]]) }
 
         val acquired = holds.acquire(
-            state, data, CueHold.Stack(s, entries[1]), cueDerivedPriority(data), CueHolds.Arrival.SNAP,
+            state, data, CueHold.Stack(s, entries[1]), cueDerivedPriority(data, holds.ranks), CueHolds.Arrival.SNAP,
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default), fireEvents = false, stackTag = s, adoptFrom = q1,
         )
         assertEquals(id, one(q2).id, "handed on")
@@ -723,7 +723,7 @@ class FxFadeTest : RouteIntegrationTest() {
         val id = one(q1).id
         val data = transaction(state.database) { buildCueGoData(DaoCue[q2], DaoCueStackEntry[entries[1]]) }
         val acquired = holds.acquire(
-            state, data, CueHold.Stack(s, entries[1]), cueDerivedPriority(data), CueHolds.Arrival.SNAP,
+            state, data, CueHold.Stack(s, entries[1]), cueDerivedPriority(data, holds.ranks), CueHolds.Arrival.SNAP,
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default), fireEvents = false, stackTag = s, adoptFrom = q1,
         )
         assertEquals(id, one(q2).id, "handed on")

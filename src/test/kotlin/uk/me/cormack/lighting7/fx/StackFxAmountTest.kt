@@ -28,6 +28,7 @@ import uk.me.cormack.lighting7.testsupport.mountTestApp
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
 import java.time.Duration
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -163,8 +164,60 @@ class StackFxAmountTest : RouteIntegrationTest() {
         manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
 
         assertTrue(outgoing.leaving)
-        assertEquals(s, weighingStackOf(outgoing), "it is still its stack's")
+        assertEquals(s, weighingStackOf(outgoing, manager.holds.ranks), "it is still its stack's")
         assertEquals(0.5, manager.fxAmounts.weightOf(outgoing), "so the stack's size still weighs it as it shrinks")
+    }
+
+    @Test
+    fun `an effects-only stack keeps its rank while its release fades its effects`() = testApplication {
+        mountTestApp(state)
+        val look = jsonClient().pulseLook()
+        engine.sweepsLeaving = false
+        val s1 = cue("S1", look, "hex-1")
+        val t1 = cue("T1", look, "hex-2")
+        val (s, sEntries) = stack("S", 0, s1)
+        val (t, tEntries) = stack("T", 1, t1)
+        transaction(state.database) { DaoCueStack[s].releaseTime = Duration.ofMillis(600) }
+        manager.activateEntry(state, s, sEntries[0])
+        manager.activateEntry(state, t, tEntries[0])
+        manager.setFxAmount(s, 0.5)
+        val leaving = one(s1)
+
+        manager.stopStack(state, s)
+
+        assertTrue(leaving.leaving)
+        assertEquals(1, manager.holds.ranks.placeOf(s)?.rank, "it keeps rank 1 while its effects shrink")
+        assertEquals(2, manager.holds.ranks.placeOf(t)?.rank)
+        assertEquals(s, weighingStackOf(leaving, manager.holds.ranks))
+        assertEquals(0.5, manager.fxAmounts.weightOf(leaving))
+        kotlinx.coroutines.runBlocking { kotlinx.coroutines.delay(900) }
+        assertNull(manager.holds.ranks.placeOf(s), "and gives it up once the release has run")
+        assertEquals(1, manager.holds.ranks.placeOf(t)?.rank)
+    }
+
+    @Test
+    fun `a leaving effect keeps its stack's size when the ranks renumber under it`() = testApplication {
+        mountTestApp(state)
+        val look = jsonClient().pulseLook()
+        engine.sweepsLeaving = false
+        val q1 = cue("Q1", look, "hex-1")
+        val q2 = cue("Q2", look, "hex-2", fadeMs = 3000)
+        val other = cue("T1", look, "hex-2")
+        val (t, tEntries) = stack("T", 0, other)
+        val (s, entries) = stack("S", 1, q1, q2)
+        manager.activateEntry(state, t, tEntries[0])
+        manager.activateEntry(state, s, entries[0])
+        manager.setFxAmount(s, 0.5)
+        val outgoing = one(q1)
+        manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
+        assertEquals(2, manager.holds.ranks.placeOf(s)?.rank)
+
+        manager.deactivateStack(t, state)
+
+        assertEquals(1, manager.holds.ranks.placeOf(s)?.rank, "S closed up under T's stop")
+        assertTrue(outgoing.leaving)
+        assertEquals(s, weighingStackOf(outgoing, manager.holds.ranks), "the leaving effect moved with its stack")
+        assertEquals(0.5, manager.fxAmounts.weightOf(outgoing))
     }
 
     @Test

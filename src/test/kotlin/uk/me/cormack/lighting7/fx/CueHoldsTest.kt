@@ -150,7 +150,8 @@ class CueHoldsTest : RouteIntegrationTest() {
         assertEquals(listOf(CueHold.Stack(rig.stackB, rig.b1)), holds.holdsOf(rig.c), "A let go; B still holds C")
         assertTrue(onStage(rig.c), "C stays on stage")
         assertTrue(onStage(rig.d))
-        assertEquals(100, red("hex-1"), "C, held at B's band, still wins hex-1 over D at A's")
+        // Latest GO wins (busk-stack plan D5): A's GO onto D put A above B, which still holds C.
+        assertEquals(200, red("hex-1"), "D, A's latest GO, wins hex-1 over C, which B holds")
     }
 
     @Test
@@ -187,17 +188,17 @@ class CueHoldsTest : RouteIntegrationTest() {
         mountTestApp(state)
         val rig = seed()
         manager.activateEntry(state, rig.stackA, rig.a3)
-        assertEquals(cueDerivedPriority(rig.stackA, 2), holds.priorityOf(rig.c), "a3 is A's third entry")
+        assertEquals(stackPriority(holds.ranks.placeOf(rig.stackA), 2), holds.priorityOf(rig.c), "a3 is A's third entry")
 
         manager.activateEntry(state, rig.stackB, rig.b1)
-        val bBand = cueDerivedPriority(rig.stackB, 0)
+        val bBand = stackPriority(holds.ranks.placeOf(rig.stackB), 0)
         assertEquals(bBand, holds.priorityOf(rig.c), "B's hold is the higher")
         assertEquals(bBand, rowPriority(rig.c), "and the rows on stage were restamped to it")
         assertEquals(rig.stackB, holds.stackOf(rig.c))
 
         manager.deactivateStack(rig.stackB, state)
-        assertEquals(cueDerivedPriority(rig.stackA, 2), holds.priorityOf(rig.c))
-        assertEquals(cueDerivedPriority(rig.stackA, 2), rowPriority(rig.c), "back to A's when B lets go")
+        assertEquals(stackPriority(holds.ranks.placeOf(rig.stackA), 2), holds.priorityOf(rig.c))
+        assertEquals(stackPriority(holds.ranks.placeOf(rig.stackA), 2), rowPriority(rig.c), "back to A's when B lets go")
     }
 
     @Test

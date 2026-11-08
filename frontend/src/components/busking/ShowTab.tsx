@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { isInRunningOrder } from '@/lib/runningOrder'
 import { ProgrammerIndicator } from '@/components/ProgrammerIndicator'
 import { OffPlayheadBanner } from '@/components/runner/OffPlayheadBanner'
 import { RunMobile } from '@/components/runner/mobile/RunMobile'
@@ -72,6 +73,7 @@ export function ShowTab({ projectId, show }: { projectId: number; show: ShowTabS
       : undefined
   const stack = browsed ?? transport.activeStack
   const offPlayhead = stack != null && stack.id !== activeStackId
+  // Every stack, busk stacks included: the phone's picker lists them (busk-stack plan D4).
   const runnableStackCount = stacks?.filter((s) => s.type === 'STACK').length ?? 0
 
   const display = useRunnerDisplay(show)
@@ -93,7 +95,7 @@ export function ShowTab({ projectId, show }: { projectId: number; show: ShowTabS
           selectedStackName={stack.name}
           liveCueIsOnStage={transport.serverActiveCueId != null}
           onJumpToLive={() => setBrowsedStackId(null)}
-          onMakeLive={() => makeLive(stack)}
+          onMakeLive={isInRunningOrder(stack) ? () => makeLive(stack) : undefined}
         />
       )}
       <RunMobile

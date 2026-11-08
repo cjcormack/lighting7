@@ -255,6 +255,7 @@ export function rangeToRegion(range: Range, pageEls: Map<number, HTMLElement>): 
 export function flattenCueOrder(stacks: CueStack[] | undefined): FlatCue[] {
   if (!stacks) return []
   const out: FlatCue[] = []
+  // Every stack, busk stacks included (busk-stack plan D4): every stack's cues are placed in the book.
   const ordered = [...stacks]
     .filter((s) => s.type === 'STACK')
     .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -404,6 +405,7 @@ export type ShowRailRow =
 export function flattenShowRows(stacks: CueStack[] | undefined): ShowRailRow[] {
   if (!stacks) return []
   const ordered = [...stacks].sort((a, b) => a.sortOrder - b.sortOrder)
+  // Every stack, busk stacks included (busk-stack plan D4): labels name a stack whenever the book holds more than one.
   const distinctStacks = ordered.filter((s) => s.type === 'STACK').length
   const out: ShowRailRow[] = []
   for (const stack of ordered) {

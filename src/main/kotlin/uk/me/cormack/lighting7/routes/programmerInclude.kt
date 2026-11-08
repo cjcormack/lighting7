@@ -92,7 +92,7 @@ internal fun includeCueIntoProgrammer(
     // composition into literals, so the operator got the right output with none of the structure —
     // and Update then had nothing to write back but literals. Now the stack arrives intact,
     // reorderable, and Update can diff it.
-    val cueOwnRows = buildCueAssignmentsForCue(fixtures, cueData, state.show.paletteReferences)
+    val cueOwnRows = buildCueAssignmentsForCue(fixtures, cueData, state.show.paletteReferences, state.show.cueStackManager.holds.ranks)
 
     // Still needed for the local rows: `buildCueAssignmentsForCue` deliberately emits both a
     // group-expanded member row and any direct fixture row for the same member, leaving the

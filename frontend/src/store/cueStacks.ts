@@ -445,11 +445,13 @@ export const cueStacksApi = restApi.injectEndpoints({
 
     deactivateCueStack: build.mutation<
       CueStackDeactivateResponse,
-      { projectId: number; stackId: number }
+      // `snap` lets go at once; without it the stack fades over its release time (busk-stack plan D6).
+      { projectId: number; stackId: number; snap?: boolean }
     >({
-      query: ({ projectId, stackId }) => ({
+      query: ({ projectId, stackId, snap }) => ({
         url: `projects/${projectId}/cue-stacks/${stackId}/deactivate`,
         method: 'POST',
+        body: snap ? { snap: true } : {},
       }),
       // Optimistic update: clear the live entry and its cue immediately
       async onQueryStarted({ projectId, stackId }, { dispatch, queryFulfilled }) {
@@ -475,7 +477,8 @@ export const cueStacksApi = restApi.injectEndpoints({
     }),
 
     advanceCueStack: build.mutation<
-      CueStackActivateResponse,
+      // A GO past the last cue of a Release stack answers the stack stopped (busk-stack plan D3).
+      CueStackActivateResponse | CueStackDeactivateResponse,
       { projectId: number; stackId: number } & AdvanceCueStackRequest
     >({
       query: ({ projectId, stackId, ...body }) => ({
@@ -495,6 +498,12 @@ export const cueStacksApi = restApi.injectEndpoints({
             if (cues.length === 0) return
             const currentIdx = cues.findIndex((c) => c.entryId === stack.activeEntryId)
             const delta = direction === 'FORWARD' ? 1 : -1
+            // Past the last cue of a Release stack the desk stops it.
+            if (delta === 1 && !stack.loop && stack.releaseAtEnd && currentIdx === cues.length - 1) {
+              stack.activeCueId = null
+              stack.activeEntryId = null
+              return
+            }
             let nextIdx = currentIdx + delta
             if (stack.loop) {
               nextIdx = ((nextIdx % cues.length) + cues.length) % cues.length
@@ -514,8 +523,9 @@ export const cueStacksApi = restApi.injectEndpoints({
             cueStacksApi.util.updateQueryData('projectCueStackList', projectId, (draft) => {
               const stack = draft.find((s) => s.id === stackId)
               if (stack) {
-                stack.activeCueId = data.cueId
-                stack.activeEntryId = data.entryId
+                const live = 'cueId' in data ? data : null
+                stack.activeCueId = live?.cueId ?? null
+                stack.activeEntryId = live?.entryId ?? null
               }
             }),
           )

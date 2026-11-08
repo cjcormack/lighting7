@@ -56,9 +56,18 @@ internal class CueCrossfadeDriver(
 
         /** The weight this fade last gave [incomingCueId]. */
         @Volatile var incomingWeight: Double = 0.0
+
+        /**
+         * A stop's release ([startRelease]): each cue it takes out, with the weight it fades from. Every
+         * one is outgoing — dropped at the end, by [cancel], or taken out by [forgetOutgoing].
+         */
+        val releasing: MutableMap<Int, Double> = ConcurrentHashMap()
     }
 
     private val fades = ConcurrentHashMap<Int, Fade>()
+
+    /** Told when a release runs to its end — not when one is cancelled — so its stack gives up its rank. */
+    @Volatile var onReleaseEnded: (stackId: Int) -> Unit = {}
 
     /**
      * Start a fade on [stackId], replacing any in-flight one.
@@ -93,6 +102,50 @@ internal class CueCrossfadeDriver(
     }
 
     /**
+     * Start [stackId]'s release (busk-stack plan §3 "Release"): every cue of [fromWeights] ramped from
+     * its weight to 0 over [durationMs], as w₀ × (1 − eased), and its rows dropped at the end. A cue with
+     * no rows (an effects-only one, its effects shrinking on their own ramps) is held all the same, so
+     * the stack keeps its rank until they have gone ([onReleaseEnded]). Replaces any fade the stack has,
+     * which the caller has already [detach]ed.
+     */
+    fun startRelease(stackId: Int, fromWeights: Map<Int, Double>, durationMs: Long, easingCurve: EasingCurve, scope: CoroutineScope) {
+        val fade = Fade()
+        fade.releasing.putAll(fromWeights)
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            runRelease(fade, durationMs, easingCurve)
+            if (fades.remove(stackId, fade)) onReleaseEnded(stackId)
+        }
+        fade.job = job
+        fades[stackId] = fade
+        job.start()
+    }
+
+    /** The cues [stackId]'s fade is taking out: a GO fade's outgoing cue, or every cue of a release. */
+    fun fadingCuesOf(stackId: Int): Set<Int> {
+        val fade = fades[stackId] ?: return emptySet()
+        return buildSet {
+            fade.outgoingCueId?.let(::add)
+            addAll(fade.releasing.keys)
+        }
+    }
+
+    /** Whether [stackId] has a release running. */
+    fun isReleasing(stackId: Int): Boolean = fades[stackId]?.releasing?.isNotEmpty() == true
+
+    /**
+     * What [stackId]'s in-flight GO fade is moving, taken off the stack with its job stopped and its
+     * cues' weights left where they stand, for a stop to release from there. Null when it has none.
+     */
+    fun detach(stackId: Int): InFlight? {
+        val fade = fades.remove(stackId) ?: return null
+        fade.job?.cancel()
+        return InFlight(outgoingCueId = fade.outgoingCueId)
+    }
+
+    /** What a GO fade was taking out, as [detach] took it; its incoming cue is the stack's live one. */
+    data class InFlight(val outgoingCueId: Int?)
+
+    /**
      * Cancel [stackId]'s in-flight fade, if any. Its outgoing cue's Layer 4 rows are dropped and its
      * fading effects removed — otherwise they'd linger past the cancellation, the rows frozen at
      * whatever weight the fade had reached and the effects running on to 0 under a stack that has
@@ -118,6 +171,15 @@ internal class CueCrossfadeDriver(
             }
         }
         fade.outgoingCueId = null
+        for (cueId in fade.releasing.keys) {
+            if (isHeld(cueId)) {
+                fxEngine.cueLayer.updateFadeWeights(mapOf(cueId to 1.0))
+            } else {
+                fxEngine.cueLayer.removeAssignments(cueId)
+                if (cueId != returning) fxEngine.retireLeaving { it.cueId == cueId }
+            }
+        }
+        fade.releasing.clear()
         fade.incomingCueId?.let { cueId ->
             fxEngine.cueLayer.updateFadeWeights(mapOf(cueId to 1.0))
             fxEngine.settleFx(fxEngine.cueFx(cueId))
@@ -133,6 +195,7 @@ internal class CueCrossfadeDriver(
     fun forgetOutgoing(cueId: Int) {
         for (fade in fades.values) {
             if (fade.outgoingCueId == cueId) fade.outgoingCueId = null
+            fade.releasing.remove(cueId)
         }
     }
 
@@ -167,6 +230,20 @@ internal class CueCrossfadeDriver(
         // Fade complete — drop outgoing Layer 4 contributions and pin incoming to 1.0.
         fade.outgoingCueId?.let { fxEngine.cueLayer.removeAssignments(it) }
         fade.incomingCueId?.let { fxEngine.cueLayer.updateFadeWeights(mapOf(it to 1.0)) }
+    }
+
+    private suspend fun runRelease(fade: Fade, durationMs: Long, easingCurve: EasingCurve) {
+        val startTime = System.currentTimeMillis()
+        while (true) {
+            val progress = ((System.currentTimeMillis() - startTime).toDouble() / durationMs).coerceIn(0.0, 1.0)
+            val remaining = 1.0 - easingCurve.apply(progress)
+            val updates = fade.releasing.mapValues { (_, from) -> from * remaining }
+            if (updates.isNotEmpty()) fxEngine.cueLayer.updateFadeWeights(updates)
+            if (progress >= 1.0) break
+            delay(CROSSFADE_TICK_MS)
+        }
+        for (cueId in fade.releasing.keys) fxEngine.cueLayer.removeAssignments(cueId)
+        fade.releasing.clear()
     }
 
     companion object {

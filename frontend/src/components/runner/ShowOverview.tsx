@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { Fragment, useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import type { SceneryChange } from '@/api/sceneryApi'
 import {
   ArrowRight,
@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { reorderWithinGroup, splitBuskStacks } from '@/lib/runningOrder'
 import { MarkerRow } from '@/components/runner/MarkerRow'
 import {
   DropdownMenu,
@@ -35,7 +36,6 @@ import {
 import {
   SortableContext,
   verticalListSortingStrategy,
-  arrayMove,
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -63,7 +63,8 @@ const NO_SCENERY: SceneryChange[] = []
 interface SortableStackEntryProps {
   stack: CueStack
   projectId: number
-  index: number
+  /** The row's number in the show's list; null for a busk stack, which is no step of the show. */
+  index: number | null
   isActive: boolean
   onDrill: (stackId: number) => void
   onEdit: (stack: CueStack) => void
@@ -123,7 +124,7 @@ function SortableStackEntry({
         </div>
       )}
       <span className="hidden @[560px]:block w-6 text-center font-mono text-xs text-muted-foreground shrink-0">
-        {index + 1}
+        {index != null ? index + 1 : null}
       </span>
       {/* The field wraps its text rather than filling the row, so clicking the space beside a
           short stack name drills into the stack instead of opening the rename editor. */}
@@ -338,6 +339,16 @@ interface ShowOverviewProps {
   onShowDarkCues?: (stackId: number) => void
 }
 
+/** Where the running order ends and the busk stacks start. */
+function BuskDivider() {
+  return (
+    <div className="flex items-center gap-2 px-1 pt-3 pb-1" aria-label="Busk stacks">
+      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Busk</span>
+      <div className="h-px flex-1 bg-border" />
+    </div>
+  )
+}
+
 export function ShowOverview({
   projectId,
   stacks,
@@ -348,6 +359,9 @@ export function ShowOverview({
   onShowDarkCues,
 }: ShowOverviewProps) {
   const stackRows = stacks.filter((s) => s.type === 'STACK')
+  // The running order and its separators, then the busk stacks past a divider (busk-stack plan D4).
+  const { show, busk } = useMemo(() => splitBuskStacks(stacks), [stacks])
+  const ordered = useMemo(() => [...show, ...busk], [show, busk])
   // Distinct cues: a cue shared by two stacks is one cue in two places.
   const totalCues = new Set(stackRows.flatMap((s) => s.cues.filter(isCueRow).map((c) => c.id))).size
 
@@ -426,14 +440,10 @@ export function ShowOverview({
       const { active, over } = event
       if (!over || active.id === over.id) return
 
-      const oldIndex = stacks.findIndex((s) => s.id === active.id)
-      const newIndex = stacks.findIndex((s) => s.id === over.id)
-      if (oldIndex === -1 || newIndex === -1) return
-
-      const reordered = arrayMove(stacks, oldIndex, newIndex)
-      reorderStacks({ projectId, stackIds: reordered.map((s) => s.id) })
+      const reordered = reorderWithinGroup(ordered, Number(active.id), Number(over.id))
+      if (reordered) reorderStacks({ projectId, stackIds: reordered.map((s) => s.id) })
     },
-    [stacks, projectId, reorderStacks],
+    [ordered, projectId, reorderStacks],
   )
 
 
@@ -473,8 +483,8 @@ export function ShowOverview({
 
       <div className="flex-1 overflow-y-auto p-4 space-y-1.5">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={stacks.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-            {stacks.map((stack, idx) => {
+          <SortableContext items={ordered.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+            {ordered.map((stack, idx) => {
               if (stack.type === 'SEPARATOR') {
                 return (
                   <SortableSeparatorEntry
@@ -487,19 +497,21 @@ export function ShowOverview({
                 )
               }
               return (
-                <SortableStackEntry
-                  key={stack.id}
-                  stack={stack}
-                  projectId={projectId}
-                  index={idx}
-                  isActive={activeStackId !== null && stack.id === activeStackId}
-                  onDrill={onDrillStack}
-                  onEdit={handleEditStack}
-                  onRename={handleRenameStack}
-                  onSort={(stackId) => sortByCueNumber({ projectId, stackId })}
-                  onRemove={handleRemove}
-                  locked={locked}
-                />
+                <Fragment key={stack.id}>
+                  {idx === show.length && <BuskDivider />}
+                  <SortableStackEntry
+                    stack={stack}
+                    projectId={projectId}
+                    index={idx < show.length ? idx : null}
+                    isActive={activeStackId !== null && stack.id === activeStackId}
+                    onDrill={onDrillStack}
+                    onEdit={handleEditStack}
+                    onRename={handleRenameStack}
+                    onSort={(stackId) => sortByCueNumber({ projectId, stackId })}
+                    onRemove={handleRemove}
+                    locked={locked}
+                  />
+                </Fragment>
               )
             })}
           </SortableContext>

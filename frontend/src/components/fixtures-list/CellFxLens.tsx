@@ -50,12 +50,13 @@ import type { CellAttributeKey } from './useRowValues'
  */
 
 /** Why an effect is held back on a cell — the desk's `heldBackReason` vocabulary. */
-export type LensHeldReason = 'PROGRAMMER' | 'STOMP' | 'BLIND'
+export type LensHeldReason = 'PROGRAMMER' | 'STOMP' | 'BLIND' | 'REPLACED'
 
 export const LENS_REASON_WORDS: Readonly<Record<LensHeldReason, string>> = {
   PROGRAMMER: 'your value holds it back',
   STOMP: 'a layer above stomps it',
   BLIND: 'held · Blind',
+  REPLACED: 'a replacing stack holds it back',
 }
 
 /** What the lens reads of the desk at render — the programmer's keys, Blind and the stacks' FX amount. */

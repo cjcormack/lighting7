@@ -27,7 +27,10 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.fx.CueEntryRef
-import uk.me.cormack.lighting7.fx.stackEntryPriorities
+import uk.me.cormack.lighting7.fx.stackEntryPositions
+import uk.me.cormack.lighting7.fx.StackEntryPositions
+import uk.me.cormack.lighting7.fx.CueStackLimitException
+import uk.me.cormack.lighting7.fx.CODE_CUE_STACK_LIMIT
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 
@@ -62,6 +65,12 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val moveInDark = input.moveInDark?.resolve(MoveInDarkSettings.NEW_STACK)?.getOrElse {
                 return@withCurrentProject call.respondMoveInDarkInvalid(it)
             } ?: MoveInDarkSettings.NEW_STACK
+            val runSettings = if (input.type == CueStackType.SEPARATOR.name) {
+                CueStackRunSettings()
+            } else {
+                CueStackRunSettings.resolve(null, input.loop, input.inRunningOrder, input.releaseAtEnd, input.releaseTimeMs, input.overShow)
+                    .getOrElse { return@withCurrentProject call.respondCueStackInvalid(it) }
+            }
             val details = transaction(state.database) {
                 val stackType = input.type ?: CueStackType.STACK.name
                 val resolvedName = if (stackType == CueStackType.SEPARATOR.name) {
@@ -73,11 +82,15 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 val stack = DaoCueStack.new {
                     name = resolvedName
                     this.project = project
-                    loop = input.loop
                     type = stackType
                     label = input.label
                     sortOrder = nextSort
-                    if (stackType != CueStackType.SEPARATOR.name) moveInDarkSettings = moveInDark
+                    if (stackType != CueStackType.SEPARATOR.name) {
+                        moveInDarkSettings = moveInDark
+                        this.runSettings = runSettings
+                    } else {
+                        loop = input.loop
+                    }
                 }
                 stack.toCueStackDetails(isCurrentProject = true, manager)
             }
@@ -131,6 +144,8 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         ) { project ->
             val input = call.receive<NewCueStack>()
             val manager = state.show.cueStackManager
+            // Set when the write moves the stack between the show's band and the busk band (D5).
+            var bandNow: Boolean? = null
             val details = transaction(state.database) {
                 val stack = DaoCueStack.findById(resource.stackId) ?: return@transaction null
                 if (stack.project.id != project.id) return@transaction null
@@ -143,18 +158,32 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     if (newLabel.isNotBlank()) stack.name = newLabel
                 } else {
                     val moveInDark = input.moveInDark?.resolve(stack.moveInDarkSettings)?.getOrElse {
-                        return@transaction Result.failure<CueStackDetails>(it)
+                        return@transaction Result.failure<CueStackDetails>(MoveInDarkInvalid(it))
+                    }
+                    val stored = stack.runSettings
+                    val runSettings = CueStackRunSettings.resolve(stored, input.loop, input.inRunningOrder, input.releaseAtEnd, input.releaseTimeMs, input.overShow)
+                        .getOrElse { return@transaction Result.failure(it) }
+                    if (stored.inRunningOrder && !runSettings.inRunningOrder && project.activeStackId == stack.id.value) {
+                        return@transaction Result.failure(StackIsPlayhead(stack.name))
                     }
                     stack.name = input.name
-                    stack.loop = input.loop
+                    stack.runSettings = runSettings
+                    if (stored.inRunningOrder != runSettings.inRunningOrder) bandNow = runSettings.inRunningOrder
                     if (moveInDark != null) stack.moveInDarkSettings = moveInDark
                 }
 
                 Result.success(stack.toCueStackDetails(isCurrentProject = true, manager))
-            }?.getOrElse { return@withCurrentProject call.respondMoveInDarkInvalid(it) }
+            }?.getOrElse {
+                return@withCurrentProject when (it) {
+                    is MoveInDarkInvalid -> call.respondMoveInDarkInvalid(it.cause ?: it)
+                    is StackIsPlayhead -> call.respond(HttpStatusCode.Conflict, ErrorResponse(it.message!!, CODE_CUE_STACK_IS_PLAYHEAD))
+                    else -> call.respondCueStackInvalid(it)
+                }
+            }
 
             if (details != null) {
-                // Looping decides what follows the last entry.
+                bandNow?.let { manager.onBandChanged(resource.stackId, it) }
+                // Looping and Release decide what follows the last entry.
                 if (manager.isStackActive(resource.stackId)) manager.runState.publishRunState(state, resource.stackId)
                 state.show.moveInDark.onStackSettingsChanged(resource.stackId)
                 state.show.fixtures.cueStackListChanged()
@@ -207,7 +236,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 writeEntryOrder(named + current.filter { it.id.value !in namedIds })
                 // Auto numbers are derived from position, so the moved entries take new ones.
                 renumberAutoEntries(stack, before)
-                stackEntryPriorities(stack)
+                stackEntryPositions(stack)
             }
             if (priorities != null) announceEntriesPlaced(state, resource.parent.stackId, priorities)
             call.respond(HttpStatusCode.OK)
@@ -243,7 +272,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 Triple(
                     null,
                     stack.toCueStackDetails(isCurrentProject = true, manager),
-                    stackEntryPriorities(stack),
+                    stackEntryPositions(stack),
                 )
             }
 
@@ -286,7 +315,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val stackId = resource.parent.parent.stackId
             var refusal: EntryNumberRefusal? = null
             // The new priorities when the number moved the entry, read in the write's own transaction.
-            var movedPriorities: Map<Int, Int>? = null
+            var movedPriorities: StackEntryPositions? = null
             val result = transaction(state.database) {
                 val entry = stackEntry(project, stackId, resource.entryId)
                     ?.takeIf { !it.isMarker }
@@ -312,7 +341,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     return@transaction null to numberPlan.refusal.message
                 }
                 if (numberPlan is EntryNumberEditPlan.Write && setEntryNumber(entry, numberPlan.number, numberPlan.byNumber)) {
-                    movedPriorities = stackEntryPriorities(entry.stack)
+                    movedPriorities = stackEntryPositions(entry.stack)
                 }
                 autoAdvance?.let { entry.autoAdvance = it }
                 if ("autoAdvanceDelayMs" in body) entry.autoAdvanceDelay = body["autoAdvanceDelayMs"].nullableLong().asDuration()
@@ -380,7 +409,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 }
                 writeEntryOrder(existing.take(at) + marker + existing.drop(at), fresh = listOf(marker))
                 // A marker counts in the positions a live cue's priority is derived from.
-                Triple(marker.toCueStackCueEntry(emptyMap()), null, stackEntryPriorities(stack))
+                Triple(marker.toCueStackCueEntry(emptyMap()), null, stackEntryPositions(stack))
             }
             val (entry, error, priorities) = result
             if (entry == null) {
@@ -420,7 +449,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 val anchors = DaoPromptBookAnchors.deleteWhere { DaoPromptBookAnchors.entry eq marker.id }
                 marker.delete()
                 // The entries after it move up a place, and a live cue's priority is its place.
-                anchors to stackEntryPriorities(stack)
+                anchors to stackEntryPositions(stack)
             }
             if (removed == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Marker not found"))
@@ -465,16 +494,25 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 }
                 state.show.fixtures.cueStackListChanged()
                 call.respond(result.toResponse())
+            } catch (e: CueStackLimitException) {
+                call.respond(HttpStatusCode.Conflict, ErrorResponse(e.message!!, CODE_CUE_STACK_LIMIT))
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to activate stack"))
             }
         }
     }
 
-    // POST /{projectId}/cue-stacks/{stackId}/deactivate - Deactivate stack
+    // POST /{projectId}/cue-stacks/{stackId}/deactivate - Stop the stack, fading over its release time
+    // (busk-stack plan D6); `snap: true` lets go at once.
     post<CueStackDeactivateResource> { resource ->
         withCurrentProject(state, resource.parent.parent.projectId, "Cannot deactivate - not current project") { _ ->
-            val removedCount = state.show.cueStackManager.deactivateStack(resource.parent.stackId, state)
+            val request = try { call.receive<DeactivateCueStackRequest>() } catch (_: Exception) { DeactivateCueStackRequest() }
+            val manager = state.show.cueStackManager
+            val removedCount = if (request.snap) {
+                manager.deactivateStack(resource.parent.stackId, state)
+            } else {
+                manager.stopStack(state, resource.parent.stackId)
+            }
             state.show.fixtures.cueStackListChanged()
             call.respond(CueStackDeactivateResponse(stackId = resource.parent.stackId, removedCount = removedCount))
         }
@@ -494,11 +532,14 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             try {
                 val result = state.show.cueStackManager.advanceStack(state, resource.parent.stackId, direction)
                 state.show.fixtures.cueStackListChanged()
-                if (result != null) {
+                // A Release at the end answers the stack as stopped, as the deactivate does.
+                if (result != null && !result.released) {
                     call.respond(result.toResponse())
                 } else {
-                    call.respond(CueStackDeactivateResponse(stackId = resource.parent.stackId, removedCount = 0))
+                    call.respond(CueStackDeactivateResponse(stackId = resource.parent.stackId, removedCount = 0, released = result?.released == true))
                 }
+            } catch (e: CueStackLimitException) {
+                call.respond(HttpStatusCode.Conflict, ErrorResponse(e.message!!, CODE_CUE_STACK_LIMIT))
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to advance stack"))
             }
@@ -514,6 +555,8 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 val result = state.show.cueStackManager.goToEntry(state, resource.parent.stackId, request.entryId)
                 state.show.fixtures.cueStackListChanged()
                 call.respond(result.toResponse())
+            } catch (e: CueStackLimitException) {
+                call.respond(HttpStatusCode.Conflict, ErrorResponse(e.message!!, CODE_CUE_STACK_LIMIT))
             } catch (e: Exception) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Failed to go to cue"))
             }
@@ -633,7 +676,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     updatedCues = details.cues,
                     pinnedCount = unparseable,
                     nullNumberCount = unnumbered,
-                ) to stackEntryPriorities(stack)
+                ) to stackEntryPositions(stack)
             }
 
             if (result == null) {
@@ -731,6 +774,19 @@ data class NewCueStack(
      * `PUT` keeps what is stored, and a field left out of it keeps that field. Ignored for a separator.
      */
     val moveInDark: MoveInDarkDto? = null,
+    /**
+     * The run settings (busk-stack plan §3): absent on a create takes the default, absent on a `PUT`
+     * keeps what is stored. A write that turns [inRunningOrder] off and names no [releaseAtEnd] sets
+     * it unless the stack loops. Ignored for a separator.
+     */
+    val inRunningOrder: Boolean? = null,
+    val releaseAtEnd: Boolean? = null,
+    val releaseTimeMs: Long? = null,
+    /**
+     * *Over the show* (D7), `ADDS | REPLACES`, a busk stack's only: absent keeps what is stored, and a
+     * `PUT` that puts the stack back into the running order and names none sets `ADDS`.
+     */
+    val overShow: String? = null,
 )
 
 @Serializable
@@ -766,6 +822,18 @@ data class CueStackDetails(
     /** *Move in dark* (move-in-dark plan D2), every field present — sent for a stack that is off too. */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val moveInDark: MoveInDarkDto = MoveInDarkSettings.OFF.toDto(),
+    /** Off for a *busk stack*, which the show's playhead never reaches (busk-stack plan D1). */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val inRunningOrder: Boolean = true,
+    /** *After the last cue: Release* (D3). */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val releaseAtEnd: Boolean = false,
+    /** How long a deliberate stop fades (D6). */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val releaseTimeMs: Long = CueStackRelease.DEFAULT_TIME.toMillis(),
+    /** *Over the show* (D7), `ADDS | REPLACES`. */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val overShow: String = CueStackOverShow.ADDS.name,
 )
 
 /**
@@ -869,6 +937,12 @@ data class ActivateCueStackRequest(
 )
 
 @Serializable
+data class DeactivateCueStackRequest(
+    /** Let go at once rather than fading over the release time — *Make this stack live*'s. */
+    val snap: Boolean = false,
+)
+
+@Serializable
 data class AdvanceCueStackRequest(
     val direction: String,
 )
@@ -912,6 +986,8 @@ private fun CueStackManager.ActivateResult.toResponse(): CueStackActivateRespons
 data class CueStackDeactivateResponse(
     val stackId: Int,
     val removedCount: Int,
+    /** An advance that went past the last cue entry and released the stack (busk-stack plan D3). */
+    val released: Boolean = false,
 )
 
 @Serializable
@@ -957,8 +1033,21 @@ private fun DaoCueStack.toCueStackDetails(
         canDelete = isCurrentProject,
         scenery = stackSceneryOf(id).map { it.toDto() },
         moveInDark = moveInDarkSettings.toDto(),
+        inRunningOrder = inRunningOrder,
+        releaseAtEnd = releaseAtEnd,
+        releaseTimeMs = releaseTime.toMillis(),
+        overShow = overShow.name,
     )
 }
+
+/** 400 `CUE_STACK_INVALID`, naming every problem. */
+private suspend fun io.ktor.server.application.ApplicationCall.respondCueStackInvalid(error: Throwable) =
+    respond(HttpStatusCode.BadRequest, ErrorResponse(error.message ?: "Invalid cue stack", CODE_CUE_STACK_INVALID))
+
+private class MoveInDarkInvalid(cause: Throwable) : Exception(cause.message, cause)
+
+private class StackIsPlayhead(name: String) :
+    Exception("'$name' is the show's live stack: stop the show or move the playhead before taking it out of the running order")
 
 /** 400 `MOVE_IN_DARK_INVALID`, naming every problem. */
 private suspend fun io.ktor.server.application.ApplicationCall.respondMoveInDarkInvalid(error: Throwable) =
@@ -1024,8 +1113,8 @@ internal data class EntryMove(
     val toStackId: Int,
     /** A prompt-book anchor stands on the entry: the book shows its new place. */
     val anchored: Boolean,
-    /** Both stacks' entries' priorities; a hold is restamped only within its own stack's band. */
-    val priorities: Map<Int, Int>,
+    /** Both stacks' entries' positions; a hold is restamped only by its own stack's. */
+    val priorities: StackEntryPositions,
 )
 
 /**
@@ -1033,7 +1122,7 @@ internal data class EntryMove(
  * prompt-book anchor stay with it, and both stacks' auto numbers follow the change. A live stack
  * whose live entry it was keeps holding the cue and plays on from where the entry stood, as a
  * removal does (D16), its hold at that stack's priority until its next GO (`restampEntries` restamps
- * a hold only within its own stack's band). The caller has
+ * a hold only by its own stack's positions). The caller has
  * checked that an explicit number is free in [target]. Inside the caller's transaction.
  */
 internal fun moveEntry(state: State, project: DaoProject, entry: DaoCueStackEntry, target: DaoCueStack): EntryMove {
@@ -1060,7 +1149,7 @@ internal fun moveEntry(state: State, project: DaoProject, entry: DaoCueStackEntr
     writeEntryOrder(existing + entry, fresh = listOf(entry))
     renumberAutoEntries(source, beforeSource)
     renumberAutoEntries(target, beforeTarget)
-    val priorities = if (current) stackEntryPriorities(source) + stackEntryPriorities(target) else emptyMap()
+    val priorities = if (current) stackEntryPositions(source) + stackEntryPositions(target) else emptyMap()
     return EntryMove(
         entryId = entry.id.value,
         fromStackId = source.id.value,
@@ -1077,7 +1166,7 @@ internal fun moveEntry(state: State, project: DaoProject, entry: DaoCueStackEntr
  * whose auto-numbered entries may have taken new numbers. Every handler that places a cue entry in a
  * stack of the current project ends here.
  */
-internal fun announceEntriesPlaced(state: State, stackId: Int, priorities: Map<Int, Int>) {
+internal fun announceEntriesPlaced(state: State, stackId: Int, priorities: StackEntryPositions) {
     val manager = state.show.cueStackManager
     manager.holds.restampEntries(priorities)
     if (manager.isStackActive(stackId)) manager.runState.publishRunState(state, stackId)

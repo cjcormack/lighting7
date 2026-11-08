@@ -86,7 +86,7 @@ export interface FxPreviewOutput {
   /** An index into the answer's `fx`. */
   fx: number
   output: FxPreviewSeries
-  heldBackReason?: 'STOMP' | 'PROGRAMMER' | 'BLIND' | null
+  heldBackReason?: 'STOMP' | 'PROGRAMMER' | 'BLIND' | 'REPLACED' | null
 }
 
 export interface FxPreviewAttributeRow {

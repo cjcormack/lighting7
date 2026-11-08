@@ -34,6 +34,8 @@ function heldBackDetail(layer: KeyStackLayer): string | null {
       return 'Blind holds it; it is still running and paints in phase when Blind goes off'
     case 'STOMP':
       return 'a layer above stomps it; it is still running and resumes in phase when the stomp goes'
+    case 'REPLACED':
+      return 'a replacing stack holds it; it resumes in phase as that stack fades'
     default:
       return 'your value holds it back; it is still running and resumes in phase when you clear'
   }
@@ -363,7 +365,7 @@ function StackLayerRow({ layer, cueLabel }: { layer: KeyStackLayer; cueLabel: (c
             data-held-back-reason={layer.heldBackReason ?? undefined}
             className="rounded-full border border-amber-500/55 px-1.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400"
           >
-            {layer.heldBackReason === 'BLIND' ? 'held · Blind' : 'held back'}
+            {layer.heldBackReason === 'BLIND' ? 'held · Blind' : layer.heldBackReason === 'REPLACED' ? 'held · replaced' : 'held back'}
           </span>
         )}
       </div>

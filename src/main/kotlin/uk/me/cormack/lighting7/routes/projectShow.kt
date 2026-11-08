@@ -17,7 +17,8 @@ import uk.me.cormack.lighting7.state.State
  * The "show" is now just the project's ordered list of cue stacks (see [DaoCueStacks]); the content
  * and order of that list live under `/{projectId}/cue-stacks`. These endpoints are the thin
  * *playhead* over it: which stack is currently live ([DaoProject.activeStackId]) and how to
- * step/jump between the runnable `STACK`-type rows (SEPARATORs are skipped).
+ * step/jump between the stacks in the **running order** — `STACK` rows with `inRunningOrder` on;
+ * separators and busk stacks are skipped (busk-stack plan D2).
  */
 internal fun Route.routeApiRestProjectShow(state: State) {
     // GET /{projectId}/show - Current playhead state.
@@ -95,7 +96,7 @@ internal fun Route.routeApiRestProjectShow(state: State) {
 
             if (result != null) {
                 val (projectId, cueStackId) = result
-                state.show.cueStackManager.deactivateStack(cueStackId, state)
+                state.show.cueStackManager.stopStack(state, cueStackId)
                 state.show.fixtures.showChanged(projectId, null, null)
                 // Same shape as /activate, /advance and /go-to: a null `activeStackId` reports
                 // the deactivated state instead of leaving the caller to infer it from a bare 200.
@@ -149,8 +150,11 @@ internal fun Route.routeApiRestProjectShow(state: State) {
                     )
                 }
 
-                if (result.previousCueStackId != null) {
-                    state.show.cueStackManager.deactivateStack(result.previousCueStackId, state)
+                // A stack the playhead leaves is let go at once, unless it is already stopped and still
+                // releasing, which is left to finish (D6).
+                val manager = state.show.cueStackManager
+                if (result.previousCueStackId != null && !manager.isReleasing(result.previousCueStackId)) {
+                    manager.deactivateStack(result.previousCueStackId, state)
                 }
 
                 state.show.cueStackManager.activateAtFirstCue(state, result.cueStackId)
@@ -179,6 +183,7 @@ internal fun Route.routeApiRestProjectShow(state: State) {
                     if (stack.type == CueStackType.SEPARATOR.name) {
                         throw IllegalArgumentException("Cannot go-to a separator")
                     }
+                    if (!stack.inRunningOrder) return@transaction null
 
                     val previousCueStackId = project.activeStackId
                     project.activeStackId = stack.id.value
@@ -189,10 +194,16 @@ internal fun Route.routeApiRestProjectShow(state: State) {
                         cueStackName = stack.name,
                         previousCueStackId = previousCueStackId,
                     )
-                }
+                } ?: return@withCurrentProject call.respond(
+                    HttpStatusCode.Conflict,
+                    ErrorResponse("A busk stack is not in the running order: start it from its own GO", CODE_CUE_STACK_NOT_IN_SHOW),
+                )
 
-                if (result.previousCueStackId != null && result.previousCueStackId != result.cueStackId) {
-                    state.show.cueStackManager.deactivateStack(result.previousCueStackId, state)
+                val manager = state.show.cueStackManager
+                if (result.previousCueStackId != null && result.previousCueStackId != result.cueStackId &&
+                    !manager.isReleasing(result.previousCueStackId)
+                ) {
+                    manager.deactivateStack(result.previousCueStackId, state)
                 }
 
                 state.show.cueStackManager.activateAtFirstCue(state, result.cueStackId)
@@ -281,6 +292,6 @@ private data class ActivateShowResult(
 
 // ─── Entity helpers ────────────────────────────────────────────────────
 
-/** This project's runnable stacks (excluding SEPARATOR rows), in show order. */
+/** This project's running order: its stacks, less separators and busk stacks, in show order. */
 private fun DaoProject.orderedStacks(): List<DaoCueStack> =
-    cueStacks.filter { it.type == CueStackType.STACK.name }.sortedBy { it.sortOrder }
+    cueStacks.filter { it.type == CueStackType.STACK.name && it.inRunningOrder }.sortedBy { it.sortOrder }

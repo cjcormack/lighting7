@@ -383,10 +383,11 @@ The `FxInstance` class has a `cueId: Int?` field (alongside `lookId`, `cueLayerI
 
 A live cue composes at its **highest hold's** priority (cue model plan P3, D10; `fx/CueHolds.kt`):
 
-- A **stack hold** — `cueDerivedPriority` in
-  [`fx/CueApply.kt`](../src/main/kotlin/uk/me/cormack/lighting7/fx/CueApply.kt):
-  `stackId * 1_000_000 + position * 1_000 + 1`, where `position` is the entry's place in the stack's
-  list, markers counted.
+- A **stack hold** — `stackPriority` in
+  [`fx/StackRanks.kt`](../src/main/kotlin/uk/me/cormack/lighting7/fx/StackRanks.kt):
+  `band + rank * 1_000_000 + position * 1_000 + 1`, where `band` is 0 for a stack in the running order
+  and 1 000 000 000 for a busk stack, `rank` the stack's place in its band by latest operator GO
+  (busk-stack plan D5, P3), and `position` the entry's place in the stack's list, markers counted.
 - A **loose hold** — `LOOSE_BAND + seq`, `LOOSE_BAND = 2_000_000_000` and `seq` the registry's
   press counter: above every stack, and the newest press on top. A press over a cue it already holds
   re-stamps it as the newest.
@@ -405,7 +406,7 @@ Because a stack hold's priority is derived from the entry's position, **reorderi
 precedence**. Every write that moves an entry's position — reorder, `add-cue` (and the AI's
 `add_cue_to_stack`), `sort-by-cue-number`, a cue created or recorded mid-list, a cue deleted, a
 marker added or removed (a marker counts in the positions) — calls
-`holds.restampEntries(stackEntryPriorities(stack))` after writing the entries' order. That re-ranks
+`holds.restampEntries(stackEntryPositions(stack))` after writing the entries' order. That re-ranks
 the stack holds whose entries it names and restamps each affected cue to its new highest hold
 through `FxEngine.repriorityCues`, which moves both tiers a cue owns — `FxInstance.priority` and
 the Tier 4 `Assignment.priority` rows — so cues already on stage compose in the new order without

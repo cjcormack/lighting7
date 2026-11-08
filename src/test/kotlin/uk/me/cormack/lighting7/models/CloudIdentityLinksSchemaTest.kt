@@ -1,11 +1,14 @@
 package uk.me.cormack.lighting7.models
 
+import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
+import uk.me.cormack.lighting7.state.tablesOutOfStep
 import java.nio.file.Files
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -27,8 +30,10 @@ class CloudIdentityLinksSchemaTest {
             exec("CREATE UNIQUE INDEX cloud_identity_links_user_id_unique ON cloud_identity_links (user_id)")
         }
         transaction(database) {
+            val outOfStep = tablesOutOfStep(listOf(DaoUsers, DaoCloudIdentityLinks))
+            assertEquals(listOf<Table>(DaoCloudIdentityLinks), outOfStep)
             @Suppress("DEPRECATION")
-            SchemaUtils.createMissingTablesAndColumns(DaoUsers, DaoCloudIdentityLinks)
+            SchemaUtils.createMissingTablesAndColumns(*outOfStep.toTypedArray())
         }
         val (columns, indexes) = transaction(database) {
             val conn = TransactionManager.current().connection.connection as java.sql.Connection

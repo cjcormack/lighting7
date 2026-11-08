@@ -39,6 +39,9 @@ import java.util.concurrent.atomic.AtomicLong
  *   the desk is *at send time*. A session joining mid-fade starts its animation there instead
  *   of replaying from zero. Deliberately a duration and not a wall-clock instant: a tablet
  *   with a skewed clock would otherwise animate a fade that is already over.
+ * @property releasedAtEnd true while the stack is stopped because a GO or follow went past its last
+ *   cue entry with *Release* set (busk-stack plan D3), until its next start: nothing is on deck,
+ *   though [nextCueId] still names the cue a start would fire.
  * @property seq where this frame sits among every run-state frame the desk has produced — see
  *   [CueRunStateTracker.runStateFor]. Server-side only: a socket uses it to drop a frame older
  *   than one it has already sent, and it is not on the wire.
@@ -58,6 +61,7 @@ data class CueRunState(
     val autoAdvance: Boolean,
     val autoAdvanceDelayMs: Long?,
     val seq: Long,
+    val releasedAtEnd: Boolean = false,
 )
 
 /**
@@ -110,6 +114,22 @@ class CueRunStateTracker internal constructor(
      * replaces that whole entry. Transient runtime state — never persisted, never synced.
      */
     private val standbys = ConcurrentHashMap<Int, CueEntryRef>()
+
+    /** The stacks a Release at the end stopped, until their next start ([CueRunState.releasedAtEnd]). */
+    private val releasedAtEnd: MutableSet<Int> = ConcurrentHashMap.newKeySet()
+
+    internal fun markReleasedAtEnd(stackId: Int) {
+        releasedAtEnd += stackId
+    }
+
+    internal fun clearReleasedAtEnd(stackId: Int) {
+        releasedAtEnd -= stackId
+    }
+
+    fun isReleasedAtEnd(stackId: Int): Boolean = stackId in releasedAtEnd
+
+    /** Every stack released at its end: what a carried reload marks again. */
+    fun releasedAtEndStacks(): Set<Int> = releasedAtEnd.toSet()
 
     /** [stackId]'s cue entries in playback order, markers left out. Must be called inside a transaction. */
     internal fun orderedCueEntries(stackId: Int): List<CueEntryRef> =
@@ -229,6 +249,8 @@ class CueRunStateTracker internal constructor(
             CueEntryRef(entryId, entry.cueId ?: throw IllegalArgumentException("Entry $entryId is a marker, which cannot be armed"))
         }
         standbys[stackId] = ref
+        // An armed cue is on deck again, released at the end or not.
+        releasedAtEnd -= stackId
         onNextMayHaveMoved(stackId)
         publishRunState(state, stackId)
     }
@@ -312,14 +334,15 @@ class CueRunStateTracker internal constructor(
             autoAdvance = active?.autoAdvanceRunning == true,
             autoAdvanceDelayMs = active?.autoAdvanceDelayMs,
             seq = seq,
+            releasedAtEnd = stackId in releasedAtEnd,
         )
     }
 
     /**
-     * Stacks with run state worth reporting — live, or holding an armed standby. The
-     * connect-time snapshot walks these rather than every stack in the project.
+     * Stacks with run state worth reporting — live, holding an armed standby, or released at their
+     * end. The connect-time snapshot walks these rather than every stack in the project.
      */
-    fun stacksWithRunState(): Set<Int> = liveStacks.liveStackIds() + standbys.keys
+    fun stacksWithRunState(): Set<Int> = liveStacks.liveStackIds() + standbys.keys + releasedAtEnd
 
     /** Fan [stackId]'s run state out to every connected session. */
     internal fun publishRunState(state: State, stackId: Int, transition: Boolean = false) {

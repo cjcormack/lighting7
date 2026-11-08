@@ -869,11 +869,56 @@ internal val createCueStackTool = ToolDef(
                 put("type", "boolean")
                 put("description", "Loop back to start after last cue. Default false.")
             })
+            putStackRunSettingsSchema()
             put("moveInDark", moveInDarkSchema)
         })
         put("required", buildJsonArray { add("name") })
     }
 )
+
+/**
+ * A stack's run settings (busk-stack plan §3), as `create_cue_stack` and `build_cue_stack` take them.
+ * Shared so the two tools describe them in the same words.
+ */
+internal fun kotlinx.serialization.json.JsonObjectBuilder.putStackRunSettingsSchema() {
+    put("inRunningOrder", buildJsonObject {
+        put("type", "boolean")
+        put(
+            "description",
+            "Whether the stack is in the show's running order, which the playhead steps through. Default true. " +
+                "False makes a busk stack — a song or a moment run from its own GO, a pad, a binding or go_cue_stack, " +
+                "never reached by the show's advance — and sets releaseAtEnd unless loop is on.",
+        )
+    })
+    put("releaseAtEnd", buildJsonObject {
+        put("type", "boolean")
+        put("description", "After the last cue, one more GO (or a follow off it) releases the stack, handing the stage back. Not with loop.")
+    })
+    put("releaseTimeMs", buildJsonObject {
+        put("type", "integer")
+        put("description", "How long a stop or a release fades the stack's light, 0–60000 ms. Default 2000; 0 snaps.")
+    })
+    put("overShow", buildJsonObject {
+        put("type", "string")
+        put("enum", buildJsonArray { add("ADDS"); add("REPLACES") })
+        put(
+            "description",
+            "A busk stack's only (inRunningOrder false): ADDS (the default) composes its cues with the show's by the usual rules, " +
+                "so a song's chase lifts heads over the base look and never darkens them; REPLACES makes every attribute its cue " +
+                "sets win outright, dimmers included — what is under it on that attribute fades out as it comes in, the FX under " +
+                "it are held back, and its release hands the stage back. A character's entrance taking the stage is REPLACES.",
+        )
+    })
+}
+
+/** A tool's `releaseTimeMs`: absent is null, else a whole number of milliseconds or a problem. */
+internal fun toolReleaseTimeMs(raw: kotlinx.serialization.json.JsonElement?): Result<Long?> {
+    if (raw == null || raw is kotlinx.serialization.json.JsonNull) return Result.success(null)
+    val value = (raw as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { !it.isString }?.let { p ->
+        p.content.toLongOrNull() ?: p.content.toDoubleOrNull()?.takeIf { it == kotlin.math.floor(it) && kotlin.math.abs(it) < 1e15 }?.toLong()
+    }
+    return if (value != null) Result.success(value) else Result.failure(IllegalArgumentException("releaseTimeMs must be a whole number of milliseconds"))
+}
 
 internal val activateCueStackTool = ToolDef(
     name = "activate_cue_stack",
@@ -883,7 +928,7 @@ internal val activateCueStackTool = ToolDef(
 
 internal val deactivateCueStackTool = ToolDef(
     name = "deactivate_cue_stack",
-    description = "Deactivate a cue stack, stopping all its FX and cancelling auto-advance.",
+    description = "Stop a cue stack: it reads stopped at once and its light fades out over its release time (releaseTimeMs), its FX shrinking with it; auto-advance is cancelled.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -895,7 +940,7 @@ internal val deactivateCueStackTool = ToolDef(
 
 internal val advanceCueStackTool = ToolDef(
     name = "advance_cue_stack",
-    description = "Advance an active cue stack forward or backward to the next/previous cue. If at the end and looping is enabled, wraps around. If not looping, deactivates the stack.",
+    description = "Advance an active cue stack forward or backward to the next/previous cue. If at the end and looping is enabled, wraps around; with releaseAtEnd, FORWARD releases the stack (it stops, fading over its release time); otherwise it stays on the last cue.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -958,7 +1003,8 @@ internal val goCueStackTool = ToolDef(
     name = "go_cue_stack",
     description = "Press GO on a cue stack — fire whatever is on deck. On a stopped stack that starts it, at the " +
             "armed standby if one is set and at its first cue otherwise; on a running stack it fires the armed " +
-            "standby, else the next cue in order. This is the tool to use for running a show; advance_cue_stack " +
+            "standby, else the next cue in order; past the last cue of a stack with releaseAtEnd it releases " +
+            "the stack. This is the tool to use for running a show; advance_cue_stack " +
             "is for stepping BACKWARD, and activate_cue_stack for jumping to a named cue.",
     inputSchema = buildJsonObject {
         put("type", "object")

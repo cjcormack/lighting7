@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { isInRunningOrder } from '@/lib/runningOrder'
 import { useParams, useNavigate, Navigate, useSearchParams, useLocation } from 'react-router'
 import { SheetPage } from '@/components/sheet/SheetPage'
 import { useProjectQuery } from '../store/projects'
@@ -151,6 +152,7 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
   // FADING badge is unaffected: it animates from the write-once `fade` descriptor.
   const { showBarProps, showHeaderProps, transport, nextStack, activeCue, standbyCue } =
     useShowBarProps(projectIdNum, { onBeforeGo: editLock.noteGo, frameRateProgress: false })
+  // Every stack, busk stacks included: the tab strip and the phone's picker list them (D4).
   const runnableStackCount = stacks?.filter((s) => s.type === 'STACK').length ?? 0
 
   // The phone layout is always locked, whatever the lock says — it is a running surface with no
@@ -511,7 +513,7 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
                 activeStackId != null &&
                 navigate(`/projects/${projectIdNum}/show/stacks/${activeStackId}`)
               }
-              onMakeLive={() => handleMakeLive(phoneStack)}
+              onMakeLive={isInRunningOrder(phoneStack) ? () => handleMakeLive(phoneStack) : undefined}
             />
           )}
           <RunMobile
@@ -574,7 +576,7 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
                   activeStackId != null &&
                   navigate(`/projects/${projectIdNum}/show/stacks/${activeStackId}`)
                 }
-                onMakeLive={() => handleMakeLive(drillStack)}
+                onMakeLive={isInRunningOrder(drillStack) ? () => handleMakeLive(drillStack) : undefined}
               />
             )}
             <ShowView

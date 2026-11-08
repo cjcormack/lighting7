@@ -388,9 +388,8 @@ class FxEngine(
 
         /**
          * Reserved priority band for programmer-owned effects (Session 2's busking FX).
-         * Strictly above every cue priority — a stack hold's
-         * (`cueDerivedPriority(stackId, sort) = stackId*1M + sort*1K + 1`, `fx/CueApply.kt`) and a
-         * loose hold's ([CueHolds.LOOSE_BAND] `+ seq`) — and every manual effect (priority 0). Effects in
+         * Strictly above every cue priority — a stack hold's (its band and rank, then its entry,
+         * [stackPriority]) and a loose hold's ([CueHolds.LOOSE_BAND] `+ seq`) — and every manual effect (priority 0). Effects in
          * this band are exempt from programmer suppression — they modulate *on top of*
          * programmer values rather than being overridden by them.
          */
@@ -474,6 +473,17 @@ class FxEngine(
         effect.weight(dyn, stackFxAmounts?.weightOf(effect) ?: StackFxAmounts.FULL)
 
     /**
+     * [weight] on [fixtureKey] once a replacing stack has had its say (busk-stack plan D8): times the
+     * share the replacing stacks above [effect] on that key leave it, 0 under one fully in. One volatile
+     * read and an empty check while no stack replaces.
+     */
+    internal fun underReplacing(weight: Double, effect: FxInstance, fixtureKey: String): Double {
+        val layer = layerResolver.current
+        if (layer.replaced.isEmpty()) return weight
+        return weight * layerResolver.replacedWeight(layer, fixtureKey, effect.target.attribute, effect.priority, effect.cueId)
+    }
+
+    /**
      * Provenance computation + broadcast. The lambdas hand it read access to the engine's
      * live effect set without a service → engine reference.
      */
@@ -511,7 +521,17 @@ class FxEngine(
      * disturb the fade. Entries whose priority already matches are skipped, which makes the
      * common single-live-cue reorder a no-op. Returns the number of rows changed.
      */
-    fun repriorityCues(priorities: Map<Int, Int>): Int {
+    fun repriorityCues(priorities: Map<Int, Int>): Int = restampLayers(priorities, replaceGroups = null)
+
+    /**
+     * [repriorityCues] with each cue's replace group too (busk-stack plan D7): what [CueHolds] hands
+     * over whenever a hold changes what a cue composes at. The group is the rows' alone — an effect
+     * is held back by a replacing stack's weight, not grouped with it.
+     */
+    fun restampCues(stamps: Map<Int, CueStamp>): Int =
+        restampLayers(stamps.mapValues { it.value.priority }, replaceGroups = stamps.mapValues { it.value.replaceGroup })
+
+    private fun restampLayers(priorities: Map<Int, Int>, replaceGroups: Map<Int, Int?>?): Int {
         if (priorities.isEmpty()) return 0
         var changed = 0
 
@@ -528,7 +548,7 @@ class FxEngine(
         }
 
         // Layer 4 — the assignment rows live in [cueLayer]; it rebuilds them by copy.
-        changed += cueLayer.repriorityAssignments(priorities)
+        changed += cueLayer.repriorityAssignments(priorities, replaceGroups)
         return changed
     }
 
@@ -1165,6 +1185,55 @@ class FxEngine(
      * Get all active effect instances.
      */
     fun getActiveFx(): List<FxInstance> = activeFx.values.toList()
+
+    /**
+     * What one replacing group ([CueAssignmentResolver.ReplacingGroup]) has on stage now: each key it
+     * sets with the value it lands at and its fade weight there, and each running effect it holds back,
+     * with the share it leaves that effect — the replacing stacks' half of `get_current_state`.
+     */
+    data class Replacing(
+        val group: Int,
+        val stackId: Int?,
+        val keys: List<ReplacedKey>,
+        val heldBack: List<HeldBackFx>,
+    )
+
+    data class ReplacedKey(val fixtureKey: String, val attribute: String, val value: CueAssignmentResolver.AttributeValue?, val weight: Double)
+
+    data class HeldBackFx(val fxId: Long, val fixtureKey: String, val attribute: String, val leaves: Double)
+
+    /** Every replacing group on stage now, by [Replacing.group] (busk-stack plan D7, D8). */
+    fun replacing(): List<Replacing> {
+        val layer = layerResolver.current
+        if (layer.replaced.isEmpty()) return emptyList()
+        val keys = HashMap<Int, MutableList<ReplacedKey>>()
+        val held = HashMap<Int, MutableList<HeldBackFx>>()
+        for ((fixtureKey, attributes) in layer.replaced) {
+            for ((attribute, groups) in attributes) {
+                for (group in groups) {
+                    keys.getOrPut(group.group) { ArrayList() } +=
+                        ReplacedKey(fixtureKey, attribute, layer.index[fixtureKey]?.get(attribute), group.weight)
+                }
+            }
+        }
+        for (effect in activeFx.values) {
+            if (isProgrammerFxPriority(effect.priority)) continue
+            val attribute = effect.target.attribute
+            for (fixtureKey in resolveFxFixtureKeys(effect)) {
+                val groups = layer.replaced[fixtureKey]?.get(attribute) ?: continue
+                val leaves = CueAssignmentResolver.replacedWeight(groups, effect.priority, effect.cueId, layerResolver.stackAt)
+                if (leaves >= 1.0) continue
+                for (group in groups) {
+                    if (group.holdsBack(effect.priority, effect.cueId, layerResolver.stackAt)) {
+                        held.getOrPut(group.group) { ArrayList() } += HeldBackFx(effect.id, fixtureKey, attribute, leaves)
+                    }
+                }
+            }
+        }
+        return keys.entries.sortedBy { it.key }.map { (group, list) ->
+            Replacing(group, group.takeIf { it > 0 }, list.sortedWith(compareBy({ it.fixtureKey }, { it.attribute })), held[group].orEmpty())
+        }
+    }
 
     /**
      * [effects] in the order a home stores them (FX editor plan §3.5): two that share a key — an
@@ -2667,7 +2736,8 @@ class FxEngine(
                 val calculate = { calculateFxOutput(effect, fixtureKey, tick, deltaMs, step, fxPhase, context) }
                 val output = carry?.step?.outputFor(effect.effect, tick, calculate) ?: calculate()
                 if (!isSuppressed(suppression, blind, fixtureKey, effect.target.attribute, effect)) {
-                    effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode, weightOf(effect, dyn))
+                    val weight = underReplacing(weightOf(effect, dyn), effect, fixtureKey)
+                    if (weight > 0.0) effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode, weight)
                 }
             }
 
@@ -2733,7 +2803,8 @@ class FxEngine(
                 effect, elementKey, tick, deltaMs, step, memberPhase, plan.contexts[distributionIdx],
             )
             if (!isSuppressed(suppression, blind, elementKey, effect.target.attribute, effect)) {
-                effect.target.applyValue(fixturesWithTx, elementKey, output, effect.blendMode, weight)
+                val painted = underReplacing(weight, effect, elementKey)
+                if (painted > 0.0) effect.target.applyValue(fixturesWithTx, elementKey, output, effect.blendMode, painted)
             }
         }
         if (!lastMemberPhase.isNaN()) effect.lastPhase = lastMemberPhase
@@ -2767,7 +2838,8 @@ class FxEngine(
             val output = calculateFxOutput(effect, keys.first(), tick, deltaMs, step, memberPhase, plan.contexts[unitIdx])
             for (key in keys) {
                 if (!isSuppressed(suppression, blind, key, effect.target.attribute, effect)) {
-                    effect.target.applyValue(fixturesWithTx, key, output, effect.blendMode, weight)
+                    val painted = underReplacing(weight, effect, key)
+                    if (painted > 0.0) effect.target.applyValue(fixturesWithTx, key, output, effect.blendMode, painted)
                 }
             }
         }
@@ -2817,7 +2889,8 @@ class FxEngine(
                         effect, member.key, tick, deltaMs, step, memberPhase, plan.contexts[memberIdx],
                     )
                     if (!isSuppressed(suppression, blind, member.key, effect.target.attribute, effect)) {
-                        effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode, weight)
+                        val painted = underReplacing(weight, effect, member.key)
+                        if (painted > 0.0) effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode, painted)
                     }
                 }
                 if (!lastMemberPhase.isNaN()) effect.lastPhase = lastMemberPhase
@@ -3076,8 +3149,17 @@ class FxEngine(
         override fun heldBack(): (FxInstance, String, String) -> KeyStackLayer.HeldBackReason? {
             val blind = programmerStore.blind
             val held = programmerSuppression(blind)
-            return { effect, key, attribute -> FxSuppression.heldBackReason(held, blind, key, attribute, effect, isLayerStomped) }
+            val layer = layerResolver.current
+            return { effect, key, attribute ->
+                FxSuppression.heldBackReason(
+                    held, blind, key, attribute, effect, isLayerStomped,
+                    layerResolver.replacedWeight(layer, key, attribute, effect.priority, effect.cueId),
+                )
+            }
         }
+
+        override fun replaced(effect: FxInstance, key: String, attribute: String): Double =
+            layerResolver.replacedWeight(layerResolver.current, key, attribute, effect.priority, effect.cueId)
 
         override fun stackAmount(effect: FxInstance): Double = stackFxAmounts?.weightOf(effect) ?: StackFxAmounts.FULL
 

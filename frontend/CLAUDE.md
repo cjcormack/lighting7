@@ -720,8 +720,10 @@ Release folds to its glyph and the scope line drops the fade.
 - **The stack** (D5): the chip opens `LayerStack` through `EditorSurface` — `programmer.keyStack`
   asked on open and **again whenever the key's provenance moves** while open, every layer top first,
   the one on stage ticked, held-back layers struck through and said out loud — *why* from the desk's
-  `heldBackReason`: your value, a stomp, or Blind (*held · Blind*, show-cue-editing plan D7); an
-  older desk's unreasoned hold reads as your value. *Clear yours — let it run* is offered only over a
+  `heldBackReason`: your value, a stomp, Blind (*held · Blind*, show-cue-editing plan D7), or a
+  replacing busk stack above it (*held · replaced*, lighting7 busk-stack plan D8: a weight, so it
+  still paints at what that stack leaves, and resumes in phase as it fades); an older desk's
+  unreasoned hold reads as your value. *Clear yours — let it run* is offered only over a
   hold your value makes (`heldByYourValue`). The client never works out what is underneath.
 - **Clearing** (D6): a row's × is drawn only while the programmer holds the row by an owner
   `clearEntry` releases (a slot only a pressed layer holds is not the operator's to clear), and sends
@@ -5837,7 +5839,9 @@ drives carries a violet chip — the wave and the Speed (`lensDivision`: `×8`, 
 desk names no FX on a key whose every painter it skipped, so a running, weighted FX under a
 key provenance gives to a cue is stomped there — `lensHeldReason` checks the weight's other factors
 first (paused, spent, leaving, amount 0, envelope 0, its stack at FX amount 0), so none of those is ever
-called a stomp. A click opens `FxEditorPopover` on that FX, its split edit for the cell's batch;
+called a stomp. A replacing busk stack fully in reads the same way there, so the lens words it as a
+stomp: `LENS_REASON_WORDS` has `REPLACED`'s *a replacing stack holds it back*, but nothing on this side
+can tell the two apart. A click opens `FxEditorPopover` on that FX, its split edit for the cell's batch;
 with several, a menu names them first. Things that will bite:
 
 - **One index, read per cell, never a subscription per row.** `fixtures-list/cellFx.ts`'s
@@ -7058,6 +7062,24 @@ and `liveStackId` (the green pip) as separate props, and arming is an explicit, 
 in `OffPlayheadBanner`. The confirmation is not ceremony: `POST /show/go-to` deactivates the stack
 being left and then calls `activateAtFirstCue` on the target, so the target's first cue genuinely
 fires and the desk darkens it again — a visible blip on top of losing the current cue.
+
+**Busk stacks come after the show's own** (lighting7 busk-stack plan D1–D4). A stack with
+`inRunningOrder` false is a busk stack, run from its own GO or a pad, never the playhead's. The tab
+strip and the stack list (`ShowOverview`) draw the running order's stacks and separators, then a
+*Busk* divider and the busk stacks, each running one with a live dot and its live entry's number,
+and the list numbers only the running order's rows, a busk stack being no step of the show
+(`lib/runningOrder.ts`'s `splitBuskStacks`); a drag in the list reorders within its side of the
+divider (`reorderWithinGroup`). The off-playhead banner offers no *Make this stack live* for one. The
+transport's boundary GO, the next-stack label and `canStart` read the **running order**
+(`runningOrder`, `nextInRunningOrder`); the counts that decide whether the strip and the phone's
+picker draw keep every stack, busk stacks included. Two predicates answer the GO: **GO releases**
+(`isGoReleases`: the playhead stack is set to Release, live, nothing armed) sends GO to the stack's own
+advance, which releases it, and **nothing on deck** (`isNothingOnDeck`: no next cue, or the run
+state's `releasedAtEnd`) makes it the boundary GO; `useShowTransport` exposes both, and the phone's
+GO/END reads them through `RunnerDisplayState`. *Make this stack live* deactivates with `snap: true`,
+since a stop otherwise fades over the stack's release time. `CueStackForm` carries *In the running
+order*, *After the last cue* (Stay · Loop · Release, one choice) and *Release time*; turning the
+switch off sets Release unless the stack loops.
 
 **And the Stacks button has to be able to leave one.** `/show`, `/show/stacks/:id`,
 `/show/stacks/:id/table` and `/show/stacks/:id/timeline` are four sibling routes with an `element` each, so going back from a stack

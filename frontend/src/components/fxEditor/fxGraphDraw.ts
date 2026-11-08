@@ -310,7 +310,8 @@ function drawRow(
       const colour = options.highlight === 'holding' ? palette.highlight : palette.holding
       for (const [from, to] of holding) hatch(ctx, x(from), top, x(to + 1) - x(from), rowH, colour)
     }
-    if (own && pickedOutput.heldBackReason != null) hatch(ctx, layout.plotLeft, top, layout.plotWidth, rowH, palette.heldBack)
+    // A replacing stack's hold is a weight: the FX still paints at what it leaves, so it is not hatched out.
+    if (own && pickedOutput.heldBackReason != null && pickedOutput.heldBackReason !== 'REPLACED') hatch(ctx, layout.plotLeft, top, layout.plotWidth, rowH, palette.heldBack)
     const lit = options.highlight === 'starts'
     const half = lit ? 4 : 3
     ctx.fillStyle = lit ? palette.highlight : palette.start

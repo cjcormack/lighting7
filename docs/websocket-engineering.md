@@ -752,7 +752,7 @@ payload-free, since one project has one rig).
 | `fixturesChanged` | — | Fixtures re-registered; `channelMappingState` follows immediately |
 | `promptBookChanged` | — | Prompt-book content changed |
 | `showChanged` | `projectId`, `activeStackId?`, `activeStackName?` | The active show/stack moved |
-| `cueRunStateChanged` | `projectId`, `stackId`, `activeCueId?`, `nextCueId?`, `activeEntryId?`, `nextEntryId?`, `standbyEntryId?`, `nextIsArmed`, `transition`, `fadeDurationMs?`, `fadeElapsedMs?`, `autoAdvance`, `autoAdvanceDelayMs?` | One frame per transition, and one per stack-list write that can move an active stack's next (a cue entry placed, moved or removed, the list reordered or sorted, or a stack PUT, whose loop decides what follows the last entry); the client animates the fade locally. The entry ids are which **entry** the stack is on, arms and fires next (cue model plan P2) — a stack naming one cue twice is on one of the two |
+| `cueRunStateChanged` | `projectId`, `stackId`, `activeCueId?`, `nextCueId?`, `activeEntryId?`, `nextEntryId?`, `standbyEntryId?`, `nextIsArmed`, `transition`, `fadeDurationMs?`, `fadeElapsedMs?`, `autoAdvance`, `autoAdvanceDelayMs?`, `releasedAtEnd?` | One frame per transition, and one per stack-list write that can move an active stack's next (a cue entry placed, moved or removed, the list reordered or sorted, or a stack PUT, whose loop decides what follows the last entry); the client animates the fade locally. The entry ids are which **entry** the stack is on, arms and fires next (cue model plan P2) — a stack naming one cue twice is on one of the two. `releasedAtEnd` (omitted when false) says the stack stopped by going past its last cue with *Release* set, until its next start or an armed standby (busk-stack plan D3) |
 | `cueHolds.state` | `projectId`, `cues: [{cueId, priority, stackId?, holds: [{kind: STACK, stackId, entryId} \| {kind: LOOSE, seq}], edited?}]` | What holds every live cue, and whether each is edited since GO (§"Cue holds" below). `StateFlow`-backed, so the subscription is the snapshot |
 
 **`busk.layoutChanged` also has to refresh the library rows' `buskPageCount`,** and where that
@@ -1283,8 +1283,10 @@ cue value or a full park covering what is below. The FX kinds carry `fxId`, `fxT
 `BlindHold`'s over one read of blind, the tick's questions asked of the same code, so the sheet's
 *held back* mark cannot disagree with the rig — with **`heldBackReason`** beside it whenever it is
 true: `STOMP` (a layer above stomps it), `PROGRAMMER` (the programmer's value on the key, never a
-band FX) or `BLIND` (Blind holds the programmer band, show-cue-editing plan D7), asked in that
-order, so a stomped band FX still reads `STOMP` under Blind. A desk that predates the field sends
+band FX), `BLIND` (Blind holds the programmer band, show-cue-editing plan D7) or `REPLACED` (a
+replacing busk stack above it on the key, busk-stack plan D8 — a weight rather than a switch, so the
+FX still paints at what that stack leaves it), asked in that order, so a stomped band FX still reads
+`STOMP` under Blind. A desk that predates the field sends
 none, and the client reads an unreasoned hold as `PROGRAMMER`, which every hold then was. An
 FX painting every channel of the key under a sibling key — a Circle on `position` under a `pan`
 row — is on that key's stack too, as provenance credits it (`lighting-composition-model.md`

@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
  * On a brand-new database `initDatabase` uses `SchemaUtils.create` instead of
  * `createMissingTablesAndColumns`, because the latter reconciles the model against the live
  * schema through JDBC metadata and sqlite-jdbc answers that by re-parsing every table's DDL —
- * ~1220 ms for these tables, paid whether or not anything is missing. `create` does the same job
+ * seconds for these tables, paid whether or not anything is missing. `create` does the same job
  * on an empty database in ~6 ms. That one branch took the test suite from ~13.5 min to ~1 min,
  * so it is worth a test that says *why it is safe*: the two paths must produce the same schema.
  *
