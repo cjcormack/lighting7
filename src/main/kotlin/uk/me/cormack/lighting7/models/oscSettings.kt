@@ -35,6 +35,8 @@ object DaoOscSendersTable : IntIdTable("osc_senders") {
     val name = varchar("name", 100)
     /** The sender's IP literal, in the canonical form `InetAddress.hostAddress` gives. */
     val address = varchar("address", 64)
+    /** Whether each message this sender sends is answered with a `/lighting7/reply` (D14). */
+    val replies = bool("replies").default(false)
 }
 
 class DaoOscSender(id: EntityID<Int>) : IntEntity(id) {
@@ -42,7 +44,8 @@ class DaoOscSender(id: EntityID<Int>) : IntEntity(id) {
 
     var name by DaoOscSendersTable.name
     var address by DaoOscSendersTable.address
+    var replies by DaoOscSendersTable.replies
 }
 
-/** UDP 8415, beside the desk's 8413 and the public listener's 8414 (D13). */
+/** 8415, UDP and TCP, beside the desk's 8413 and the public listener's 8414 (D13). */
 const val OSC_DEFAULT_PORT = 8415

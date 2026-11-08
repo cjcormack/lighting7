@@ -1,6 +1,6 @@
 # Lighting7 Cloud P1: remote access and MCP, the desk's side
 
-> **Document status: ACTIVE — written 2026-11-05; sessions 1–8 merged, session 9 planned.** The desk half of the PRD's
+> **Document status: ACTIVE — written 2026-11-05; sessions 1–8 merged, session 9 in review.** The desk half of the PRD's
 > phase P1. The cloud half is `docs/plans/p1-plan.md` in `cjcormack/lighting7-cloud`. Design record:
 > [`cloud-design/INDEX.md`](cloud-design/INDEX.md), whose rules R1–R7 apply to every session here.
 
@@ -260,8 +260,8 @@ P1 is done when `FU-MANUAL-CLOUD-P1` (§6), the PRD's exit criteria, passes.
   `/.well-known/*`, `/mcp` on the public listener, the connected-apps routes and UI, the *Remote
   access* tab, `mcp.publicUrl`, `mcp.extraRedirectUris` and `mcp.tunnel.*` (a `local.conf` naming one
   logs a warning), and cookie sign-in on 8414, which then takes bearer tokens only. The tables go
-  through the migration seam that now exists (`State.initDatabase`'s numbered steps): step 11,
-  `state/RetiredRemoteAccessMigration.kt`, drops `mcp_oauth_clients` and `mcp_oauth_grants` and
+  through the migration seam that now exists (`State.initDatabase`'s numbered steps): step 13 (11 and 12
+  went to the cue-number and Own tempo steps first), `state/RetiredRemoteAccessMigration.kt`, drops `mcp_oauth_clients` and `mcp_oauth_grants` and
   `remote_access_settings`' `enabled` and `domain`, backing the database up first when either table has
   rows, and deletes the `ngrok:authtoken` credential and the downloaded agents under
   `<appDataDir>/ngrok`. `oauth_identities` is GitHub sync's and stays for P2. `SyncCoverageTest`'s
@@ -321,7 +321,7 @@ and a session is added here for it.
 | 6 | Linking cloud accounts | merged | `claude/festive-wright-5j9oje` | [#364](https://github.com/cjcormack/lighting7/pull/364) | `0b40974` |
 | 7 | Remote sessions on the Cloud tab | merged | `claude/gifted-hopper-w8jn4c` | [#366](https://github.com/cjcormack/lighting7/pull/366) | `a3984d1` |
 | 8 | The MCP relay | merged | `claude/cloud-p1-v6rzx8` | [#367](https://github.com/cjcormack/lighting7/pull/367) | `33dd2fe` |
-| 9 | Delete ngrok and the desk's OAuth server | planned | | | |
+| 9 | Delete ngrok and the desk's OAuth server | in review | `claude/elegant-gauss-7h7ld1` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session` fills
 *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts the
@@ -650,7 +650,7 @@ next; whoever merges the last fills its own.
 - D18, all of it, in its order (moves first), and the *Remote access* tab removed (its switches are on
   the Cloud tab since session 7); `REMOTE_NEEDS_ACCOUNT` and the rest of `installRemoteHardening` stay,
   less the OAuth exemption.
-- **Tests:** step 11 over a frozen database at step 10 holding grants, clients, a tunnel row and the
+- **Tests:** step 13 over a frozen database at step 12 holding grants, clients, a tunnel row and the
   authtoken (`src/test/resources/db/pre-retired-remote-access.sql`, never regenerated), and over one
   holding none; the policy switches and the lockout working from their new homes; a cookie on 8414
   refused; the deleted routes 404; `SyncCoverageTest`. `./gradlew check shadowJar` and `npm run check`.
@@ -660,6 +660,17 @@ next; whoever merges the last fills its own.
   `docs/websocket-engineering.md`'s `tunnel.state` rows; `docs/desk-accounts.md`'s Remote access and
   public-listener sign-in passages; the tunnel steps in `docs/plans/manual-validation.md`.
   `FU-MANUAL-CLOUD-P1` (§6) added to `docs/plans/manual-validation.md`.
+
+  As built: the step is 13, its frozen database at 12. On the public listener `POST /auth/login` is 403
+  `REMOTE_PASSWORD_SIGN_IN` and `resolveCaller` reads no cookie, and `/mcp`, `/oauth/…` and `/.well-known/…`
+  answer 404 there rather than the SPA's page; only `/api/` is traced now. A desk grant's `mcp-grant:`
+  history source went with the grants, so `HistorySource.mcp` names cloud grants alone. `SetupTools`' desk
+  link is the shell's only while *Remote sessions* is on (the owner's call, 2026-11-07), else the desk's own
+  `/prompt-book`. Step 13 stops an ngrok agent the old PID file names before deleting it. The leftovers
+  outside the database (the authtoken, `<appDataDir>/ngrok`) go once the credential store exists, and only
+  when step 13 met the tunnel's schema, so a fresh database never opens the store for them. The tests sign
+  in on 8414 as remote sessions a `FakeCloud` adoption signs (`testsupport/RemoteDesk.kt`). The glossary
+  had no remote rows to change. `TokenScrubber` keeps its ngrok patterns, for logs written before.
 
 ## 6. The gate and the operator checks
 

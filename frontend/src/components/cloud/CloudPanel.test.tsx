@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CloudState } from '@/store/cloud'
 
 // Store-connected. Mocking the store modules keeps this a component test and keeps the import
-// graph away from lightingApi's real WebSocket, as RemoteAccessPanel's test does.
+// graph away from lightingApi's real WebSocket.
 const mocks = vi.hoisted(() => ({
   state: undefined as unknown,
   role: 'ADMIN' as string,

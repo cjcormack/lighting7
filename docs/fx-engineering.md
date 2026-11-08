@@ -2971,17 +2971,18 @@ The timing source is stored on `FxRegistration` in the `FxRegistry` and propagat
 
 ### Control-surface bindings
 
-Three `BindingTarget` variants drive the bank from hardware, and one the FX's Speed
+Four `BindingTarget` variants drive the bank from hardware, and one the FX's Speed
 (`midi/BindingTarget.kt`, dispatched by `midi/SurfaceInputRouter.kt`):
 
 | Target | Control | Behaviour |
 |--------|---------|-----------|
 | `speedMasterBpm` | fader / encoder | `{ masterUuid?, minBpm, maxBpm }` — 0..127 maps across the window, clamped into the clock's 20..300. Defaults to 60..180, because spreading 128 steps over the full range gives ~2.2 BPM a step |
 | `speedMasterTap` | button | `{ masterUuid? }` — taps on press, no-op on release |
+| `speedMasterSetBpm` | button | `{ masterUuid?, bpm }` — sets that tempo on press, 20–300, taken whole (OSC plan D10): `SpeedMasterBank.setBpm`, a typed tempo's write (on a held master it moves the hold), refused on a follower. What OSC's `/tempo/{master}` builds from the BPM it carries |
 | `speedMasterScale` | button | `{ masterUuid?, factor }` — ×½ or ×2 on press (fx-speed plan D12): `SpeedMasterBank.scale`, the running tempo times the factor, a tempo write by D9 (on a held master it moves the hold). Refused as `OutOfRange` where it would leave 20–300, rather than clamped, and on a follower. No factor is kept: a tap afterwards sets the beat it hears. The rail cards and the master's detail sheet send the same write as `speedMasters.scale` (refusal `SPEED_MASTER_RANGE`), their buttons disabled at the range's ends and on a follower |
 | `fxSpeed` | fader / encoder | The Speed of every Local FX painting a selected head, each whole (D13) — see below |
 
-The three tempo targets address the master by **uuid** (null → master 1), so they survive clone and
+The four tempo targets address the master by **uuid** (null → master 1), so they survive clone and
 cross-install import — unlike the older int-id cue/stack variants (`FU-SYNC-BINDING-PAYLOAD-UUIDS`).
 A binding naming a deleted master reports `AssignmentHealth.MissingSpeedMaster` rather than
 falling back to master 1: an *FX* degrading to the global tempo is reasonable, a control

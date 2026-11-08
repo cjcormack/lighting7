@@ -80,8 +80,8 @@ class HistoryControlsTest : RouteIntegrationTest() {
         assertTrue(state.history.entries(projectId).none { it.undone })
     }
 
-    private val claude = AuthenticatedUser(1, UUID.randomUUID(), "chris", "Chris", UserRole.ADMIN, "mcp-grant:7")
-    private val otherClaude = AuthenticatedUser(1, UUID.randomUUID(), "chris", "Chris", UserRole.ADMIN, "mcp-grant:8")
+    private val claude = AuthenticatedUser(1, UUID.randomUUID(), "chris", "Chris", UserRole.ADMIN, "cloud-grant:7")
+    private val otherClaude = AuthenticatedUser(1, UUID.randomUUID(), "chris", "Chris", UserRole.ADMIN, "cloud-grant:8")
 
     private fun call(user: AuthenticatedUser, tool: String, arguments: String): Pair<Boolean, JsonObject> {
         val answer = runBlocking {
@@ -122,8 +122,8 @@ class HistoryControlsTest : RouteIntegrationTest() {
     fun `undo_changes refuses another grant's change and takes back its own`() {
         ok(claude, "create_cue_stack", """{"name":"Act 1"}""")
         ok(otherClaude, "create_cue_stack", """{"name":"Act 2"}""")
-        val theirs = state.history.entries(projectId).first { it.source.key == "mcp:8" }.id
-        val mine = state.history.entries(projectId).first { it.source.key == "mcp:7" }.id
+        val theirs = state.history.entries(projectId).first { it.source.key == "mcp:cloud:8" }.id
+        val mine = state.history.entries(projectId).first { it.source.key == "mcp:cloud:7" }.id
 
         assertEquals("HISTORY_NOT_YOURS", refusal(claude, "undo_changes", """{"entryId":"$theirs"}"""))
         assertEquals(setOf("Act 1", "Act 2"), stacks(), "nothing was undone")
@@ -133,7 +133,7 @@ class HistoryControlsTest : RouteIntegrationTest() {
         assertEquals(setOf("Act 2"), stacks())
         assertEquals("HISTORY_EMPTY", refusal(claude, "undo_changes", """{"entryId":"$mine"}"""), "already undone")
         assertTrue(state.history.entries(projectId).single { it.id == mine }.undone)
-        assertTrue(state.history.entries(projectId).none { it.source.key == "mcp:7" && !it.undone }, "the undo made no entry of its own")
+        assertTrue(state.history.entries(projectId).none { it.source.key == "mcp:cloud:7" && !it.undone }, "the undo made no entry of its own")
     }
 
     @Test
@@ -156,7 +156,7 @@ class HistoryControlsTest : RouteIntegrationTest() {
     @Test
     fun `undo_changes is held to the remote script gate`() {
         state.ensureHistory(projectId)
-        write(HistorySource.mcp("mcp-grant:7")) { DaoScript.new { project = DaoProject[projectId]; name = "Chase"; script = "println(1)" } }
+        write(HistorySource.mcp("cloud-grant:7")) { DaoScript.new { project = DaoProject[projectId]; name = "Chase"; script = "println(1)" } }
         assertEquals("REMOTE_SCRIPTS_DISABLED", refusal(claude, "undo_changes", "{}"))
         assertTrue(transaction(state.database) { DaoScript.all().any { it.name == "Chase" } }, "nothing was undone")
     }
@@ -185,7 +185,7 @@ class HistoryControlsTest : RouteIntegrationTest() {
             a.id.value to b.id.value
         }
         state.ensureHistory(projectId)
-        val grant = HistorySource.mcp("mcp-grant:7")
+        val grant = HistorySource.mcp("cloud-grant:7")
         write(grant) { DaoLook[first].name = "Warmer wash" }
         write(grant) { DaoLook[second].name = "Cooler wash" }
 

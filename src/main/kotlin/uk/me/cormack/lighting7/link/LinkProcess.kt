@@ -36,7 +36,7 @@ interface SidecarLaunches {
 }
 
 /**
- * The sidecar supervised (cloud-p1 plan D11, NFR-SAFE-2), as ngrok's agent is: a launch that ends —
+ * The sidecar supervised (cloud-p1 plan D11, NFR-SAFE-2): a launch that ends —
  * it exited, crashed, or was killed as hung — is followed by another after a backoff of 1 s doubling
  * to 30 s, reset once a launch has served for 60 s. The sidecar must not outlive the desk, so each
  * launch is in the desk's Windows job, a shutdown hook stops the current one, and each records itself

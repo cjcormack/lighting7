@@ -106,7 +106,7 @@ class DeskMetrics {
 
     private val oscCounts = AtomicLongArray(OscResult.entries.size)
 
-    /** One OSC message (or, for [OscResult.REFUSED], packet) — from `osc-1`, so an atomic add and nothing else. */
+    /** One OSC message (or, for [OscResult.REFUSED], packet) — from the receive threads, so an atomic add and nothing else. */
     fun osc(result: OscResult) {
         oscCounts.incrementAndGet(result.ordinal)
     }

@@ -6,33 +6,22 @@ import org.jetbrains.exposed.v1.dao.IntEntity
 import org.jetbrains.exposed.v1.dao.IntEntityClass
 
 /**
- * Remote access (the ngrok tunnel) for this machine: at most one row.
+ * What a remote caller may do on this machine, at most one row: `cloud/RemotePolicy.kt`'s switches.
  *
- * Machine-local and never synced — it names *this* desk's public address and whether this desk is
- * reachable from the internet, which is a fact about the machine, not about a show. The ngrok
- * authtoken is deliberately not a column: it is a secret and lives in the `CredentialStore`
- * (keychain or encrypted file), beside the GitHub tokens. See `docs/mcp-engineering.md`
- * §"Remote access".
- *
- * No row means "never saved from the desk": `local.conf`'s `mcp.tunnel.*` keys are the defaults
- * until the first save, after which this row wins.
+ * Machine-local and never synced — whether this desk lets the internet run a script or fire a cannon
+ * is a fact about the machine, not about a show. No row means every switch off.
  */
 object DaoRemoteAccessSettingsTable : IntIdTable("remote_access_settings") {
-    val enabled = bool("enabled").default(false)
-    /** The ngrok domain without scheme, e.g. `desk-name.ngrok-free.app`. Null until set. */
-    val domain = varchar("domain", 253).nullable()
-    /** Whether a remote request may compile, run or save scripts. Off by default. */
+    /** Whether a remote request may compile, run or save scripts. */
     val allowScripts = bool("allow_scripts").default(false)
     /**
-     * Whether a remote request may arm the desk, fire a one-shot trigger or reload one (stage-view
-     * plan session 9, D16). Off by default: a confetti cannon spends something physical, in a room
-     * the remote caller cannot see.
+     * Whether a remote request may arm the desk, fire a one-shot trigger or reload one: a confetti
+     * cannon spends something physical, in a room the remote caller cannot see.
      */
     val allowEffects = bool("allow_effects").default(false)
     /**
      * Whether a remote request — MCP included — may run a fixture command: a reset, a lamp strike, a
-     * lamp off (fixture optics plan session 7, D13). Off by default: a lamp off is a dark head for eight
-     * minutes, in a room the remote caller cannot see.
+     * lamp off. A lamp off is a dark head for eight minutes, in a room the remote caller cannot see.
      */
     val allowCommands = bool("allow_commands").default(false)
     val updatedAt = utcInstant("updated_at")
@@ -41,8 +30,6 @@ object DaoRemoteAccessSettingsTable : IntIdTable("remote_access_settings") {
 class DaoRemoteAccessSettings(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<DaoRemoteAccessSettings>(DaoRemoteAccessSettingsTable)
 
-    var enabled by DaoRemoteAccessSettingsTable.enabled
-    var domain by DaoRemoteAccessSettingsTable.domain
     var allowScripts by DaoRemoteAccessSettingsTable.allowScripts
     var allowEffects by DaoRemoteAccessSettingsTable.allowEffects
     var allowCommands by DaoRemoteAccessSettingsTable.allowCommands

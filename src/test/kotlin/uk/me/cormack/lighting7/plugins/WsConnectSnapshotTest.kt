@@ -54,9 +54,8 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // The hand, in the show band beside the selection. Empty on a fresh desk, which is exactly
         // the case a replay-1 SharedFlow would have nothing to say about.
         HandStateOutMessage::class,
-        // Remote access, machine band, admin sockets only — and a zero-user desk's socket is one.
-        TunnelStateOutMessage::class,
-        // Lighting7 Cloud (cloud-p0 plan D14), machine band, admin sockets only, like the tunnel's.
+        // Lighting7 Cloud (cloud-p0 plan D14), machine band, admin sockets only — and a zero-user
+        // desk's socket is one.
         CloudStateOutMessage::class,
         // The remote sessions waiting for an admin (cloud-p1 plan D13), machine band, admin sockets on
         // the desk's own listener: empty on a fresh desk, which is still what every window's toasts read.

@@ -36,7 +36,7 @@ import kotlin.test.assertTrue
  * The MCP show-setup tools (`ai/SetupTools.kt`), driven the way the MCP server drives them: a tool
  * name and a JSON argument object in, a [ToolExecutionResult] out. The through-the-wire half —
  * that `tools/list` offers them and marks the readers read-only — is asserted here too, against
- * [McpProtocol] directly; `McpServerTest` already covers the transport.
+ * [McpProtocol] directly; `cloud/McpRelayTest` covers the transport.
  */
 class McpSetupToolsTest : RouteIntegrationTest() {
 
@@ -887,6 +887,17 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         assertTrue(problems.any { "layers[0]" in it && "LOOK_LAYER_TARGETED" in it }, problems.toString())
         assertTrue(problems.any { "no look 99999" in it }, problems.toString())
         assertTrue(problems.any { "BOGUS" in it }, "the row's other problems are named in the same answer: $problems")
+    }
+
+    @Test
+    fun `with no prompt book, Claude names the desk's own page, or the cloud's when one is given`() {
+        val local = call("get_prompt_book", "{}").json()["message"]!!.jsonPrimitive.content
+        assertTrue("the desk's Prompt Book view (/prompt-book)" in local, local)
+
+        val shell = SetupTools(state, AiTools(state), deskUrl = { path -> "https://cloud.example/r/inst-1$path" })
+        val remote = runBlocking { shell.executeTool("get_prompt_book", JsonObject(emptyMap())) }
+        val message = Json.parseToJsonElement(remote.result).jsonObject["message"]!!.jsonPrimitive.content
+        assertTrue("open https://cloud.example/r/inst-1/prompt-book and import" in message, message)
     }
 
     @Test

@@ -81,9 +81,11 @@ open class RecordingSurfaceActions : SurfaceActions {
     override fun writeSpeedMasterBpm(masterUuid: String?, minBpm: Double, maxBpm: Double, midiValue7Bit: UByte) {
         calls += RecordedCall.WriteSpeedMasterBpm(masterUuid, minBpm, maxBpm, midiValue7Bit)
     }
-    override fun tapSpeedMaster(masterUuid: String?) {
-        calls += RecordedCall.TapSpeedMaster(masterUuid)
-    }
+    override fun tapSpeedMaster(masterUuid: String?): ActionOutcome = answer(RecordedCall.TapSpeedMaster(masterUuid))
+    override fun setSpeedMasterBpm(masterUuid: String?, bpm: Double): ActionOutcome =
+        answer(RecordedCall.SetSpeedMasterBpm(masterUuid, bpm))
+    override fun setBlackout(on: Boolean): ActionOutcome = answer(RecordedCall.SetBlackout(on))
+    override fun setGrandMasterLevel(percent: Double): ActionOutcome = answer(RecordedCall.SetGrandMasterLevel(percent))
     override fun scaleSpeedMaster(masterUuid: String?, factor: Double) {
         calls += RecordedCall.ScaleSpeedMaster(masterUuid, factor)
     }
@@ -154,6 +156,9 @@ sealed class RecordedCall {
         val value: UByte,
     ) : RecordedCall()
     data class TapSpeedMaster(val masterUuid: String?) : RecordedCall()
+    data class SetSpeedMasterBpm(val masterUuid: String?, val bpm: Double) : RecordedCall()
+    data class SetBlackout(val on: Boolean) : RecordedCall()
+    data class SetGrandMasterLevel(val percent: Double) : RecordedCall()
     data class ScaleSpeedMaster(val masterUuid: String?, val factor: Double) : RecordedCall()
     data class WriteFxSpeed(val value7Bit: UByte, val encoder: Boolean) : RecordedCall()
 }

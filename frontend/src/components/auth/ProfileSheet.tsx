@@ -17,13 +17,10 @@ import {
 import { formatError } from "@/lib/formatError"
 import {
   useChangePasswordMutation,
-  useConnectedAppsQuery,
-  useRevokeConnectedAppMutation,
   useRevokeOtherSessionsMutation,
   useSessionsQuery,
   useUpdateProfileMutation,
   type AuthUser,
-  type ConnectedApp,
   type SessionInfo,
 } from "@/store/auth"
 import { MIN_PASSWORD_LENGTH } from "@/lib/passwordPolicy"
@@ -69,40 +66,6 @@ function SessionRow({ session }: { session: SessionInfo }) {
         </p>
       </div>
       {session.current && <Badge variant="secondary">This device</Badge>}
-    </li>
-  )
-}
-
-function ConnectedAppRow({ app }: { app: ConnectedApp }) {
-  const [revoke, { isLoading }] = useRevokeConnectedAppMutation()
-  const handleRevoke = async () => {
-    try {
-      await revoke({ id: app.id }).unwrap()
-    } catch {
-      // Reported by errorToastMiddleware.
-      return
-    }
-    toast.success(`${app.clientName} disconnected`)
-  }
-  return (
-    <li className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
-      <div className="min-w-0">
-        <p className="truncate text-sm">{app.clientName}</p>
-        <p className="text-xs text-muted-foreground">
-          Connected {new Date(app.createdAt).toLocaleDateString()} · last used{" "}
-          {new Date(app.lastUsedAt).toLocaleString()}
-        </p>
-      </div>
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={isLoading}
-        onClick={() => void handleRevoke()}
-        aria-label={`Revoke ${app.clientName}`}
-      >
-        {isLoading && <Loader2 className="size-4 animate-spin" />}
-        Revoke
-      </Button>
     </li>
   )
 }
@@ -157,9 +120,6 @@ export function ProfileSheet({
     isLoading: isLoadingSessions,
     isError: sessionsFailed,
   } = useSessionsQuery(undefined, { skip: !open })
-  const { data: connectedApps, isError: appsFailed } = useConnectedAppsQuery(undefined, {
-    skip: !open,
-  })
 
   // Re-seeded per opening, keyed on the identity rather than on `user` itself: an `Auth`
   // refetch — which happens on every 401 and on a socket rejection — would otherwise clobber
@@ -394,28 +354,6 @@ export function ProfileSheet({
                       : `Sign out everywhere else (${otherSessionCount})`}
                 </Button>
               </div>
-
-              {/* Apps signed in through the desk's MCP listener (Claude on a phone, say). They
-                  sit beside the devices because they are the same question — what can act as
-                  me — and "Sign out everywhere else" ends them too. Drawn only once there is
-                  something to say, so a desk that never connected an app shows nothing new. */}
-              {(appsFailed || (connectedApps && connectedApps.length > 0)) && (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium">Connected apps</h3>
-                  {appsFailed && (
-                    <p className="text-sm text-destructive">
-                      Couldn&apos;t load your connected apps.
-                    </p>
-                  )}
-                  {connectedApps && (
-                    <ul className="space-y-2">
-                      {connectedApps.map((app) => (
-                        <ConnectedAppRow key={app.id} app={app} />
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
             </TabsContent>
 
             <TabsContent value="signin" className="space-y-4">

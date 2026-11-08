@@ -119,8 +119,6 @@ allowlist passes, and it keeps `LICENSE` out of the tree while it stands.
 - **The Java runtime** that jlink bundles into the installers is the Temurin JDK, under
   `GPL-2.0-only WITH Classpath-exception-2.0`. The exception lets a program under any licence run on
   the runtime and ship beside it, so it does not reach the desk's code. The notices name it.
-- **The ngrok agent** is downloaded by the desk when Remote access is first turned on, never bundled
-  (`docs/mcp-engineering.md` §"Remote access").
 - **Build and test tooling** (Gradle plugins, `testImplementation`, the frontend's devDependencies,
   the sidecar's test-only Go modules) does not ship. The one exception is the Sentry Vite plugin (MIT): in a release build, with
   `SENTRY_AUTH_TOKEN` set, it injects a debug-id snippet into each chunk. A package whose code or CSS

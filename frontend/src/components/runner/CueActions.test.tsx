@@ -326,6 +326,7 @@ describe('CueActions', () => {
       'Delete…',
       'Add to stack…',
       'Move to stack…',
+      'Copy OSC address',
       'Copy link',
     ])
   })

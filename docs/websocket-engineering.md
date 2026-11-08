@@ -64,8 +64,8 @@ which catches staleness itself in a local `./gradlew test`. The rule is not WebS
 other hierarchy that grows an intermediate needs the annotation on its root, and the test will say
 so.
 
-The startup guard stays as the backstop. Staleness reached a desk once, as `tunnel.state` — every
-admin socket closed on connect — so `configureSockets` runs `SocketMessageScope.verify()` first,
+The startup guard stays as the backstop. Staleness reached a desk once, as the since-deleted
+`tunnel.state` — every admin socket closed on connect — so `configureSockets` runs `SocketMessageScope.verify()` first,
 comparing each root's leaves (walked through `sealedSubclasses`, fresh because a leaf's metadata
 lives in its intermediate) against the generated serializer (the stale half). A mismatch refuses to
 start the desk, naming every stale frame, the rebuild command, and any intermediate missing from
@@ -1013,7 +1013,7 @@ kept whatever the rig's state; `remainingMs`, `restrikeRemainingMs`, `coolRemain
 `coolingRemainingMs` are measured when the frame is sent, as `effects.armed`'s are, and a client counts down from its receive time. A finished
 run stays on the frame until the next. `quitAllowed` is the receiving socket's own — an admin (or a
 desk with no accounts) on the desk's listener — so no window offers *Quit desk* where the route would
-refuse it; the role is the one resolved at upgrade, as `tunnel.state`'s is. Registered in the show
+refuse it; the role is the one resolved at upgrade, as `cloud.state`'s is. Registered in the show
 band: the run and the ready state are the live show's.
 
 ### Busk page — `BuskSocket.kt`
@@ -1148,10 +1148,9 @@ Machine-scoped, so registered in the pre-warm-up band and unaffected by project 
 | `ownAccountChanged` | — | Only sockets belonging to the changed account (and bootstrap-open sockets) |
 | `installChanged` | — | Every socket |
 | `updateStateChanged` | `phase`, `availability`, `latestVersion?`, `downloadedBytes`, `totalBytes?` | Every socket |
-| `tunnel.state` | `state`: `status`, `url?`, `code?`, `message?`, `retrying`, `downloadedBytes?`, `totalBytes?` | Admin sockets only (and bootstrap-open ones), snapshot on connect |
 | `cloud.state` | `state`: `configured`, `enabled`, `adoption?`, `adopted?`, `connection`, `link?` (the sidecar's status, `OFF` when absent), `retryAt?`, `lastError?`, `lastOnlineAt?`, `notice?`, `noticeAt?`, `remote?`, `remoteSwitches` (`remoteAccess`, `mcpAccess`, `approveSessions`) | Admin sockets only (and bootstrap-open ones), snapshot on connect; a pending adoption's code and links left out on the public listener |
 | `remoteSession.pending` | `sessions`: `[{sid, email, displayName, linkedUser?, expiresAt}]`, oldest first, empty once none waits | Admin sockets (and bootstrap-open ones) **on the desk's own listener** only, snapshot on connect |
-| `osc.state` | `state`: `enabled`, `listening`, `port`, `error?`, `received`, `dropped`, `refused`, `refusedSenders` (`[{address, count, lastAt}]`, most recent first), `recent` (`[{at, sender, address, args, outcome, detail}]`, newest first, at most 50) | **Every** socket on the desk's own listener, operators' included; none on the public listener. Snapshot on connect |
+| `osc.state` | `state`: `enabled`, `listening` (UDP), `tcpListening`, `port`, `error?`, `received`, `dropped`, `refused`, `refusedSenders` (`[{address, count, lastAt}]`, most recent first), `recent` (`[{at, sender, address, args, outcome, detail}]`, newest first, at most 50), `warnings` (`[{id, at, changes: [{address, was, now?, reason?}]}]`, received addresses a change moved, newest first, at most 10) | **Every** socket on the desk's own listener, operators' included; none on the public listener. Snapshot on connect |
 
 The account frames are payload-free **deliberately, not just by convention**: sockets are open to
 operators while `/api/rest/users` is admin-only, so a body here would leak exactly what that gate
@@ -1164,15 +1163,11 @@ changed" at 2 Hz would mean an HTTP round-trip per tick for a several-hundred-me
 It carries no user data. Disabling and deleting an account are felt through a different mechanism
 entirely — they revoke sessions, and the socket closes 4401.
 
-`tunnel.state` is the second payload-carrying frame, for the same reason — the first enable
-downloads the ngrok agent and the frame is the progress — and it is the only one **sent to admins
-alone**: it names the desk's public address and ngrok's own errors, and every route behind it
-(`/install/tunnel`) is admin only. The role is the one resolved when the socket connected, so a
-demoted admin keeps receiving it until they reconnect; their REST calls are refused at once.
-`StateFlow`-backed, so the subscription is the connect snapshot (`WsConnectSnapshotTest` guards it).
-
 `cloud.state` is Lighting7 Cloud's state (`CloudService.state`, cloud-p0 plan D14), what
-`GET /install/cloud` answers, and follows `tunnel.state`'s rules: admins alone, `StateFlow`-backed,
+`GET /install/cloud` answers, and the second payload-carrying frame. It is **sent to admins alone**,
+since every route behind it is admin only; the role is the one resolved when the socket connected, so
+a demoted admin keeps receiving it until they reconnect, their REST calls refused at once.
+`StateFlow`-backed, so the subscription is the connect snapshot (`WsConnectSnapshotTest` guards it),
 outbound only, every operation REST. On the public listener it leaves out a pending adoption's
 `userCode` and both verification URIs (`CloudStateDto.forRemote`), since whoever holds the code can
 approve the desk into an organisation of their own, and says `remote: true`, which is how the Cloud tab
@@ -1187,7 +1182,8 @@ the desk's own listener is sent it, since only there may one be allowed; *Allow*
 Outbound only. See `docs/cloud-engineering.md` §"Remote sessions".
 
 `osc.state` is OSC in (`OscService.state`, OSC plan §3 "Wire"): whether the desk listens, the counts
-since it started, the refused senders and the last 50 messages with what each did. It is the one
+since it started, the refused senders, the last 50 messages with what each did, and the received
+addresses a change has moved, which every window toasts as a new one arrives. It is the one
 machine frame **every** window on the desk's own listener is sent, because the operator at the desk is
 who needs to see that a QLab cue did nothing (D12); the settings behind it (`/install/osc`) are an
 admin's, and nothing about OSC goes to the public listener (D5). `StateFlow`-backed and republished at
@@ -1537,7 +1533,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/RecentValuesSocket.kt` | The value editors' recent values: `recentValues.state` and `recentValues.record` |
 | `plugins/StackFxAmountSocket.kt` | Each stack's FX amount: `stackFxAmount.state` and `stackFxAmount.set` |
 | `plugins/MoveInDarkSocket.kt` | What the live show moves in the dark: `moveInDark.state` |
-| `plugins/MachineSocket.kt` | Accounts, install row, update state, remote-access tunnel state, Lighting7 Cloud state (machine-scoped band) |
+| `plugins/MachineSocket.kt` | Accounts, install row, update state, Lighting7 Cloud state (machine-scoped band) |
 | `plugins/ParkSocket.kt` | Park state and park/unpark writes |
 | `plugins/ProgrammerSocket.kt` | Programmer values, layer stack, include target, provenance |
 | `plugins/ProjectSocket.kt` | Current project and switch events |

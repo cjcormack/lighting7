@@ -72,8 +72,10 @@ class SurfaceDispatch(
         is BindingTarget.LocateSelection -> done { actions.locateSelection() }
         // Health already marks it dead, so the router drops it before it gets here.
         is BindingTarget.Unknown -> wrongKind(target)
-        is BindingTarget.Blackout -> done { actions.toggleBlackout() }
+        is BindingTarget.Blackout -> ActionOutcome.Done(if (actions.toggleBlackout()) "on" else "off")
+        is BindingTarget.BlackoutSet -> actions.setBlackout(target.on)
         is BindingTarget.GrandMasterToggle -> done { actions.toggleGrandMaster() }
+        is BindingTarget.GrandMasterLevel -> actions.setGrandMasterLevel(target.level)
         is BindingTarget.SetBank -> done { bankState.setBank(target.deviceTypeKey, target.bank) }
         // Applies to the device the button is on, so the payload names no device and a
         // button can never be stranded pointing at a surface that isn't attached.
@@ -85,7 +87,8 @@ class SurfaceDispatch(
             logger.warn("Strip binding {} reached button dispatch — resolve should have derived it", origin.bindingId)
             wrongKind(target)
         }
-        is BindingTarget.SpeedMasterTap -> done { actions.tapSpeedMaster(target.masterUuid) }
+        is BindingTarget.SpeedMasterTap -> actions.tapSpeedMaster(target.masterUuid)
+        is BindingTarget.SpeedMasterSetBpm -> actions.setSpeedMasterBpm(target.masterUuid, target.bpm)
         is BindingTarget.SpeedMasterScale -> done { actions.scaleSpeedMaster(target.masterUuid, target.factor) }
         // Records: one behaviour each (D6). The Look whole, the palette onto the selection, the pad
         // through its own bank's plan — never any of the three onto what the other two would choose.

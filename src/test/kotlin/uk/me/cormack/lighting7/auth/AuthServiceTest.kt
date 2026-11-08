@@ -346,4 +346,30 @@ class AuthServiceTest {
         assertEquals(emptyList(), seen)
         assertEquals(UserRole.OPERATOR, other.role)
     }
+
+    // ─── The public listener's sign-in lockout ─────────────────────────
+
+    @Test
+    fun `remote failures lock a username out for the window, and a success clears them`() {
+        seed()
+        repeat(REMOTE_SIGN_IN_LOCKOUT_FAILURES - 1) { auth.recordRemoteSignInFailure(" Alice ") }
+        assertTrue(!auth.remoteSignInLockedOut("alice"))
+        auth.recordRemoteSignInFailure("alice")
+        assertTrue(auth.remoteSignInLockedOut("ALICE"), "the key is the normalised username")
+
+        now = now.plus(REMOTE_SIGN_IN_LOCKOUT_WINDOW).plusMillis(1)
+        assertTrue(!auth.remoteSignInLockedOut("alice"), "the window passes")
+
+        repeat(REMOTE_SIGN_IN_LOCKOUT_FAILURES) { auth.recordRemoteSignInFailure("alice") }
+        auth.clearRemoteSignInFailures("alice")
+        assertTrue(!auth.remoteSignInLockedOut("alice"))
+    }
+
+    @Test
+    fun `spraying junk usernames does not reset a real account's lockout`() {
+        seed()
+        repeat(REMOTE_SIGN_IN_LOCKOUT_FAILURES) { auth.recordRemoteSignInFailure("alice") }
+        repeat(1_500) { auth.recordRemoteSignInFailure("junk-$it") }
+        assertTrue(auth.remoteSignInLockedOut("alice"), "a real account's failures survive the table's bound")
+    }
 }

@@ -232,6 +232,14 @@ data class SessionInfo(
     val createdVia: SessionOrigin = SessionOrigin.PASSWORD,
 )
 
+/** Failures from the public listener that lock a username out of it (`AuthService.remoteSignInLockedOut`). */
+const val REMOTE_SIGN_IN_LOCKOUT_FAILURES = 10
+
+/** How long a public-listener lockout's failures count. */
+val REMOTE_SIGN_IN_LOCKOUT_WINDOW: Duration = Duration.ofMinutes(15)
+
+private const val MAX_REMOTE_LOCKOUT_KEYS = 1_000
+
 /**
  * The only place that touches [DaoUsers] / [DaoUserSessions] / [DaoPasswordResetTokens].
  *
@@ -315,21 +323,13 @@ class AuthService(
     private val credentialRevocationListeners = java.util.concurrent.CopyOnWriteArrayList<(Int, String?) -> Unit>()
 
     /**
-     * Called **synchronously** with a userId whenever that account's credentials move in a way
-     * that ends sessions: disable, delete, any password set, reset redemption, and "sign out
-     * everywhere else". The MCP OAuth grants hang off this (`McpAuthService`), so a grant dies
-     * on exactly the events a cookie does. Synchronous rather than a flow like [revocations]:
-     * a dropped frame there costs a socket that closes late, a dropped one here would leave a
-     * token alive on the internet after the account was disabled.
-     */
-    fun addCredentialRevocationListener(listener: (Int) -> Unit) {
-        credentialRevocationListeners += { userId, _ -> listener(userId) }
-    }
-
-    /**
-     * [addCredentialRevocationListener], also told the session token hash the revocation spares, if any: the caller's own,
-     * for "sign out everywhere else" and a password change. Remote sessions through the cloud key on
-     * it (`cloud/RemoteSessions.kt`), since one of them can be the caller.
+     * Called **synchronously** whenever an account's credentials move in a way that ends sessions:
+     * disable, delete, any password set, reset redemption, and "sign out everywhere else", told the
+     * session token hash the revocation spares, if any — the caller's own, for "sign out everywhere
+     * else" and a password change. Remote sessions through the cloud key on it
+     * (`cloud/RemoteSessions.kt`), since one of them can be the caller. Synchronous rather than a flow
+     * like [revocations]: a dropped frame there costs a socket that closes late, a dropped one here
+     * would leave a remote session open after the account was disabled.
      */
     fun addSessionRevocationListener(listener: (userId: Int, exceptTokenHash: String?) -> Unit) {
         credentialRevocationListeners += listener
@@ -671,9 +671,9 @@ class AuthService(
 
     /**
      * The password half of [login], with no session minted: the same throttle, the same
-     * constant-time miss, the same "disabled answers after the password" ordering. The MCP
-     * sign-in page (`mcp/McpAuthService.kt`) is its second caller — it grants an OAuth token
-     * rather than a cookie, and must not be a way round the throttle the login form has.
+     * constant-time miss, the same "disabled answers after the password" ordering. An unlinked
+     * remote session's prove-once (`routes/cloudLink.kt`) is its second caller — it links a cloud
+     * account rather than minting a cookie, and must not be a way round the throttle.
      */
     suspend fun verifyCredentials(username: String, password: String): UserRecord {
         val uname = normaliseUsername(username)
@@ -698,6 +698,49 @@ class AuthService(
         }
         clearLoginFailures(uname)
         return user
+    }
+
+    // ─── The public listener's sign-in lockout ─────────────────────────
+
+    private val remoteSignInFailures = ConcurrentHashMap<String, ArrayDeque<Instant>>()
+
+    /**
+     * Whether a password check from the public listener (an unlinked remote session's prove-once)
+     * should refuse [username] outright. Stricter than [verifyCredentials]' throttle, which only slows a
+     * guesser, because every remote caller arrives from loopback: [REMOTE_SIGN_IN_LOCKOUT_FAILURES]
+     * failures inside [REMOTE_SIGN_IN_LOCKOUT_WINDOW] lock that username out of the public listener for
+     * the rest of the window. The LAN login form is untouched, so a stranger cannot lock the crew out.
+     */
+    fun remoteSignInLockedOut(username: String): Boolean {
+        val window = remoteSignInFailures[throttleKey(username)] ?: return false
+        val cutoff = clock() - REMOTE_SIGN_IN_LOCKOUT_WINDOW
+        synchronized(window) {
+            while (window.isNotEmpty() && window.first() <= cutoff) window.removeFirst()
+            return window.size >= REMOTE_SIGN_IN_LOCKOUT_FAILURES
+        }
+    }
+
+    fun recordRemoteSignInFailure(username: String) {
+        if (remoteSignInFailures.size >= MAX_REMOTE_LOCKOUT_KEYS) pruneRemoteSignInFailures()
+        val window = remoteSignInFailures.computeIfAbsent(throttleKey(username)) { ArrayDeque() }
+        synchronized(window) { window.addLast(clock()) }
+    }
+
+    fun clearRemoteSignInFailures(username: String) {
+        remoteSignInFailures.remove(throttleKey(username))
+    }
+
+    /**
+     * Keeps the table bounded without forgetting a real account's failures: expired windows go first,
+     * then keys naming no account, so spraying junk usernames cannot reset a real one's lockout.
+     */
+    private fun pruneRemoteSignInFailures() {
+        val cutoff = clock() - REMOTE_SIGN_IN_LOCKOUT_WINDOW
+        remoteSignInFailures.entries.removeIf { (_, window) ->
+            synchronized(window) { window.isEmpty() || window.last() <= cutoff }
+        }
+        if (remoteSignInFailures.size < MAX_REMOTE_LOCKOUT_KEYS) return
+        remoteSignInFailures.keys.removeIf { findUserByUsername(it) == null }
     }
 
     /**

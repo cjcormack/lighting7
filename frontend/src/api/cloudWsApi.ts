@@ -16,9 +16,9 @@ export interface PendingRemoteSession {
 
 /**
  * Lighting7 Cloud's machine-scoped frames (`plugins/MachineSocket.kt`), sent to admin sockets only:
- * `cloud.state`, which carries the whole state as `tunnel.state` does, and `remoteSession.pending`,
- * the remote sessions waiting for an admin at the desk — sent only on the desk's own listener, a
- * whole list each time, empty once none waits.
+ * `cloud.state`, which carries the whole state, and `remoteSession.pending`, the remote sessions
+ * waiting for an admin at the desk — sent only on the desk's own listener, a whole list each time,
+ * empty once none waits.
  */
 export interface CloudWsApi {
   subscribe(fn: (state: CloudState) => void): Subscription

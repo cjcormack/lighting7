@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -10,13 +10,17 @@ import { Label } from '@/components/ui/label'
 import { formatError } from '@/lib/formatError'
 import { useAuthStatusQuery } from '@/store/auth'
 import {
+  useLazyOscAddressesQuery,
   useOscSettingsQuery,
   useOscState,
   useSaveOscSettingsMutation,
   type OscSettings,
   type OscSettingsRequest,
 } from '@/store/osc'
-import type { OscLogRow, OscOutcome, OscState } from '@/api/oscWsApi'
+import type { OscAddressWarning, OscLogRow, OscOutcome, OscState } from '@/api/oscWsApi'
+import { useCurrentProjectQuery } from '@/store/projects'
+import { describeAddressChange } from '@/lib/oscAddresses'
+import { openCheatSheetWindow, printOscCheatSheet } from '@/lib/oscCheatSheet'
 
 /**
  * The OSC tab (lighting7 OSC plan §4, `docs/osc-engineering.md`): whether the desk is listening for
@@ -46,6 +50,8 @@ export function OscPanel() {
       {state != null && state.refusedSenders.length > 0 && (
         <RefusedCard state={state} isAdmin={isAdmin} onAllow={setAllowing} />
       )}
+      <CheatSheetCard />
+      {(state?.warnings?.length ?? 0) > 0 && <WarningsCard warnings={state!.warnings!} />}
       <LogCard rows={state?.recent ?? []} />
     </div>
   )
@@ -59,11 +65,7 @@ function StatusCard({ state }: { state: OscState | null }) {
       </Card>
     )
   }
-  const status = state.listening
-    ? `Listening on UDP ${state.port}`
-    : state.enabled
-      ? 'Not listening'
-      : 'Off'
+  const status = !state.enabled ? 'Off' : listeningOn(state) ?? 'Not listening'
   return (
     <Card className="p-4 space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -79,17 +81,27 @@ function StatusCard({ state }: { state: OscState | null }) {
       )}
       <p className="text-xs text-muted-foreground">
         A QLab Network cue sends an address such as <code>/lighting7/stack/act-1/cue/5/go</code> to
-        this computer. Only the senders listed here are heard.
+        this computer, over UDP or TCP. Only the senders listed here are heard.
       </p>
     </Card>
   )
+}
+
+function listeningOn(state: OscState): string | null {
+  const on = [state.listening && 'UDP', state.tcpListening && 'TCP'].filter(Boolean)
+  return on.length === 0 ? null : `Listening on ${on.join(' and ')} ${state.port}`
 }
 
 interface DraftSender {
   id?: number
   name: string
   address: string
+  replies?: boolean
 }
+
+/** A sender as the desk compares it, so a draft that only spelled `replies: false` out is not dirty. */
+const comparable = (list: DraftSender[]) =>
+  JSON.stringify(list.map((s) => ({ id: s.id, name: s.name, address: s.address, replies: s.replies === true })))
 
 function SettingsCard({
   settings,
@@ -107,12 +119,24 @@ function SettingsCard({
   const [senders, setSenders] = useState<DraftSender[]>(settings.senders)
   const [problem, setProblem] = useState<string | null>(null)
 
-  // A save answers the stored document; the draft follows it.
+  // When the stored document moves, a field the operator has not edited follows it, and one they
+  // have keeps its draft: Enable and Disable save the stored document, and must not throw away a
+  // sender typed but not yet saved.
+  const stored = useRef(settings)
   useEffect(() => {
-    setPort(String(settings.port))
-    setBindAddress(settings.bindAddress ?? '')
-    setSenders(settings.senders)
+    const before = stored.current
+    stored.current = settings
+    setPort((p) => (p === String(before.port) ? String(settings.port) : p))
+    setBindAddress((b) => (b === (before.bindAddress ?? '') ? (settings.bindAddress ?? '') : b))
+    setSenders((list) => (JSON.stringify(list) === JSON.stringify(before.senders) ? settings.senders : list))
   }, [settings])
+
+  /** The draft as the desk stored it, after a Save: a new sender takes its id. */
+  const adopt = (saved: OscSettings) => {
+    setPort(String(saved.port))
+    setBindAddress(saved.bindAddress ?? '')
+    setSenders(saved.senders)
+  }
 
   useEffect(() => {
     if (allowing == null) return
@@ -124,13 +148,14 @@ function SettingsCard({
     enabled: settings.enabled,
     port: Number(port),
     bindAddress: bindAddress.trim() || null,
-    senders: senders.map((s) => ({ id: s.id, name: s.name.trim(), address: s.address.trim() })),
+    senders: senders.map((s) => ({ id: s.id, name: s.name.trim(), address: s.address.trim(), replies: s.replies === true })),
   })
 
-  const submit = async (body: OscSettingsRequest) => {
+  const submit = async (body: OscSettingsRequest, fromDraft: boolean) => {
     setProblem(null)
     try {
-      await save(body).unwrap()
+      const saved = await save(body).unwrap()
+      if (fromDraft) adopt(saved)
       toast.success('OSC settings saved')
     } catch (err) {
       setProblem(formatError(err))
@@ -140,7 +165,7 @@ function SettingsCard({
   const dirty =
     port !== String(settings.port) ||
     (bindAddress.trim() || null) !== (settings.bindAddress ?? null) ||
-    JSON.stringify(senders) !== JSON.stringify(settings.senders)
+    comparable(senders) !== comparable(settings.senders)
 
   return (
     <Card className="p-4 space-y-4">
@@ -159,7 +184,7 @@ function SettingsCard({
               port: settings.port,
               bindAddress: settings.bindAddress ?? null,
               senders: settings.senders,
-            })
+            }, false)
           }
           disabled={saving}
         >
@@ -168,7 +193,7 @@ function SettingsCard({
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="osc-port">UDP port</Label>
+          <Label htmlFor="osc-port">Port, UDP and TCP</Label>
           <Input id="osc-port" inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value)} />
         </div>
         <div className="space-y-1.5">
@@ -186,8 +211,14 @@ function SettingsCard({
         {senders.length === 0 && (
           <p className="text-xs text-muted-foreground">No senders yet: every packet is refused.</p>
         )}
+        {senders.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            A sender with <em>Replies</em> is answered with <code>/lighting7/reply</code>: the address, its
+            outcome and what it did, to the port it sent from.
+          </p>
+        )}
         {senders.map((sender, i) => (
-          <div key={sender.id ?? `new-${i}`} className="flex gap-2">
+          <div key={sender.id ?? `new-${i}`} className="flex items-center gap-2">
             <Input
               aria-label="Sender name"
               placeholder="QLab"
@@ -200,6 +231,18 @@ function SettingsCard({
               value={sender.address}
               onChange={(e) => setSenders(senders.map((s, j) => (j === i ? { ...s, address: e.target.value } : s)))}
             />
+            <label
+              className="flex shrink-0 items-center gap-1.5 text-xs"
+              title="Answer each message with /lighting7/reply, saying what it did"
+            >
+              <input
+                type="checkbox"
+                aria-label={`Replies to ${sender.name || sender.address || 'sender'}`}
+                checked={sender.replies === true}
+                onChange={(e) => setSenders(senders.map((s, j) => (j === i ? { ...s, replies: e.target.checked } : s)))}
+              />
+              Replies
+            </label>
             <Button
               variant="ghost"
               size="icon"
@@ -220,7 +263,7 @@ function SettingsCard({
         </Alert>
       )}
       <div className="flex justify-end">
-        <Button onClick={() => void submit(draft())} disabled={!dirty || saving}>
+        <Button onClick={() => void submit(draft(), true)} disabled={!dirty || saving}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
         </Button>
       </div>
@@ -272,6 +315,65 @@ const OUTCOME_WORDS: Record<OscOutcome, string> = {
 function OutcomeChip({ outcome }: { outcome: OscOutcome }) {
   const variant = outcome === 'DONE' ? 'secondary' : outcome === 'FAILED' ? 'destructive' : 'outline'
   return <Badge variant={variant}>{OUTCOME_WORDS[outcome]}</Badge>
+}
+
+/** The addresses the current show answers to, as a printable page for the sound department. */
+function CheatSheetCard() {
+  const { data: project } = useCurrentProjectQuery()
+  const [read, { isFetching }] = useLazyOscAddressesQuery()
+  const open = async () => {
+    if (project == null) return
+    const win = openCheatSheetWindow()
+    if (win == null) {
+      toast.error('The browser blocked the cheat sheet’s window')
+      return
+    }
+    try {
+      printOscCheatSheet(win, await read(project.id).unwrap(), project.name)
+    } catch (err) {
+      win.close()
+      toast.error(`Couldn’t read the addresses: ${formatError(err)}`)
+    }
+  }
+  return (
+    <Card className="p-4 space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-sm font-medium">Addresses</div>
+        <Button variant="outline" size="sm" disabled={project == null || isFetching} onClick={() => void open()}>
+          {isFetching && <Loader2 className="size-3.5 animate-spin" />}
+          Print cheat sheet
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Every address {project != null ? <em>{project.name}</em> : 'this show'} answers to, for the sound
+        department. A stack&rsquo;s, a cue&rsquo;s, a Look&rsquo;s and a busk pad&rsquo;s menu each have{' '}
+        <em>Copy OSC address</em>.
+      </p>
+    </Card>
+  )
+}
+
+/** Addresses a sender has used that a change since moved: newest first, as the desk keeps them. */
+function WarningsCard({ warnings }: { warnings: OscAddressWarning[] }) {
+  return (
+    <Card className="p-4 space-y-2">
+      <div className="text-sm font-medium">Addresses that moved</div>
+      <ul className="divide-y">
+        {warnings.map((warning) => (
+          <li key={warning.id} className="grid grid-cols-[auto_1fr] gap-x-3 py-1.5 text-sm">
+            <span className="text-xs text-muted-foreground tabular-nums">{timeOf(warning.at)}</span>
+            <ul className="space-y-0.5">
+              {warning.changes.map((change) => (
+                <li key={change.address} className="text-xs break-all">
+                  {describeAddressChange(change)}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  )
 }
 
 function LogCard({ rows }: { rows: OscLogRow[] }) {
