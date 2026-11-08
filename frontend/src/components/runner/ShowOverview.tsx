@@ -53,6 +53,7 @@ import { StackMovingChip } from '@/components/cues/StackMovingChip'
 import { InlineEditField } from '@/components/InlineEditField'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
 import { isCueRow, type CueStack, type CueStackInput } from '@/api/cueStacksApi'
+import { CopyOscAddressMenu } from '@/components/osc/CopyOscAddressMenu'
 
 /** An empty set, stable, so the form's set editor does not re-seed on every render. */
 const NO_SCENERY: SceneryChange[] = []
@@ -61,6 +62,7 @@ const NO_SCENERY: SceneryChange[] = []
 
 interface SortableStackEntryProps {
   stack: CueStack
+  projectId: number
   index: number
   isActive: boolean
   onDrill: (stackId: number) => void
@@ -73,6 +75,7 @@ interface SortableStackEntryProps {
 
 function SortableStackEntry({
   stack,
+  projectId,
   index,
   isActive,
   onDrill,
@@ -185,6 +188,7 @@ function SortableStackEntry({
           <DropdownMenuItem onClick={() => onSort(stack.id)}>
             <ArrowDownAZ className="size-3.5 mr-2" /> Sort by cue number
           </DropdownMenuItem>
+          <CopyOscAddressMenu projectId={projectId} records={[{ kind: 'STACK', id: stack.id }]} menu="dropdown" />
           <DropdownMenuItem
             className="text-destructive focus:text-destructive"
             onClick={() => onRemove(stack)}
@@ -486,6 +490,7 @@ export function ShowOverview({
                 <SortableStackEntry
                   key={stack.id}
                   stack={stack}
+                  projectId={projectId}
                   index={idx}
                   isActive={activeStackId !== null && stack.id === activeStackId}
                   onDrill={onDrillStack}

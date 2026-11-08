@@ -104,9 +104,12 @@ const BUTTON_KINDS: TargetKind[] = [
   "looseCueSet",
   "fireTrigger",
   "blackout",
+  "blackoutSet",
   "grandMasterToggle",
+  "grandMasterLevel",
   "setBank",
   "speedMasterTap",
+  "speedMasterSetBpm",
   "speedMasterScale",
   "applyLook",
   "lookSet",
@@ -149,12 +152,15 @@ const KIND_LABELS: Record<TargetKind, string> = {
   locateSelection: "Selection — locate",
   encoderBankSet: "Encoder bank",
   blackout: "Blackout",
+  blackoutSet: "Blackout — on / off",
   grandMasterToggle: "Grand Master",
+  grandMasterLevel: "Grand Master — set level",
   grandMasterFader: "Grand Master — fader",
   stackFxAmount: "Cue stack — FX amount",
   setBank: "Set bank",
   speedMasterBpm: "Speed master — Tempo",
   speedMasterTap: "Speed master — Tap tempo",
+  speedMasterSetBpm: "Speed master — Set tempo",
   speedMasterScale: "Speed master — Tempo ×½ / ×2",
   applyLook: "Look — apply",
   lookSet: "Look — on / off",
@@ -1037,6 +1043,50 @@ function TargetBody({
     )
   }
 
+  if (kind === "blackoutSet" && value.type === "blackoutSet") {
+    return (
+      <div className="space-y-2">
+        <OnOffField on={value.on} onChange={(on) => onChange({ ...value, on })} />
+        <p className="text-xs text-muted-foreground">
+          Sets blackout rather than toggling it, so a second press does nothing.
+        </p>
+      </div>
+    )
+  }
+
+  if (kind === "grandMasterLevel" && value.type === "grandMasterLevel") {
+    return (
+      <CommitNumberField
+        label="Level (%)"
+        value={value.level}
+        min={0}
+        max={100}
+        onCommit={(level) => onChange({ ...value, level })}
+      />
+    )
+  }
+
+  if (kind === "speedMasterSetBpm" && value.type === "speedMasterSetBpm") {
+    return (
+      <div className="space-y-2">
+        <SpeedMasterSelect
+          value={value.masterUuid}
+          onChange={(masterUuid) => onChange({ ...value, masterUuid })}
+        />
+        <CommitNumberField
+          label="Tempo (BPM)"
+          value={value.bpm}
+          min={20}
+          max={300}
+          onCommit={(bpm) => onChange({ ...value, bpm })}
+        />
+        <p className="text-xs text-muted-foreground">
+          On a held master it moves the hold; a master that follows another refuses it.
+        </p>
+      </div>
+    )
+  }
+
   if (kind === "speedMasterTap" && value.type === "speedMasterTap") {
     return (
       <SpeedMasterSelect
@@ -1129,6 +1179,46 @@ function RecordField({
   )
 }
 
+/** A number typed and landed on Enter or blur, clamped into [min, max]; anything else puts the last back. */
+function CommitNumberField({
+  label,
+  value,
+  min,
+  max,
+  onCommit,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  onCommit: (value: number) => void
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const commit = () => {
+    if (draft == null) return
+    const parsed = Number(draft)
+    setDraft(null)
+    if (draft.trim() === "" || !Number.isFinite(parsed)) return
+    onCommit(Math.min(max, Math.max(min, parsed)))
+  }
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <Input
+        inputMode="decimal"
+        aria-label={label}
+        value={draft ?? String(value)}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit()
+          if (e.key === "Escape") setDraft(null)
+        }}
+      />
+    </div>
+  )
+}
+
 /** The on / off half of an explicit-form binding (OSC plan D4). */
 function OnOffField({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
   return (
@@ -1185,8 +1275,12 @@ function defaultForKind(
       }
     case "blackout":
       return { type: "blackout" }
+    case "blackoutSet":
+      return { type: "blackoutSet", on: true }
     case "grandMasterToggle":
       return { type: "grandMasterToggle" }
+    case "grandMasterLevel":
+      return { type: "grandMasterLevel", level: 100 }
     case "grandMasterFader":
       return { type: "grandMasterFader" }
     case "stackFxAmount":
@@ -1217,6 +1311,8 @@ function defaultForKind(
       return { type: "speedMasterBpm", masterUuid: null, minBpm: 60, maxBpm: 180 }
     case "speedMasterTap":
       return { type: "speedMasterTap", masterUuid: null }
+    case "speedMasterSetBpm":
+      return { type: "speedMasterSetBpm", masterUuid: null, bpm: 120 }
     case "speedMasterScale":
       return { type: "speedMasterScale", masterUuid: null, factor: 2 }
     case "fxSpeed":

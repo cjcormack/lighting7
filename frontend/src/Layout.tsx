@@ -40,6 +40,7 @@ import { HandChip } from "./components/hand/HandChip"
 import { ArmedChip } from "./components/effects/ArmedChip"
 import { GrandMasterOverviewPanel } from "./components/GrandMasterOverviewPanel"
 import { EffectsAnnouncer } from "./components/effects/EffectsAnnouncer"
+import { OscAddressAnnouncer } from "./components/osc/OscAddressAnnouncer"
 import { RemoteSessionApprovals } from "./components/cloud/RemoteSessionApprovals"
 import { ScreensSheet, type WindowViewControls } from "./components/screens/ScreensSheet"
 import { HistoryButton, HistorySheet } from "./components/history/HistorySheet"
@@ -345,6 +346,7 @@ export default function Layout() {
               <HandChip />
               {/* A fire that did not happen is said on every window (stage-view plan session 9). */}
               <EffectsAnnouncer />
+              <OscAddressAnnouncer />
               <RemoteSessionApprovals />
             </main>
           </DeskDndProvider>

@@ -25,6 +25,8 @@ import uk.me.cormack.lighting7.models.OSC_DEFAULT_PORT
 import uk.me.cormack.lighting7.models.nowUtc
 import uk.me.cormack.lighting7.models.toIsoUtc
 import uk.me.cormack.lighting7.perf.DeskMetrics
+import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.show.FixturesChangeListener
 import java.net.InetAddress
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
@@ -82,8 +84,30 @@ class OscService(
 
     private val recent = ArrayDeque<OscLogRowDto>()
     private val refusedSenders = LinkedHashMap<String, OscRefusedSenderDto>()
-    private val resolvedAddresses = object : LinkedHashMap<String, Unit>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Unit>?) = size > MAX_RESOLVED
+
+    /** Every address resolved since the desk started, by project, and what it reached when last read. */
+    private val resolvedAddresses = object : LinkedHashMap<Received, OscReach>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Received, OscReach>?) = size > MAX_RESOLVED
+    }
+    private val warnings = ArrayDeque<OscAddressWarningDto>()
+
+    /** From the boot's clock, so a window that outlives a desk restart still reads the next as new. */
+    private var nextWarningId = System.currentTimeMillis()
+
+    private data class Received(val projectId: Int, val address: String)
+
+    /** A change that may have moved what an address reaches; conflated, and read after [CHECK_DEBOUNCE_MS]. */
+    private val checks = Channel<Unit>(Channel.CONFLATED)
+
+    @Volatile
+    private var watched: Fixtures? = null
+
+    private val listChanged = object : FixturesChangeListener {
+        override fun cueStackListChanged() = addressesMayHaveMoved()
+        override fun cueListChanged() = addressesMayHaveMoved()
+        override fun lookListChanged() = addressesMayHaveMoved()
+        override fun speedMasterListChanged() = addressesMayHaveMoved()
+        override fun buskLayoutChanged(pageIds: List<Int>) = addressesMayHaveMoved()
     }
 
     private val _state = MutableStateFlow(snapshot())
@@ -111,6 +135,14 @@ class OscService(
     }
 
     private fun launchLoops() {
+        // On the collector's thread, so a check and a message never read the received set at once.
+        scope.launch {
+            for (unit in checks) {
+                delay(CHECK_DEBOUNCE_MS)
+                checks.tryReceive()
+                runCatching { checkReceived() }.onFailure { logger.warn("OSC address check failed: {}", it.toString()) }
+            }
+        }
         scope.launch {
             for (inbound in channel) {
                 collect(inbound)
@@ -180,7 +212,66 @@ class OscService(
     internal fun boundPort(): Int? = synchronized(lifecycle) { receiver?.boundPort?.takeIf { listening } }
 
     /** The addresses resolved since the desk started, lower-cased. */
-    fun resolvedAddresses(): Set<String> = synchronized(data) { resolvedAddresses.keys.toSet() }
+    fun resolvedAddresses(): Set<String> = synchronized(data) { resolvedAddresses.keys.mapTo(LinkedHashSet()) { it.address } }
+
+    /**
+     * Watch [fixtures]' show for the changes that can move an address — a rename, a renumber, an
+     * insert or delete that relabels auto numbers, a bank or pad moved, a speed master deleted — and
+     * warn when an address received since the desk started now reaches something else, or nothing
+     * (OSC plan §4). The show's listener only signals; the check runs on the collector.
+     */
+    fun attach(fixtures: Fixtures) {
+        val previous = watched
+        if (previous === fixtures) return
+        previous?.unregisterListener(listChanged)
+        fixtures.registerListener(listChanged)
+        watched = fixtures
+        // A reload or a switch arrives with its changes made — a sync pull's rename among them — and
+        // fires no list hook of its own on the show it brings.
+        addressesMayHaveMoved()
+    }
+
+    private fun addressesMayHaveMoved() {
+        checks.trySend(Unit)
+    }
+
+    /** Re-read what each address received in the current project reaches, warning for each that moved. */
+    internal fun checkReceived() {
+        val projectId = handler.currentProject() ?: return
+        val prior = synchronized(data) {
+            resolvedAddresses.entries.filter { it.key.projectId == projectId }.associate { it.key.address to it.value }
+        }
+        if (prior.isEmpty()) return
+        val now = handler.reach(projectId, prior.keys)
+        val changes = prior.mapNotNull { (address, was) ->
+            val next = now[address] ?: return@mapNotNull null
+            val same = when {
+                was is OscReach.To && next is OscReach.To -> was.identity == next.identity
+                else -> was is OscReach.Gone && next is OscReach.Gone
+            }
+            if (same) return@mapNotNull null
+            OscAddressChangeDto(
+                address = address,
+                was = (was as? OscReach.To)?.reached,
+                now = (next as? OscReach.To)?.reached,
+                reason = (next as? OscReach.Gone)?.message,
+            )
+        }
+        synchronized(data) {
+            for ((address, reach) in now) {
+                val key = Received(projectId, address)
+                if (resolvedAddresses.containsKey(key)) resolvedAddresses[key] = reach
+            }
+            if (changes.isNotEmpty()) {
+                warnings.addFirst(OscAddressWarningDto(nextWarningId++, nowUtc().toIsoUtc(), changes))
+                while (warnings.size > MAX_WARNINGS) warnings.removeLast()
+            }
+        }
+        if (changes.isNotEmpty()) {
+            logger.info("OSC: {} received address(es) moved: {}", changes.size, changes.joinToString { it.address })
+            changed()
+        }
+    }
 
     private fun load() {
         val read = transaction(database) {
@@ -232,6 +323,9 @@ class OscService(
 
     private fun OscReceiver.matches(bind: InetAddress?, port: Int) = bindAddress == bind && this.port == port
 
+    /** A message as though [OscReceiver] had read it, for a test that needs no socket. */
+    internal fun offer(inbound: OscInbound) = deliver(inbound)
+
     /** Receive thread: never blocks. */
     private fun deliver(inbound: OscInbound) {
         received.incrementAndGet()
@@ -274,7 +368,9 @@ class OscService(
         synchronized(data) {
             recent.addFirst(row)
             while (recent.size > MAX_RECENT) recent.removeLast()
-            if (handled.resolved) resolvedAddresses[address.lowercase()] = Unit
+            val reach = handled.reach
+            val projectId = handled.projectId
+            if (reach != null && projectId != null) resolvedAddresses[Received(projectId, address.lowercase())] = reach
         }
         changed()
     }
@@ -294,6 +390,7 @@ class OscService(
             refused = refused.get(),
             refusedSenders = refusedSenders.values.reversed(),
             recent = recent.toList(),
+            warnings = warnings.toList(),
         )
     }
 
@@ -303,7 +400,10 @@ class OscService(
             receiver = null
             listening = false
         }
+        watched?.unregisterListener(listChanged)
+        watched = null
         channel.close()
+        checks.close()
         publish.close()
         scope.cancel()
     }
@@ -316,6 +416,10 @@ class OscService(
         const val MAX_REFUSED_SENDERS = 20
         const val MAX_RESOLVED = 1_000
         const val PUBLISH_INTERVAL_MS = 250L
+        const val MAX_WARNINGS = 10
+
+        /** A burst of changes — a renumber writes every entry — is read once. */
+        const val CHECK_DEBOUNCE_MS = 300L
 
         private val IPV4 = Regex("""\d{1,3}(\.\d{1,3}){3}""")
 
@@ -373,7 +477,20 @@ data class OscStateDto(
     val refusedSenders: List<OscRefusedSenderDto>,
     /** Newest first, at most 50. */
     val recent: List<OscLogRowDto>,
+    /** Received addresses a change moved, newest first, at most 10. */
+    val warnings: List<OscAddressWarningDto> = emptyList(),
 )
+
+/** One change's moved addresses: [id] increases, so a window toasts only those it has not seen. */
+@Serializable
+data class OscAddressWarningDto(val id: Long, val at: String, val changes: List<OscAddressChangeDto>)
+
+/**
+ * A received [address] that now reaches something else ([now]), or nothing ([now] null, [reason]
+ * why); [was] what it reached when last read, null when it reached nothing then.
+ */
+@Serializable
+data class OscAddressChangeDto(val address: String, val was: String?, val now: String?, val reason: String? = null)
 
 @Serializable
 data class OscRefusedSenderDto(val address: String, val count: Long, val lastAt: String)

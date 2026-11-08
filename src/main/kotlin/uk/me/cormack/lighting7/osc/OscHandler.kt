@@ -16,8 +16,18 @@ import java.time.Instant
 /** A log row's outcome (OSC plan §3 "Outcomes and the log"). */
 enum class OscOutcome { DONE, NOT_FOUND, AMBIGUOUS, REFUSED, FAILED, BAD_MESSAGE }
 
-/** What one message did, for its log row; [resolved] when it reached a record, for the received set. */
-data class OscHandled(val outcome: OscOutcome, val detail: String, val resolved: Boolean = false)
+/**
+ * What one message did, for its log row; [reach] what its address reached in [projectId], for the
+ * received set, when it reached anything.
+ */
+data class OscHandled(
+    val outcome: OscOutcome,
+    val detail: String,
+    val reach: OscReach.To? = null,
+    val projectId: Int? = null,
+) {
+    val resolved: Boolean get() = reach != null
+}
 
 /**
  * One message, resolved and dispatched (OSC plan D2, D7, D8): its address against the current
@@ -62,6 +72,18 @@ class OscHandler(
         }
     }
 
+    /** The current project, or null while there is none (a switch in flight). */
+    fun currentProject(): Int? = try {
+        currentProjectId()
+    } catch (e: Exception) {
+        null
+    }
+
+    /** What each of [addresses] reaches in [projectId] now, read in one transaction. */
+    fun reach(projectId: Int, addresses: Collection<String>): Map<String, OscReach> = transaction(database) {
+        OscAddresses.reachAll(addresses, lookupFor(projectId))
+    }
+
     private fun withinTraceBudget(): Boolean = synchronized(this) {
         val now = System.nanoTime()
         if (now - traceSecondStart >= 1_000_000_000L) {
@@ -101,15 +123,20 @@ class OscHandler(
                     else -> error("resolved above")
                 }
             } }
+            val reach = when (resolution) {
+                is OscResolution.Press -> OscReach.To(OscAddresses.identityOf(message.address, resolution.record), reached)
+                is OscResolution.Level -> OscReach.To(OscAddresses.identityOf(message.address, resolution.record), reached)
+                else -> error("resolved above")
+            }
             handled = when (done) {
-                is ActionOutcome.Done -> OscHandled(OscOutcome.DONE, listOfNotNull(reached, done.detail).joinToString(" · "), resolved = true)
-                is ActionOutcome.Refused -> OscHandled(OscOutcome.REFUSED, "$reached: ${done.message}", resolved = true)
-                is ActionOutcome.NotFound -> OscHandled(OscOutcome.NOT_FOUND, done.message, resolved = true)
-                is ActionOutcome.Failed -> OscHandled(OscOutcome.FAILED, "$reached: ${done.message}", resolved = true)
+                is ActionOutcome.Done -> OscHandled(OscOutcome.DONE, listOfNotNull(reached, done.detail).joinToString(" · "), reach, projectId)
+                is ActionOutcome.Refused -> OscHandled(OscOutcome.REFUSED, "$reached: ${done.message}", reach, projectId)
+                is ActionOutcome.NotFound -> OscHandled(OscOutcome.NOT_FOUND, done.message, reach, projectId)
+                is ActionOutcome.Failed -> OscHandled(OscOutcome.FAILED, "$reached: ${done.message}", reach, projectId)
             }
             ActionOutcome.DONE
         }
-        if (outcome is ActionOutcome.Failed) return OscHandled(OscOutcome.FAILED, outcome.message, resolved = handled?.resolved == true)
+        if (outcome is ActionOutcome.Failed) return OscHandled(OscOutcome.FAILED, outcome.message, handled?.reach, handled?.projectId)
         return handled ?: OscHandled(OscOutcome.FAILED, "no outcome")
     }
 

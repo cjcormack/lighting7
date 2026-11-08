@@ -32,5 +32,11 @@ sealed interface ActionOutcome {
 
         /** The stack manager refused a GO or a GO BACK; the message says why. */
         const val GO_REFUSED = "GO_REFUSED"
+
+        /** A tempo write on a master that follows another. */
+        const val SPEED_MASTER_FOLLOWER = "SPEED_MASTER_FOLLOWER"
+
+        /** A tempo write that would leave 20–300 BPM. */
+        const val SPEED_MASTER_RANGE = "SPEED_MASTER_RANGE"
     }
 }

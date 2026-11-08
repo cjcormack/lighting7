@@ -193,8 +193,11 @@ object BindingHealthEvaluator {
         is BindingTarget.SpeedMasterBpm -> checkSpeedMaster(target.masterUuid, context)
         is BindingTarget.SpeedMasterTap -> checkSpeedMaster(target.masterUuid, context)
         is BindingTarget.SpeedMasterScale -> checkSpeedMaster(target.masterUuid, context)
+        is BindingTarget.SpeedMasterSetBpm -> checkSpeedMaster(target.masterUuid, context)
         BindingTarget.Blackout -> AssignmentHealth.Ok
+        is BindingTarget.BlackoutSet -> AssignmentHealth.Ok
         BindingTarget.GrandMasterToggle -> AssignmentHealth.Ok
+        is BindingTarget.GrandMasterLevel -> AssignmentHealth.Ok
         BindingTarget.GrandMasterFader -> AssignmentHealth.Ok
         is BindingTarget.StackFxAmount -> checkStack(target.stackId, target.stackUuid, context)
     }

@@ -131,6 +131,16 @@ class InstallOscRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `the address listing is refused on the public listener`() = testApplication {
+        desk.adopt(seedUser(state, "admin").userId)
+        mountPublic(state)
+        val client = createWsClient()
+        val response = client.get("/api/rest/projects/$projectId/osc/addresses") { remote(desk.caller("admin")) }
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+        assertEquals("OSC_LOCAL_ONLY", response.json()["code"]?.jsonPrimitive?.content)
+    }
+
+    @Test
     fun `an operator's socket on the desk's own listener gets osc_state`() = testApplication {
         seedUser(state, "op", role = UserRole.OPERATOR)
         mountTestApp(state)

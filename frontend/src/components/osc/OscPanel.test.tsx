@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
   state: null as unknown,
   role: 'ADMIN' as string,
   skip: [] as boolean[],
+  readAddresses: vi.fn((projectId: number) => ({ unwrap: () => Promise.resolve({ projectId }) })),
+  openWindow: vi.fn(() => ({ close: vi.fn() }) as unknown as Window),
+  printSheet: vi.fn((_win: unknown, _list: unknown, _name: string) => {}),
 }))
 
 vi.mock('@/store/osc', () => ({
@@ -21,6 +24,16 @@ vi.mock('@/store/osc', () => ({
   },
   useSaveOscSettingsMutation: () => [mocks.save, { isLoading: false }],
   useOscState: () => mocks.state,
+  useLazyOscAddressesQuery: () => [mocks.readAddresses, { isFetching: false }],
+}))
+
+vi.mock('@/store/projects', () => ({
+  useCurrentProjectQuery: () => ({ data: { id: 7, name: 'Tempest' } }),
+}))
+
+vi.mock('@/lib/oscCheatSheet', () => ({
+  openCheatSheetWindow: () => mocks.openWindow(),
+  printOscCheatSheet: (win: unknown, list: unknown, name: string) => mocks.printSheet(win, list, name),
 }))
 
 vi.mock('@/store/auth', () => ({
@@ -153,6 +166,41 @@ describe('OscPanel', () => {
         { id: undefined, name: 'Sound Mac', address: '192.168.1.40' },
       ],
     })
+  })
+
+  it('prints the current show’s cheat sheet from the listing, for either role', async () => {
+    mocks.role = 'OPERATOR'
+    render(<OscPanel />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Print cheat sheet' }))
+    })
+    // The window opens in the click, before the listing's round trip, which a browser would block.
+    expect(mocks.openWindow.mock.invocationCallOrder[0]).toBeLessThan(mocks.readAddresses.mock.invocationCallOrder[0])
+    expect(mocks.readAddresses).toHaveBeenCalledWith(7)
+    expect(mocks.printSheet).toHaveBeenCalledWith(expect.anything(), { projectId: 7 }, 'Tempest')
+  })
+
+  it('lists the addresses a change moved, newest first, in words', () => {
+    mocks.role = 'OPERATOR'
+    mocks.state = state({
+      warnings: [
+        {
+          id: 2,
+          at: '2026-11-07 20:05:00.000Z',
+          changes: [{ address: '/lighting7/busk/storm/1/1/press', was: 'Press Haze', now: 'Press Rain' }],
+        },
+        {
+          id: 1,
+          at: '2026-11-07 20:04:00.000Z',
+          changes: [{ address: '/lighting7/stack/act-1/go', was: 'GO Act 1', now: null, reason: 'No stack `act-1` in this show' }],
+        },
+      ],
+    })
+    render(<OscPanel />)
+    expect(screen.getByText('Addresses that moved')).toBeTruthy()
+    const lines = screen.getAllByText(/^\/lighting7\//).map((el) => el.textContent)
+    expect(lines).toContain('/lighting7/busk/storm/1/1/press now reaches Press Rain (was Press Haze)')
+    expect(lines).toContain('/lighting7/stack/act-1/go no longer works (was GO Act 1) — No stack `act-1` in this show')
   })
 
   it('shows a refusal from the desk under the form', async () => {

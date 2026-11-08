@@ -224,11 +224,15 @@ is no undo address.
   sender twice).
 - `GET /api/rest/projects/{id}/osc/addresses` (session 2): every address the project answers to,
   from the table (P2), with what it does, the record it reaches, any ambiguity and any record with no
-  address. Any project, both roles.
+  address. Any project, both roles. As built: `{prefix, patterns, addresses: [{address, pattern, args,
+  does, reaches, target, record?}], ambiguous: [{message, records, addresses}], unaddressed: [{kind, id,
+  uuid, name, reason}]}`, each address made by filling the table's placeholders from the project and
+  answered by `resolve` itself.
 - `osc.state`: outbound, `StateFlow`-backed, machine-scoped (registered in
   `setupMachineSubscriptions` and skipped when `scope.remote`), to every signed-in socket on the
   desk's own listener, conflated to 4 a second:
-  `{enabled, listening, port, error?, received, dropped, refused, refusedSenders: [{address, count, lastAt}], recent: [{at, sender, address, args, outcome, detail}]}`.
+  `{enabled, listening, port, error?, received, dropped, refused, refusedSenders: [{address, count, lastAt}], recent: [{at, sender, address, args, outcome, detail}], warnings: [{id, at, changes: [{address, was, now?, reason?}]}]}`
+  (`warnings` since session 2).
   A bind failure (the port in use) is `error`, never a failed startup.
 
 ### Storage
@@ -264,8 +268,8 @@ written, and its row marked *in review* with its branch. A session's PR is title
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Listener, stacks, Looks, cues and busk | in review | `claude/festive-dirac-ywtlap` | | |
-| 2 | Masters, tempo and finding addresses | planned | | | |
+| 1 | Listener, stacks, Looks, cues and busk | merged | `claude/festive-dirac-ywtlap` | [#384](https://github.com/cjcormack/lighting7/pull/384) | `5959702` |
+| 2 | Masters, tempo and finding addresses | in review | `claude/gracious-albattani-cqe2mu` | | |
 | 3 | Learnable addresses, feedback and TCP | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -359,6 +363,34 @@ the next; whoever merges the last fills its own.
   `FU-MANUAL-OSC-S2`.
 - **Local:** `./gradlew compileTestKotlin`, then `./gradlew test` for the `osc`, `midi` and `routes`
   packages, and `npm run check:quick`.
+
+**Where session 2 followed the code over this section:**
+
+- **The warning is said after the change, not asked before it.** The eight changes are made in a dozen
+  places, and only the desk knows what a renumber relabels or which index a new master takes, so the
+  desk re-reads every received address after the show's list-changed hooks fire (debounced 300 ms) and
+  puts what moved in `osc.state`'s new `warnings`; `OscAddressAnnouncer` toasts each new one on every
+  window and the OSC tab lists them. Undo takes the change back. The received set keeps, by project,
+  what each address reached, compared by the record it names, never the value a tempo carries (and
+  by its row for an address naming none). Attaching a show schedules a check too, since a reload's
+  changes fire no hook on the show it brings.
+- The listing is refused on the public listener (`OSC_LOCAL_ONLY`), by D5, so remote mode draws no
+  *Copy OSC address*.
+- `GrandMasterLevel(level)` holds a percentage, 0–100, the desk's grand-master unit everywhere else;
+  `/grandmaster`'s 0–1 is multiplied up. A tempo outside 20–300 is a *bad message*, not a refusal, so
+  no `SpeedMasterSetBpm` outside the clock's range is ever built. `{master}` is the master's display
+  index (`master_index`), which a delete leaves as a gap.
+- A Look has no per-row menu (the Looks sheet's verbs act on a selection), so its *Copy OSC address* is
+  an *OSC address* button on the Look's own sheet, beside *Add to busk page*. The cue entry's is in
+  `CueActions`' ⋯ (`components/runner`, not `components/cues`), listing the entry's GO TO and standby
+  and then the cue's loose hold.
+- The copy items find a record's addresses by the listing's `record` (`{kind, id, uuid}`) rather than
+  computing a slug in the client, so the client has no copy of the slug rule.
+- `OscLookup` answers whole lists (every stack, every entry of a stack with its number) and the
+  resolver filters by slug, so the listing and a message read the same answers; the listing caches
+  them for its one request. `tapSpeedMaster` answers an outcome, as session 1's rows' actions do.
+- Beyond this section: any numeric argument that is not finite (a NaN float) is a *bad message* for
+  every row that takes one, session 1's `/fx-amount` included.
 
 ### Session 3 — Learnable addresses, feedback and TCP
 

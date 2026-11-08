@@ -28,6 +28,8 @@ import {
 import { buskDragData, DROP_DEPTH, type BuskDropData, type BuskPadDragData } from './buskDnd'
 import { tapVerb } from '@/components/press/PressGestures'
 import type { PressInto } from '@/hooks/usePress'
+import { CopyOscAddressMenu } from '@/components/osc/CopyOscAddressMenu'
+import { useCurrentProjectQuery } from '@/store/projects'
 
 /** A busk pad presses the programmer: it has no focused Look to write into. */
 const PROGRAMMER_INTO: PressInto = { kind: 'programmer' }
@@ -287,6 +289,7 @@ export function BuskPadButton({
           <Hand className="mr-2 size-4" />
           Pick up
         </ContextMenuItem>
+        {pad.id != null && <PadOscAddress padId={pad.id} />}
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={onInspect}>
           <Eye className="mr-2 size-4" />
@@ -295,6 +298,13 @@ export function BuskPadButton({
       </ContextMenuContent>
     </ContextMenu>
   )
+}
+
+/** The pad's OSC address: the busk view shows the current project's pages, so it is that project's. */
+function PadOscAddress({ padId }: { padId: number }) {
+  const { data: project } = useCurrentProjectQuery()
+  if (project == null) return null
+  return <CopyOscAddressMenu projectId={project.id} records={[{ kind: 'PAD', id: padId }]} menu="context" />
 }
 
 /** The pad-shaped placeholder that opens where a drop would land. */
