@@ -33,13 +33,15 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * OSC in (OSC plan, `docs/osc-engineering.md`): this machine's settings and allowlist, the
- * [OscReceiver] on `osc-1`, the channel it hands messages to, the one collector that runs each
+ * [OscReceiver] on `osc-1` and the [OscTcpListener] on the same port, the channel they hand messages to, the one collector that runs each
  * through [handler], the address log and the counts — and `osc.state`, which every window on the
  * desk's own listener reads.
  *
  * Started with the desk, before the show, and listening once an admin enables it; a bind failure is
  * [OscStateDto.error], never a failed startup. Nothing here takes a lock the show takes, and the receive path never waits on the
  * collector (D8): the channel holds [CHANNEL_CAPACITY] and drops the oldest, counting each drop.
+ * A sender with replies on is answered once its message is logged, through a queue the collector
+ * only offers to (D14).
  */
 class OscService(
     private val database: Database,
@@ -70,12 +72,18 @@ class OscService(
     /** The log, the refused senders and the received set. */
     private val data = Any()
     private var receiver: OscReceiver? = null
+    private var tcp: OscTcpListener? = null
 
     @Volatile
     private var listening = false
 
     @Volatile
+    private var tcpListening = false
+
+    @Volatile
     private var error: String? = null
+    private var udpError: String? = null
+    private var tcpError: String? = null
     private var started = false
     private var loopsLaunched = false
 
@@ -201,15 +209,20 @@ class OscService(
                 val dao = existing ?: DaoOscSender.new {}
                 dao.name = sender.name.trim()
                 dao.address = ipLiteral(sender.address.trim())!!
+                dao.replies = sender.replies
             }
         }
         load()
+        synchronized(lifecycle) { tcp?.closeUnlisted() }
         applyListener()
         return settings
     }
 
     /** The UDP port bound now, or null when not listening — the system's choice where a test asked for none. */
     internal fun boundPort(): Int? = synchronized(lifecycle) { receiver?.boundPort?.takeIf { listening } }
+
+    /** The TCP port bound now, or null when not listening on TCP. */
+    internal fun boundTcpPort(): Int? = synchronized(lifecycle) { tcp?.boundPort?.takeIf { tcpListening } }
 
     /** The addresses resolved since the desk started, lower-cased. */
     fun resolvedAddresses(): Set<String> = synchronized(data) { resolvedAddresses.keys.mapTo(LinkedHashSet()) { it.address } }
@@ -276,7 +289,7 @@ class OscService(
     private fun load() {
         val read = transaction(database) {
             val row = DaoOscSettings.all().firstOrNull()
-            val list = DaoOscSender.all().sortedBy { it.id.value }.map { OscSenderDto(it.id.value, it.name, it.address) }
+            val list = DaoOscSender.all().sortedBy { it.id.value }.map { OscSenderDto(it.id.value, it.name, it.address, it.replies) }
             OscSettingsDto(
                 enabled = row?.enabled ?: false,
                 bindAddress = row?.bindAddress,
@@ -286,42 +299,71 @@ class OscService(
         }
         settings = read
         loaded = true
-        senders = read.senders.associate { it.address to OscSender(it.id, it.name, it.address) }
+        senders = read.senders.associate { it.address to OscSender(it.id, it.name, it.address, it.replies) }
         // A sender allowed since it was refused leaves the refused list.
         synchronized(data) { refusedSenders.keys.removeAll(senders.keys) }
         changed()
     }
 
-    /** Make the listener match [settings]: closed when off, rebound when the port or interface moved. */
+    /**
+     * Make the listeners match [settings]: closed when off, rebound when the port or interface moved.
+     * UDP and TCP bind the same port, each reconciled on its own: a save that moves neither leaves a
+     * running one alone — a QLab TCP connection open, say — even while the other cannot bind, and
+     * [OscStateDto.error] names whichever failed.
+     */
     private fun applyListener() {
         synchronized(lifecycle) {
             if (!started) return
             val s = settings
             val bind = s.bindAddress?.let { InetAddress.getByName(it) }
-            val running = receiver
-            if (running != null && listening && s.enabled && running.matches(bind, s.port)) return
-            running?.close()
-            receiver = null
-            listening = false
-            error = null
-            if (s.enabled) {
-                val next = OscReceiver(bind, s.port, { senders }, ::deliver, ::refusedFrom)
-                try {
-                    next.start()
-                    receiver = next
-                    listening = true
-                    logger.info("OSC listening on UDP {}:{}", s.bindAddress ?: "*", next.boundPort)
-                } catch (e: Exception) {
-                    next.close()
-                    error = "Couldn't listen on UDP ${s.port}: ${e.message ?: e::class.simpleName}"
-                    logger.warn(error)
+
+            val udp = receiver
+            if (!s.enabled || udp == null || udp.bindAddress != bind || udp.port != s.port) {
+                udp?.close()
+                receiver = null
+                listening = false
+                udpError = null
+                if (s.enabled) {
+                    val next = OscReceiver(bind, s.port, { senders }, ::deliver, ::refusedFrom)
+                    try {
+                        next.start()
+                        receiver = next
+                        listening = true
+                        logger.info("OSC listening on UDP {}:{}", s.bindAddress ?: "*", next.boundPort)
+                    } catch (e: Exception) {
+                        next.close()
+                        udpError = "Couldn't listen on UDP ${s.port}: ${e.message ?: e::class.simpleName}"
+                        logger.warn(udpError)
+                    }
                 }
             }
+
+            // On the port UDP bound, which is a test's system-chosen one where it asked for none.
+            val tcpPort = receiver?.boundPort ?: s.port
+            val running = tcp
+            if (!s.enabled || running == null || running.bindAddress != bind || running.port != tcpPort) {
+                running?.close()
+                tcp = null
+                tcpListening = false
+                tcpError = null
+                if (s.enabled) {
+                    val next = OscTcpListener(bind, tcpPort, { senders }, ::deliver, ::refusedFrom)
+                    try {
+                        next.start()
+                        tcp = next
+                        tcpListening = true
+                        logger.info("OSC listening on TCP {}:{}", s.bindAddress ?: "*", next.boundPort)
+                    } catch (e: Exception) {
+                        next.close()
+                        tcpError = "Couldn't listen on TCP $tcpPort: ${e.message ?: e::class.simpleName}"
+                        logger.warn(tcpError)
+                    }
+                }
+            }
+            error = listOfNotNull(udpError, tcpError).joinToString("; ").ifEmpty { null }
         }
         changed()
     }
-
-    private fun OscReceiver.matches(bind: InetAddress?, port: Int) = bindAddress == bind && this.port == port
 
     /** A message as though [OscReceiver] had read it, for a test that needs no socket. */
     internal fun offer(inbound: OscInbound) = deliver(inbound)
@@ -356,7 +398,8 @@ class OscService(
             OscHandled(OscOutcome.FAILED, e.message ?: e::class.simpleName ?: "error")
         }
         val message = (inbound.item as? OscPacket.Item.Message)?.message
-        val address = message?.address ?: (inbound.item as OscPacket.Item.Bad).address ?: "–"
+        val received = message?.address ?: (inbound.item as OscPacket.Item.Bad).address
+        val address = received ?: "–"
         val row = OscLogRowDto(
             at = inbound.at.truncatedToMillis().toIsoUtc(),
             sender = inbound.sender.name,
@@ -372,6 +415,9 @@ class OscService(
             val projectId = handled.projectId
             if (reach != null && projectId != null) resolvedAddresses[Received(projectId, address.lowercase())] = reach
         }
+        inbound.replyTo?.let { replyTo ->
+            oscReply(received, handled.outcome, handled.detail)?.let { runCatching { replyTo.send(it) } }
+        }
         changed()
     }
 
@@ -383,6 +429,7 @@ class OscService(
         OscStateDto(
             enabled = settings.enabled,
             listening = listening,
+            tcpListening = tcpListening,
             port = settings.port,
             error = error,
             received = received.get(),
@@ -397,8 +444,11 @@ class OscService(
     override fun close() {
         synchronized(lifecycle) {
             receiver?.close()
+            tcp?.close()
             receiver = null
+            tcp = null
             listening = false
+            tcpListening = false
         }
         watched?.unregisterListener(listChanged)
         watched = null
@@ -448,8 +498,9 @@ data class OscSettingsDto(
     val senders: List<OscSenderDto>,
 )
 
+/** [replies]: each message this sender sends is answered with a `/lighting7/reply` (D14). */
 @Serializable
-data class OscSenderDto(val id: Int, val name: String, val address: String)
+data class OscSenderDto(val id: Int, val name: String, val address: String, val replies: Boolean = false)
 
 /** The whole document: a sender without an `id` is new, and one left out is removed. */
 @Serializable
@@ -461,13 +512,16 @@ data class OscSettingsRequest(
 )
 
 @Serializable
-data class OscSenderRequest(val id: Int? = null, val name: String, val address: String)
+data class OscSenderRequest(val id: Int? = null, val name: String, val address: String, val replies: Boolean = false)
 
 /** `osc.state` (OSC plan §3 "Wire"). Counts are since the desk started. */
 @Serializable
 data class OscStateDto(
     val enabled: Boolean,
+    /** On UDP. */
     val listening: Boolean,
+    /** On TCP, the same port, SLIP-framed. */
+    val tcpListening: Boolean = false,
     val port: Int,
     val error: String? = null,
     val received: Long,

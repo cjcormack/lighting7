@@ -134,7 +134,7 @@ describe('OscPanel', () => {
     mocks.settings = settings({ enabled: false })
     mocks.save.mockImplementationOnce(() => ({ unwrap: () => Promise.reject({ status: 400, data: { error: 'no' } }) }))
     render(<OscPanel />)
-    fireEvent.change(screen.getByLabelText('UDP port'), { target: { value: '9999' } })
+    fireEvent.change(screen.getByLabelText('Port, UDP and TCP'), { target: { value: '9999' } })
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Enable' }))
     })
@@ -170,7 +170,7 @@ describe('OscPanel', () => {
       enabled: true,
       port: 8415,
       bindAddress: null,
-      senders: [{ id: undefined, name: 'Sound Mac', address: '192.168.1.40' }],
+      senders: [{ id: undefined, name: 'Sound Mac', address: '192.168.1.40', replies: false }],
     })
   })
 
@@ -178,7 +178,7 @@ describe('OscPanel', () => {
     const view = render(<OscPanel />)
     mocks.settings = settings({ port: 9000 })
     view.rerender(<OscPanel />)
-    expect((screen.getByLabelText('UDP port') as HTMLInputElement).value).toBe('9000')
+    expect((screen.getByLabelText('Port, UDP and TCP') as HTMLInputElement).value).toBe('9000')
 
     fireEvent.change(screen.getAllByLabelText('Sender name')[0], { target: { value: 'QLab 2' } })
     mocks.save.mockImplementationOnce(() => ({
@@ -207,10 +207,46 @@ describe('OscPanel', () => {
       port: 8415,
       bindAddress: null,
       senders: [
-        { id: 1, name: 'QLab', address: '192.168.1.20' },
-        { id: undefined, name: 'Sound Mac', address: '192.168.1.40' },
+        { id: 1, name: 'QLab', address: '192.168.1.20', replies: false },
+        { id: undefined, name: 'Sound Mac', address: '192.168.1.40', replies: false },
       ],
     })
+  })
+
+  it('says it listens on TCP too, and on TCP alone when UDP could not bind', () => {
+    mocks.state = state({ tcpListening: true })
+    render(<OscPanel />)
+    expect(screen.getByTestId('osc-status').textContent).toBe('Listening on UDP and TCP 8415')
+    cleanup()
+    mocks.state = state({ listening: false, tcpListening: true, error: "Couldn't listen on UDP 8415: Address already in use" })
+    render(<OscPanel />)
+    expect(screen.getByTestId('osc-status').textContent).toBe('Listening on TCP 8415')
+  })
+
+  it('turns a sender’s replies on, and reads the stored switch back', async () => {
+    mocks.settings = settings({ senders: [{ id: 1, name: 'QLab', address: '192.168.1.20', replies: false }] })
+    render(<OscPanel />)
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    const replies = screen.getByLabelText('Replies to QLab') as HTMLInputElement
+    expect(replies.checked).toBe(false)
+    fireEvent.click(replies)
+    expect(save.disabled).toBe(false)
+    await act(async () => {
+      fireEvent.click(save)
+    })
+    expect(mocks.save).toHaveBeenCalledWith({
+      enabled: true,
+      port: 8415,
+      bindAddress: null,
+      senders: [{ id: 1, name: 'QLab', address: '192.168.1.20', replies: true }],
+    })
+  })
+
+  it('draws a stored sender with replies on as ticked', () => {
+    mocks.settings = settings({ senders: [{ id: 1, name: 'QLab', address: '192.168.1.20', replies: true }] })
+    render(<OscPanel />)
+    expect((screen.getByLabelText('Replies to QLab') as HTMLInputElement).checked).toBe(true)
   })
 
   it('prints the current show’s cheat sheet from the listing, for either role', async () => {
@@ -253,7 +289,7 @@ describe('OscPanel', () => {
       unwrap: () => Promise.reject({ status: 400, data: { error: 'The port must be from 1024 to 65535' } }),
     }))
     render(<OscPanel />)
-    fireEvent.change(screen.getByLabelText('UDP port'), { target: { value: '80' } })
+    fireEvent.change(screen.getByLabelText('Port, UDP and TCP'), { target: { value: '80' } })
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     })

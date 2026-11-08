@@ -2,10 +2,11 @@
 
 QLab and other show-control senders drive the desk over OSC: a Network cue sends one message, an
 address and optional arguments, and the desk does what the address names. The plan is
-[`plans/osc-plan.md`](plans/osc-plan.md); this document is what is built. Session 1 is the listener,
-stacks, Looks, loose cues and busk pads; session 2 masters and tempo, and finding addresses: the
-listing, *Copy OSC address*, the cheat sheet and the moved-address warning. Learnable addresses,
-feedback and TCP are session 3's.
+[`plans/completed/osc-plan.md`](plans/completed/osc-plan.md); this document is what is built.
+Session 1 is the listener, stacks, Looks, loose cues and busk pads; session 2 masters and tempo, and
+finding addresses: the listing, *Copy OSC address*, the cheat sheet and the moved-address warning;
+session 3 TCP and replies. Learnable addresses, and the fader and LED feedback a learned sender
+would want, wait for one to be in use (`FU-OSC-LEARN` in `plans/followups.md`).
 
 ## The address set
 
@@ -95,7 +96,21 @@ takes each message in turn through `osc/OscHandler.kt`: resolve, then dispatch u
 causes — is a *failed* row and the collector carries on. The collector yields between messages and
 the state is published from another dispatcher, so a flood never freezes `osc.state`.
 `OscFloodOutputTimingTest` holds a fade's output timing while an allowed and a refused sender flood
-the listener (P3).
+the listener, over UDP and over TCP (P3).
+
+**TCP** is OSC 1.1's: on the same port as UDP, each packet framed by double-ended SLIP (RFC 1055,
+`osc/OscSlip.kt`), which is how QLab sends OSC over TCP. `osc/OscTcpListener.kt` accepts on
+`osc-tcp`, closes a connection from an address not on the allowlist unread (counted and listed as a
+refused sender, as a UDP packet is), and reads each connection on its own `osc-tcp-N` thread: frames
+split across reads are joined, one longer than a datagram (65,507 bytes) is a *bad message* row and
+the connection reads on, and each message goes into the same channel as UDP's. At most eight are
+open; a ninth closes the one idle longest rather than being turned away, so a QLab machine that lost
+power mid-show, its connection never closed, cannot lock its own reconnect out (keepalive closes such
+a connection in time too). The sender is looked up again for every frame, and a settings save closes
+the connections of senders it removed. UDP and TCP bind separately and are reconciled separately, so
+a port another program holds on one still leaves the other listening, a save that moves neither
+leaves a running one alone, and `error` names the one that failed. Nothing on these threads touches
+the database or the show (D8).
 
 ## Settings and security
 
@@ -103,10 +118,10 @@ Off by default (D5). The service starts with the desk, before the show, so its s
 desk whose show failed to start; a message that arrives before the show is up is a *failed* row. An
 admin on the desk's own listener turns it on in Install Settings → OSC:
 `GET/PUT /api/rest/install/osc` (`routes/installOsc.kt`), `{enabled, bindAddress, port, senders:
-[{id, name, address}]}`, the `PUT` the whole document — a sender with no `id` is new, one left out is
+[{id, name, address, replies}]}`, the `PUT` the whole document — a sender with no `id` is new, one left out is
 removed — refused 400 `OSC_SETTINGS_INVALID` naming every problem at once (a port outside 1024–65535,
 an address that is not an IP literal, a sender twice). Both are 403 `OSC_SETTINGS_LOCAL_ONLY` on the
-public listener. The default port is UDP **8415** (D13); `bindAddress` null listens on every
+public listener. The default port is **8415**, UDP and TCP (D13); `bindAddress` null listens on every
 interface, and is how a desk keeps OSC off a network it does not trust. A hostname is never looked
 up: the allowlist compares addresses, and DNS has no place on the settings route.
 
@@ -116,13 +131,32 @@ source address can be forged by anyone on the LAN, so the allowlist keeps out th
 an attacker. A port in use is `osc.state`'s `error`, never a failed startup.
 
 Storage is `osc_settings` (one row) and `osc_senders`, both `MachineLocal` in `SyncDispositions`:
-they never sync, and need no migration.
+they never sync, and need no migration — `osc_senders.replies`, session 3's, is a column
+`createMissingTablesAndColumns` adds, off.
+
+## Replies
+
+A sender whose allowlist entry has **Replies** on (`replies`, off by default, D14) is answered for
+each `/lighting7/` address it sends, once the message is logged: `/lighting7/reply` with three
+strings — the address it sent, its outcome in lower case (`done`, `not_found`, `ambiguous`,
+`refused`, `failed`, `bad_message`) and the log row's detail. Over UDP it goes to the address and
+port the message came from, sent from the listening socket (on a desk with several addresses, set
+the interface so the reply comes from the one the sender sent to); over TCP down the same
+connection, SLIP-framed, and a peer that half-closes after sending keeps its connection two seconds
+for them. An address outside `/lighting7/`, a packet that could not be read and a
+`/lighting7/reply` itself are logged but never answered: a peer that acknowledges what it is sent in
+its own namespace, or another desk with replies on, would otherwise answer the desk forever. Nor is a
+message the full channel dropped. The collector only offers the reply to a queue
+(`osc/OscReplies.kt`, 64 deep, its own thread: `osc-reply` for UDP, `osc-tcp-reply-N` for each
+connection), and a reply that finds it full is dropped, never the message — so a TCP peer that stops
+reading holds up nobody but its own replies. QLab acts on nothing it reads back; turn Replies on for
+it to watch the answers in its OSC monitor.
 
 ## The log
 
 `osc.state` (`plugins/MachineSocket.kt`) goes to every socket on the desk's own listener, operators'
-included (D12), and none on the public one: `{enabled, listening, port, error?, received, dropped,
-refused, refusedSenders, recent, warnings}`, at most four times a second. Each of the last 50 messages is a
+included (D12), and none on the public one: `{enabled, listening, tcpListening, port, error?,
+received, dropped, refused, refusedSenders, recent, warnings}` (`listening` is UDP's), at most four times a second. Each of the last 50 messages is a
 row — time, sender (the allowlist's name), address, arguments, outcome and a one-line detail naming
 what it reached (*GO TO 31 Storm builds in Act 2*) or why it did nothing (*No stack `act-3` in this
 show*). Outcomes: **done**, **not found**, **ambiguous**, **refused**, **failed**, **bad message**.
@@ -192,7 +226,8 @@ nothing stored); a Look on or off takes one, as a busk press does. There is no u
 `components/osc/OscPanel.tsx` on the OSC tab of Install Settings, a row both roles see
 (`navigation.ts`). Everyone sees the status, the refused senders and the log, from `osc.state` alone
 (`api/oscWsApi.ts` keeps the latest frame, since the snapshot arrives on connect); an admin also sees
-*Enable*, the port, the interface and the senders, from `GET /install/osc` (`store/osc.ts`). *Enable*
-and *Disable* save the stored document with only the switch flipped, so a half-typed draft never goes
-live; the draft is kept through them, each field following the stored document only where it has not
-been edited, and *Save* sends it.
+*Enable*, the port, the interface and the senders with their *Replies* box, from `GET /install/osc`
+(`store/osc.ts`). The status names each transport listening: *Listening on UDP and TCP 8415*.
+*Enable* and *Disable* save the stored document with only the switch flipped, so a half-typed draft
+never goes live; the draft is kept through them, each field following the stored document only where
+it has not been edited, and *Save* sends it.
