@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -113,12 +113,24 @@ function SettingsCard({
   const [senders, setSenders] = useState<DraftSender[]>(settings.senders)
   const [problem, setProblem] = useState<string | null>(null)
 
-  // A save answers the stored document; the draft follows it.
+  // When the stored document moves, a field the operator has not edited follows it, and one they
+  // have keeps its draft: Enable and Disable save the stored document, and must not throw away a
+  // sender typed but not yet saved.
+  const stored = useRef(settings)
   useEffect(() => {
-    setPort(String(settings.port))
-    setBindAddress(settings.bindAddress ?? '')
-    setSenders(settings.senders)
+    const before = stored.current
+    stored.current = settings
+    setPort((p) => (p === String(before.port) ? String(settings.port) : p))
+    setBindAddress((b) => (b === (before.bindAddress ?? '') ? (settings.bindAddress ?? '') : b))
+    setSenders((list) => (JSON.stringify(list) === JSON.stringify(before.senders) ? settings.senders : list))
   }, [settings])
+
+  /** The draft as the desk stored it, after a Save: a new sender takes its id. */
+  const adopt = (saved: OscSettings) => {
+    setPort(String(saved.port))
+    setBindAddress(saved.bindAddress ?? '')
+    setSenders(saved.senders)
+  }
 
   useEffect(() => {
     if (allowing == null) return
@@ -133,10 +145,11 @@ function SettingsCard({
     senders: senders.map((s) => ({ id: s.id, name: s.name.trim(), address: s.address.trim() })),
   })
 
-  const submit = async (body: OscSettingsRequest) => {
+  const submit = async (body: OscSettingsRequest, fromDraft: boolean) => {
     setProblem(null)
     try {
-      await save(body).unwrap()
+      const saved = await save(body).unwrap()
+      if (fromDraft) adopt(saved)
       toast.success('OSC settings saved')
     } catch (err) {
       setProblem(formatError(err))
@@ -165,7 +178,7 @@ function SettingsCard({
               port: settings.port,
               bindAddress: settings.bindAddress ?? null,
               senders: settings.senders,
-            })
+            }, false)
           }
           disabled={saving}
         >
@@ -226,7 +239,7 @@ function SettingsCard({
         </Alert>
       )}
       <div className="flex justify-end">
-        <Button onClick={() => void submit(draft())} disabled={!dirty || saving}>
+        <Button onClick={() => void submit(draft(), true)} disabled={!dirty || saving}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
         </Button>
       </div>

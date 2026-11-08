@@ -192,4 +192,7 @@ nothing stored); a Look on or off takes one, as a busk press does. There is no u
 `components/osc/OscPanel.tsx` on the OSC tab of Install Settings, a row both roles see
 (`navigation.ts`). Everyone sees the status, the refused senders and the log, from `osc.state` alone
 (`api/oscWsApi.ts` keeps the latest frame, since the snapshot arrives on connect); an admin also sees
-*Enable*, the port, the interface and the senders, from `GET /install/osc` (`store/osc.ts`).
+*Enable*, the port, the interface and the senders, from `GET /install/osc` (`store/osc.ts`). *Enable*
+and *Disable* save the stored document with only the switch flipped, so a half-typed draft never goes
+live; the draft is kept through them, each field following the stored document only where it has not
+been edited, and *Save* sends it.
