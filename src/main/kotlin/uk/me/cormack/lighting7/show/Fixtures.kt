@@ -116,7 +116,11 @@ interface FixturesChangeListener {
     fun projectDetailsChanged(projectId: Int) {}
 }
 
-class Fixtures {
+/**
+ * @param mockOutput `dmx.mock`: every Art-Net universe [DbFixtureLoader] builds sends nothing to the
+ *   network, while still fading and reporting its channels as a live one does.
+ */
+class Fixtures(val mockOutput: Boolean = false) {
     private val registerLock = ReentrantReadWriteLock()
 
     /**

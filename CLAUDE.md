@@ -57,6 +57,8 @@ anything it didn't put there, so don't hand-place files in it.
 1. Copy `example.local.conf` to `local.conf`
 2. Optionally set `database.path` — empty uses `<appDataDir>/lighting7.db`
 3. Set project name
+4. Optionally set `dmx.mock = true` to send no Art-Net at all (a dev desk beside a live rig;
+   `docs/dmx-engineering.md` §"Mock output")
 
 ### Cloud sessions
 
