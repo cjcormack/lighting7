@@ -194,6 +194,16 @@ log a refusal, never confirming, so an undo that would move a running show is no
 `undo_changes` (mcp-engineering.md §"Claude's own history") runs it entry by entry for its own grant
 only, refusing another source's entry as `HISTORY_NOT_YOURS`.
 
+**A door that restores from git.** Bringing records back from a cloud-sync snapshot
+(sync-engineering.md §"Bringing records back") is `RecordRestorer.bringBack`: no plan against the
+cache, but the records the snapshot holds, upserted through the same `ProjectImporter.restore` with
+fresh row ids, renumbered, held to the venue's namespace and checked by export against the folders as
+they stood with the records laid over them (hashes only, the ids being new). Its commit is a
+**tracked** write under the request's origin, so it is an entry of its own — *Brought back from
+3f2a91c* — which an undo takes back like any other; what it sets off runs under an `UNDO` origin, as
+an undo's does, so it takes no programmer step. It refuses as an undo does, but asks no confirm: its
+dry run lists the same moves (`movesFor`) for the operator to read before they press *Bring back*.
+
 **Confirm (D6).** On the live project, while any cue is held, an undo that moves the stage answers 409
 `HISTORY_CONFIRM` with `moves` until it is resent with `confirm`: a change to the rig that rebuilds the
 fixtures, as its own route's write would (`KindEffects.rigReach`: a patch or group added or taken away,

@@ -1996,6 +1996,7 @@ All endpoints live under `/api/rest/projects/{projectId}/sync/...`:
 | POST | `/abort` | Drop the active session |
 | GET | `/restore/{sha}` | What restoring that snapshot would do (§"Restoring a snapshot") |
 | POST | `/restore` | `{sha, token, note?}`: restore it as a new commit on top |
+| POST | `/restore/records` | `{sha, records, token?, dryRun?}`: bring chosen records back (§"Bringing records back") |
 
 JGit calls are blocking and run inside `withContext(Dispatchers.IO) {…}`;
 the snapshot engine wraps that boundary itself, route handlers wrap their
@@ -2074,6 +2075,41 @@ an ordinary snapshot with a trailer in its message.
 commit is marked with the snapshot it went back to. `RestoreReviewDialog.tsx` draws the review, takes
 the note, puts a `RESTORE_REVIEW_STALE` answer's review in its place, and toasts the done restore with
 *Undo*, which opens the review of `before` through the Sync tab's `?review={sha}`.
+
+### Bringing records back
+
+`POST …/sync/restore/records` `{sha, records: [{folder, uuid}], token?, dryRun?}` (sync-restore plan
+session 3) puts back only the records chosen from the review — each a `BACK` or `CHANGED` one; a `GONE`
+one, one as the snapshot has it, `project.json` or a folder outside `RESTORABLE_FOLDERS` is 400
+`RESTORE_INVALID`, since taking a record away is an ordinary delete. **Also needed** joins them,
+transitively: every record the target holds and the show lacks that a chosen one names by uuid (a
+`…Uuid` field, a `…Uuids` list or each `pal:` reference in a value, a list's included, the field saying
+the folder where it can), the prompt book an anchor or note sits in, and every such record that is
+**part of** a selected one — a cue's rows, layers, FX, triggers and stack entries, an entry's
+prompt-book anchors, and a stack's entries only when the stack itself is chosen, so a cue of a deleted
+stack brings the stack back with that cue's place alone. A reference by key (a cue row's fixture)
+brings nothing. P7 holds as for a restore: the venue's machine overrides for a universe or patch it
+brings back are copied to the show's id, and a universe left with no address here is named
+(`addresses`). `dryRun` answers the selection, chosen first, its `addresses`, its `token` — the SHA-256
+of the target sha, each selected record's folder, uuid, change and its hashes now and then, and the
+addresses — and, on the live project while a cue is held, `moves`: what it moves on stage, in undo's
+confirm's words (`RecordRestorer.movesFor`), which the dialog shows above *Bring back*, pressing it being
+the confirmation. A dry run naming a script or FX definition is refused for a caller remote scripts are
+off for. Without it the selection is computed again inside the write's transaction and must answer the
+token, else 409 `RESTORE_REVIEW_STALE` with `selection` in the body.
+
+The target's records are the review's, read from its import rolled back, so they are in today's
+format. They go back through undo's upsert (`RecordRestorer.bringBack` over `ProjectImporter.restore`),
+with **fresh row ids** — an image read from git has no row of its own (`keepRowIds = false`) — under
+the request's write origin, named *Brought back from {shortSha}*, so the journal makes them one show
+entry that ⌘Z takes back, and `KindEffects` runs what their writes would. It is refused as an undo is,
+409 `HISTORY_UNDO_BLOCKED` with nothing written: a name taken since, a key the venue holds on a show on
+one, a record that would not land exactly — a stack's entries are checked with it, so a renumber that
+would move one refuses. A script or FX definition is held to remote scripts. Once written, the
+snapshot's prompt-book PDFs and scene images are copied into the stores, as a restore copies them, so a
+painted cloth whose image was pruned comes back painted. No commit, no reload, no clear point: the next
+snapshot or sync carries it. The review dialog ticks
+records and asks *Bring back n…*, lists the selection with what is also needed, and writes it.
 
 ## Remote sync (Phase 4)
 
@@ -2479,9 +2515,9 @@ person.
 | `AUTH_FAILED` | 401 | Credentials present but GitHub rejected the push/fetch. |
 | `MISSING_PAT` | 401 | Legacy alias for `MISSING_CREDENTIALS`; retained for one release. |
 | `RESTORE_COMMIT_UNKNOWN` | 404 | The snapshot to restore isn't HEAD or an ancestor of it, or the show has no history. |
-| `RESTORE_REVIEW_STALE` | 409 | The restore would now do something else, or a write landed during it; the body carries `review`. |
+| `RESTORE_REVIEW_STALE` | 409 | The restore would now do something else, or a write landed during it; the body carries `review`. A bring-back's would now bring back something else; its body carries `selection`. |
 | `RESTORE_NO_CHANGES` | 409 | The snapshot is the show as it is. |
-| `RESTORE_INVALID` | 400 | A note over 200 characters or holding a line break; a blank sha or token. |
+| `RESTORE_INVALID` | 400 | A note over 200 characters or holding a line break; a blank sha or token. A bring-back with no records, a malformed uuid, a record that is `GONE`, as the snapshot has it, `project.json` or outside `RESTORABLE_FOLDERS`, or no token on a write. |
 | `RESTORE_TOO_OLD` | 422 | The snapshot's archive is older than `MIN_SUPPORTED_FORMAT_VERSION`. |
 | `RESTORE_UNREADABLE` | 422 | Any other failure to import the snapshot's tree (or the first sync's pulled one). |
 

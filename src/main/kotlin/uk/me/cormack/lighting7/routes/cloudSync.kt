@@ -54,6 +54,18 @@ import uk.me.cormack.lighting7.sync.RestoreRequest
 import uk.me.cormack.lighting7.sync.RestoreResultDto
 import uk.me.cormack.lighting7.sync.RestoreReviewDto
 import uk.me.cormack.lighting7.sync.RestoreStaleException
+import uk.me.cormack.lighting7.sync.BringBackDto
+import uk.me.cormack.lighting7.sync.BringBackOutcome
+import uk.me.cormack.lighting7.sync.BringBackRequest
+import uk.me.cormack.lighting7.sync.BringBackStaleException
+import uk.me.cormack.lighting7.auth.authenticatedUserOrNull
+import uk.me.cormack.lighting7.history.HistoryMoveResult
+import uk.me.cormack.lighting7.history.HistoryRefusal
+import uk.me.cormack.lighting7.history.WriteOrigin
+import uk.me.cormack.lighting7.history.refusal
+import uk.me.cormack.lighting7.mcp.RemoteScriptsDisabledException
+import uk.me.cormack.lighting7.mcp.scriptsAllowed
+import uk.me.cormack.lighting7.plugins.historySourceOf
 import java.util.UUID
 import uk.me.cormack.lighting7.models.nowUtc
 import uk.me.cormack.lighting7.models.toIsoUtc
@@ -381,6 +393,42 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
         }
     }
 
+    // Bringing chosen records back (sync-restore plan session 3): one show-history entry, no commit.
+    post<ProjectSyncRestoreRecordsResource> { resource ->
+        val request = call.receive<BringBackRequest>()
+        withProject(state, resource.parent.parent.projectId) { project ->
+            val outcome = try {
+                remoteSyncEngine.bringBack(
+                    projectId = project.id.value,
+                    sha = request.sha,
+                    records = request.records,
+                    token = request.token,
+                    dryRun = request.dryRun,
+                    origin = WriteOrigin.current() ?: WriteOrigin(historySourceOf(call.authenticatedUserOrNull)),
+                    scriptsAllowed = call.scriptsAllowed(state),
+                )
+            } catch (e: BringBackStaleException) {
+                call.respond(e.code.toHttpStatus(), BringBackStaleResponse(e.message ?: e.code.name, e.code.name, e.selection))
+                return@withProject
+            } catch (e: SyncException) {
+                respondSyncError(e)
+                return@withProject
+            }
+            when (outcome) {
+                is BringBackOutcome.Done -> call.respond(outcome.result)
+                is BringBackOutcome.Refused -> {
+                    val refusal = HistoryMoveResult.Show(outcome.outcome).refusal(undo = true, entryId = null)
+                        ?: error("A refused bring-back with no refusal: ${outcome.outcome}")
+                    if (refusal.kind == HistoryRefusal.Kind.SCRIPTS_REFUSED) throw RemoteScriptsDisabledException()
+                    call.respond(
+                        HttpStatusCode.Conflict,
+                        HistoryRefusalDto(error = refusal.message, code = refusal.code ?: CODE_HISTORY_UNDO_BLOCKED, record = refusal.record, reason = refusal.reason),
+                    )
+                }
+            }
+        }
+    }
+
     // ─── Phase 5 conflict-session endpoints ────────────────────────────
 
     get<ProjectSyncConflictsResource> { resource ->
@@ -676,6 +724,9 @@ data class ProjectSyncRestoreResource(val parent: ProjectSyncResource)
 @Resource("/{sha}")
 data class ProjectSyncRestoreReviewResource(val parent: ProjectSyncRestoreResource, val sha: String)
 
+@Resource("/records")
+data class ProjectSyncRestoreRecordsResource(val parent: ProjectSyncRestoreResource)
+
 @Resource("/conflicts")
 data class ProjectSyncConflictsResource(val parent: ProjectSyncResource)
 
@@ -735,6 +786,10 @@ data class ReconnectRequest(val repoUrl: String)
 /** `RESTORE_REVIEW_STALE`'s body: the review the restore would now make, to show in its place. */
 @Serializable
 data class RestoreStaleResponse(val error: String, val code: String, val review: RestoreReviewDto)
+
+/** `RESTORE_REVIEW_STALE`'s body for a bring-back: the selection it would now make. */
+@Serializable
+data class BringBackStaleResponse(val error: String, val code: String, val selection: BringBackDto)
 
 private fun restoreDoneMessage(result: RestoreResultDto): String {
     val c = result.counts

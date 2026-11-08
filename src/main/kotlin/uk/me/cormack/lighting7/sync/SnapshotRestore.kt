@@ -14,7 +14,12 @@ import org.jetbrains.exposed.v1.dao.flushCache
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import uk.me.cormack.lighting7.fx.parsePaletteColourRefUuid
 import uk.me.cormack.lighting7.history.RecordLabeler
+import uk.me.cormack.lighting7.history.RecordRestorer
+import uk.me.cormack.lighting7.history.WriteOrigin
 import uk.me.cormack.lighting7.models.DaoMachineOverride
 import uk.me.cormack.lighting7.models.DaoMachineOverrides
 import uk.me.cormack.lighting7.models.DaoProject
@@ -235,6 +240,205 @@ class SnapshotRestore(private val state: State) {
                 )
             }
         }
+    }
+
+    /**
+     * `POST …/sync/restore/records` (sync-restore plan session 3): the [records] of [sha] the operator
+     * chose, and every record they need (§"Bring back"), put back through undo's upsert under [origin]
+     * as one show-history entry, *Brought back from {shortSha}*. With [dryRun] it answers the selection,
+     * its addresses, what it moves on the live stage and its token, and writes nothing; otherwise the
+     * selection, recomputed in the write's transaction, must answer [token], and the snapshot's binary
+     * stores are hydrated once it lands. Neither commits nor reloads: the next snapshot or sync carries it.
+     */
+    internal suspend fun bringBack(
+        projectId: Int,
+        sha: String,
+        records: List<BringBackRecordRef>,
+        token: String?,
+        dryRun: Boolean,
+        origin: WriteOrigin,
+        scriptsAllowed: Boolean,
+    ): BringBackOutcome = withContext(Dispatchers.IO) {
+        requireShow(projectId)
+        if (sha.isBlank()) throw SyncException(SyncErrorCode.RESTORE_INVALID, "Name the snapshot to bring records back from.")
+        if (records.isEmpty()) throw SyncException(SyncErrorCode.RESTORE_INVALID, "Choose a record to bring back.")
+        if (!dryRun && token.isNullOrBlank()) throw SyncException(SyncErrorCode.RESTORE_INVALID, "Bringing records back needs their selection's token.")
+        val chosen = records.map { ref ->
+            val uuid = runCatching { UUID.fromString(ref.uuid) }.getOrNull()
+                ?: throw SyncException(SyncErrorCode.RESTORE_INVALID, "“${ref.uuid}” is not a record's id.")
+            RecordKey(ref.folder, uuid)
+        }.distinct()
+        val projectUuid = transaction(state.database) { DaoProject.findById(projectId)?.uuid }
+            ?: throw SyncException(SyncErrorCode.RESTORE_COMMIT_UNKNOWN, "Project $projectId not found.")
+        val restorer = RecordRestorer(state)
+        prepare(projectId, sha).use { prepared ->
+            val label = "Brought back from ${prepared.target.shortSha}"
+            if (dryRun) {
+                val (now, then) = recordsAt(projectId, prepared, withNow = true)
+                val selection = transaction(state.database) { selection(projectId, prepared, now!!, then, chosen) }
+                if (!scriptsAllowed && selection.records.any { it.key.tableName in SCRIPT_RECORD_FOLDERS }) {
+                    return@use BringBackOutcome.Refused(RecordRestorer.Outcome.ScriptsRefused)
+                }
+                val moves = restorer.movesFor(projectId, selection.records.associate { it.key to then.getValue(it.key) })
+                return@use BringBackOutcome.Done(selection.dto(prepared, label, applied = false, moves = moves))
+            }
+
+            val (_, then) = recordsAt(projectId, prepared, withNow = false)
+            origin.entryLabel = label
+            var picked: Selection? = null
+            val outcome = restorer.bringBack(projectId, origin, scriptsAllowed) {
+                val selection = selection(projectId, prepared, exporter.exportRecords(projectId).images, then, chosen)
+                if (selection.token != token) {
+                    throw BringBackStaleException(
+                        selection.dto(prepared, label, applied = false),
+                        "What bringing these records back would do has changed since it was reviewed.",
+                    )
+                }
+                picked = selection
+                val project = DaoProject[projectId]
+                selection.addresses.copies.forEach { copy ->
+                    DaoMachineOverride.new {
+                        this.project = project
+                        targetTable = copy.table
+                        recordUuid = copy.uuid
+                        fieldName = copy.field
+                        valueJson = copy.valueJson
+                    }
+                }
+                selection.records.associate { it.key to then.getValue(it.key) }
+            }
+            val selection = picked
+            if (outcome !is RecordRestorer.Outcome.Done || selection == null) return@use BringBackOutcome.Refused(outcome)
+            runCatching { PromptScriptRepoSync.hydrateStore(state, projectUuid, prepared.scratch) }
+                .onFailure { logger.warn("Prompt-book PDF hydrate failed bringing records back to project {}: {}", projectId, it.message) }
+            runCatching { SceneImageRepoSync.hydrateStore(state, projectUuid, prepared.scratch) }
+                .onFailure { logger.warn("Scene image hydrate failed bringing records back to project {}: {}", projectId, it.message) }
+            BringBackOutcome.Done(selection.dto(prepared, label, applied = true, entryId = outcome.entries.firstOrNull()?.id))
+        }
+    }
+
+    /**
+     * The show's records as [prepared]'s target makes them — the review's import, in a transaction
+     * rolled back — and, [withNow], as they stand. Every record but `project.json`.
+     */
+    private fun recordsAt(
+        projectId: Int,
+        prepared: Prepared,
+        withNow: Boolean,
+    ): Pair<Map<RecordKey, RecordImage>?, Map<RecordKey, RecordImage>> = try {
+        transaction(state.database) {
+            val project = DaoProject.findById(projectId)
+                ?: throw SyncException(SyncErrorCode.RESTORE_COMMIT_UNKNOWN, "Project $projectId not found.")
+            val projectKey = RecordKey(SyncDispositions.PROJECT_FOLDER, project.uuid)
+            val now = if (withNow) exporter.exportRecords(projectId).images - projectKey else null
+            adjustProjectJson(prepared, project)
+            importer.replaceInTransaction(projectId, prepared.scratch)
+            TransactionManager.current().flushCache()
+            val then = exporter.exportRecords(projectId).images - projectKey
+            TransactionManager.current().rollback()
+            now to then
+        }
+    } catch (e: ImportError) {
+        throw e.toSyncException(pulled = false)
+    } catch (e: SerializationException) {
+        throw SyncException(SyncErrorCode.RESTORE_UNREADABLE, "Snapshot ${prepared.target.shortSha} could not be read: ${e.message}", e)
+    } catch (e: SQLException) {
+        throw SyncException(SyncErrorCode.RESTORE_UNREADABLE, "Snapshot ${prepared.target.shortSha} could not be imported: ${e.message}", e)
+    }
+
+    private class Picked(val key: RecordKey, val change: RestoreChange, val label: String, val needed: Boolean, val nowHash: String?, val thenHash: String)
+
+    private class Selection(val records: List<Picked>, val addresses: Addresses, val addressesDto: RestoreAddressesDto?, val token: String) {
+        fun dto(prepared: Prepared, label: String, applied: Boolean, entryId: String? = null, moves: List<String> = emptyList()) = BringBackDto(
+            target = prepared.target,
+            token = token,
+            label = label,
+            records = records.map {
+                BringBackRecordDto(it.key.tableName, it.key.uuid.toString(), RecordLabeler.nouns(it.key.tableName).first, it.label, it.change, it.needed)
+            },
+            addresses = addressesDto,
+            moves = moves,
+            applied = applied,
+            entryId = entryId,
+        )
+    }
+
+    /**
+     * [chosen] and every record it needs, transitively: each record [then] holds and [now] lacks that a
+     * selected one names by uuid, the prompt book an anchor or note sits in, and each such record that
+     * is part of a selected one — a cue's rows, layers, FX, triggers and places in stacks, an entry's
+     * prompt-book anchors, and a stack's entries when the stack itself is chosen — since neither a cue
+     * nor a stack names its parts. With P7's addresses for the universes and patches it brings back.
+     * Refuses a record the review does not offer. Inside a transaction.
+     */
+    private fun selection(
+        projectId: Int,
+        prepared: Prepared,
+        now: Map<RecordKey, RecordImage>,
+        then: Map<RecordKey, RecordImage>,
+        chosen: List<RecordKey>,
+    ): Selection {
+        for (key in chosen) {
+            val thenImage = then[key]
+            val refusal = when {
+                key.tableName == SyncDispositions.PROJECT_FOLDER || key.tableName !in RESTORABLE_FOLDERS ->
+                    "A ${key.tableName} record can't be brought back on its own."
+                thenImage == null && now[key] != null ->
+                    "${RecordLabeler.name(key, now.getValue(key))} was added since: taking it away is an ordinary delete."
+                thenImage == null -> "Snapshot ${prepared.target.shortSha} has no ${key.tableName} record ${key.uuid}."
+                now[key]?.hash == thenImage.hash -> "${RecordLabeler.name(key, thenImage)} is as the snapshot has it."
+                else -> null
+            }
+            if (refusal != null) throw SyncException(SyncErrorCode.RESTORE_INVALID, refusal)
+        }
+        val chosenSet = chosen.toSet()
+        val back = (then.keys - now.keys).filter { it.tableName in RESTORABLE_FOLDERS }
+        val backByUuid = back.groupBy { it.uuid }
+        val books = back.filter { it.tableName == RecordFolders.PROMPT_BOOKS }
+        val partsOf = HashMap<RecordKey, MutableList<RecordKey>>()
+        for (key in back) {
+            val obj = then.getValue(key).jsonObjectOrNull() ?: continue
+            for ((field, parentFolder) in PART_OF[key.tableName].orEmpty()) {
+                val parent = (obj[field] as? JsonPrimitive)?.contentOrNull?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: continue
+                partsOf.getOrPut(RecordKey(parentFolder, parent)) { mutableListOf() } += key
+            }
+        }
+        val taken = LinkedHashSet(chosen)
+        val queue = ArrayDeque(chosen)
+        while (queue.isNotEmpty()) {
+            val key = queue.removeFirst()
+            val named = referencesOf(canonicalJson.parseToJsonElement(then.getValue(key).json)).flatMap { (field, uuid) ->
+                val folder = REFERENCE_FOLDERS[field]
+                backByUuid[uuid].orEmpty().filter { folder == null || it.tableName == folder }
+            }
+            val book = if (key.tableName in RecordFolders.PROMPT_BOOK_CHILDREN) books else emptyList()
+            // A stack only needed for one of its entries comes back with that entry, not with all of them.
+            val parts = if (key.tableName == RecordFolders.CUE_STACKS && key !in chosenSet) emptyList() else partsOf[key].orEmpty()
+            for (next in named + book + parts) if (taken.add(next)) queue.addLast(next)
+        }
+        val order = ProjectExporter.FOLDERS.withIndex().associate { (i, folder) -> folder to i }
+        val picked = taken.map { key ->
+            val image = then.getValue(key)
+            Picked(
+                key = key,
+                change = if (key in now) RestoreChange.CHANGED else RestoreChange.BACK,
+                label = RecordLabeler.name(key, image),
+                needed = key !in chosenSet,
+                nowHash = now[key]?.hash,
+                thenHash = image.hash,
+            )
+        }.sortedWith(compareBy({ it.needed }, { order[it.key.tableName] ?: Int.MAX_VALUE }, { it.label }, { it.key.uuid }))
+        val project = DaoProject[projectId]
+        val venueIds = listOfNotNull(project.venueUuid?.let { VenuePins.venueOf(it)?.id?.value })
+        val addresses = addressesFor(project, then, picked.filter { it.change == RestoreChange.BACK }.mapTo(HashSet()) { it.key }, venueIds)
+        val addressesDto = addresses.takeIf { it.copies.isNotEmpty() || it.missing.isNotEmpty() }
+            ?.let { RestoreAddressesDto(copied = it.copies.size, missing = it.missing) }
+        val basis = picked.map { listOf(it.key.tableName, it.key.uuid.toString(), it.change.name, it.nowHash.orEmpty(), it.thenHash) }
+            .sortedWith(compareBy({ it[0] }, { it[1] }))
+        val token = RecordHasher.sha256Hex(
+            canonicalEncode(BringBackTokenBasis.serializer(), BringBackTokenBasis(prepared.target.sha, basis, addressesDto)),
+        )
+        return Selection(picked, addresses, addressesDto, token)
     }
 
     /** The show's own fields and its pin may have moved: every window's project list and the venues' cards follow. */
@@ -610,6 +814,9 @@ class SnapshotRestore(private val state: State) {
         runCatching { state.projectManager.currentProject.id.value == projectId }.getOrDefault(false)
 
     @Serializable
+    private data class BringBackTokenBasis(val sha: String, val records: List<List<String>>, val addresses: RestoreAddressesDto?)
+
+    @Serializable
     private data class TokenBasis(
         val sha: String,
         val records: List<List<String>>,
@@ -649,6 +856,56 @@ class SnapshotRestore(private val state: State) {
         )
 
         private val logger = LoggerFactory.getLogger(SnapshotRestore::class.java)
+
+        /** The folder a reference field names; a `…Uuid` field not here may name a record of any folder. */
+        private val REFERENCE_FOLDERS = with(RecordFolders) {
+            mapOf(
+                "cueUuid" to CUES, "cueStackUuid" to CUE_STACKS, "entryUuid" to CUE_STACK_ENTRIES, "lookUuid" to LOOKS,
+                "paletteUuid" to PALETTES, "speedMasterUuid" to SPEED_MASTERS, "rateSpeedMasterUuid" to SPEED_MASTERS,
+                "followTargetUuid" to SPEED_MASTERS, "universeConfigUuid" to UNIVERSE_CONFIGS, "riggingUuid" to RIGGINGS,
+                "elementUuid" to STAGE_ELEMENTS, "seatElementUuid" to STAGE_ELEMENTS, "fixturePatchUuid" to FIXTURE_PATCHES,
+                "patchUuid" to FIXTURE_PATCHES, "groupUuid" to FIXTURE_GROUPS, "scriptUuid" to SCRIPTS,
+            )
+        }
+
+        /** `…Uuid` fields that name no record of the show. */
+        private val NOT_REFERENCES = setOf("venueUuid", "detachedFromVenueUuid", "runUuid", "projectUuid")
+
+        /** A record's parts, by the field that names the record they are part of, and its folder. */
+        private val PART_OF: Map<String, List<Pair<String, String>>> = with(RecordFolders) {
+            CUE_CHILDREN.associateWith { listOf("cueUuid" to CUES) } + mapOf(
+                CUE_STACK_ENTRIES to listOf("cueUuid" to CUES, "cueStackUuid" to CUE_STACKS),
+                PROMPT_BOOK_ANCHORS to listOf("entryUuid" to CUE_STACK_ENTRIES),
+            )
+        }
+
+        /**
+         * Every record uuid [element] names, with the field that names it: `…Uuid` fields and `…Uuids`
+         * lists anywhere in it, and the palette of each `pal:` reference in a value, a list's included.
+         */
+        internal fun referencesOf(element: JsonElement): List<Pair<String, UUID>> {
+            val out = ArrayList<Pair<String, UUID>>()
+            fun uuid(text: String) = runCatching { UUID.fromString(text) }.getOrNull()
+            fun walk(e: JsonElement, field: String?) {
+                when (e) {
+                    is JsonObject -> for ((k, v) in e) walk(v, k)
+                    is kotlinx.serialization.json.JsonArray -> for (v in e) walk(v, field?.takeIf { it.endsWith("Uuids") }?.removeSuffix("s"))
+                    is JsonPrimitive -> {
+                        if (!e.isString) return
+                        val text = e.content
+                        val palettes = text.split(',').mapNotNull(::parsePaletteColourRefUuid)
+                        when {
+                            palettes.isNotEmpty() -> palettes.forEach { out += "paletteUuid" to it }
+                            field != null && field.endsWith("Uuid") && field !in NOT_REFERENCES -> uuid(text)?.let { out += field to it }
+                        }
+                    }
+                }
+            }
+            walk(element, null)
+            return out
+        }
+
+        private val SCRIPT_RECORD_FOLDERS = setOf(RecordFolders.SCRIPTS, RecordFolders.FX_DEFINITIONS)
 
         fun formatWhen(whenMs: Long): String = WHEN_FORMAT.format(Instant.ofEpochMilli(whenMs))
     }
@@ -757,6 +1014,58 @@ data class RestoreReviewDto(
     val live: Boolean,
     val sync: RestoreSyncDto,
 )
+
+/** One record of a snapshot, as the review lists it: its folder and uuid. */
+@Serializable
+data class BringBackRecordRef(val folder: String = "", val uuid: String = "")
+
+/** `POST …/sync/restore/records`'s body: the records chosen, and the selection's token unless [dryRun]. */
+@Serializable
+data class BringBackRequest(
+    val sha: String = "",
+    val records: List<BringBackRecordRef> = emptyList(),
+    val token: String? = null,
+    val dryRun: Boolean = false,
+)
+
+/** A record bringing back puts back: one chosen, or [needed] by one chosen. */
+@Serializable
+data class BringBackRecordDto(
+    val folder: String,
+    val uuid: String,
+    val noun: String,
+    val label: String,
+    val change: RestoreChange,
+    val needed: Boolean,
+)
+
+/**
+ * `POST …/sync/restore/records`'s answer: what bringing the chosen records back puts back, chosen
+ * first, and its [token]; [applied] once written, with the show-history entry [entryId] it made.
+ */
+@Serializable
+data class BringBackDto(
+    val target: CommitInfo,
+    val token: String,
+    val label: String,
+    val records: List<BringBackRecordDto>,
+    /** P7: the venue's overrides copied to the show, and the universes left with no address here. */
+    val addresses: RestoreAddressesDto? = null,
+    /** What it moves on the live stage while a cue is held, as an undo's confirm names it; a dry run's only. */
+    val moves: List<String> = emptyList(),
+    val applied: Boolean,
+    val entryId: String? = null,
+)
+
+/** A bring-back's answer: done, or refused by the upsert as an undo is refused. */
+internal sealed interface BringBackOutcome {
+    data class Done(val result: BringBackDto) : BringBackOutcome
+    data class Refused(val outcome: RecordRestorer.Outcome) : BringBackOutcome
+}
+
+/** `RESTORE_REVIEW_STALE` for a bring-back, carrying the selection it would now make. */
+class BringBackStaleException(val selection: BringBackDto, message: String) :
+    SyncException(SyncErrorCode.RESTORE_REVIEW_STALE, message)
 
 @Serializable
 data class RestoreRequest(val sha: String = "", val token: String = "", val note: String? = null)

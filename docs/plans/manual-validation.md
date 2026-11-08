@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-RESTORE-S3`](#fu-manual-restore-s3) | a cue deleted last week comes back from the History panel with its place in its stack and the Look it layered, nothing else moves, and ⌘Z takes it back | Snapshot restore S3, 2026-11-08 |
 | [`FU-MANUAL-RESTORE-S2`](#fu-manual-restore-s2) | restoring from the History panel: the review's counts match what changed, the toast's *Undo* puts it back, and a restore with the network off goes out on the next sync | Snapshot restore S2, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S2`](#fu-manual-busk-stack-s2) | Carabossy on Replaces takes the front wash from 80 % to 0, holds the movers' chase back, and fades the kitchen back on release with the chase growing back in phase; a song on Adds lifts heads over the base and never darkens them; a GO on Act 1 during Carabossy lands under her | Busk stack session 2, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S1`](#fu-manual-busk-stack-s1) | a song stack out of the running order: Act 1's last GO goes to Act 2, not the song; the song's own GO and a follow off its last cue release it over its release time; the Show view's stop fades | Busk stack session 1, 2026-11-07 |
@@ -161,6 +162,27 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-RESTORE-S3`
+
+**What it proves**: *bringing chosen records back from a snapshot* (snapshot-restore plan session 3)
+— only what was ticked and what it needs comes back, as one change ⌘Z takes back.
+
+**Why it is here**: the tests bring back a seeded cue; only a show that has lived for a week shows
+whether *Also needed* lists what an operator expects, and whether the cue plays as it did.
+
+**Test**, on a synced show with a snapshot from before a cue and the Look it layered were deleted:
+
+1. **Choose.** In Project settings → Sync → History, open that snapshot's *Review and restore…*. Tick
+   the cue alone and press *Bring back 1…*. *Also needed* lists its place in its stack, its rows and
+   layers and the Look; nothing else.
+2. **Bring back.** Press *Bring back n*. The toast says *Brought back n records*; the cue is in its stack
+   at its old number, GOes as it did, and the Look is in the library. Every other change since that
+   snapshot is still there, and the Sync tab shows unsnapshotted changes.
+3. **Undo.** Press ⌘Z: the History sheet's top entry was *Brought back from …*, and the cue and the Look
+   go again.
 
 ---
 

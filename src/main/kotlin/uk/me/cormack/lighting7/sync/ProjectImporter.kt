@@ -760,9 +760,10 @@ class ProjectImporter(private val state: State) {
      * in the importer's order — found by uuid and updated in place, its embedded children replaced, or
      * inserted with the row id its image keeps. What a restored record names resolves against the
      * project's rows as they then stand, the venue's under them for a show on one. Only the folders in
-     * [RESTORABLE_FOLDERS].
+     * [RESTORABLE_FOLDERS]. Without [keepRowIds] a record not found takes a fresh row id: an image read
+     * from git, whose row id is no row's.
      */
-    internal fun restore(project: DaoProject, targets: Map<RecordKey, RecordImage?>) {
+    internal fun restore(project: DaoProject, targets: Map<RecordKey, RecordImage?>, keepRowIds: Boolean = true) {
         val unknown = targets.keys.mapTo(HashSet()) { it.tableName } - RESTORABLE_FOLDERS
         require(unknown.isEmpty()) { "No restore for folder(s) $unknown" }
 
@@ -780,7 +781,7 @@ class ProjectImporter(private val state: State) {
         val images = targets.mapNotNull { (key, image) -> image?.let { key to it } }.toMap()
         if (images.isEmpty()) return
         freeSwappedUniques(project, images)
-        val run = Run(ImageSource(images), upsert = true, rowIds = images.mapValues { it.value.rowId })
+        val run = Run(ImageSource(images), upsert = true, rowIds = if (keepRowIds) images.mapValues { it.value.rowId } else emptyMap())
         val folders = images.keys.mapTo(HashSet()) { it.tableName }
         fun has(vararg folder: String) = folder.any { it in folders }
         // Each map is read only by a folder the undo restores, and built from the rows as they then stand,
