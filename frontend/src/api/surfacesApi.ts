@@ -131,6 +131,18 @@ export interface GrandMasterToggleTarget {
   type: "grandMasterToggle"
 }
 
+/** Set blackout on or off on press — `blackout`'s explicit form (OSC plan D4): pressed twice, nothing moves. */
+export interface BlackoutSetTarget {
+  type: "blackoutSet"
+  on: boolean
+}
+
+/** Set the grand master to a level on press, `level` 0–100 %, taken whole (OSC plan D10). */
+export interface GrandMasterLevelTarget {
+  type: "grandMasterLevel"
+  level: number
+}
+
 /** Set the grand master's level from a fader / encoder: 0..127 across 0–100 %. */
 export interface GrandMasterFaderTarget {
   type: "grandMasterFader"
@@ -171,6 +183,16 @@ export interface SpeedMasterBpmTarget {
 export interface SpeedMasterTapTarget {
   type: "speedMasterTap"
   masterUuid: string | null
+}
+
+/**
+ * Set a speed master's tempo on press, `bpm` 20–300 (`masterUuid` null → master 1) — a typed
+ * tempo's write: on a held master it moves the hold, and a follower refuses it.
+ */
+export interface SpeedMasterSetBpmTarget {
+  type: "speedMasterSetBpm"
+  masterUuid: string | null
+  bpm: number
 }
 
 /**
@@ -459,12 +481,15 @@ export type BindingTarget =
   | FireTriggerTarget
   | FlashTarget
   | BlackoutTarget
+  | BlackoutSetTarget
   | GrandMasterToggleTarget
+  | GrandMasterLevelTarget
   | GrandMasterFaderTarget
   | StackFxAmountTarget
   | SetBankTarget
   | SpeedMasterBpmTarget
   | SpeedMasterTapTarget
+  | SpeedMasterSetBpmTarget
   | SpeedMasterScaleTarget
   | SelectionAttributeTarget
   | SelectionFanTarget

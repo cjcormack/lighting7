@@ -126,9 +126,9 @@ What the code says, read at `6a5ffcf` (the OSC plan at `9bc4001`). `F/` is `fron
 - **Surfaces.** `PressPad(padUuid)` (`K/midi/BindingTarget.kt:354`) calls `BuskPressService`; its
   LED is `SurfaceFeedbackPublisher.padLed` (`:888`), fed by `State.buildBuskRefs`. Stacks have
   `CueStackGo`, `CueStackBack` and `CueStackPause`.
-- **The OSC plan** (`docs/plans/osc-plan.md`, READY, session 1 not built): lifts the router's
-  dispatch into `K/midi/SurfaceDispatch.kt` with an `ActionOutcome`, makes `pressPad` return
-  `BuskPressService`'s outcome, adds `CueStackStop(stackUuid)` → `deactivateStack`, and addresses
+- **The OSC plan** (`docs/plans/completed/osc-plan.md`, DONE, all three sessions merged): lifts
+  the router's dispatch into `K/midi/SurfaceDispatch.kt` with an `ActionOutcome`, makes `pressPad`
+  return `BuskPressService`'s outcome, adds `CueStackStop(stackUuid)` → `deactivateStack`, and addresses
   stacks by slug (`/lighting7/stack/{stack}/go`, `/cue/{n}/go`, `/stop`) and pads by position
   (`/busk/{page}/{bank}/{pad}/press`). No `formatVersion` change and no migration.
 - **Copying.** Clone and sync go through export and import. `copy_to_project` builds a copied stack
@@ -521,7 +521,7 @@ the next; whoever merges the last fills its own.
 
 ### Session 3 — Stack pads
 
-**Needs:** cjcormack/lighting7 docs/plans/osc-plan.md session 1 merged
+**Needs:** cjcormack/lighting7 docs/plans/completed/osc-plan.md session 1 merged
 
 `/next-session` §1.5 checks this on `main`, but §2 may stack on the previous session's branch. So
 after §2 the session also checks its base: `git merge-base --is-ancestor <OSC session 1's head>
@@ -566,7 +566,7 @@ that branch with a merge commit, never a rebase (root `CLAUDE.md` §"Git workflo
 
 ### Session 4 — Surfaces
 
-**Needs:** cjcormack/lighting7 docs/plans/osc-plan.md session 1 merged
+**Needs:** cjcormack/lighting7 docs/plans/completed/osc-plan.md session 1 merged
 
 `/next-session` §1.5 checks this on `main`, but §2 may stack on the previous session's branch. So
 after §2 the session also checks its base: `git merge-base --is-ancestor <OSC session 1's head>

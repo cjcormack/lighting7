@@ -5,13 +5,16 @@ import type { OscSettings } from '@/store/osc'
 import type { OscState } from '@/api/oscWsApi'
 
 // Store-connected: mocking the store keeps this a component test and the import graph away from
-// lightingApi's real WebSocket, as RemoteAccessPanel's test does.
+// lightingApi's real WebSocket.
 const mocks = vi.hoisted(() => ({
   save: vi.fn((args: unknown) => ({ unwrap: () => Promise.resolve(args) })),
   settings: undefined as unknown,
   state: null as unknown,
   role: 'ADMIN' as string,
   skip: [] as boolean[],
+  readAddresses: vi.fn((projectId: number) => ({ unwrap: () => Promise.resolve({ projectId }) })),
+  openWindow: vi.fn(() => ({ close: vi.fn() }) as unknown as Window),
+  printSheet: vi.fn((_win: unknown, _list: unknown, _name: string) => {}),
 }))
 
 vi.mock('@/store/osc', () => ({
@@ -21,6 +24,16 @@ vi.mock('@/store/osc', () => ({
   },
   useSaveOscSettingsMutation: () => [mocks.save, { isLoading: false }],
   useOscState: () => mocks.state,
+  useLazyOscAddressesQuery: () => [mocks.readAddresses, { isFetching: false }],
+}))
+
+vi.mock('@/store/projects', () => ({
+  useCurrentProjectQuery: () => ({ data: { id: 7, name: 'Tempest' } }),
+}))
+
+vi.mock('@/lib/oscCheatSheet', () => ({
+  openCheatSheetWindow: () => mocks.openWindow(),
+  printOscCheatSheet: (win: unknown, list: unknown, name: string) => mocks.printSheet(win, list, name),
 }))
 
 vi.mock('@/store/auth', () => ({
@@ -121,7 +134,7 @@ describe('OscPanel', () => {
     mocks.settings = settings({ enabled: false })
     mocks.save.mockImplementationOnce(() => ({ unwrap: () => Promise.reject({ status: 400, data: { error: 'no' } }) }))
     render(<OscPanel />)
-    fireEvent.change(screen.getByLabelText('UDP port'), { target: { value: '9999' } })
+    fireEvent.change(screen.getByLabelText('Port, UDP and TCP'), { target: { value: '9999' } })
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Enable' }))
     })
@@ -149,10 +162,81 @@ describe('OscPanel', () => {
       port: 8415,
       bindAddress: null,
       senders: [
-        { id: 1, name: 'QLab', address: '192.168.1.20' },
-        { id: undefined, name: 'Sound Mac', address: '192.168.1.40' },
+        { id: 1, name: 'QLab', address: '192.168.1.20', replies: false },
+        { id: undefined, name: 'Sound Mac', address: '192.168.1.40', replies: false },
       ],
     })
+  })
+
+  it('says it listens on TCP too, and on TCP alone when UDP could not bind', () => {
+    mocks.state = state({ tcpListening: true })
+    render(<OscPanel />)
+    expect(screen.getByTestId('osc-status').textContent).toBe('Listening on UDP and TCP 8415')
+    cleanup()
+    mocks.state = state({ listening: false, tcpListening: true, error: "Couldn't listen on UDP 8415: Address already in use" })
+    render(<OscPanel />)
+    expect(screen.getByTestId('osc-status').textContent).toBe('Listening on TCP 8415')
+  })
+
+  it('turns a sender’s replies on, and reads the stored switch back', async () => {
+    mocks.settings = settings({ senders: [{ id: 1, name: 'QLab', address: '192.168.1.20', replies: false }] })
+    render(<OscPanel />)
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    const replies = screen.getByLabelText('Replies to QLab') as HTMLInputElement
+    expect(replies.checked).toBe(false)
+    fireEvent.click(replies)
+    expect(save.disabled).toBe(false)
+    await act(async () => {
+      fireEvent.click(save)
+    })
+    expect(mocks.save).toHaveBeenCalledWith({
+      enabled: true,
+      port: 8415,
+      bindAddress: null,
+      senders: [{ id: 1, name: 'QLab', address: '192.168.1.20', replies: true }],
+    })
+  })
+
+  it('draws a stored sender with replies on as ticked', () => {
+    mocks.settings = settings({ senders: [{ id: 1, name: 'QLab', address: '192.168.1.20', replies: true }] })
+    render(<OscPanel />)
+    expect((screen.getByLabelText('Replies to QLab') as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('prints the current show’s cheat sheet from the listing, for either role', async () => {
+    mocks.role = 'OPERATOR'
+    render(<OscPanel />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Print cheat sheet' }))
+    })
+    // The window opens in the click, before the listing's round trip, which a browser would block.
+    expect(mocks.openWindow.mock.invocationCallOrder[0]).toBeLessThan(mocks.readAddresses.mock.invocationCallOrder[0])
+    expect(mocks.readAddresses).toHaveBeenCalledWith(7)
+    expect(mocks.printSheet).toHaveBeenCalledWith(expect.anything(), { projectId: 7 }, 'Tempest')
+  })
+
+  it('lists the addresses a change moved, newest first, in words', () => {
+    mocks.role = 'OPERATOR'
+    mocks.state = state({
+      warnings: [
+        {
+          id: 2,
+          at: '2026-11-07 20:05:00.000Z',
+          changes: [{ address: '/lighting7/busk/storm/1/1/press', was: 'Press Haze', now: 'Press Rain' }],
+        },
+        {
+          id: 1,
+          at: '2026-11-07 20:04:00.000Z',
+          changes: [{ address: '/lighting7/stack/act-1/go', was: 'GO Act 1', now: null, reason: 'No stack `act-1` in this show' }],
+        },
+      ],
+    })
+    render(<OscPanel />)
+    expect(screen.getByText('Addresses that moved')).toBeTruthy()
+    const lines = screen.getAllByText(/^\/lighting7\//).map((el) => el.textContent)
+    expect(lines).toContain('/lighting7/busk/storm/1/1/press now reaches Press Rain (was Press Haze)')
+    expect(lines).toContain('/lighting7/stack/act-1/go no longer works (was GO Act 1) — No stack `act-1` in this show')
   })
 
   it('shows a refusal from the desk under the form', async () => {
@@ -160,7 +244,7 @@ describe('OscPanel', () => {
       unwrap: () => Promise.reject({ status: 400, data: { error: 'The port must be from 1024 to 65535' } }),
     }))
     render(<OscPanel />)
-    fireEvent.change(screen.getByLabelText('UDP port'), { target: { value: '80' } })
+    fireEvent.change(screen.getByLabelText('Port, UDP and TCP'), { target: { value: '80' } })
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     })

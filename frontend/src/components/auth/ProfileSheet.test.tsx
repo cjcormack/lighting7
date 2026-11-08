@@ -10,8 +10,6 @@ const updateProfile = vi.fn()
 const createDeviceLogin = vi.fn()
 const cancelDeviceLogin = vi.fn()
 let sessionsResult: { data?: unknown[]; isLoading?: boolean; isError?: boolean } = { data: [] }
-const revokeConnectedApp = vi.fn()
-let appsResult: { data?: unknown[]; isError?: boolean } = { data: [] }
 
 vi.mock('@/store/auth', () => ({
   useChangePasswordMutation: () => [
@@ -27,11 +25,6 @@ vi.mock('@/store/auth', () => ({
     { isLoading: false },
   ],
   useSessionsQuery: () => sessionsResult,
-  useConnectedAppsQuery: () => appsResult,
-  useRevokeConnectedAppMutation: () => [
-    (args: unknown) => ({ unwrap: () => revokeConnectedApp(args) }),
-    { isLoading: false },
-  ],
   useCreateDeviceLoginMutation: () => [
     () => ({ unwrap: () => createDeviceLogin() }),
     { isLoading: false },
@@ -79,7 +72,6 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   sessionsResult = { data: [] }
-  appsResult = { data: [] }
   ownLink = { data: { link: null } }
 })
 
@@ -228,31 +220,6 @@ describe('ProfileSheet', () => {
 
       expect(screen.getByRole('button', { name: /^Sign out everywhere else$/ })).toBeEnabled()
       expect(screen.getByText(/Couldn't load your signed-in devices/)).toBeInTheDocument()
-    })
-  })
-
-  describe('connected apps', () => {
-    it('draws nothing when no app has ever been connected', () => {
-      renderSheet()
-      goTo('Devices')
-      expect(screen.queryByText('Connected apps')).not.toBeInTheDocument()
-    })
-
-    it('lists each grant and revokes the one pressed', async () => {
-      revokeConnectedApp.mockResolvedValue(undefined)
-      const at = new Date(0).toISOString()
-      appsResult = {
-        data: [
-          { id: 4, clientName: 'Claude', createdAt: at, lastUsedAt: at },
-          { id: 9, clientName: 'Claude Code', createdAt: at, lastUsedAt: at },
-        ],
-      }
-      renderSheet()
-      goTo('Devices')
-
-      expect(screen.getByText('Connected apps')).toBeInTheDocument()
-      fireEvent.click(screen.getByRole('button', { name: 'Revoke Claude Code' }))
-      await vi.waitFor(() => expect(revokeConnectedApp).toHaveBeenCalledWith({ id: 9 }))
     })
   })
 

@@ -820,7 +820,10 @@ class SurfaceFeedbackPublisher(
 
     private fun onScalerChanged(blackoutEnabled: Boolean, grandMasterEnabled: Boolean) {
         val idx = index.get()
-        for (entry in idx.blackoutLeds) sendLed(entry, blackoutEnabled)
+        for (entry in idx.blackoutLeds) {
+            val target = entry.binding.target
+            sendLed(entry, if (target is BindingTarget.BlackoutSet) blackoutEnabled == target.on else blackoutEnabled)
+        }
         // Grand Master LED: "ON" = grand master engaged (normal output). Some consoles invert
         // this; we follow the `enabled` flag so a lit button means "lights are live".
         for (entry in idx.grandMasterLeds) sendLed(entry, grandMasterEnabled)
@@ -1010,6 +1013,7 @@ class SurfaceFeedbackPublisher(
                     val listed = when (target) {
                         is BindingTarget.Flash -> { flashByBindingId[binding.id] = entry; true }
                         is BindingTarget.Blackout -> { blackoutLeds += entry; true }
+                        is BindingTarget.BlackoutSet -> { blackoutLeds += entry; true }
                         is BindingTarget.GrandMasterToggle -> { grandMasterLeds += entry; true }
                         is BindingTarget.SelectTarget -> { selectLeds += entry; true }
                         is BindingTarget.LocateSelection -> { locateLeds += entry; true }
@@ -1217,6 +1221,9 @@ class SurfaceFeedbackPublisher(
         is BindingTarget.Flash -> flashTracker.isActive(entry.binding.id)
         // The scaler facade is per show; before the show is up there is nothing to read.
         is BindingTarget.Blackout -> runCatching { globalScalerStateProvider().blackoutEnabled.value }.getOrDefault(false)
+        // Lit while blackout is in the state the button sets.
+        is BindingTarget.BlackoutSet ->
+            runCatching { globalScalerStateProvider().blackoutEnabled.value == target.on }.getOrDefault(!target.on)
         is BindingTarget.GrandMasterToggle -> runCatching { globalScalerStateProvider().grandMasterEnabled.value }.getOrDefault(false)
         is BindingTarget.SelectTarget -> deskSelection?.covers(target.target) ?: false
         is BindingTarget.LocateSelection -> selectionLocated(

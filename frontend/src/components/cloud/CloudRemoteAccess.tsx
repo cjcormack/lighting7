@@ -24,8 +24,8 @@ export const LOCAL_ONLY_REASON =
  * The Cloud tab's *Remote access* section (lighting7 cloud-p1 plan D6, D13): what may come through
  * the cloud — remote sessions, Claude, and whether each new session waits for an admin here — the
  * sidecar that carries the sessions, the open and recent sessions with *End*, and the scripts,
- * effects and commands switches every remote caller answers to, through the cloud or the ngrok
- * tunnel alike. Editable only on the desk's own listener; over remote access it reads, and says why.
+ * effects and commands switches every remote caller answers to, a remote session and Claude alike.
+ * Editable only on the desk's own listener; over remote access it reads, and says why.
  */
 export function CloudRemoteAccess({ state }: { state: CloudState }) {
   const { data: settings, error: loadError } = useRemoteAccessSettingsQuery()
@@ -99,7 +99,7 @@ export function CloudRemoteAccess({ state }: { state: CloudState }) {
 
       <div className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          Whoever reaches the desk from outside — a remote session, Claude, or the ngrok tunnel — may also:
+          Whoever reaches the desk from outside — a remote session or Claude — may also:
         </p>
         <CheckRow
           label="Allow scripts over remote access"

@@ -64,7 +64,7 @@ internal const val CODE_HISTORY_UNDO_BLOCKED = "HISTORY_UNDO_BLOCKED"
 internal fun Route.routeApiRestProjectHistory(state: State) {
     get<HistoryResource> { resource ->
         withProject(state, resource.projectId) { project ->
-            val source = historySourceOf(state, call.authenticatedUserOrNull)
+            val source = historySourceOf(call.authenticatedUserOrNull)
             val limit = (resource.limit ?: DEFAULT_HISTORY_LIMIT).coerceIn(1, MAX_HISTORY_LIMIT)
             call.respond(historyPage(state, project.id.value, source, limit, resource.before))
         }
@@ -79,7 +79,7 @@ internal fun Route.routeApiRestProjectHistory(state: State) {
 
 private suspend fun ApplicationCall.historyMove(state: State, project: DaoProject, request: HistoryRequest, undo: Boolean) {
     val user = authenticatedUserOrNull
-    val caller = historySourceOf(state, user)
+    val caller = historySourceOf(user)
     val projectId = project.id.value
     val move = HistoryMove(undo, request.entryId, request.programmerOnly, request.backToHere, request.confirm, request.fadeMs ?: 0)
     val result = moveHistory(

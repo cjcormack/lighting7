@@ -2,12 +2,15 @@ import { useSyncExternalStore } from 'react'
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import type { OscState } from '../api/oscWsApi'
+import type { OscAddressList } from '../lib/oscAddresses'
 
 /** An allowlisted sender, mirroring `OscSenderDto` in lighting7's `osc/OscService.kt`. */
 export interface OscSender {
   id: number
   name: string
   address: string
+  /** Each message it sends is answered with a `/lighting7/reply`; absent is off. */
+  replies?: boolean
 }
 
 /** `GET /install/osc`: this machine's listener and allowlist. Admin only, and never remote. */
@@ -24,7 +27,7 @@ export interface OscSettingsRequest {
   enabled: boolean
   bindAddress?: string | null
   port: number
-  senders: { id?: number; name: string; address: string }[]
+  senders: { id?: number; name: string; address: string; replies?: boolean }[]
 }
 
 export const oscApi = restApi.injectEndpoints({
@@ -45,11 +48,17 @@ export const oscApi = restApi.injectEndpoints({
         }
       },
     }),
+    // Read when a menu or the cheat sheet opens, and asked again each time: an address follows a
+    // rename, a renumber or a pad moved, none of which this cache hears about.
+    oscAddresses: build.query<OscAddressList, number>({
+      query: (projectId) => `projects/${projectId}/osc/addresses`,
+      keepUnusedDataFor: 5,
+    }),
   }),
   overrideExisting: false,
 })
 
-export const { useOscSettingsQuery, useSaveOscSettingsMutation } = oscApi
+export const { useOscSettingsQuery, useSaveOscSettingsMutation, useOscAddressesQuery, useLazyOscAddressesQuery } = oscApi
 
 const subscribe = (notify: () => void) => {
   const subscription = lightingApi.osc.subscribe(() => notify())

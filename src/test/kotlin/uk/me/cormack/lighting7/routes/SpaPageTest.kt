@@ -74,15 +74,6 @@ class SpaPageTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `the public listener's own pages, outside the bundle, gain no meta`() = testApplication {
-        mountPublic(state)
-        val signIn = client.get("/oauth/authorize")
-        assertEquals("text/html", signIn.headers["Content-Type"]?.substringBefore(';'))
-        assertFalse(signIn.bodyAsText().contains("lighting7-remote-parent"))
-        assertEquals(1, signIn.headers.getAll("Content-Security-Policy")?.size)
-    }
-
-    @Test
     fun `the desk's own API answers carry no frame policy`() = testApplication {
         mountDesk(state)
         assertNull(client.get("/api/rest/status").framePolicy())

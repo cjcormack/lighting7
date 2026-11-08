@@ -21,7 +21,6 @@ import uk.me.cormack.lighting7.plugins.BootProgressStateOutMessage
 import uk.me.cormack.lighting7.plugins.MachineOutMessage
 import uk.me.cormack.lighting7.plugins.CloudStateOutMessage
 import uk.me.cormack.lighting7.plugins.RemoteSessionPendingOutMessage
-import uk.me.cormack.lighting7.plugins.TunnelStateOutMessage
 import uk.me.cormack.lighting7.plugins.OwnAccountChangedOutMessage
 import uk.me.cormack.lighting7.plugins.UserListChangedOutMessage
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -454,10 +453,10 @@ class UsersRoutesTest : RouteIntegrationTest() {
             val frames = collectUntilOfType<UserListChangedOutMessage>()
             assertEquals(
                 listOf(OwnAccountChangedOutMessage, UserListChangedOutMessage),
-                // `tunnel.state`, `cloud.state` and `remoteSession.pending` are an admin socket's connect snapshots,
+                // `cloud.state` and `remoteSession.pending` are an admin socket's connect snapshots,
                 // and may land after the boot frame.
                 frames.filterIsInstance<MachineOutMessage>()
-                    .filterNot { it is TunnelStateOutMessage || it is CloudStateOutMessage || it is RemoteSessionPendingOutMessage },
+                    .filterNot { it is CloudStateOutMessage || it is RemoteSessionPendingOutMessage },
             )
         }
     }
@@ -492,10 +491,10 @@ class UsersRoutesTest : RouteIntegrationTest() {
             val frames = collectUntilOfType<UserListChangedOutMessage>()
             assertEquals(
                 listOf(UserListChangedOutMessage),
-                // `tunnel.state`, `cloud.state` and `remoteSession.pending` are an admin socket's connect snapshots,
+                // `cloud.state` and `remoteSession.pending` are an admin socket's connect snapshots,
                 // and may land after the boot frame.
                 frames.filterIsInstance<MachineOutMessage>()
-                    .filterNot { it is TunnelStateOutMessage || it is CloudStateOutMessage || it is RemoteSessionPendingOutMessage },
+                    .filterNot { it is CloudStateOutMessage || it is RemoteSessionPendingOutMessage },
             )
         }
     }
@@ -526,39 +525,6 @@ class UsersRoutesTest : RouteIntegrationTest() {
             val frames = collectUntilOfType<UserListChangedOutMessage>()
             assertEquals(emptyList(), frames.filterIsInstance<CloudStateOutMessage>())
             assertEquals(emptyList(), frames.filterIsInstance<RemoteSessionPendingOutMessage>())
-        }
-    }
-
-    /**
-     * `tunnel.state` names the desk's public address and ngrok's errors, and every route behind it
-     * is admin only — so an operator's socket is never sent it, while an admin's gets it on connect.
-     */
-    @Test
-    fun `the tunnel frame reaches an admin's socket and never an operator's`() = testApplication {
-        mountTestApp(state)
-        seedUser(state, "boss", role = UserRole.ADMIN)
-        seedUser(state, "op", role = UserRole.OPERATOR)
-        val bystander = seedUser(state, "other", role = UserRole.OPERATOR)
-        val client = createWsClient()
-        val admin = client.loginCookieHeader("boss")
-        val operator = client.loginCookieHeader("op")
-
-        client.webSocket("/api", request = { header(HttpHeaders.Cookie, admin) }) {
-            awaitOfType<TunnelStateOutMessage>()
-        }
-
-        client.webSocket("/api", request = { header(HttpHeaders.Cookie, operator) }) {
-            awaitOfType<BootProgressStateOutMessage>()
-            // A user-list poke is a machine frame sent after connect; by the time it arrives the
-            // connect snapshots are long out, so a leaked tunnel frame would be in `frames`.
-            val rename = client.put("/api/rest/users/${bystander.userId}") {
-                header(HttpHeaders.Cookie, admin)
-                contentType(ContentType.Application.Json)
-                setBody(UpdateUserRequest(displayName = "Renamed For The Tunnel Test"))
-            }
-            assertEquals(HttpStatusCode.OK, rename.status, rename.bodyAsText())
-            val frames = collectUntilOfType<UserListChangedOutMessage>()
-            assertEquals(emptyList(), frames.filterIsInstance<TunnelStateOutMessage>())
         }
     }
 }

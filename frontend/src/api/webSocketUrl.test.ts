@@ -6,7 +6,7 @@ describe('webSocketUrlFor', () => {
     expect(webSocketUrlFor({ protocol: 'http:', host: 'localhost:8413' })).toBe('ws://localhost:8413/api')
   })
 
-  it('uses wss: for a page served over HTTPS, as through the tunnel', () => {
-    expect(webSocketUrlFor({ protocol: 'https:', host: 'desk.ngrok.app' })).toBe('wss://desk.ngrok.app/api')
+  it('uses wss: for a page served over HTTPS', () => {
+    expect(webSocketUrlFor({ protocol: 'https:', host: 'desk.example' })).toBe('wss://desk.example/api')
   })
 })

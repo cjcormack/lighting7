@@ -20,25 +20,14 @@ import uk.me.cormack.lighting7.state.State
  */
 
 /**
- * The source a signed-in caller writes as: their account, Claude's grant (named by its client through
- * [clientName], given the grant's id), a grant through the cloud (named by the client its call names),
- * or the desk with no accounts.
+ * The source a signed-in caller writes as: their account, Claude's grant through the cloud (named by
+ * the client its call names), or the desk with no accounts.
  */
-internal fun historySourceOf(user: AuthenticatedUser?, clientName: (Int) -> String? = { null }): HistorySource = when {
+internal fun historySourceOf(user: AuthenticatedUser?): HistorySource = when {
     user == null -> HistorySource.DESK
-    user.sessionTokenHash.startsWith(MCP_GRANT_PREFIX) -> HistorySource.mcp(
-        user.sessionTokenHash,
-        user.sessionTokenHash.removePrefix(MCP_GRANT_PREFIX).toIntOrNull()?.let(clientName),
-    )
     user.sessionTokenHash.startsWith(McpRelay.CLOUD_GRANT_PREFIX) -> HistorySource.mcp(user.sessionTokenHash, user.clientName)
     else -> HistorySource.account(user.uuid, user.displayName)
 }
-
-/** [historySourceOf] with Claude's client named from [state]'s grants. */
-internal fun historySourceOf(state: State, user: AuthenticatedUser?): HistorySource =
-    historySourceOf(user) { state.mcpAuthService.clientNameOf(it) }
-
-private const val MCP_GRANT_PREFIX = "mcp-grant:"
 
 /** The request header naming the desk window a REST call comes from: its `windows.state` row id. */
 const val DESK_WINDOW_HEADER = "X-Desk-Window"
@@ -70,7 +59,7 @@ internal fun Route.installHistoryOrigin(state: State) {
         if (method == HttpMethod.Get || method == HttpMethod.Head || method == HttpMethod.Options) return@intercept
         val path = call.request.path()
         val window = call.request.headers[DESK_WINDOW_HEADER]?.takeIf { it.isNotBlank() && it.length <= MAX_WINDOW_ID }
-        val origin = WriteOrigin(historySourceOf(state, call.authenticatedUserOrNull), window = window)
+        val origin = WriteOrigin(historySourceOf(call.authenticatedUserOrNull), window = window)
         origin.label = restHistoryLabel(path, method)
         call.response.header(HISTORY_ENTRY_HEADER, origin.requestId)
         state.ensureHistory()
@@ -128,7 +117,7 @@ internal fun restHistoryLabel(path: String, method: HttpMethod = HttpMethod.Post
  */
 internal fun SocketScope.writeOrigin(message: InMessage): WriteOrigin {
     state.ensureHistory()
-    return WriteOrigin(historySourceOf(state, user), window = window?.id).apply {
+    return WriteOrigin(historySourceOf(user), window = window?.id).apply {
         label = socketHistoryLabel(message)
         coalesceKey = socketCoalesceKey(message)
     }

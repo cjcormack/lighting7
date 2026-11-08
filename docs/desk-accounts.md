@@ -371,24 +371,21 @@ Other guards:
 
 ## Connected apps (MCP)
 
-Claude connects to the desk's MCP listener with OAuth, signing in on a page that listener
-serves with a desk account (`docs/mcp-engineering.md`). Each approval is a **grant** in
-`mcp_oauth_grants`: a hashed access token and a hashed rotating refresh token, acting as that
-user with that user's role. Grants are revoked by every event that revokes sessions — disable,
-delete, any password change, reset redemption and "sign out everywhere else" — through
-`AuthService`'s credential-revocation listener, which fires before `revokeAllSessionsFor`'s
-early return so a user with no browser sessions still loses their apps. The user sees them as
-**Connected apps** in Profile → Devices, each with Revoke. A desk with no accounts refuses the
-sign-in outright.
+Claude reaches the desk through Lighting7 Cloud (`docs/mcp-engineering.md`): the person signs in to the
+cloud and consents to a connector there, and each relayed call runs as the desk user their cloud account
+is linked to, with that user's role. The connectors an account has granted are listed and revoked in the
+Lighting7 Cloud portal; the desk keeps no grants and has no list of its own. Everything that ends the
+link, or disables or deletes the user, refuses the next call. (The desk once had its own OAuth server,
+its grants listed under Profile → Devices; database step 13 dropped them.)
 
-The MCP sign-in page has a lockout (ten failures in fifteen minutes) on top of the login
-throttle, because it is on the internet. Since Remote access, so is the desk login when it arrives
-on the public listener: a remote `POST /auth/login` shares that lockout and answers 429
-`SIGN_IN_LOCKED`, and its session cookie is `Secure`. The LAN login keeps the throttle only, so a
-stranger on the internet cannot lock the crew out at the desk. The QR reset and device-login flows
-are 404 on the public listener whatever the peer address — a tunnel's requests arrive from
-loopback, which the peer check would otherwise take as the LAN. See `docs/mcp-engineering.md`
-§"Remote hardening".
+**The public listener signs no one in by password.** A remote caller is a remote session through the
+cloud or no one: `POST /auth/login` there is 403 `REMOTE_PASSWORD_SIGN_IN` and a session cookie is not
+read. The one password it takes is an unlinked session's prove-once, under a lockout of its own
+(`AuthService.remoteSignInLockedOut`: ten failures in fifteen minutes, then 429 `SIGN_IN_LOCKED`) on top
+of the login throttle. The LAN login keeps the throttle only, so a stranger on the internet cannot lock
+the crew out at the desk. The QR reset and device-login flows are 404 on the public listener whatever
+the peer address — the sidecar's requests arrive from loopback, which the peer check would otherwise
+take as the LAN. See `docs/mcp-engineering.md` §"Remote hardening".
 
 ## Lighting7 Cloud
 
@@ -427,14 +424,14 @@ is *unlinked*: it can see its own status and link itself by proving once, and no
 Everything that ends a cookie session ends a remote one too: disabling or deleting the user, a password
 set or reset, *sign out everywhere*. So does removing the link, unadopting, or *Remote sessions* turned
 off. The session's requests get the public listener's whole hardening, and every switch that limits what
-comes through the cloud — *Remote sessions*, *Claude (MCP)* and Remote access's scripts, effects and
-commands — is changed only on the desk itself (`CLOUD_SETTINGS_LOCAL_ONLY`), since a compromised cloud
+comes through the cloud — *Remote sessions*, *Claude (MCP)* and the scripts, effects and commands
+switches — is changed only on the desk itself (`CLOUD_SETTINGS_LOCAL_ONLY`), since a compromised cloud
 could mint a token for a linked admin. Each remote session leaves a `cloud_remote_sessions` row: who,
 as which user, when, and why it ended (`docs/cloud-engineering.md` §"Remote sessions").
 
 ## Cloud sync and support copies
 
-All three tables — and the two MCP OAuth tables and the cloud's link, invite and audit tables — are `MachineLocal` in `SyncCoverageTest`: nothing here reaches a git
+All three tables — and the cloud's link, invite and audit tables — are `MachineLocal` in `SyncCoverageTest`: nothing here reaches a git
 remote, an export, or a clone. Session and reset tokens are stored hashed, so a SQLite
 file copied for diagnostics — or sitting next to a sync working tree — contains no
 redeemable credential. Device-login codes aren't in the database at all.
@@ -442,8 +439,9 @@ redeemable credential. Device-login codes aren't in the database at all.
 ## Not in v1
 
 HTTPS and `Secure` cookies on the LAN (desks run plain LAN HTTP; the QR URL scheme would need
-revisiting — the public listener has both), CSRF tokens (the public listener has an Origin check),
-account lockout on the LAN login (the MCP sign-in page and a remote desk login have one), 2FA, password complexity
+revisiting — a remote session is end-to-end encrypted and carries no cookie), CSRF tokens (the public
+listener has an Origin check), account lockout on the LAN login (prove-once on the public listener has
+one), 2FA, password complexity
 beyond the length floor, per-user attribution of edits, an audit log, and per-message
 WebSocket authorisation.
 

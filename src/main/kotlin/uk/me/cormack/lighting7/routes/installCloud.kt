@@ -95,11 +95,10 @@ internal fun Route.routeApiRestInstallCloud(state: State) {
                 )
             }
             if (request.allowScripts != null || request.allowEffects != null || request.allowCommands != null) {
-                state.remoteAccess.update(
+                state.remotePolicy.update(
                     allowScripts = request.allowScripts,
                     allowEffects = request.allowEffects,
                     allowCommands = request.allowCommands,
-                    hasAnyUser = state.authService.hasAnyUser,
                 )
             }
         } catch (e: CloudException) {
@@ -156,15 +155,15 @@ private fun remoteAccessOf(state: State): RemoteAccessDto {
         remoteAccess = switches.remoteAccess,
         mcpAccess = switches.mcpAccess,
         approveSessions = switches.approveSessions,
-        allowScripts = state.remoteAccess.allowRemoteScripts,
-        allowEffects = state.remoteAccess.allowRemoteEffects,
-        allowCommands = state.remoteAccess.allowRemoteCommands,
+        allowScripts = state.remotePolicy.allowScripts,
+        allowEffects = state.remotePolicy.allowEffects,
+        allowCommands = state.remotePolicy.allowCommands,
     )
 }
 
 /**
  * The Cloud tab's *Remote access* section: the three switches for what comes through the cloud
- * (D6, D13), and the three every remote request answers to, through the cloud or ngrok alike.
+ * (D6, D13), and the three every remote caller answers to, a remote session and an MCP call alike.
  */
 @Serializable
 data class RemoteAccessDto(

@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
-import uk.me.cormack.lighting7.auth.AuthenticationException
+import uk.me.cormack.lighting7.mcp.CODE_REMOTE_PASSWORD_SIGN_IN
 import uk.me.cormack.lighting7.mcp.isRemote
 import io.ktor.http.Cookie
 import io.ktor.http.CookieEncoding
@@ -88,29 +88,26 @@ internal fun Route.routeApiRestAuth(state: State) {
         call.respondAuthenticated(user, rawToken)
     }
 
+    // The desk's own listener only, since a remote caller signs in through Lighting7 Cloud. The public
+    // listener's gate refuses it first (`mcp/RemoteRequests.kt`); this is the second lock.
     post<AuthLoginResource> {
-        val request = call.receive<LoginRequest>()
-        // Through the tunnel every caller shares one loopback address, so a per-IP throttle
-        // would lock out everyone at once; a per-username lockout (10 failures in 15 minutes,
-        // shared with the MCP sign-in page) is what stands between a guesser and a password.
-        // It never applies on the LAN, so a remote guesser cannot lock the operator out of the desk.
-        val remote = call.isRemote
-        if (remote && state.mcpAuthService.signInLockedOut(request.username)) {
-            call.respond(HttpStatusCode.TooManyRequests, ErrorResponse("Too many failed sign-ins. Try again later.", "SIGN_IN_LOCKED"))
+        if (call.isRemote) {
+            call.respond(
+                HttpStatusCode.Forbidden,
+                ErrorResponse(
+                    "Sign in to this desk through Lighting7 Cloud. Password sign-in is only on the desk itself.",
+                    CODE_REMOTE_PASSWORD_SIGN_IN,
+                ),
+            )
             return@post
         }
-        val (user, rawToken) = try {
-            state.authService.login(
-                request.username,
-                request.password,
-                call.request.userAgent(),
-                call.request.origin.remoteHost,
-            )
-        } catch (e: AuthenticationException) {
-            if (remote) state.mcpAuthService.recordSignInFailure(request.username)
-            throw e
-        }
-        if (remote) state.mcpAuthService.clearSignInFailures(request.username)
+        val request = call.receive<LoginRequest>()
+        val (user, rawToken) = state.authService.login(
+            request.username,
+            request.password,
+            call.request.userAgent(),
+            call.request.origin.remoteHost,
+        )
         call.respondAuthenticated(user, rawToken)
     }
 
@@ -118,9 +115,12 @@ internal fun Route.routeApiRestAuth(state: State) {
         // In bootstrap-open mode there is no session to log out of: `authenticatedUser`
         // throws and the caller gets 401. Deliberate, not an oversight.
         call.authenticatedUser
-        call.remoteSessionOrNull(state)?.sessionOrNull?.let { state.cloud.remoteSessions.end(it.sid, RemoteSessionEnd.ENDED) }
-        call.request.cookies[SESSION_COOKIE]?.let { state.authService.logout(it) }
-        call.clearSessionCookie()
+        if (call.isRemote) {
+            call.remoteSessionOrNull(state)?.sessionOrNull?.let { state.cloud.remoteSessions.end(it.sid, RemoteSessionEnd.ENDED) }
+        } else {
+            call.request.cookies[SESSION_COOKIE]?.let { state.authService.logout(it) }
+            call.clearSessionCookie()
+        }
         call.respond(HttpStatusCode.NoContent)
     }
 
@@ -173,25 +173,6 @@ internal fun Route.routeApiRestAuth(state: State) {
         val user = call.authenticatedUser
         state.authService.revokeAllSessionsFor(user.userId, exceptTokenHash = user.sessionTokenHash)
         call.respond(HttpStatusCode.NoContent)
-    }
-
-    // ─── Connected apps: the caller's own MCP OAuth grants ──────────────
-    //
-    // Any role, own grants only — the same shape as `/auth/sessions`. Revoking one here is the
-    // Profile sheet's Revoke button; it takes effect on the MCP listener's next request.
-
-    get<AuthConnectedAppsResource> {
-        val user = call.authenticatedUser
-        call.respond(state.mcpAuthService.grantsFor(user.userId))
-    }
-
-    delete<AuthConnectedAppResource> { resource ->
-        val user = call.authenticatedUser
-        if (state.mcpAuthService.revokeGrant(user.userId, resource.id)) {
-            call.respond(HttpStatusCode.NoContent)
-        } else {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("No such connected app"))
-        }
     }
 
     // ─── QR password reset, redeemed on the locked-out user's phone ─────
@@ -405,8 +386,8 @@ private fun ApplicationCall.deviceLoginThrottleKey() = "device-login-ip:${reques
  * Returns null (and has already responded) when the peer is refused.
  */
 private suspend fun ApplicationCall.requireLanPeer(): Unit? {
-    // The tunnel's requests arrive from loopback, which the address test below would admit.
-    // The public listener's own gate already refuses these paths; this is the second lock.
+    // The public listener's requests arrive from loopback, which the address test below would admit.
+    // Its own gate already refuses these paths; this is the second lock.
     if (isRemote) {
         respond(HttpStatusCode.NotFound, ErrorResponse("Unknown sign-in code"))
         return null
@@ -443,12 +424,6 @@ data object AuthProfileResource
 
 @Resource("/auth/sessions")
 data object AuthSessionsResource
-
-@Resource("/auth/connected-apps")
-data object AuthConnectedAppsResource
-
-@Resource("/auth/connected-apps/{id}")
-data class AuthConnectedAppResource(val id: Int)
 
 @Resource("/auth/reset/{token}")
 data class AuthResetResource(val token: String)
@@ -573,9 +548,8 @@ private suspend fun ApplicationCall.respondAuthenticated(user: AuthenticatedUser
 }
 
 /**
- * Cookie shape per the oauth.kt precedent. `Secure` only on the public listener: the LAN is plain
- * HTTP, where a Secure cookie would never be sent back, while through the tunnel it is HTTPS and
- * the cookie must never travel any other way.
+ * Cookie shape per the oauth.kt precedent. Not `Secure`: the LAN is plain HTTP, where a Secure cookie
+ * would never be sent back. The public listener sets none and reads none (`auth/AuthGate.kt`).
  */
 private fun ApplicationCall.setSessionCookie(rawToken: String) {
     response.cookies.append(
@@ -585,7 +559,6 @@ private fun ApplicationCall.setSessionCookie(rawToken: String) {
             maxAge = SESSION_COOKIE_MAX_AGE_SECONDS,
             path = "/",
             httpOnly = true,
-            secure = isRemote,
             extensions = mapOf("SameSite" to "Lax"),
             encoding = CookieEncoding.URI_ENCODING,
         ),

@@ -16,7 +16,10 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-BUSK-STACK-S1`](#fu-manual-busk-stack-s1) | a song stack out of the running order: Act 1's last GO goes to Act 2, not the song; the song's own GO and a follow off its last cue release it over its release time; the Show view's stop fades | Busk stack session 1, 2026-11-07 |
+| [`FU-MANUAL-CLOUD-P1`](#fu-manual-cloud-p1) | Lighting7 Cloud's P1 exit: a phone on 4G busks the venue desk opened from the portal, Claude patches a rig through the desk's cloud URL with no tunnel, an emailed invite approved in the portal lands its operator as `OPERATOR`, unlinking, disabling, removing a membership and *End* each close a session within 5 s, the two switches refuse what they name and cannot be changed remotely, the Remote access tab, `/oauth/*`, `/mcp` and the tunnel are gone and an upgraded desk keeps its policy switches, and a running fade sees nothing of the sidecar or the cloud stopping | Cloud P1 S9, 2026-11-07 |
 | [`FU-MANUAL-OSC-S1`](#fu-manual-osc-s1) | a QLab Network cue lands cue 1 and fired again mid-fade moves nothing; a Look's `on` and `off` and a busk Look pad from QLab; a QLab machine off the allowlist shows with *Allow this sender*; an operator sees the log | OSC session 1, 2026-11-07 |
+| [`FU-MANUAL-OSC-S2`](#fu-manual-osc-s2) | the grand master follows a QLab fade cue sending floats; a copied address pasted into QLab works first time; renumbering a received cue warns on the desk | OSC session 2, 2026-11-07 |
+| [`FU-MANUAL-OSC-S3`](#fu-manual-osc-s3) | a QLab Network cue over TCP lands its cue; a sender with replies on reads `/lighting7/reply` back | OSC session 3, 2026-11-08 |
 | [`FU-MANUAL-FX-SPEED-S4`](#fu-manual-fx-speed-s4) | ×½ and ×2 on a busked master halve and double it mid-song, a hold included, and greyed at 20 and 300; a fader and an encoder on *FX speed* move the selection's Local FX with no jump, the fader picking up at the lead FX | FX speed session 4, 2026-11-07 |
 | [`FU-MANUAL-FX-SPEED-S3`](#fu-manual-fx-speed-s3) | dragging Speed on a running chase changes its rate with no jump, letting go on ×2 settles it on the beat within a cycle, and TAP in the live FX editor holds its master, the rail reading *Held* | FX speed session 3, 2026-11-07 |
 | [`FU-MANUAL-FX-SPEED-S2`](#fu-manual-fx-speed-s2) | a tempo the operator tapped and captured on the rail outlives a GO of a cue that sets the same master, Record puts it into the cue's *Tempo on GO*, and that cue sets it after a Clear | FX speed session 2, 2026-11-07 |
@@ -178,6 +181,56 @@ lighting something different:
    stays up. Give its last cue a follow and start it again: the follow releases it the same way.
 4. **A stop fades.** With *Act 2* live, stop the show from the header: its light fades over 2 s rather
    than snapping. Set its release time to 0 and stop it again: it snaps.
+
+---
+
+## `FU-MANUAL-OSC-S3`
+
+**What it proves**: *QLab reaches the desk over TCP, and a sender that asks is told what each
+message did* (OSC plan session 3).
+
+**Why it is here**: the tests frame SLIP and read replies over loopback; only QLab shows that its
+TCP patch frames the way the desk reads and that its reply reaches whatever is listening for it.
+
+**Test**, at the desk with QLab 5 on the show network and OSC enabled for it (`FU-MANUAL-OSC-S1`,
+step 1), a show with a stack *Act 1*:
+
+1. **TCP.** In QLab's Network patch set the protocol to TCP, same host and port. A Network cue
+   sending `/lighting7/stack/act-1/cue/1/go` lands cue 1, and the OSC tab reads *Listening on UDP and
+   TCP 8415*.
+2. **Replies.** Tick *Replies* on QLab's sender and save. Watch QLab's OSC monitor (Window → OSC
+   Monitor), or `oscdump` on the QLab machine for UDP: firing the cue again brings back
+   `/lighting7/reply "/lighting7/stack/act-1/cue/1/go" "done" "GO TO 1 … · already live"`, and
+   `/lighting7/stack/act-9/go` brings back `not_found`.
+3. **Off.** Untick *Replies* and save: nothing comes back.
+
+---
+
+## `FU-MANUAL-OSC-S2`
+
+**What it proves**: *QLab drives the masters, and the desk says what to send* (OSC plan session 2) —
+a QLab fade sends the grand master as floats, an address copied from the desk works in QLab as
+pasted, and a change that moves an address QLab has used is said on the desk.
+
+**Why it is here**: the tests send OSC over loopback and read the desk; only QLab shows how often a
+fade cue sends and whether the grand master follows it smoothly, that the clipboard carries an
+address QLab takes, and that the warning reads well enough to act on mid-plot.
+
+**Test**, at the desk with QLab 5 on the show network and OSC enabled for it (`FU-MANUAL-OSC-S1`,
+step 1), a show with a stack *Act 1* holding cues 1 and 5:
+
+1. **Grand master.** A QLab Network cue of type *OSC message*, `/lighting7/grandmaster`, set to fade
+   its float from 1 to 0 over five seconds: the rig dims smoothly to nothing, the Grand Master panel
+   follows, and the log's rows read *Grand master · n %*.
+2. **Tempo.** `/lighting7/tempo/1 128` sets M1 to 128 BPM; `/lighting7/tempo/1 400` does nothing and
+   its row is a *bad message*.
+3. **Copy.** On the Show view, cue 5's ⋯ → *Copy OSC address* → *go*. Paste into a new QLab Network
+   cue and fire it: cue 5 runs, first time. *Print cheat sheet* on the OSC tab prints every address.
+4. **The warning.** Renumber cue 5 to 6 on the desk: within a second every window toasts that
+   `/lighting7/stack/act-1/cue/5/go` no longer works, and the OSC tab lists it under *Addresses that
+   moved*.
+
+---
 
 ## `FU-MANUAL-OSC-S1`
 
@@ -488,6 +541,35 @@ installed app's file modes and layout are the installer's.
 4. Quit the desk from its menu: no `lighting7-link` process is left running.
 
 Record the date and the two installers' growth here and in the plan's §4.
+
+---
+
+## `FU-MANUAL-CLOUD-P1`
+
+**What it proves**: the PRD's P1 exit (cloud-p1 plan §6): the desk is reached from anywhere through
+Lighting7 Cloud alone — remote sessions and Claude both — with a desk role that only a link gives, every
+way of taking access away closing it at once, and the show untouched by the sidecar or the cloud.
+
+**Why it is here**: the desk's tests run against `FakeCloud` and a fake sidecar (R5); only the owner
+can open a real desk from a real phone and connect a real Claude through the deployed cloud.
+
+**Test**, once both P1 plans are merged and deployed:
+
+1. **UC-2.** From a phone on 4G, open the venue desk from the portal and busk a look.
+2. **UC-3.** Add the desk to Claude with its cloud URL and no tunnel, and ask Claude to patch a rig.
+3. **UC-6.** Invite an operator by email from Users and approve the invite in the portal; they accept
+   with their own cloud account and land on the desk as `OPERATOR`, unable to do what an operator
+   cannot.
+4. **Revocation.** Unlinking, disabling the user, removing their membership in the portal and ending
+   the session each close an open remote session within 5 s.
+5. **Off.** *Remote sessions* off refuses a new session and closes an open one; *Claude (MCP)* off
+   refuses an MCP call while sessions still work; neither switch can be changed from a remote session.
+6. **Gone.** The Remote access tab, `/oauth/*`, `/mcp` and the tunnel are absent, and a desk upgraded
+   from a pre-P1 build keeps its policy switches and loses its grants.
+7. **The show.** During a running fade, killing the sidecar and stopping the cloud's app change nothing
+   visible on the rig.
+
+When it passes, record the date here and in the plan's §6.
 
 ---
 
@@ -3019,7 +3101,7 @@ universe beside it):
    … s*); with the programmer blind, a command is refused rather than sent.
 6. **A project switch mid-hold** ends the hold at once: a dedicated channel drops to 0 and the panel
    says it was cut short.
-7. **Remote**: from the public listener (or a phone through the tunnel), a command answers
+7. **Remote**: from a remote session through Lighting7 Cloud, a command answers
    `REMOTE_COMMANDS_DISABLED`; Install settings → Cloud → Remote access → *Allow fixture commands* lifts it,
    and MCP's `run_fixture_command` follows the same switch.
 

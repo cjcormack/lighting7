@@ -371,6 +371,13 @@ class RemoteSessionsTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `the desk's pages are linked through the shell only while remote sessions are on`() {
+        assertEquals("${fake.baseUrl}/r/$installId/prompt-book", state.cloud.remoteShellUrl("/prompt-book"))
+        state.cloud.setSwitches(remoteAccess = false)
+        assertNull(state.cloud.remoteShellUrl("/prompt-book"))
+    }
+
+    @Test
     fun `remote sessions off refuses everything, and the switches change only on the desk itself`() = testApplication {
         open()
         mountPublic()
@@ -379,11 +386,11 @@ class RemoteSessionsTest : RouteIntegrationTest() {
             bearer(token()); contentType(ContentType.Application.Json); setBody("""{"remoteAccess":false}""")
         }
         assertRefused(put, HttpStatusCode.Forbidden, CloudErrorCodes.SETTINGS_LOCAL_ONLY)
-        val tunnel = http.put("/api/rest/install/tunnel") {
+        val policy = http.put("/api/rest/install/cloud/remote") {
             bearer(token()); contentType(ContentType.Application.Json); setBody("""{"allowScripts":true}""")
         }
-        assertRefused(tunnel, HttpStatusCode.Forbidden, CloudErrorCodes.SETTINGS_LOCAL_ONLY)
-        assertFalse(state.remoteAccess.allowRemoteScripts)
+        assertRefused(policy, HttpStatusCode.Forbidden, CloudErrorCodes.SETTINGS_LOCAL_ONLY)
+        assertFalse(state.remotePolicy.allowScripts)
         assertTrue(state.cloud.switches.remoteAccess)
 
         state.cloud.setSwitches(remoteAccess = false)
@@ -427,11 +434,8 @@ class RemoteSessionsTest : RouteIntegrationTest() {
         val foreign = http.delete("/api/rest/cloud/session") { bearer(token(), origin = "https://evil.example") }
         assertRefused(foreign, HttpStatusCode.Forbidden, "REMOTE_ORIGIN_REFUSED")
         assertNotNull(sessions.find(SID))
-        val cookie = http.post("/api/rest/auth/login") {
-            header(HttpHeaders.Origin, REMOTE_ORIGIN); contentType(ContentType.Application.Json)
-            setBody("""{"username":"admin","password":"correct-horse"}""")
-        }
-        assertRefused(cookie, HttpStatusCode.Forbidden, "REMOTE_ORIGIN_REFUSED")
+        val noBearer = http.post("/api/rest/auth/logout") { header(HttpHeaders.Origin, REMOTE_ORIGIN) }
+        assertRefused(noBearer, HttpStatusCode.Forbidden, "REMOTE_ORIGIN_REFUSED")
         assertEquals(HttpStatusCode.NoContent, http.delete("/api/rest/cloud/session") { bearer(token(), origin = REMOTE_ORIGIN) }.status)
         assertNull(sessions.find(SID))
     }

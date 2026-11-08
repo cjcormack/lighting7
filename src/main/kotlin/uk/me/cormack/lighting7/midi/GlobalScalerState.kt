@@ -140,10 +140,8 @@ class GlobalScalerState(
     /** Toggle the grand master between 0 and its last level. Returns the new on/off. */
     fun toggleGrandMaster(): Boolean = holder.toggleGrandMaster()
 
-    /** Explicitly set the blackout state (exposed for WS `surfaceScaler.set`). */
-    fun setBlackout(enabled: Boolean) {
-        holder.setBlackout(enabled)
-    }
+    /** Explicitly set the blackout state (exposed for WS `surfaceScaler.set`). True when it changed. */
+    fun setBlackout(enabled: Boolean): Boolean = holder.setBlackout(enabled)
 
     /** Turn the grand master off (level 0) or back on (its last level). */
     fun setGrandMaster(enabled: Boolean) {

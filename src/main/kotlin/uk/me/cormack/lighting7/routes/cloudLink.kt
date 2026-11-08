@@ -60,16 +60,16 @@ internal fun Route.routeApiRestCloudLink(state: State) {
             else -> return@post refuse(HttpStatusCode.Forbidden, ErrorCode.REMOTE_SESSION_UNKNOWN, "This is not a remote session.")
         }
         val request = call.receive<ProveCloudLinkRequest>()
-        if (state.mcpAuthService.signInLockedOut(request.username)) {
+        if (state.authService.remoteSignInLockedOut(request.username)) {
             return@post refuse(HttpStatusCode.TooManyRequests, "SIGN_IN_LOCKED", "Too many failed sign-ins. Try again later.")
         }
         val user = try {
             state.authService.verifyCredentials(request.username, request.password)
         } catch (e: AuthenticationException) {
-            state.mcpAuthService.recordSignInFailure(request.username)
+            state.authService.recordRemoteSignInFailure(request.username)
             throw e
         }
-        state.mcpAuthService.clearSignInFailures(request.username)
+        state.authService.clearRemoteSignInFailures(request.username)
         try {
             state.cloud.links.prove(session, user)
         } catch (e: CloudException) {

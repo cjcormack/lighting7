@@ -6438,13 +6438,8 @@ recovery. Frontend shape:
   inside a prefix-matched admin gate would mean that prefix list no longer describes
   its own subtree.
 
-  **Connected apps** sit on the Devices tab under the sessions: the MCP OAuth grants
-  (`../docs/mcp-engineering.md`), one row each with Revoke, via
-  `GET`/`DELETE /auth/connected-apps`. Drawn only when there is at least one, so a desk
-  that never connected Claude shows nothing new. They are beside the devices because they
-  answer the same question — what can act as me — and the backend ends them on the same
-  events, which is why `changePassword` and `revokeOtherSessions` invalidate
-  `AuthConnectedApps` too.
+  There is no *Connected apps* list any more: Claude's connectors are granted and revoked in the
+  Lighting7 Cloud portal, and the desk keeps no grants (lighting7 cloud-p1 plan D18).
 - **Account changes self-heal across clients**, via two frames from one backend flow rather
   than the project-scoped `FixturesChangeListener` bus every other list rides (users belong to the
   machine; see `../docs/desk-accounts.md` → "Account edits reach other clients").
@@ -7494,37 +7489,16 @@ mechanics live in `../docs/windows-updates.md`.
 
 ### Remote access
 
-The **Remote access** tab in `InstallSettings` (`components/remoteAccess/RemoteAccessPanel.tsx`),
-backed by `store/remoteAccess.ts` and `api/remoteAccessWsApi.ts`: the desk's own ngrok tunnel,
-which puts the **whole desk** on the internet at the operator's ngrok domain. Admin only — the tab
-trigger is hidden from operators like Users, the query passes `skip: !isAdmin`, and the desk sends
-`tunnel.state` to admin sockets alone. Backend contract in `../docs/mcp-engineering.md`
-§"Remote access" and §"Remote hardening".
-
-- **The authtoken is write-only.** `GET /install/tunnel` answers `hasAuthtoken` and never the
-  token, so the field is always empty (a password input) and says whether one is stored.
-- **Turning it on asks; turning it off does not.** The switch opens a dialog saying the whole
-  desk becomes reachable to anyone with a desk password; only its confirm sends `enabled: true`.
-- **Saving a changed domain asks**, because the domain is the OAuth issuer and every Claude
-  connector added under the old one has to be re-added. A first domain saves without asking, and
-  so does any domain while `mcp.publicUrl` overrides it (then it is not the issuer).
-- **`tunnel.state` carries its payload**, like `updateStateChanged`: the bridge patches the cached
-  settings' `state` and never refetches, and the PUT writes its response into the cache
-  (`upsertQueryData`). `saveTunnelSettings` is in `SILENT_ENDPOINTS` — the panel renders a refusal
-  (`REMOTE_ACCESS_INVALID`: a bad domain, no desk accounts) itself.
-- **No free-plan warning**, by decision (Chris, 2026-09-26): ngrok's quotas are not pre-empted.
-- **The scripts, effects and commands switches are the Cloud tab's now** (lighting7 cloud-p1 plan
-  session 7, D6): they hold for the tunnel and the cloud alike, so they sit in the Cloud tab's *Remote
-  access* section, which writes them through `PUT /install/cloud/remote`, and this tab keeps only
-  ngrok's own fields until the tunnel is deleted (session 9). The enable dialog still reads
-  `allowScripts` from its settings, which the Cloud tab's save invalidates.
+There is no Remote access tab: the desk's ngrok tunnel is gone (lighting7 cloud-p1 plan D18), and a
+remote caller comes through Lighting7 Cloud — a remote session (**Remote mode**, below) or Claude through the
+cloud's MCP relay. What may come through, and what any remote caller may do, is the Cloud tab's
+*Remote access* section (below). `/install/remote` redirects to `/install/cloud`.
 
 ### Lighting7 Cloud
 
 The **Cloud** tab in `InstallSettings` (`components/cloud/CloudPanel.tsx`), backed by
-`store/cloud.ts` and `api/cloudWsApi.ts`: this desk's adoption by Lighting7 Cloud. Admin only, as
-Remote access is — hidden tab and nav row, `skip: !isAdmin`, `cloud.state` sent to admin sockets
-alone. Backend contract in `../docs/cloud-engineering.md` §"The Cloud tab".
+`store/cloud.ts` and `api/cloudWsApi.ts`: this desk's adoption by Lighting7 Cloud. Admin only —
+hidden tab and nav row, `skip: !isAdmin`, `cloud.state` sent to admin sockets alone. Backend contract in `../docs/cloud-engineering.md` §"The Cloud tab".
 
 - **The state is the desk's.** `GET /install/cloud`, every Cloud route's answer and the `cloud.state`
   frame are one document; the bridge replaces the cached state with each frame and each mutation
@@ -8028,7 +8002,7 @@ path may quietly change where it lands.
 - **Role filtering**: set `adminOnly: true` on any entry whose destination's API
   is admin only on the backend — `adminOnly {}` in lighting7's `auth/AuthGate.kt`,
   or `requireAdmin()` on every handler the page reads — currently `users`, `sync`,
-  `project-sync` and `remote-access` (`/install/tunnel`). Not on a page an operator
+  `project-sync` and `cloud`. Not on a page an operator
   can read whose *actions* are admin-only: **Updates** is shown to everyone, as its
   tab is, and the panel disables what an operator cannot do.
   `filterNavItems(items, isViewingActiveProject, isAdmin)` drops
@@ -8095,7 +8069,7 @@ path may quietly change where it lands.
   the project on the rig (`WindowView.needsRig`, `windowViewProject`), whatever project that window
   was left on; a library keeps the window's own.
 - **Not every nav path is its own route**: `users`' `/install/users` is served by
-  `InstallSettings`' `:tab` route, like `sync`, `remote-access`, `updates` and
+  `InstallSettings`' `:tab` route, like `sync`, `osc`, `cloud`, `updates` and
   `diagnostics`. Adding a tab means touching `TABS` + a `TabsTrigger` in
   `routes/InstallSettings.tsx`, not `App.tsx` — and a `navItems` entry under
   `install-settings` with the tab's role rule, in `TABS` order, and its id in

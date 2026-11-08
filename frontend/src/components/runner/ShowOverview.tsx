@@ -53,6 +53,7 @@ import { StackMovingChip } from '@/components/cues/StackMovingChip'
 import { InlineEditField } from '@/components/InlineEditField'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
 import { isCueRow, type CueStack, type CueStackInput } from '@/api/cueStacksApi'
+import { CopyOscAddressMenu } from '@/components/osc/CopyOscAddressMenu'
 
 /** An empty set, stable, so the form's set editor does not re-seed on every render. */
 const NO_SCENERY: SceneryChange[] = []
@@ -61,6 +62,7 @@ const NO_SCENERY: SceneryChange[] = []
 
 interface SortableStackEntryProps {
   stack: CueStack
+  projectId: number
   /** The row's number in the show's list; null for a busk stack, which is no step of the show. */
   index: number | null
   isActive: boolean
@@ -74,6 +76,7 @@ interface SortableStackEntryProps {
 
 function SortableStackEntry({
   stack,
+  projectId,
   index,
   isActive,
   onDrill,
@@ -186,6 +189,7 @@ function SortableStackEntry({
           <DropdownMenuItem onClick={() => onSort(stack.id)}>
             <ArrowDownAZ className="size-3.5 mr-2" /> Sort by cue number
           </DropdownMenuItem>
+          <CopyOscAddressMenu projectId={projectId} records={[{ kind: 'STACK', id: stack.id }]} menu="dropdown" />
           <DropdownMenuItem
             className="text-destructive focus:text-destructive"
             onClick={() => onRemove(stack)}
@@ -497,6 +501,7 @@ export function ShowOverview({
                   {idx === show.length && <BuskDivider />}
                   <SortableStackEntry
                     stack={stack}
+                    projectId={projectId}
                     index={idx < show.length ? idx : null}
                     isActive={activeStackId !== null && stack.id === activeStackId}
                     onDrill={onDrillStack}

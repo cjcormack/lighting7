@@ -78,7 +78,7 @@ class OwnTempoMigrationTest {
 
         val (desk, logs) = captureLogs("OwnTempoMigration") { startDesk() }
 
-        assertEquals(OWN_TEMPO_USER_VERSION, userVersion())
+        assertEquals(RETIRED_REMOTE_ACCESS_USER_VERSION, userVersion())
         assertEquals(1, backups().size, "the database is backed up before anything moves")
         for (table in listOf("look_fx", "cue_ad_hoc_fx", "palette_fx")) {
             assertTrue("seconds" !in columns(table), "$table's seconds column is dropped")
@@ -128,7 +128,7 @@ class OwnTempoMigrationTest {
             for (table in listOf("look_fx", "cue_ad_hoc_fx", "palette_fx")) s.execute("UPDATE $table SET seconds = 0")
         }
         startDesk()
-        assertEquals(OWN_TEMPO_USER_VERSION, userVersion())
+        assertEquals(RETIRED_REMOTE_ACCESS_USER_VERSION, userVersion())
         assertEquals(emptyList(), backups())
         assertTrue("seconds" !in columns("palette_fx"))
     }

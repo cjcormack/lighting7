@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AudioWaveform, Blinds, CopyPlus, Download, Loader2, XCircle } from 'lucide-react'
 import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
+import { CopyOscAddressButton } from '@/components/osc/CopyOscAddressMenu'
 import {
   Sheet,
   SheetBody,
@@ -265,6 +266,7 @@ export function LookDetailSheet({
               projectId={projectId}
               record={{ kind: 'LOOK', id: look.id, name: look.name }}
             />
+            <CopyOscAddressButton projectId={projectId} records={[{ kind: 'LOOK', id: look.id }]} />
           </div>
 
           <div className="space-y-2">

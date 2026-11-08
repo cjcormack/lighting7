@@ -141,7 +141,7 @@ class ProgrammerHistoryTest {
     @Test
     fun `a request that writes again after another request's write is still one step`() {
         val h = history()
-        val claude = WriteOrigin(HistorySource.mcp("mcp-grant:7"))
+        val claude = WriteOrigin(HistorySource.mcp("cloud-grant:7"))
         val drag = WriteOrigin(chris).apply { coalesceKey = "set|hex-1|dimmer" }
         WriteOrigin.with(claude) { h.beforeMutation() }
         WriteOrigin.with(drag) { h.beforeMutation() }

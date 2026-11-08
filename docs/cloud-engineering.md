@@ -225,8 +225,8 @@ order:
 
 1. It must carry `Lighting7-Link` equal to the secret the registry made for the running sidecar
    (`newLinkSecret`, handed to the sidecar on stdin), compared in constant time; else 401
-   `unauthenticated`. So a valid token that reaches 8414 any other way, through ngrok or from a local
-   process, is refused. No sidecar, no secret, no bearer request.
+   `unauthenticated`. So a valid token that reaches 8414 any other way, from a local process say, is
+   refused. No sidecar, no secret, no bearer request.
 2. The desk must be adopted through an enabled cloud; *Remote sessions* off is 403 `REMOTE_ACCESS_OFF`.
 3. The token must verify (401 with its `TOKEN_*` code), be covered by no `revoke` (`TOKEN_REVOKED`), name
    an open session (`REMOTE_SESSION_UNKNOWN`), and name that session's account and org: a token that
@@ -275,12 +275,11 @@ year are pruned then.
 
 **The switches** (P1 D6) are `cloud_connection`'s `remote_access`, `mcp_access` and `approve_sessions`,
 off at adoption. `GET /install/cloud/remote` answers them beside the scripts, effects and commands
-switches every remote request answers to (`remote_access_settings`' `allow_*`, through the cloud or ngrok
-alike), as `RemoteAccessDto`; `PUT` sets any of the six, a cloud switch only once adopted (409
+switches every remote caller answers to (`cloud/RemotePolicy.kt` over `remote_access_settings`' `allow_*`,
+a remote session and an MCP call alike), as `RemoteAccessDto`; `PUT` sets any of the six, a cloud switch only once adopted (409
 `CLOUD_NOT_ADOPTED`), and is refused on the public listener, 403 `CLOUD_SETTINGS_LOCAL_ONLY`, whatever the
 role: a compromised cloud can mint a linked admin's token, so nothing it can sign may widen what comes
-through it. No message writes them. For the same reason `PUT /install/tunnel`, which still takes the
-scripts, effects and commands switches until P1's session 9, is refused there too.
+through it. No message writes them.
 
 **Approval** (P1 D13). With `approve_sessions` on, an offer past the caps, the switch and the sidecar
 waits in the broker rather than opening: nothing is written and nothing reaches the sidecar, the
@@ -417,7 +416,7 @@ every offer is refused `SIDECAR_UNAVAILABLE`; the desk announces `remote.v1` wha
 `cloud.state`'s `link` says where it is: `OFF`, `STARTING`, `RUNNING` (it said `started`) or
 `RESTARTING`.
 
-**Supervision** (`link/LinkProcess.kt`, P1 D11), ngrok's moved: a launch that ends, by exiting, crashing
+**Supervision** (`link/LinkProcess.kt`, P1 D11): a launch that ends, by exiting, crashing
 or being killed as hung, is followed by the next after 1 s, doubling to 30 s, and the backoff resets once
 a launch has served for 60 s. The sidecar must not outlive the desk, so each launch is put in the desk's
 Windows Job Object with kill-on-close (`process/WindowsJob.kt`), a shutdown hook stops it, and each
@@ -426,7 +425,6 @@ that launch. `CloudService.start` sweeps the file once per desk run, before anyt
 no lock, so a sidecar a killed desk left running is stopped: only while that PID is alive, still running
 the same binary and, where the platform reports it, started at the recorded time, so a reused PID is left
 alone. It also exits by itself when its stdin ends, as it does when the JVM dies.
-`process/` is shared with ngrok's agent until P1's session 9 deletes the tunnel.
 
 **The stdio protocol.** The launch's link secret is the first line on stdin, then one JSON object per
 line each way (`link/LinkMessages.kt`, `link/internal/sidecar/stdio.go`). `link/testdata/stdio.json`
@@ -546,7 +544,7 @@ meta below, loads exactly as before and never waits.
 `CloudService.state` is a `StateFlow<CloudStateDto>` (D14), rebuilt from the row and memory on every
 transition and every account change. `GET /install/cloud` answers it, and so does every route in
 `routes/installCloud.kt`. The `cloud.state` frame carries it to admin sockets (and bootstrap-open ones),
-in the machine-scoped band beside `tunnel.state` (`plugins/MachineSocket.kt`), so it does not wait for a
+in the machine-scoped band (`plugins/MachineSocket.kt`), so it does not wait for a
 project. Its shape:
 
 `{configured, enabled, adoption?: {userCode, verificationUri, verificationUriComplete, expiresAt,
@@ -597,8 +595,7 @@ than refetching. Its states:
 Below the adoption, the **Remote access** section (`CloudRemoteAccess.tsx`, P1 D6, D13): once adopted,
 *Remote sessions* with the sidecar's status under it while it is on, *Approve each new session on this
 desk* and *Claude (MCP)*, each a switch saying what turning it on allows; on any desk, adopted or not,
-the scripts, effects and commands switches, which the Remote access tab held until now and which hold
-for the ngrok tunnel too; and once adopted the open sessions, each with *End* (asked once), and the
+the scripts, effects and commands switches; and once adopted the open sessions, each with *End* (asked once), and the
 recent ones with why they ended, re-read every 5 s while the tab is open, since no frame announces a
 session. The three cloud switches follow `cloud.state`'s `remoteSwitches` (`store/cloud.ts`'s bridge
 patches the cached settings), and a change of install re-reads the switches and the list. Over remote access (`remote`) every switch is drawn disabled with the reason; *End* still works.
@@ -643,8 +640,8 @@ does the show run exactly as before with the cloud down, hung or hostile? The ru
    bounded queues, and one that hangs is restarted rather than waited on (§"The sidecar").
 8. **A relayed MCP call is the desk's own work, not the channel's.** The channel's thread only judges
    the switch and the queue and hands the call on: the token, the link and the tool run on
-   `Dispatchers.IO`, four at once and four waiting, `DESK_BUSY` beyond, as `/mcp`'s run on the
-   listener's own threads (`docs/mcp-engineering.md` §"Through the cloud").
+   `Dispatchers.IO`, four at once and four waiting, `DESK_BUSY` beyond (`docs/mcp-engineering.md`
+   §"Through the cloud").
 
 `CloudOutageOutputTimingTest` is the rules' proof (NFR-SAFE-1): a fade's Art-Net frames, timed with no
 connector, then with the cloud connected, stopping reading, dropping the connection and refusing every
