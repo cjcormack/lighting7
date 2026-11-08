@@ -31,7 +31,8 @@ import {
  * darkens it again immediately afterwards to arrive armed rather than playing. Mid-show that is a
  * visible blip on stage on top of losing the current cue, which is worth one press to acknowledge.
  * Asked only when there is something to lose: with the show stopped, or the current stack already
- * dark, it goes straight through.
+ * dark, it goes straight through. A busk stack is never the playhead (lighting7 busk-stack plan D4),
+ * so its host passes no [onMakeLive] and only *Jump to live* is offered.
  */
 export function OffPlayheadBanner({
   liveStackName,
@@ -46,7 +47,8 @@ export function OffPlayheadBanner({
   /** Whether the stack being left currently has a cue on stage — the thing a jump costs. */
   liveCueIsOnStage: boolean
   onJumpToLive: () => void
-  onMakeLive: () => void
+  /** Absent for a stack that cannot be the playhead. */
+  onMakeLive?: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
 
@@ -64,14 +66,16 @@ export function OffPlayheadBanner({
             Jump to live
           </Button>
         )}
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-6 px-2 text-xs"
-          onClick={() => (liveCueIsOnStage ? setConfirming(true) : onMakeLive())}
-        >
-          Make this stack live
-        </Button>
+        {onMakeLive && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs"
+            onClick={() => (liveCueIsOnStage ? setConfirming(true) : onMakeLive())}
+          >
+            Make this stack live
+          </Button>
+        )}
       </div>
 
       <Dialog open={confirming} onOpenChange={setConfirming}>
@@ -91,7 +95,7 @@ export function OffPlayheadBanner({
             <Button
               onClick={() => {
                 setConfirming(false)
-                onMakeLive()
+                onMakeLive?.()
               }}
             >
               Move the playhead

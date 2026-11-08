@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { runningOrder } from '@/lib/runningOrder'
 import { useStableCallback } from '@/hooks/useStableCallback'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { Loader2, Trash2 } from 'lucide-react'
@@ -428,7 +429,8 @@ export function PromptBookViewerPage() {
 
   // Start/Stop the show in place from the header (parity with Program/Run). State is
   // derived from the program playhead, so no local entry tracking is needed here.
-  const runnableStackCount = stacks?.filter((s) => s.type === 'STACK').length ?? 0
+  // `/show/activate` starts the running order's first stack, so a show of busk stacks alone cannot start.
+  const runnableStackCount = runningOrder(stacks).length
   const canStart = !isShowActive && runnableStackCount > 0
   const handleStartShow = useCallback(() => {
     activateShow({ projectId: projectIdNum })

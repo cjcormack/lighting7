@@ -18,6 +18,7 @@ export interface CuePlace {
 export function cuePlacesByCue(stacks: readonly CueStack[] | undefined): Map<number, CuePlace[]> {
   const out = new Map<number, CuePlace[]>()
   if (stacks == null) return out
+  // Every stack, busk stacks included (busk-stack plan D4): a cue's places are in any stack.
   const ordered = [...stacks].filter((s) => s.type === 'STACK').sort((a, b) => a.sortOrder - b.sortOrder)
   for (const stack of ordered) {
     for (const row of stack.cues) {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { Provider } from 'react-redux'
 import type { CueStack } from '@/api/cueStacksApi'
@@ -641,7 +641,22 @@ describe('ShowPage browsing versus arming', () => {
     act(() => bannerProbe.onMakeLive!())
 
     expect(goToStack).toHaveBeenCalledWith({ projectId: 1, stackId: 11 })
-    expect(deactivateCueStack).not.toHaveBeenCalledWith({ projectId: 1, stackId: 10 })
+    expect(deactivateCueStack).not.toHaveBeenCalledWith(expect.objectContaining({ stackId: 10 }))
+  })
+
+  it('arrives armed at once: the stack it lands on is let go with snap, not over its release time', async () => {
+    programState.data = { activeStackId: 10, canEdit: true }
+    draw(['/projects/1/show/stacks/11'])
+    act(() => bannerProbe.onMakeLive!())
+    await waitFor(() => expect(deactivateCueStack).toHaveBeenCalledWith({ projectId: 1, stackId: 11, snap: true }))
+  })
+
+  it('offers no Make this stack live on a busk stack, which is never the playhead', () => {
+    programState.data = { activeStackId: 10, canEdit: true }
+    stacksState.data = [mkStack(), mkStack({ id: 11, name: 'Song', sortOrder: 1, inRunningOrder: false })]
+    draw(['/projects/1/show/stacks/11'])
+    expect(bannerProbe.onJumpToLive).toBeDefined()
+    expect(bannerProbe.onMakeLive).toBeUndefined()
   })
 })
 

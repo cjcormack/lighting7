@@ -237,9 +237,10 @@ full (`CueHolds.kt:846-848`), which the GO path keeps; and `stopStack` does not 
   unless another hold keeps them. Fading a stack's first cue in is out of scope (§7).
 - **Other stops.** A stack delete, a project switch or the undo restorer mid-release removes the rows
   at once. `/show/advance` and `/show/go-to` must call `deactivateStack` on the stack they leave
-  only while it is active. Today they call it whenever there is a previous stack
+  unless it is stopped and still releasing. Today they call it whenever there is a previous stack
   (`projectShow.kt:152-154`, `:194-196`); with the change, a GO into Act 2 during Act 1's release
-  leaves the release running.
+  leaves the release running. (Corrected in session 1: "only while it is active" would also skip a
+  stopped stack's teardown, leaving a standby armed on it to fire when the show comes back.)
 - **Release at the end** is `advanceStack` FORWARD from the last cue entry with `releaseAtEnd` set.
   It answers an explicit result rather than null (an `ActivateResult` with `released = true`, or a
   sealed result), and each caller words it: the REST advance (`projectCueStacks.kt:495`) the
@@ -389,7 +390,7 @@ written, and its row marked *in review* with its branch. A session's PR is title
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Busk stacks and the running order | planned | | | |
+| 1 | Busk stacks and the running order | in review | `claude/blissful-pasteur-r0ys12` | | |
 | 2 | Over the show | planned | | | |
 | 3 | Stack pads | planned | | | |
 | 4 | Surfaces | planned | | | |
@@ -408,7 +409,7 @@ the next; whoever merges the last fills its own.
 - **Sync (P2):** `CueStackJson` gains the three fields; `SUPPORTED_FORMAT_VERSION` and the writer to
   50, `minReader` 50; `RichProjectFixture` gets a busk stack with Release and a 3 s release time.
 - **The running order (D2, D3, D4):** `orderedStacks` filters on the setting; `/show/go-to` refuses a
-  busk stack; `/show/advance` and `/show/go-to` leave a stack that is no longer active alone.
+  busk stack; `/show/advance` and `/show/go-to` leave a stack that is stopped and releasing alone.
 - **Release (D3, D6):** `CueStackManager.stopStack` and its contract (§3 "Release"): the driver's
   release fade, the stop skipping `takeOff`'s pin, the shared teardown tail; Release at the end in
   `advanceStack` with its explicit result and every caller's wording; `releasedAtEnd` in the run

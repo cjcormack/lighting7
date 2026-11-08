@@ -2,6 +2,7 @@ import { useState, useEffect, useId, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   Sheet,
   SheetContent,
@@ -22,6 +23,31 @@ import type { SceneryChange } from '@/api/sceneryApi'
 
 const EMPTY_SCENERY: SceneryChange[] = []
 
+/** *After the last cue* (busk-stack plan D3): one choice, so Loop and Release can never both be on. */
+type AtEnd = 'STAY' | 'LOOP' | 'RELEASE'
+
+const AT_END_OPTIONS: { value: AtEnd; label: string; hint: string }[] = [
+  { value: 'STAY', label: 'Stay', hint: 'GO on the last cue does nothing' },
+  { value: 'LOOP', label: 'Loop', hint: 'Wrap from the last cue to the first' },
+  { value: 'RELEASE', label: 'Release', hint: 'One more GO, or a follow, lets the stack go' },
+]
+
+const DEFAULT_RELEASE_MS = 2000
+const MAX_RELEASE_MS = 60_000
+
+function atEndOf(stack: CueStack | null): AtEnd {
+  if (stack?.loop) return 'LOOP'
+  return stack?.releaseAtEnd ? 'RELEASE' : 'STAY'
+}
+
+/** Seconds as the field shows them, or null for anything outside 0–60 s. */
+function releaseMsOf(text: string): number | null {
+  const seconds = Number(text.trim())
+  if (text.trim() === '' || !Number.isFinite(seconds)) return null
+  const ms = Math.round(seconds * 1000)
+  return ms >= 0 && ms <= MAX_RELEASE_MS ? ms : null
+}
+
 interface CueStackFormProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -38,6 +64,27 @@ interface CueStackFormProps {
   onShowDarkCues?: (stackId: number) => void
 }
 
+function Switch({ id, checked, onChange }: { id?: string; checked: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+        checked ? 'bg-primary' : 'bg-muted'
+      }`}
+    >
+      <span
+        className={`pointer-events-none inline-block size-5 rounded-full bg-background shadow-lg transition-transform ${
+          checked ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  )
+}
+
 export function CueStackForm({
   open,
   onOpenChange,
@@ -49,7 +96,9 @@ export function CueStackForm({
   onShowDarkCues,
 }: CueStackFormProps) {
   const [name, setName] = useState('')
-  const [loop, setLoop] = useState(false)
+  const [inRunningOrder, setInRunningOrder] = useState(true)
+  const [atEnd, setAtEnd] = useState<AtEnd>('STAY')
+  const [releaseTime, setReleaseTime] = useState(String(DEFAULT_RELEASE_MS / 1000))
   const [setStackScenery] = useSetStackSceneryMutation()
   const runnable = stack == null || stack.type === 'STACK'
   // What the block opened on, so a Save that left it alone writes nothing, and one that left a time
@@ -72,13 +121,10 @@ export function CueStackForm({
   useEffect(() => {
     const stack = latestStack.current
     if (open) {
-      if (stack) {
-        setName(stack.name)
-        setLoop(stack.loop)
-      } else {
-        setName('')
-        setLoop(false)
-      }
+      setName(stack?.name ?? '')
+      setInRunningOrder(stack?.inRunningOrder ?? true)
+      setAtEnd(atEndOf(stack))
+      setReleaseTime(String((stack?.releaseTimeMs ?? DEFAULT_RELEASE_MS) / 1000))
       // A new stack starts on (Q2); one from a desk that sends no setting reads off.
       const opened = stackDraftOf(stack == null ? NEW_STACK_MOVE_IN_DARK : (stack.moveInDark ?? MOVE_IN_DARK_OFF))
       setDarkOpened(opened)
@@ -86,13 +132,25 @@ export function CueStackForm({
     }
   }, [open, stackId])
 
+  const releaseMs = releaseMsOf(releaseTime)
+  // Taking a stack out of the running order sets Release unless it loops (D3).
+  const changeRunningOrder = (on: boolean) => {
+    setInRunningOrder(on)
+    if (!on && atEnd === 'STAY') setAtEnd('RELEASE')
+  }
+
   const darkResult = stackDraftResult(dark)
   const darkTouched = JSON.stringify(dark) !== JSON.stringify(darkOpened)
 
   const handleSave = async () => {
     const input: CueStackInput = {
       name: name.trim(),
-      loop,
+      loop: atEnd === 'LOOP',
+    }
+    if (runnable) {
+      input.inRunningOrder = inRunningOrder
+      input.releaseAtEnd = atEnd === 'RELEASE'
+      input.releaseTimeMs = releaseMs ?? DEFAULT_RELEASE_MS
     }
     if (runnable && (stack == null || darkTouched)) {
       if (darkResult.value != null) {
@@ -119,7 +177,8 @@ export function CueStackForm({
   }
 
   // Only fields on screen can hold Save back: switched off, the block hides them.
-  const isValid = name.trim().length > 0 && !(runnable && dark.on && darkResult.value == null)
+  const isValid =
+    name.trim().length > 0 && !(runnable && dark.on && darkResult.value == null) && !(runnable && releaseMs == null)
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -149,28 +208,57 @@ export function CueStackForm({
             />
           </div>
 
-          {/* Loop */}
-          <div className="flex items-center justify-between">
-            <div>
-              <Label>Loop</Label>
-              <p className="text-xs text-muted-foreground">Wrap from last cue to first</p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={loop}
-              onClick={() => setLoop(!loop)}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                loop ? 'bg-primary' : 'bg-muted'
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block size-5 rounded-full bg-background shadow-lg transition-transform ${
-                  loop ? 'translate-x-5' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
+          {runnable && (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label htmlFor="stack-running-order">In the running order</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {inRunningOrder
+                      ? 'The show’s GO reaches this stack'
+                      : 'A busk stack: run from its own GO or a pad, never the show’s'}
+                  </p>
+                </div>
+                <Switch id="stack-running-order" checked={inRunningOrder} onChange={changeRunningOrder} />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label id="stack-at-end">After the last cue</Label>
+                <ToggleGroup
+                  type="single"
+                  aria-labelledby="stack-at-end"
+                  value={atEnd}
+                  onValueChange={(next) => next && setAtEnd(next as AtEnd)}
+                  className="w-full justify-start"
+                >
+                  {AT_END_OPTIONS.map((o) => (
+                    <ToggleGroupItem key={o.value} value={o.value} title={o.hint} className="flex-1">
+                      {o.label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                <p className="text-xs text-muted-foreground">{AT_END_OPTIONS.find((o) => o.value === atEnd)?.hint}</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="stack-release-time">Release time</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="stack-release-time"
+                    inputMode="decimal"
+                    className="w-24"
+                    value={releaseTime}
+                    onChange={(e) => setReleaseTime(e.target.value)}
+                    aria-invalid={releaseMs == null}
+                  />
+                  <span className="text-xs text-muted-foreground">s</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {releaseMs == null ? 'Between 0 and 60 seconds.' : 'How long stopping the stack fades its light; 0 snaps.'}
+                </p>
+              </div>
+            </>
+          )}
 
           {runnable && (
             <MoveInDarkStackBlock

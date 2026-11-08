@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-BUSK-STACK-S1`](#fu-manual-busk-stack-s1) | a song stack out of the running order: Act 1's last GO goes to Act 2, not the song; the song's own GO and a follow off its last cue release it over its release time; the Show view's stop fades | Busk stack session 1, 2026-11-07 |
 | [`FU-MANUAL-OSC-S1`](#fu-manual-osc-s1) | a QLab Network cue lands cue 1 and fired again mid-fade moves nothing; a Look's `on` and `off` and a busk Look pad from QLab; a QLab machine off the allowlist shows with *Allow this sender*; an operator sees the log | OSC session 1, 2026-11-07 |
 | [`FU-MANUAL-FX-SPEED-S4`](#fu-manual-fx-speed-s4) | ×½ and ×2 on a busked master halve and double it mid-song, a hold included, and greyed at 20 and 300; a fader and an encoder on *FX speed* move the selection's Local FX with no jump, the fader picking up at the lead FX | FX speed session 4, 2026-11-07 |
 | [`FU-MANUAL-FX-SPEED-S3`](#fu-manual-fx-speed-s3) | dragging Speed on a running chase changes its rate with no jump, letting go on ×2 settles it on the beat within a cycle, and TAP in the live FX editor holds its master, the rail reading *Held* | FX speed session 3, 2026-11-07 |
@@ -156,6 +157,27 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
 
 ---
+
+## `FU-MANUAL-BUSK-STACK-S1`
+
+**What it proves**: *Busk stacks and the running order* (busk-stack plan session 1) — a stack out of
+the running order is never reached by the show's GO, releases itself at its end, and a stop fades.
+
+**Why it is here**: the tests read fade weights off the cue layer; only the rig shows that a release
+looks like a fade rather than a cut, and that the Show view's GO crosses where the operator expects.
+
+**Test**, at the desk with a show of three stacks — *Act 1* (two cues), *Song* and *Act 2* — each cue
+lighting something different:
+
+1. **Out of the running order.** Open *Song*'s settings: switch *In the running order* off. *After the
+   last cue* moves to *Release*. Save. On the Show view *Song* is listed after a *Busk* divider.
+2. **The show's GO skips it.** Start the show and GO through *Act 1*: its last GO goes to *Act 2*, and
+   the next-stack label beside GO read *→ Act 2*, never *Song*.
+3. **Its own GO releases it.** Open *Song*'s tab, start it from its own controls and GO past its last
+   cue: it reads stopped at once, and its light fades out over its release time (2 s) while *Act 2*
+   stays up. Give its last cue a follow and start it again: the follow releases it the same way.
+4. **A stop fades.** With *Act 2* live, stop the show from the header: its light fades over 2 s rather
+   than snapping. Set its release time to 0 and stop it again: it snaps.
 
 ## `FU-MANUAL-OSC-S1`
 

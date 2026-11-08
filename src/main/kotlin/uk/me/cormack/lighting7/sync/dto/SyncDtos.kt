@@ -34,6 +34,10 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v50: busk stacks (busk-stack plan D1, D3, D6). `CueStackJson` gains `inRunningOrder`,
+    // `releaseAtEnd` and `releaseTimeMs`. The writer and `minReader` move to **50**: a v49 reader would
+    // read a busk stack as one in the running order and push it back so. See
+    // `docs/sync-engineering.md` §"Version 50 — Busk stacks".
     // v49: Own tempo (fx-speed plan D3, D5). `LookFxJson`, `PaletteFxJson` and `CueAdHocFxJson` gain
     // `ownBpm` — a beat effect's own tempo, its cycle beats at it — and no longer write `seconds`,
     // which the importer reads by D5: a beat effect onto Own tempo 120 at twice its cycle, a wall-clock
@@ -378,9 +382,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 49,
+    val formatVersion: Int = 50,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 49,
+    val minReader: Int = 50,
 )
 
 /**
@@ -1014,6 +1018,13 @@ data class CueStackJson(
     val moveInDarkTimeMs: Long = 2000,
     /** The families that move, sorted by name. */
     val moveInDarkFamilies: List<String> = listOf("BEAM", "COLOUR", "POSITION"),
+    /**
+     * v50: the run settings (busk-stack plan §3). Each defaults to what a stack without it reads as:
+     * in the running order, Stay at the end, a 2 s release.
+     */
+    val inRunningOrder: Boolean = true,
+    val releaseAtEnd: Boolean = false,
+    val releaseTimeMs: Long = 2000,
 )
 
 /**

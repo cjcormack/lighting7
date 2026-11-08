@@ -758,6 +758,13 @@ class AiTools(private val state: State) {
                                 put("name", stack.name)
                                 put("cueCount", cueCount)
                                 put("loop", stack.loop)
+                                if (stack.type == CueStackType.STACK.name) {
+                                    // Off is a busk stack, which the show's playhead never reaches.
+                                    put("inRunningOrder", stack.inRunningOrder)
+                                    put("releaseAtEnd", stack.releaseAtEnd)
+                                    put("releaseTimeMs", stack.releaseTime.toMillis())
+                                    if (manager.runState.isReleasedAtEnd(stack.id.value)) put("releasedAtEnd", true)
+                                }
                                 put("isActive", activeCueId != null)
                                 manager.getActiveEntryId(stack.id.value)?.let { put("activeEntryId", it) }
                                 activeCueId?.let { put("activeCueId", it) }
@@ -809,6 +816,7 @@ class AiTools(private val state: State) {
                             frame.fadeElapsedMs?.let { put("fadeElapsedMs", it) }
                             put("autoAdvance", frame.autoAdvance)
                             frame.autoAdvanceDelayMs?.let { put("autoAdvanceDelayMs", it) }
+                            if (frame.releasedAtEnd) put("releasedAtEnd", true)
                             // The heads Move in dark is watching or holding now, for which entry.
                             val dark = state.show.moveInDark.statusOf(frame.stackId).values
                             if (dark.isNotEmpty()) putJsonArray("movesInDark") {
@@ -1682,13 +1690,20 @@ class AiTools(private val state: State) {
         val loop = input["loop"]?.jsonPrimitive?.booleanOrNull ?: false
         val moveInDark = parseToolMoveInDark(input["moveInDark"], MoveInDarkSettings.NEW_STACK)
             .getOrElse { return errorResult(it.message!!) }
+        val releaseTimeMs = toolReleaseTimeMs(input["releaseTimeMs"]).getOrElse { return errorResult(it.message!!) }
+        val run = CueStackRunSettings.resolve(
+            null, loop,
+            inRunningOrder = input["inRunningOrder"]?.jsonPrimitive?.booleanOrNull,
+            releaseAtEnd = input["releaseAtEnd"]?.jsonPrimitive?.booleanOrNull,
+            releaseTimeMs = releaseTimeMs,
+        ).getOrElse { return errorResult(it.message!!) }
 
         val project = state.projectManager.currentProject
         val stack = transaction(state.database) {
             DaoCueStack.new {
                 this.name = name
                 this.project = project
-                this.loop = loop
+                runSettings = run
                 moveInDarkSettings = moveInDark
             }
         }
@@ -1697,11 +1712,14 @@ class AiTools(private val state: State) {
         val stackId = stack.id.value
         return ToolExecutionResult(
             success = true,
-            description = "Created cue stack '$name' (id=$stackId, loop=$loop)",
+            description = "Created ${if (run.inRunningOrder) "cue stack" else "busk stack"} '$name' (id=$stackId, loop=${run.loop}, releaseAtEnd=${run.releaseAtEnd})",
             result = buildJsonObject {
                 put("stackId", stackId)
                 put("name", name)
-                put("loop", loop)
+                put("loop", run.loop)
+                put("inRunningOrder", run.inRunningOrder)
+                put("releaseAtEnd", run.releaseAtEnd)
+                put("releaseTimeMs", run.releaseTimeMs)
             }.toString()
         )
     }
@@ -1745,11 +1763,11 @@ class AiTools(private val state: State) {
         val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
 
         val manager = state.show.cueStackManager
-        val removedCount = manager.deactivateStack(stackId, state)
+        val removedCount = manager.stopStack(state, stackId)
 
         return ToolExecutionResult(
             success = true,
-            description = "Deactivated stack $stackId ($removedCount FX removed)",
+            description = "Stopped stack $stackId, fading over its release time ($removedCount FX removed)",
             result = buildJsonObject {
                 put("stackId", stackId)
                 put("removedCount", removedCount)
@@ -1775,12 +1793,17 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "Advanced stack $stackId ${directionStr.lowercase()} to cue '${result.cueName}' (${result.fxCount} FX)",
+            description = if (result.released) {
+                "Released stack $stackId: it went past its last cue and is stopping over its release time"
+            } else {
+                "Advanced stack $stackId ${directionStr.lowercase()} to cue '${result.cueName}' (${result.fxCount} FX)"
+            },
             result = buildJsonObject {
                 put("stackId", result.stackId)
                 put("cueId", result.cueId)
                 put("cueName", result.cueName)
                 put("fxCount", result.fxCount)
+                put("released", result.released)
             }.toString()
         )
     }
@@ -1870,15 +1893,20 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "GO on stack $stackId — " +
-                (if (wasActive) "fired" else "started at") +
-                " cue '${result.cueName}' (${result.fxCount} FX)",
+            description = if (result.released) {
+                "GO on stack $stackId — released stack $stackId: it went past its last cue and is stopping over its release time"
+            } else {
+                "GO on stack $stackId — " +
+                    (if (wasActive) "fired" else "started at") +
+                    " cue '${result.cueName}' (${result.fxCount} FX)"
+            },
             result = buildJsonObject {
                 put("stackId", result.stackId)
                 put("cueId", result.cueId)
                 put("cueName", result.cueName)
                 put("fxCount", result.fxCount)
                 put("started", !wasActive)
+                put("released", result.released)
             }.toString()
         )
     }

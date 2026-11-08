@@ -1059,6 +1059,14 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project; name = "intermission"; label = "intermission"
         loop = false; type = CueStackType.SEPARATOR.name; sortOrder = 1
     }
+    // A busk stack (v50): out of the running order, Release at the end, a 3 s release.
+    DaoCueStack.new {
+        this.project = project; name = "song-1"; loop = false
+        type = CueStackType.STACK.name; sortOrder = 3
+        inRunningOrder = false
+        releaseAtEnd = true
+        releaseTime = Duration.ofSeconds(3)
+    }
 
     // cue slot
     DaoCueSlot.new {

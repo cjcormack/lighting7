@@ -22,6 +22,7 @@ import uk.me.cormack.lighting7.testsupport.awaitOfType
 import uk.me.cormack.lighting7.testsupport.createWsClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import uk.me.cormack.lighting7.testsupport.entryIdOf
@@ -209,6 +210,29 @@ class CueRunStateBroadcastTest : RouteIntegrationTest() {
                 snapshot.transition,
                 "the connect snapshot is state, not an event — treating it as a GO replays a dead fade",
             )
+        }
+    }
+
+    @Test
+    fun `a window connecting after a Release at the end is told the stack released`() = testApplication {
+        mountTestApp(state)
+        val client = createWsClient()
+
+        val stackId = client.post("/api/rest/projects/$projectId/cue-stacks") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCueStack(name = "Song", inRunningOrder = false, releaseTimeMs = 0))
+        }.body<CueStackDetails>().id
+        val cue1 = createCue(client, "s1", stackId)
+        val manager = state.show.cueStackManager
+        manager.go(state, stackId)
+        assertTrue(manager.go(state, stackId)!!.released, "one cue, so the second GO releases it")
+
+        client.webSocket("/api") {
+            val snapshot = awaitOfType<CueRunStateChangedOutMessage>()
+            assertEquals(stackId, snapshot.stackId)
+            assertTrue(snapshot.releasedAtEnd)
+            assertNull(snapshot.activeCueId)
+            assertEquals(cue1, snapshot.nextCueId, "what a start would fire")
         }
     }
 

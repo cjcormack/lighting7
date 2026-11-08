@@ -72,6 +72,7 @@ export function CopyFromShowSheet({
         .sort((a, b) => Number(a.kind === 'VENUE') - Number(b.kind === 'VENUE') || a.name.localeCompare(b.name)),
     [projects, projectId],
   )
+  // Every stack, busk stacks included (busk-stack plan D4): copied cues may land in any stack.
   const runnable = useMemo(() => (stacks ?? []).filter((s) => s.type === 'STACK'), [stacks])
   const source = sources.find((p) => p.id === sourceId) ?? null
   const cuesById = useMemo(() => new Map((sourceCues ?? []).map((c) => [c.id, c])), [sourceCues])

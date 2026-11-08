@@ -160,17 +160,23 @@ class CueStackManager(
     /** [stackId] is deleted: its FX amount and its uuid's resolution go with it. */
     fun forgetStack(stackId: Int) {
         fxAmounts.forget(stackId)
+        runState.clearReleasedAtEnd(stackId)
         stackIdsByUuid.values.removeIf { it == stackId }
     }
 
     enum class AdvanceDirection { FORWARD, BACKWARD }
 
+    /**
+     * What a GO did. [released] when it went past the last cue entry of a stack set to Release
+     * (busk-stack plan D3), stopping it: [entryId] and [cueId] are then where it stood.
+     */
     data class ActivateResult(
         val stackId: Int,
         val entryId: Int,
         val cueId: Int,
         val cueName: String,
         val fxCount: Int,
+        val released: Boolean = false,
     )
 
     /**
@@ -307,6 +313,7 @@ class CueStackManager(
             fadeStartedAtMs = if (incomingFades || outgoingFades) System.currentTimeMillis() else null,
         )
         runState.consumeStandby(stackId)
+        runState.clearReleasedAtEnd(stackId)
         moveInDark?.afterGo(stackId, entryId, cueData.cueId, if (incomingFades || outgoingFades) fadeDurationMs else 0L, cueData.cueLabel)
 
         if (incomingFades || outgoingFades) {
@@ -350,7 +357,9 @@ class CueStackManager(
      * and the MIDI surface's GO fires the same entry the tablet has on deck.
      *
      * Only cue entries are candidates — markers are skipped. Respects the stack's loop setting. If
-     * at the end and not looping, stays on the current entry. BACKWARD fires no events (D15).
+     * at the end and not looping, stays on the current entry, or — FORWARD on a stack set to Release
+     * (busk-stack plan D3) — stops it as [stopStack] does, answering [ActivateResult.released]. BACKWARD
+     * fires no events (D15).
      *
      * @return The result of activating the next entry, or null if the stack has no cue entries
      */
@@ -363,7 +372,7 @@ class CueStackManager(
         val currentState = activeStacks[stackId]
             ?: throw IllegalStateException("Stack $stackId is not active")
 
-        val next = transaction(state.database) {
+        val (target, release) = transaction(state.database) {
             val stack = DaoCueStack.findById(stackId)
                 ?: throw IllegalArgumentException("Cue stack not found: $stackId")
 
@@ -372,8 +381,8 @@ class CueStackManager(
 
             // FORWARD is the shared "next" rule — armed standby, else positional — so a GO
             // fires exactly the entry every session has on deck. At a boundary of a non-looping
-            // stack, stay on the current entry.
-            when (direction) {
+            // stack, stay on the current entry, or release a stack set to.
+            val found = when (direction) {
                 AdvanceDirection.FORWARD -> runState.nextFrom(
                     activeEntryId = currentState.activeEntryId,
                     stackId = stackId,
@@ -385,8 +394,23 @@ class CueStackManager(
                     ordered, currentState.activeEntryId, direction, stack.loop,
                     runState.detachedIndex(stackId, currentState.detachedAt),
                 )
-            } ?: CueEntryRef(currentState.activeEntryId, currentState.activeCueId)
+            }
+            found to (found == null && direction == AdvanceDirection.FORWARD && stack.releaseAtEnd)
         } ?: return null
+
+        if (release) {
+            val cueName = transaction(state.database) { DaoCue.findById(currentState.activeCueId)?.name ?: "Unknown" }
+            stop(state, stackId, scope, atEnd = true)
+            return ActivateResult(
+                stackId = stackId,
+                entryId = currentState.activeEntryId,
+                cueId = currentState.activeCueId,
+                cueName = cueName,
+                fxCount = 0,
+                released = true,
+            )
+        }
+        val next = target ?: CueEntryRef(currentState.activeEntryId, currentState.activeCueId)
 
         // Already on this entry — no-op
         if (next.entryId == currentState.activeEntryId) {
@@ -426,7 +450,7 @@ class CueStackManager(
      * button, and a second copy of "active ? advance : activate" is a show where they disagree.
      *
      * @return null only when the stack holds no cue entries — at the end of a non-looping stack
-     *   [advanceStack] stays on the live entry and returns it. Nothing here deactivates a stack.
+     *   [advanceStack] stays on the live entry and returns it, or releases a stack set to Release.
      * @throws IllegalArgumentException if a stopped stack has no cue entries to start at.
      */
     fun go(state: State, stackId: Int, scope: CoroutineScope = GlobalScope): ActivateResult? =
@@ -457,8 +481,9 @@ class CueStackManager(
     }
 
     /**
-     * Deactivate a stack — let its live entry's hold go and clean up state. The cue comes off only
-     * if no other hold keeps it live (D3).
+     * Deactivate a stack at once — let its live entry's hold go and clean up state. The cue comes off
+     * only if no other hold keeps it live (D3). A release in flight is cut short. The stop an operator
+     * makes is [stopStack]; this is a delete's, an undo's, and the show's advance and go-to.
      *
      * @return Number of effects removed
      */
@@ -468,10 +493,72 @@ class CueStackManager(
         // Cancelling also drops the mid-flight crossfade's outgoing assignments, if no hold has them.
         crossfades.cancel(stackId, holds::isHeld)
 
-        var removed = stackState?.let {
+        val removed = stackState?.let {
             holds.release(appState, it.activeCueId, CueHold.Stack(stackId, it.activeEntryId), CueHolds.Departure.SNAP).fxRemoved
         } ?: 0
-        removed += fxEngine.removeFxForCueStack(stackId)
+        return removed + afterStop(appState, stackId)
+    }
+
+    /**
+     * Stop [stackId] as an operator does (busk-stack plan D6): it reads stopped at once, and the cues
+     * it had on stage — its live cue and, mid-crossfade, the cue that fade was taking out — fade from
+     * the weight they stood at to 0 over its release time, or stay at full where another hold keeps
+     * them. A stack already stopped and still releasing is left to finish. A release time of 0 is
+     * [deactivateStack]'s snap.
+     *
+     * @return Number of effects removed
+     */
+    fun stopStack(state: State, stackId: Int, scope: CoroutineScope = GlobalScope): Int = stop(state, stackId, scope, atEnd = false)
+
+    private fun stop(state: State, stackId: Int, scope: CoroutineScope, atEnd: Boolean): Int {
+        if (!activeStacks.containsKey(stackId)) {
+            return if (crossfades.isReleasing(stackId)) 0 else deactivateStack(stackId, state)
+        }
+        val releaseMs = transaction(state.database) { DaoCueStack.findById(stackId)?.releaseTime?.toMillis() } ?: 0L
+        if (atEnd) runState.markReleasedAtEnd(stackId)
+        if (releaseMs <= 0) return deactivateStack(stackId, state)
+        val stackState = activeStacks.remove(stackId) ?: return 0
+        // A follow releasing the stack runs in this job, past its last suspension: cancelling it is harmless.
+        stackState.autoAdvanceJob?.cancel()
+        val inFlight = crossfades.detach(stackId)
+        val curve = EasingCurve.LINEAR
+        val cueLayer = fxEngine.cueLayer
+
+        val fromWeights = HashMap<Int, Double>()
+        val liveCueId = stackState.activeCueId
+        val liveFrom = cueLayer.fadeWeightOf(liveCueId)
+        val released = holds.release(
+            state, liveCueId, CueHold.Stack(stackId, stackState.activeEntryId), CueHolds.Departure.RELEASE,
+            fadeMs = releaseMs, curve = curve,
+        )
+        if (released.last) {
+            if (released.fadingRows) fromWeights[liveCueId] = liveFrom
+        } else {
+            pinAtFull(liveCueId)
+        }
+        // What the GO fade was taking out keeps going out from where it stands, its leaving FX re-ramped
+        // to the release time so rows and FX go together; a hold that has it again keeps it at full.
+        inFlight?.outgoingCueId?.let { cueId ->
+            when {
+                holds.isHeld(cueId) -> pinAtFull(cueId)
+                cueLayer.hasAssignments(cueId) -> fromWeights[cueId] = cueLayer.fadeWeightOf(cueId)
+            }
+            if (!holds.isHeld(cueId)) {
+                fxEngine.fadeOutFx(fxEngine.leavingCueFx(cueId), releaseMs, curve)
+            }
+        }
+        if (fromWeights.isNotEmpty()) crossfades.startRelease(stackId, fromWeights, releaseMs, curve, scope)
+        return released.fxRemoved + afterStop(state, stackId)
+    }
+
+    private fun pinAtFull(cueId: Int) {
+        fxEngine.cueLayer.updateFadeWeights(mapOf(cueId to 1.0))
+        fxEngine.settleFx(fxEngine.cueFx(cueId))
+    }
+
+    /** What every stop does once the stack's own cues are let go: its cue-less FX, standby, scenery and the arm. */
+    private fun afterStop(appState: State, stackId: Int): Int {
+        val removed = fxEngine.removeFxForCueStack(stackId)
         moveInDark?.onStackStopped(stackId)
         // A stopped stack has nothing on deck: the standby went with it. Published after the
         // teardown so the frame describes the stack as it now is.
@@ -578,6 +665,9 @@ class CueStackManager(
      * Check if a stack is active.
      */
     fun isStackActive(stackId: Int): Boolean = activeStacks.containsKey(stackId)
+
+    /** Whether [stackId] is stopped with its release still fading ([stopStack]). */
+    fun isReleasing(stackId: Int): Boolean = !isStackActive(stackId) && crossfades.isReleasing(stackId)
 
     // ─── Private helpers ─────────────────────────────────────────────────
 
