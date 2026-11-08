@@ -76,6 +76,102 @@ internal class RecordRestorer(private val state: State) {
     ): Outcome =
         apply(projectId, caller, window, WriteOrigin.Kind.REDO, confirm, scriptsAllowed) { state.history.planRedo(projectId, entryId, caller.key) }
 
+    /**
+     * Records brought back from a cloud-sync snapshot (sync-restore plan session 3, D10): [plan] answers
+     * them, inside the transaction, as the snapshot holds them, and they are upserted with fresh row ids
+     * (an image read from git has none of its own) under [origin], a tracked write the journal makes one
+     * show entry of, which ⌘Z takes back. Refused as an undo is: a name taken since, a key the venue
+     * holds, a record that would not land exactly. [plan] may throw to refuse; nothing is then written.
+     * Done answers the entry the journal made.
+     */
+    suspend fun bringBack(
+        projectId: Int,
+        origin: WriteOrigin,
+        scriptsAllowed: Boolean,
+        plan: () -> Map<RecordKey, RecordImage>,
+    ): Outcome {
+        val current = state.projectManager.currentProjectOrNull?.id?.value == projectId
+        var applied: Applied? = null
+        var attempted: Map<RecordKey, RecordImage?> = emptyMap()
+        var playheadCleared = false
+        val bands = HashMap<Int, Boolean>()
+        val outcome = try {
+            WriteOrigin.with(origin) {
+                transaction(state.database) {
+                    val project = DaoProject.findById(projectId) ?: return@transaction Outcome.Empty(false)
+                    val targets = plan()
+                    if (targets.isEmpty()) return@transaction Outcome.Empty(false)
+                    attempted = targets
+                    if (!scriptsAllowed && targets.keys.any { it.tableName in SCRIPT_FOLDERS }) return@transaction Outcome.ScriptsRefused
+                    // A stack's entries come too, so its renumber reads their numbers and the check sees it.
+                    val folders = targets.keys.mapTo(HashSet()) { it.tableName }
+                        .also { if (RecordFolders.CUE_STACKS in it) it += RecordFolders.CUE_STACK_ENTRIES }
+                    val before = exportFolders(projectId, folders)
+                    val stageBefore = if (current) heldStage(project, targets) else emptyMap()
+                    val clashesBefore = venueClashes(project, targets)
+                    ProjectImporter(state).restore(project, targets, keepRowIds = false)
+                    renumberAsWritten(project, targets) { before[it] }
+                    TransactionManager.current().flushCache()
+                    newClash(project, targets, clashesBefore)?.let { throw BlockedException(it) }
+                    val after = exportFolders(projectId, folders)
+                    verifyBroughtBack(before, targets, after)?.let { throw BlockedException(it) }
+                    val playhead = project.activeStackId
+                    for (key in targets.keys.filter { it.tableName == RecordFolders.CUE_STACKS }) {
+                        val stack = DaoCueStack.find { DaoCueStacks.uuid eq key.uuid }.firstOrNull { it.project.id == project.id } ?: continue
+                        bands[stack.id.value] = stack.inRunningOrder
+                        if (project.activeStackId == stack.id.value && !stack.inRunningOrder) project.activeStackId = null
+                    }
+                    playheadCleared = playhead != null && project.activeStackId == null
+                    val stageChanged = stageBefore.filter { (cueId, content) -> DaoCue.findById(cueId)?.stageContent() != content }.keys
+                    applied = Applied(
+                        targets = targets.keys.associateWith { after[it] },
+                        before = targets.keys.associateWith { before[it] },
+                        removal = EntryRemoval.NONE,
+                        stageChanged = stageChanged,
+                    )
+                    Outcome.Done(emptyList())
+                }
+            }
+        } catch (e: Exception) {
+            refused(projectId, e) { attempted }
+        }
+        val done = applied
+        if (outcome !is Outcome.Done || done == null) return outcome
+        announceStacks(projectId, current, playheadCleared, bands)
+        runEffects(projectId, current, WriteOrigin(origin.source, origin.window, kind = WriteOrigin.Kind.UNDO), done)
+        return Outcome.Done(listOfNotNull(state.history.entries(projectId).lastOrNull { origin.requestId in it.requestIds }))
+    }
+
+    /**
+     * What putting [targets] back would move on the live stage while a cue is held, as an undo's confirm
+     * names it ([movesOf]); empty off the live project.
+     */
+    fun movesFor(projectId: Int, targets: Map<RecordKey, RecordImage?>): List<String> =
+        if (state.projectManager.currentProjectOrNull?.id?.value == projectId) movesOf(projectId, targets) else emptyList()
+
+    private fun exportFolders(projectId: Int, folders: Set<String>): Map<RecordKey, RecordImage> =
+        MapSink().also { ProjectExporter(state).exportKinds(projectId, folders, it) }.images
+
+    /**
+     * The folders a bring-back wrote, exported again, against [before] with [targets] laid over it:
+     * every record as the snapshot holds it and none other moved. Row ids are new, so only hashes count.
+     */
+    private fun verifyBroughtBack(
+        before: Map<RecordKey, RecordImage>,
+        targets: Map<RecordKey, RecordImage>,
+        after: Map<RecordKey, RecordImage>,
+    ): Outcome.Blocked? {
+        val expected = before + targets
+        for (key in expected.keys + after.keys) {
+            val want = expected[key]
+            val got = after[key]
+            if (want?.hash == got?.hash) continue
+            log.warn("Bringing back {} would leave it as {} rather than {}", key, got?.json, want?.json)
+            return Outcome.Blocked(RecordLabeler.name(key, want ?: got), "It could not be put back exactly")
+        }
+        return null
+    }
+
     /** Thrown inside the transaction to roll it back with a [Outcome.Blocked]. */
     private class BlockedException(val blocked: Outcome.Blocked) : RuntimeException(blocked.reason)
 
@@ -136,30 +232,45 @@ internal class RecordRestorer(private val state: State) {
                     Outcome.Done(ready.entries)
                 }
             }
-        } catch (e: BlockedException) {
-            e.blocked
-        } catch (e: ImportError) {
-            log.info("History of project {}: an undo names a record gone since: {}", projectId, e.message)
-            Outcome.Blocked(blockedRecord(projectId, e.message, pendingTargets(origin)), "Something it names has gone since")
-        } catch (e: ExposedSQLException) {
-            log.info("History of project {}: an undo was refused by the database", projectId, e)
-            Outcome.Blocked(blockedRecord(projectId, e.message, pendingTargets(origin)), "Something else has taken its name or its place since")
+        } catch (e: Exception) {
+            refused(projectId, e) { pendingTargets(origin) }
         }
         val done = applied
-        // Every window follows the playhead from `showChanged`, which the restore's own effects do not send.
-        if (outcome is Outcome.Done && playheadCleared && current) state.show.fixtures.showChanged(projectId, null, null)
-        if (outcome is Outcome.Done && current) {
-            for ((stackId, inRunningOrder) in bands) state.show.cueStackManager.onBandChanged(stackId, inRunningOrder)
-        }
+        if (outcome is Outcome.Done) announceStacks(projectId, current, playheadCleared, bands)
         if (outcome is Outcome.Done && done != null) {
             // Its commit marked them unless it wrote nothing: records already where the entries put them.
             state.history.mark(projectId, outcome.entries.map { it.id }, undone = kind == WriteOrigin.Kind.UNDO)
-            // What the undo sets off is part of it: no programmer step, no entry of its own.
-            withContext(WriteOrigin(caller, window, kind = kind)) {
-                KindEffects.afterRestore(state, projectId, current, done.before, done.targets, done.removal, done.stageChanged)
-            }
+            runEffects(projectId, current, WriteOrigin(caller, window, kind = kind), done)
         }
         return outcome
+    }
+
+    /** A refusal the transaction threw, as an [Outcome.Blocked]; anything else is rethrown. */
+    private fun refused(projectId: Int, e: Exception, targets: () -> Map<RecordKey, RecordImage?>): Outcome.Blocked = when (e) {
+        is BlockedException -> e.blocked
+        is ImportError -> {
+            log.info("History of project {}: putting records back names one gone since: {}", projectId, e.message)
+            Outcome.Blocked(blockedRecord(projectId, e.message, targets()), "Something it names has gone since")
+        }
+        is ExposedSQLException -> {
+            log.info("History of project {}: putting records back was refused by the database", projectId, e)
+            Outcome.Blocked(blockedRecord(projectId, e.message, targets()), "Something else has taken its name or its place since")
+        }
+        else -> throw e
+    }
+
+    /** After a committed restore: the playhead it cleared, and each restored stack's band. */
+    private fun announceStacks(projectId: Int, current: Boolean, playheadCleared: Boolean, bands: Map<Int, Boolean>) {
+        // Every window follows the playhead from `showChanged`, which the restore's own effects do not send.
+        if (playheadCleared && current) state.show.fixtures.showChanged(projectId, null, null)
+        if (current) for ((stackId, inRunningOrder) in bands) state.show.cueStackManager.onBandChanged(stackId, inRunningOrder)
+    }
+
+    /** What the restored records' writes would set off, under [effectsOrigin]: part of it, no programmer step, no entry. */
+    private suspend fun runEffects(projectId: Int, current: Boolean, effectsOrigin: WriteOrigin, done: Applied) {
+        withContext(effectsOrigin) {
+            KindEffects.afterRestore(state, projectId, current, done.before, done.targets, done.removal, done.stageChanged)
+        }
     }
 
     /**
@@ -168,9 +279,13 @@ internal class RecordRestorer(private val state: State) {
      * and every other is derived from its neighbours, as an import derives it ([renumberAsArchived]).
      * The write being undone renumbered by position, which a restore cannot replay.
      */
-    private fun renumberAsWritten(project: DaoProject, targets: Map<RecordKey, RecordImage?>) {
+    private fun renumberAsWritten(
+        project: DaoProject,
+        targets: Map<RecordKey, RecordImage?>,
+        recordOf: (RecordKey) -> RecordImage? = { state.history.recordOf(project.id.value, it) },
+    ) {
         val entryKeys = targets.keys.filter { it.tableName == RecordFolders.CUE_STACK_ENTRIES }
-        val stackUuids = entryKeys.flatMap { listOfNotNull(targets[it], state.history.recordOf(project.id.value, it)) }
+        val stackUuids = entryKeys.flatMap { listOfNotNull(targets[it], recordOf(it)) }
             .mapNotNull { it.jsonObjectOrNull()?.string("cueStackUuid")?.let(::uuidOrNull) }
             .toSet() + targets.keys.filter { it.tableName == RecordFolders.CUE_STACKS && targets[it] != null }.map { it.uuid }
         for (uuid in stackUuids) {
@@ -178,7 +293,7 @@ internal class RecordRestorer(private val state: State) {
             flushPendingEntryWrites()
             val held = cueEntriesInOrder(stack).mapNotNull { entry ->
                 val key = RecordKey(RecordFolders.CUE_STACK_ENTRIES, entry.uuid)
-                val image = if (key in targets) targets[key] else state.history.recordOf(project.id.value, key)
+                val image = if (key in targets) targets[key] else recordOf(key)
                 image?.jsonObjectOrNull()?.string("cueNumber")?.let { entry.id.value to it }
             }.toMap()
             renumberAsArchived(stack, held)

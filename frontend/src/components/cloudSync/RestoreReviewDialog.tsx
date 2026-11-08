@@ -16,8 +16,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   RESTORE_NOTE_MAX_LENGTH,
+  useCloudSyncBringBackMutation,
+  useCloudSyncBringBackSelectionMutation,
   useCloudSyncRestoreMutation,
   useCloudSyncRestoreReviewQuery,
+  type BringBackRecord,
+  type BringBackRecordRef,
+  type BringBackSelection,
+  type RestoreAddresses,
   type RestoreChange,
   type RestoreProject,
   type RestoreResult,
@@ -26,7 +32,7 @@ import {
   type RestoreVenue,
   type RestoreVenueRef,
 } from "@/store/cloudSync"
-import { formatSnapshotWhen, restoreRefusalMessage, staleReview } from "@/lib/snapshotRestore"
+import { formatSnapshotWhen, restoreRefusalMessage, staleReview, staleSelection } from "@/lib/snapshotRestore"
 
 /**
  * *Review and restore…* (sync-restore plan §4): what restoring one snapshot would bring back, take
@@ -34,6 +40,10 @@ import { formatSnapshotWhen, restoreRefusalMessage, staleReview } from "@/lib/sn
  * `RESTORE_REVIEW_STALE` answer puts its new review in place, to confirm again. Done, it toasts
  * the counts, the push and the desk's notes, with *Undo* opening the review of the show as it stood
  * before: a link to the Sync tab's `?review=`, so it works after this dialog and its panel are gone.
+ *
+ * Or, with records ticked, *Bring back n…* (sync-restore plan session 3): the desk's selection —
+ * those records and every one they need — to confirm, then written as one show-history entry ⌘Z
+ * takes back, with no commit and no reload.
  */
 export function RestoreReviewDialog({
   projectId,
@@ -53,11 +63,62 @@ export function RestoreReviewDialog({
   const [stale, setStale] = useState<RestoreReview | null>(null)
   const [failure, setFailure] = useState<unknown>(null)
   const [note, setNote] = useState("")
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set())
+  const [selection, setSelection] = useState<BringBackSelection | null>(null)
+  const [selectionStale, setSelectionStale] = useState(false)
+  const [askSelection, { isLoading: asking }] = useCloudSyncBringBackSelectionMutation()
+  const [bringBack, { isLoading: bringing }] = useCloudSyncBringBackMutation()
 
   const review = stale ?? data
+  const chosenRefs = review ? chosenIn(review, chosen) : []
+  const busy = restoring || asking || bringing
+
+  const toggle = (ref: BringBackRecordRef) =>
+    setChosen((was) => {
+      const next = new Set(was)
+      const key = refKey(ref)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+
+  const ask = async () => {
+    if (!review || chosenRefs.length === 0) return
+    setFailure(null)
+    try {
+      setSelection(await askSelection({ projectId, body: { sha: review.target.sha, records: chosenRefs } }).unwrap())
+      setSelectionStale(false)
+    } catch (err) {
+      setFailure(err)
+    }
+  }
+
+  const apply = async () => {
+    if (!review || !selection) return
+    setFailure(null)
+    try {
+      const done = await bringBack({
+        projectId,
+        body: { sha: review.target.sha, records: chosenRefs, token: selection.token },
+      }).unwrap()
+      const n = done.records.length
+      toast.success(`Brought back ${n} record${n === 1 ? "" : "s"} from ${formatSnapshotWhen(review.target.whenMs)}`, {
+        description: "One change in the show's history: ⌘Z takes it back. The next snapshot carries it.",
+      })
+      onOpenChange(false)
+    } catch (err) {
+      const fresh = staleSelection(err)
+      if (fresh) {
+        setSelection(fresh)
+        setSelectionStale(true)
+      } else {
+        setFailure(err)
+      }
+    }
+  }
 
   const close = (next: boolean) => {
-    if (!next && restoring) return
+    if (!next && busy) return
     onOpenChange(next)
   }
 
@@ -82,10 +143,14 @@ export function RestoreReviewDialog({
 
   return (
     <Dialog open onOpenChange={close}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-lg" showCloseButton={!restoring}>
+      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-lg" showCloseButton={!busy}>
         <DialogHeader>
           <DialogTitle>
-            {review ? `Restore to ${formatSnapshotWhen(review.target.whenMs)}?` : "Restore a snapshot?"}
+            {review
+              ? selection
+                ? `Bring back from ${formatSnapshotWhen(review.target.whenMs)}?`
+                : `Restore to ${formatSnapshotWhen(review.target.whenMs)}?`
+              : "Restore a snapshot?"}
           </DialogTitle>
           {review && (
             <DialogDescription>
@@ -98,39 +163,45 @@ export function RestoreReviewDialog({
         </DialogHeader>
 
         <div className="-mx-6 min-h-0 flex-1 space-y-3 overflow-y-auto px-6 text-sm">
-          {stale && (
-            <Alert>
-              <AlertTriangle className="size-4" />
-              <AlertDescription>
-                The show changed since this review was read. This is what restoring would do now.
-              </AlertDescription>
-            </Alert>
-          )}
-          {review ? (
-            <ReviewBody review={review} />
-          ) : reviewError ? (
-            <Alert variant="destructive">
-              <XCircle className="size-4" />
-              <AlertDescription>{restoreRefusalMessage(reviewError)}</AlertDescription>
-            </Alert>
+          {selection ? (
+            <BringBackBody selection={selection} stale={selectionStale} />
           ) : (
-            <p className="flex items-center gap-2 text-muted-foreground">
-              {isFetching && <Loader2 className="size-4 animate-spin" />} Reading what the restore would change…
-            </p>
-          )}
-          {review && !review.noChanges && (
-            <div className="space-y-1">
-              <Label htmlFor="restore-note">Note (optional)</Label>
-              <Input
-                id="restore-note"
-                value={note}
-                maxLength={RESTORE_NOTE_MAX_LENGTH}
-                placeholder="Why the show goes back"
-                disabled={restoring}
-                onChange={(e) => setNote(e.target.value.replace(/[\r\n]+/g, " "))}
-              />
-              <p className="text-xs text-muted-foreground">Added to the restore&rsquo;s commit message.</p>
-            </div>
+            <>
+              {stale && (
+                <Alert>
+                  <AlertTriangle className="size-4" />
+                  <AlertDescription>
+                    The show changed since this review was read. This is what restoring would do now.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {review ? (
+                <ReviewBody review={review} chosen={chosen} onToggle={busy ? undefined : toggle} />
+              ) : reviewError ? (
+                <Alert variant="destructive">
+                  <XCircle className="size-4" />
+                  <AlertDescription>{restoreRefusalMessage(reviewError)}</AlertDescription>
+                </Alert>
+              ) : (
+                <p className="flex items-center gap-2 text-muted-foreground">
+                  {isFetching && <Loader2 className="size-4 animate-spin" />} Reading what the restore would change…
+                </p>
+              )}
+              {review && !review.noChanges && (
+                <div className="space-y-1">
+                  <Label htmlFor="restore-note">Note (optional)</Label>
+                  <Input
+                    id="restore-note"
+                    value={note}
+                    maxLength={RESTORE_NOTE_MAX_LENGTH}
+                    placeholder="Why the show goes back"
+                    disabled={restoring}
+                    onChange={(e) => setNote(e.target.value.replace(/[\r\n]+/g, " "))}
+                  />
+                  <p className="text-xs text-muted-foreground">Added to the restore&rsquo;s commit message.</p>
+                </div>
+              )}
+            </>
           )}
           {failure != null && (
             <Alert variant="destructive">
@@ -141,25 +212,142 @@ export function RestoreReviewDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" disabled={restoring} onClick={() => close(false)}>
-            Cancel
-          </Button>
-          <Button disabled={!review || review.noChanges || restoring} onClick={run}>
-            {restoring ? (
-              <>
-                <Loader2 className="size-4 animate-spin" /> Restoring…
-              </>
-            ) : (
-              "Restore"
-            )}
-          </Button>
+          {selection ? (
+            <>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  setSelection(null)
+                  setFailure(null)
+                }}
+              >
+                Back
+              </Button>
+              <Button disabled={busy} onClick={apply}>
+                {bringing ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" /> Bringing back…
+                  </>
+                ) : (
+                  `Bring back ${selection.records.length}`
+                )}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" disabled={busy} onClick={() => close(false)}>
+                Cancel
+              </Button>
+              {chosenRefs.length > 0 && (
+                <Button variant="outline" disabled={busy} onClick={ask}>
+                  {asking ? <Loader2 className="size-4 animate-spin" /> : null}
+                  Bring back {chosenRefs.length}…
+                </Button>
+              )}
+              <Button disabled={!review || review.noChanges || busy} onClick={run}>
+                {restoring ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" /> Restoring…
+                  </>
+                ) : (
+                  "Restore"
+                )}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 }
 
-function ReviewBody({ review }: { review: RestoreReview }) {
+function refKey(ref: BringBackRecordRef): string {
+  return `${ref.folder}:${ref.uuid}`
+}
+
+/** The ticked records the review still lists, in its order: a fresh review may have dropped some. */
+function chosenIn(review: RestoreReview, chosen: ReadonlySet<string>): BringBackRecordRef[] {
+  return review.kinds.flatMap((kind) =>
+    kind.records
+      .filter((r) => r.change !== "GONE" && chosen.has(refKey({ folder: kind.folder, uuid: r.uuid })))
+      .map((r) => ({ folder: kind.folder, uuid: r.uuid })),
+  )
+}
+
+/** The desk's selection: the records chosen, then the ones they need, before anything is written. */
+function BringBackBody({ selection, stale }: { selection: BringBackSelection; stale: boolean }) {
+  const chosen = selection.records.filter((r) => !r.needed)
+  const needed = selection.records.filter((r) => r.needed)
+  return (
+    <>
+      {stale && (
+        <Alert>
+          <AlertTriangle className="size-4" />
+          <AlertDescription>The show changed since this was read. This is what bringing them back would do now.</AlertDescription>
+        </Alert>
+      )}
+      {(selection.moves?.length ?? 0) > 0 && (
+        <Alert data-bring-back-moves="">
+          <AlertTriangle className="size-4" />
+          <AlertDescription>
+            <p>This show is live and a cue is held. Bringing these back moves the stage:</p>
+            <ul className="mt-1 list-disc pl-4">
+              {selection.moves!.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+      <SelectionList title="Chosen" records={chosen} />
+      {needed.length > 0 && <SelectionList title="Also needed" records={needed} />}
+      {addressNotes(selection.addresses).map((line) => (
+        <p key={line} className="text-muted-foreground" data-bring-back-note="">
+          {line}
+        </p>
+      ))}
+      <p className="text-muted-foreground">
+        They come back as the snapshot has them, as one change in the show&rsquo;s history: ⌘Z takes it back. Nothing is
+        committed until the next snapshot or sync.
+      </p>
+    </>
+  )
+}
+
+function SelectionList({ title, records }: { title: string; records: BringBackRecord[] }) {
+  return (
+    <div className="rounded-md border px-3 py-2" data-bring-back={title === "Chosen" ? "chosen" : "needed"}>
+      <p className="font-medium">
+        {title} · {records.length}
+      </p>
+      <ul className="mt-1 space-y-0.5">
+        {records.map((r) => (
+          <li key={refKey(r)} className="flex gap-2" data-change={r.change}>
+            <span className={`w-3 shrink-0 font-mono ${CHANGE_CLASS[r.change]}`} aria-hidden="true">
+              {CHANGE_MARK[r.change]}
+            </span>
+            <span>
+              {r.label}
+              <span className="sr-only"> {CHANGE_WORD[r.change]}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function ReviewBody({
+  review,
+  chosen,
+  onToggle,
+}: {
+  review: RestoreReview
+  chosen: ReadonlySet<string>
+  /** Absent while a request is in flight: the boxes stay as they are. */
+  onToggle?: (ref: BringBackRecordRef) => void
+}) {
   const notes = reviewNotes(review)
   const settings = settingsLines(review.project)
   return (
@@ -167,11 +355,16 @@ function ReviewBody({ review }: { review: RestoreReview }) {
       {review.noChanges ? (
         <p data-restore-no-changes="">This snapshot is the show as it is now: there is nothing to restore.</p>
       ) : (
-        <div className="grid grid-cols-3 gap-2" role="group" aria-label="What the restore changes">
-          <Count n={review.counts.back} label="come back" />
-          <Count n={review.counts.gone} label="go" />
-          <Count n={review.counts.changed} label="change back" />
-        </div>
+        <>
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label="What the restore changes">
+            <Count n={review.counts.back} label="come back" />
+            <Count n={review.counts.gone} label="go" />
+            <Count n={review.counts.changed} label="change back" />
+          </div>
+          {review.counts.back + review.counts.changed > 0 && (
+            <p className="text-muted-foreground">Tick records to bring back only those, without restoring the rest.</p>
+          )}
+        </>
       )}
       {review.kinds.map((kind, i) => (
         <details key={kind.folder} open={i === 0} className="rounded-md border px-3 py-2" data-restore-kind={kind.folder}>
@@ -180,7 +373,19 @@ function ReviewBody({ review }: { review: RestoreReview }) {
           </summary>
           <ul className="mt-1 space-y-0.5">
             {kind.records.map((r) => (
-              <li key={r.uuid} className="flex gap-2" data-change={r.change}>
+              <li key={r.uuid} className="flex items-start gap-2" data-change={r.change}>
+                {r.change === "GONE" ? (
+                  <span className="w-4 shrink-0" aria-hidden="true" />
+                ) : (
+                  <input
+                    type="checkbox"
+                    className="mt-1 shrink-0"
+                    aria-label={`Bring back ${r.label}`}
+                    checked={chosen.has(refKey({ folder: kind.folder, uuid: r.uuid }))}
+                    disabled={onToggle == null}
+                    onChange={() => onToggle?.({ folder: kind.folder, uuid: r.uuid })}
+                  />
+                )}
                 <span className={`w-3 shrink-0 font-mono ${CHANGE_CLASS[r.change]}`} aria-hidden="true">
                   {CHANGE_MARK[r.change]}
                 </span>
@@ -271,18 +476,7 @@ function reviewNotes(review: RestoreReview): string[] {
   )
   const venue = review.venue && venueNote(review.venue, review.live)
   if (venue) notes.push(venue)
-  const addresses = review.addresses
-  if (addresses && addresses.copied > 0) {
-    notes.push(
-      `${addresses.copied} address${addresses.copied === 1 ? "" : "es"} this desk keeps for the venue come${addresses.copied === 1 ? "s" : ""} back to the show.`,
-    )
-  }
-  if (addresses && addresses.missing.length > 0) {
-    const n = addresses.missing.length
-    notes.push(
-      `${addresses.missing.join(", ")} come${n === 1 ? "s" : ""} back with no address on this desk. Set ${n === 1 ? "it" : "them"} in Universes after restoring.`,
-    )
-  }
+  notes.push(...addressNotes(review.addresses))
   if (review.project?.nameKept) {
     notes.push(`Another project is now called “${review.project.nameKept}”, so this show keeps its current name.`)
   }
@@ -298,6 +492,23 @@ function reviewNotes(review: RestoreReview): string[] {
       notes.push(`${last} The desk syncs before restoring.`)
       notes.push("This desk doesn't push, so the restore stays on this desk.")
     }
+  }
+  return notes
+}
+
+/** P7's two lines: the venue's addresses copied back, and the universes that come back with none. */
+function addressNotes(addresses: RestoreAddresses | null | undefined): string[] {
+  const notes: string[] = []
+  if (addresses && addresses.copied > 0) {
+    notes.push(
+      `${addresses.copied} address${addresses.copied === 1 ? "" : "es"} this desk keeps for the venue come${addresses.copied === 1 ? "s" : ""} back to the show.`,
+    )
+  }
+  if (addresses && addresses.missing.length > 0) {
+    const n = addresses.missing.length
+    notes.push(
+      `${addresses.missing.join(", ")} come${n === 1 ? "s" : ""} back with no address on this desk. Set ${n === 1 ? "it" : "them"} in Universes after restoring.`,
+    )
   }
   return notes
 }

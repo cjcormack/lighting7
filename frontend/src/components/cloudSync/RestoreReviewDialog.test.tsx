@@ -1,12 +1,27 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { CommitInfo, RestoreResult, RestoreReview } from '@/store/cloudSync'
+import type { BringBackSelection, CommitInfo, RestoreResult, RestoreReview } from '@/store/cloudSync'
 
 let review: RestoreReview | undefined
 let reviewError: unknown
 const restoreCalls = vi.fn()
 let restoreAnswers: Array<() => Promise<unknown>> = []
+const askCalls = vi.fn()
+const bringCalls = vi.fn()
+let askAnswers: Array<() => Promise<unknown>> = []
+let bringAnswers: Array<() => Promise<unknown>> = []
+
+function mutation(calls: (arg: unknown) => void, answers: () => Array<() => Promise<unknown>>) {
+  return () => [
+    (arg: unknown) => {
+      calls(arg)
+      const answer = answers().shift() ?? (() => Promise.reject(new Error('no answer queued')))
+      return { unwrap: answer }
+    },
+    { isLoading: false },
+  ]
+}
 
 vi.mock('@/store/cloudSync', () => ({
   RESTORE_NOTE_MAX_LENGTH: 200,
@@ -19,6 +34,8 @@ vi.mock('@/store/cloudSync', () => ({
     },
     { isLoading: false },
   ],
+  useCloudSyncBringBackSelectionMutation: mutation((arg) => askCalls(arg), () => askAnswers),
+  useCloudSyncBringBackMutation: mutation((arg) => bringCalls(arg), () => bringAnswers),
 }))
 
 const navigate = vi.fn()
@@ -105,6 +122,8 @@ beforeEach(() => {
   review = REVIEW
   reviewError = undefined
   restoreAnswers = []
+  askAnswers = []
+  bringAnswers = []
 })
 
 afterEach(() => {
@@ -280,5 +299,125 @@ describe('RestoreReviewDialog (sync-restore plan session 2)', () => {
       screen.getByText("The snapshot's venue version isn't on this desk. Import or sync the venue first. Commemoration Hall v3 (github.com/x/hall)"),
     ).toBeTruthy()
     expect(restoreButton().disabled).toBe(true)
+  })
+})
+
+const SELECTION: BringBackSelection = {
+  target: REVIEW.target,
+  token: 'pick-1',
+  label: 'Brought back from 3f2a91c',
+  records: [
+    { folder: 'cues', uuid: 'c1', noun: 'cue', label: 'Cue “Rose garden”', change: 'BACK', needed: false },
+    { folder: 'looks', uuid: 'l1', noun: 'Look', label: 'Look “Dawn”', change: 'BACK', needed: true },
+  ],
+  applied: false,
+}
+
+describe('RestoreReviewDialog: bringing chosen records back (sync-restore plan session 3)', () => {
+  it('offers a box for what comes back or changes back, and none for what goes', () => {
+    draw()
+    expect(screen.getByLabelText('Bring back Cue “Rose garden”')).toBeTruthy()
+    expect(screen.getByLabelText('Bring back Cue “Curse”')).toBeTruthy()
+    expect(screen.queryByLabelText('Bring back Cue “Spindle (new)”')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Bring back/ })).toBeNull()
+  })
+
+  it('asks the desk what the ticked records need, lists it, and brings it back as one change', async () => {
+    askAnswers.push(() => Promise.resolve(SELECTION))
+    bringAnswers.push(() => Promise.resolve({ ...SELECTION, applied: true, entryId: 'e-1' }))
+    draw()
+    fireEvent.click(screen.getByLabelText('Bring back Cue “Rose garden”'))
+    fireEvent.click(screen.getByRole('button', { name: 'Bring back 1…' }))
+    await screen.findByText('Also needed · 1')
+    expect(askCalls).toHaveBeenCalledWith({ projectId: 4, body: { sha: REVIEW.target.sha, records: [{ folder: 'cues', uuid: 'c1' }] } })
+    expect(screen.getByRole('heading').textContent).toMatch(/^Bring back from .+\?$/)
+    expect(document.querySelector('[data-bring-back="chosen"]')!.textContent).toContain('Cue “Rose garden”')
+    expect(document.querySelector('[data-bring-back="needed"]')!.textContent).toContain('Look “Dawn”')
+    expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bring back 2' }))
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(bringCalls).toHaveBeenCalledWith({
+      projectId: 4,
+      body: { sha: REVIEW.target.sha, records: [{ folder: 'cues', uuid: 'c1' }], token: 'pick-1' },
+    })
+    const [title, options] = toastSuccess.mock.calls[0] as [string, { description: string }]
+    expect(title).toMatch(/^Brought back 2 records from /)
+    expect(options.description).toContain('⌘Z takes it back')
+    expect(restoreCalls).not.toHaveBeenCalled()
+  })
+
+  it('goes back to the review from the selection', async () => {
+    askAnswers.push(() => Promise.resolve(SELECTION))
+    draw()
+    fireEvent.click(screen.getByLabelText('Bring back Cue “Rose garden”'))
+    fireEvent.click(screen.getByRole('button', { name: 'Bring back 1…' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Back' }))
+    expect((screen.getByLabelText('Bring back Cue “Rose garden”') as HTMLInputElement).checked).toBe(true)
+    expect(restoreButton()).toBeTruthy()
+  })
+
+  it('puts a stale answer’s selection in place, and brings back with its token', async () => {
+    const fresh: BringBackSelection = { ...SELECTION, token: 'pick-2', records: SELECTION.records.slice(0, 1) }
+    askAnswers.push(() => Promise.resolve(SELECTION))
+    bringAnswers.push(() => Promise.reject({ status: 409, data: { error: 'moved', code: 'RESTORE_REVIEW_STALE', selection: fresh } }))
+    bringAnswers.push(() => Promise.resolve({ ...fresh, applied: true }))
+    draw()
+    fireEvent.click(screen.getByLabelText('Bring back Cue “Rose garden”'))
+    fireEvent.click(screen.getByRole('button', { name: 'Bring back 1…' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Bring back 2' }))
+    await screen.findByText('The show changed since this was read. This is what bringing them back would do now.')
+    expect(onOpenChange).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Bring back 1' }))
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(bringCalls.mock.calls[1][0].body.token).toBe('pick-2')
+  })
+
+  it('says a refusal in the desk’s words and writes nothing', async () => {
+    askAnswers.push(() => Promise.resolve(SELECTION))
+    bringAnswers.push(() =>
+      Promise.reject({
+        status: 409,
+        data: { error: 'Look “Dawn” cannot be put back: Something else has taken its name or its place since', code: 'HISTORY_UNDO_BLOCKED' },
+      }),
+    )
+    draw()
+    fireEvent.click(screen.getByLabelText('Bring back Cue “Rose garden”'))
+    fireEvent.click(screen.getByRole('button', { name: 'Bring back 1…' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Bring back 2' }))
+    expect(await screen.findByText('Look “Dawn” cannot be put back: Something else has taken its name or its place since')).toBeTruthy()
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('RestoreReviewDialog: what a selection moves and the addresses it names', () => {
+  it('shows the live stage it moves and the universes it brings back with no address', async () => {
+    askAnswers.push(() =>
+      Promise.resolve({
+        ...SELECTION,
+        moves: ['The fixtures reload: Fixture “spot-3”'],
+        addresses: { copied: 0, missing: ['Universe 2'] },
+      }),
+    )
+    draw()
+    fireEvent.click(screen.getByLabelText('Bring back Cue “Rose garden”'))
+    fireEvent.click(screen.getByRole('button', { name: 'Bring back 1…' }))
+    await screen.findByText('Also needed · 1')
+    expect(document.querySelector('[data-bring-back-moves]')!.textContent).toContain('The fixtures reload: Fixture “spot-3”')
+    expect(document.querySelector('[data-bring-back-note]')!.textContent).toBe(
+      'Universe 2 comes back with no address on this desk. Set it in Universes after restoring.',
+    )
+  })
+
+  it('clears a refusal when going back to the review', async () => {
+    askAnswers.push(() => Promise.resolve(SELECTION))
+    bringAnswers.push(() => Promise.reject({ status: 409, data: { error: 'Look “Dawn” cannot be put back: taken', code: 'HISTORY_UNDO_BLOCKED' } }))
+    draw()
+    fireEvent.click(screen.getByLabelText('Bring back Cue “Rose garden”'))
+    fireEvent.click(screen.getByRole('button', { name: 'Bring back 1…' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Bring back 2' }))
+    await screen.findByText('Look “Dawn” cannot be put back: taken')
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.queryByText('Look “Dawn” cannot be put back: taken')).toBeNull()
   })
 })

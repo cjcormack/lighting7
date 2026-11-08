@@ -322,8 +322,8 @@ written, and its row marked *in review* with its branch. A session's PR is title
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
 | 1 | Review and restore on the desk | merged | `claude/relaxed-planck-rbdr44` | [#393](https://github.com/cjcormack/lighting7/pull/393) | `7ac6eaa` |
-| 2 | The History panel and the review | in review | `claude/sync-restore-fy9kx9` | | |
-| 3 | Bring back selected records | planned | | | |
+| 2 | The History panel and the review | merged | `claude/sync-restore-fy9kx9` | [#396](https://github.com/cjcormack/lighting7/pull/396) | `60c7a18` |
+| 3 | Bring back selected records | in review | `claude/dazzling-brown-snoxsv` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -416,7 +416,8 @@ the next; whoever merges the last fills its own.
 
 ### Session 3 — Bring back selected records
 
-**Needs:** operator: sessions 1 and 2 have been used to restore a real show.
+**Needs:** operator: sessions 1 and 2 have been used to restore a real show. *Waived by the operator
+2026-11-08: session 3 ran before that restore.*
 
 - **Selection:** a check box beside each `BACK` and `CHANGED` record in the review. A chosen record's
   image names other records by uuid; each such uuid that is a record in *then* and not in *now* joins
@@ -438,6 +439,38 @@ the next; whoever merges the last fills its own.
   root `CLAUDE.md`; `FU-MANUAL-RESTORE-S3`.
 - **Local:** `./gradlew compileTestKotlin`, then `./gradlew test` for the `sync`, `history` and
   `routes` packages, and `npm run check:quick`.
+- **As built**, where the code asked for something the section does not say:
+  - *Also needed* follows more than the forward edge. A cue names none of its rows, layers, FX,
+    triggers or stack entries, and a stack none of its entries, so the forward rule alone would bring a
+    cue back empty and loose. A record the target holds and the show lacks joins when a selected one
+    names it by uuid, when it is part of a selected one — a cue's children and entries, an entry's
+    anchors, and a stack's entries only when the stack itself was ticked (Chris, 2026-11-08: a cue of
+    a deleted stack brings the stack back with its own place alone) — and a prompt book joins any
+    anchor or note in it, which names no book. Only `BACK` records join; a `CHANGED` part is ticked on
+    its own.
+  - A reference is read by field: a `…Uuid` field names its folder where the name says it
+    (`cueUuid` → cues), so a cue's uuid, which its first entry shares, does not drag that entry back
+    from a layer; `…Uuids` lists and each `pal:` reference in a value (Palette Steps' list among them,
+    read by `parsePaletteColourRefUuid`) count too. A reference by key brings nothing.
+  - Decided by Chris, 2026-11-08: P7 holds as for a restore (the venue's overrides copied, a universe
+    left with no address named in the selection's `addresses`); and on the live project with a cue
+    held the dry run answers undo's confirm's `moves`, shown above *Bring back*, which is the
+    confirmation — no second prompt.
+  - Like the restore, it copies the snapshot's prompt-book PDFs and scene images into the stores once
+    written. A brought-back stack's entries are exported beside it, so its renumber reads their
+    numbers and the check would see one move; a playhead it clears is announced, as undo's is.
+  - Row ids: `ProjectImporter.restore` takes `keepRowIds = false`, so a record not found is inserted
+    with a fresh id; undo's calls are unchanged.
+  - The selection is a dry run of the same route (`dryRun: true`), which answers it and the token; the
+    write recomputes both in its own transaction, and a stale one answers `RESTORE_REVIEW_STALE` with
+    `selection` in the body. The token covers each record's hashes now and then, not only its change.
+  - Refusals the section names answer 409 `HISTORY_UNDO_BLOCKED` with `record` and `reason`, undo's
+    body. A `GONE`, unchanged or project record, an empty choice and a folder outside
+    `RESTORABLE_FOLDERS` are 400 `RESTORE_INVALID`. A script or FX definition is held to remote
+    scripts, as an undo of one is.
+  - It takes the project's sync lock, since it reads the working tree's repo, and writes no activity
+    log row: it is a show-history entry, not a sync.
+  - Run before the Needs line was met, which the operator waived (above).
 
 ## 6. Operator checks
 

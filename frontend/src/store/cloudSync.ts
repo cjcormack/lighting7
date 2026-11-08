@@ -285,6 +285,48 @@ export interface RestoreResult {
   notes: string[]
 }
 
+/** One record of a snapshot, as the review lists it. */
+export interface BringBackRecordRef {
+  folder: string
+  uuid: string
+}
+
+/** `POST …/sync/restore/records`: the records chosen; `token` the selection's, unless `dryRun`. */
+export interface BringBackRequest {
+  sha: string
+  records: BringBackRecordRef[]
+  token?: string | null
+  dryRun?: boolean
+}
+
+/** A record bringing back puts back: one chosen, or `needed` by one chosen. */
+export interface BringBackRecord {
+  folder: string
+  uuid: string
+  noun: string
+  label: string
+  change: RestoreChange
+  needed: boolean
+}
+
+/**
+ * What bringing the chosen records back puts back, chosen first, and its token; `applied` once
+ * written, as the show-history entry `entryId`.
+ */
+export interface BringBackSelection {
+  target: CommitInfo
+  token: string
+  /** The show-history entry's name, *Brought back from 3f2a91c*. */
+  label: string
+  records: BringBackRecord[]
+  /** The venue's address overrides copied to the show, and the universes that come back with none here. */
+  addresses?: RestoreAddresses | null
+  /** What it moves on the live stage while a cue is held, in undo's words; a dry run's only. */
+  moves?: string[]
+  applied: boolean
+  entryId?: string | null
+}
+
 /** A restore note's limit, the desk's `MAX_NOTE_LENGTH`. */
 export const RESTORE_NOTE_MAX_LENGTH = 200
 
@@ -532,6 +574,24 @@ export const cloudSyncApi = restApi.injectEndpoints({
       ],
     }),
 
+    /** What bringing the chosen records back would put back: the same route as a dry run, writing nothing. */
+    cloudSyncBringBackSelection: build.mutation<BringBackSelection, { projectId: number; body: BringBackRequest }>({
+      query: ({ projectId, body }) => ({
+        url: `projects/${projectId}/sync/restore/records`,
+        method: 'POST',
+        body: { ...body, dryRun: true },
+      }),
+    }),
+    cloudSyncBringBack: build.mutation<BringBackSelection, { projectId: number; body: BringBackRequest }>({
+      query: ({ projectId, body }) => ({
+        url: `projects/${projectId}/sync/restore/records`,
+        method: 'POST',
+        body: { ...body, dryRun: false },
+      }),
+      // Records written as one show-history entry, which the next snapshot or sync carries.
+      invalidatesTags: ['CloudSyncStatus', 'History', 'SceneImage', ...SHOW_RECORD_TAGS],
+    }),
+
     // ─── Phase 5 conflict-session endpoints ─────────────────────────
 
     cloudSyncConflicts: build.query<ConflictsResponse, number>({
@@ -602,6 +662,8 @@ export const {
   useCloudSyncRunMutation,
   useCloudSyncRestoreReviewQuery,
   useCloudSyncRestoreMutation,
+  useCloudSyncBringBackSelectionMutation,
+  useCloudSyncBringBackMutation,
   useCloudSyncConflictsQuery,
   useCloudSyncResolveMutation,
   useCloudSyncApplyMutation,

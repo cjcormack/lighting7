@@ -1043,7 +1043,10 @@ only, shows only) extract an old commit's tree, import it with `ProjectImporter.
 snapshot the result as a new commit on top (`sync/SnapshotRestore.kt`): its review is that import rolled
 back and compared record by record in today's format, so a field the exporter and importer carry is
 restored without any work of the restore's own. The trailer `Restored-From: {sha}` is
-`CommitInfo.restoredFrom`. See `docs/sync-engineering.md` §"Restoring a snapshot".
+`CommitInfo.restoredFrom`. `POST …/sync/restore/records` brings only chosen records back, with every
+record they need, through undo's upsert with fresh row ids, as one show-history entry ⌘Z takes back and
+no commit of its own. See `docs/sync-engineering.md` §"Restoring a snapshot" and §"Bringing records
+back".
 
 **Project cloning is derived, not separate.** `POST /project/{id}/clone` runs
 export → fresh UUIDs → import (`sync/ProjectCloner.kt`), so wiring a table

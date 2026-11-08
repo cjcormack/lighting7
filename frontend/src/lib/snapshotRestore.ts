@@ -1,4 +1,4 @@
-import type { RestoreReview, SyncErrorCode } from '@/store/cloudSync'
+import type { BringBackSelection, RestoreReview, SyncErrorCode } from '@/store/cloudSync'
 import { formatError } from './formatError'
 import { errorCode } from './venueSyncRefusal'
 
@@ -35,4 +35,11 @@ export function staleReview(err: unknown): RestoreReview | null {
   if (errorCode(err) !== 'RESTORE_REVIEW_STALE') return null
   const review = (err as { data?: { review?: unknown } }).data?.review
   return review != null && typeof review === 'object' ? (review as RestoreReview) : null
+}
+
+/** The new selection a bring-back's `RESTORE_REVIEW_STALE` answer carries, or null for any other error. */
+export function staleSelection(err: unknown): BringBackSelection | null {
+  if (errorCode(err) !== 'RESTORE_REVIEW_STALE') return null
+  const selection = (err as { data?: { selection?: unknown } }).data?.selection
+  return selection != null && typeof selection === 'object' ? (selection as BringBackSelection) : null
 }

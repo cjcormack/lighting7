@@ -10,6 +10,7 @@ import org.eclipse.jgit.lib.Repository
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.history.WriteOrigin
 import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.telemetry.TraceSampling
 import uk.me.cormack.lighting7.telemetry.Tracing
@@ -180,6 +181,22 @@ class RemoteSyncEngine(
             override suspend fun reload(projectId: Int) = reloadShowIfActive(projectId)
         }
         snapshotRestore.restore(engine, projectId, projectUuid, installUuid, installFriendlyName, sha, token, note)
+    }
+
+    /**
+     * Bring records back from [sha] (sync-restore plan session 3), under the project lock so no sync
+     * moves the working tree while the snapshot is read.
+     */
+    internal suspend fun bringBack(
+        projectId: Int,
+        sha: String,
+        records: List<BringBackRecordRef>,
+        token: String?,
+        dryRun: Boolean,
+        origin: WriteOrigin,
+        scriptsAllowed: Boolean,
+    ): BringBackOutcome = withProjectLock(projectId, failEvent = null) {
+        snapshotRestore.bringBack(projectId, sha, records, token, dryRun, origin, scriptsAllowed)
     }
 
     suspend fun applySession(
