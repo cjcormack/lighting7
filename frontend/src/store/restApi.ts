@@ -105,6 +105,34 @@ export const REST_TAG_TYPES = ['Channel', 'Fixture', 'Script', 'Project', 'Proje
 
 export type RestTagType = (typeof REST_TAG_TYPES)[number]
 
+/** The caches a project's stored records sit in: refetched when an undo, a redo or a snapshot restore puts some back. */
+export const SHOW_RECORD_TAGS = [
+  'Cue',
+  'CueList',
+  'CueStackList',
+  'CueStackTimeline',
+  'CueSlotList',
+  'Look',
+  'LookList',
+  'PaletteList',
+  'BuskPage',
+  'BuskRig',
+  'Patch',
+  'UniverseConfig',
+  'GroupList',
+  'Fixture',
+  'SpeedMaster',
+  'SpeedMasterList',
+  'Script',
+  'PromptBook',
+  'Rigging',
+  'StageRegion',
+  'StageElement',
+  'StageViewpoint',
+  'SurfaceBinding',
+  'Project',
+] as const
+
 export const restApi = createApi({
   baseQuery: baseQueryWithAuthCheck,
   tagTypes: REST_TAG_TYPES,

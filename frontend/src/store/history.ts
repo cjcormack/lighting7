@@ -1,4 +1,4 @@
-import { restApi } from './restApi'
+import { restApi, SHOW_RECORD_TAGS } from './restApi'
 import type { FetchBaseQueryError } from '@reduxjs/toolkit/query/react'
 import { lightingApi } from '../api/lightingApi'
 import { EMPTY_HISTORY, type HistorySource, type HistoryState } from '../api/historyApi'
@@ -186,34 +186,6 @@ export function entriesForRequests(page: HistoryPage, requestIds: readonly strin
   const wanted = new Set(requestIds)
   return page.rows.filter((row) => row.kind === 'SHOW' && row.requestIds.some((id) => wanted.has(id)))
 }
-
-/** The caches a show entry's records may sit in, refetched when an undo or redo puts some back. */
-const SHOW_RECORD_TAGS = [
-  'Cue',
-  'CueList',
-  'CueStackList',
-  'CueStackTimeline',
-  'CueSlotList',
-  'Look',
-  'LookList',
-  'PaletteList',
-  'BuskPage',
-  'BuskRig',
-  'Patch',
-  'UniverseConfig',
-  'GroupList',
-  'Fixture',
-  'SpeedMaster',
-  'SpeedMasterList',
-  'Script',
-  'PromptBook',
-  'Rigging',
-  'StageRegion',
-  'StageElement',
-  'StageViewpoint',
-  'SurfaceBinding',
-  'Project',
-] as const
 
 export const historySlice = restApi.injectEndpoints({
   endpoints: (build) => ({

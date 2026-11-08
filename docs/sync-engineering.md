@@ -2069,6 +2069,12 @@ Step 4 compares a script's body as git stores it, with CRLF line endings made LF
 `eol=lf`. No table, column or `formatVersion` change: a restore commit is
 an ordinary snapshot with a trailer in its message.
 
+**On the desk**, each History row's menu (`frontend/src/components/cloudSync/HistoryPanel.tsx`) has
+*Review and restore…*, off on the newest row and absent on a venue's, and *Copy commit id*; a restore's
+commit is marked with the snapshot it went back to. `RestoreReviewDialog.tsx` draws the review, takes
+the note, puts a `RESTORE_REVIEW_STALE` answer's review in its place, and toasts the done restore with
+*Undo*, which opens the review of `before` through the Sync tab's `?review={sha}`.
+
 ## Remote sync (Phase 4)
 
 Phase 4 turns the local-only working tree into a sharing surface: one project,

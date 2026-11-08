@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-RESTORE-S2`](#fu-manual-restore-s2) | restoring from the History panel: the review's counts match what changed, the toast's *Undo* puts it back, and a restore with the network off goes out on the next sync | Snapshot restore S2, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S2`](#fu-manual-busk-stack-s2) | Carabossy on Replaces takes the front wash from 80 % to 0, holds the movers' chase back, and fades the kitchen back on release with the chase growing back in phase; a song on Adds lifts heads over the base and never darkens them; a GO on Act 1 during Carabossy lands under her | Busk stack session 2, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S1`](#fu-manual-busk-stack-s1) | a song stack out of the running order: Act 1's last GO goes to Act 2, not the song; the song's own GO and a follow off its last cue release it over its release time; the Show view's stop fades | Busk stack session 1, 2026-11-07 |
 | [`FU-MANUAL-RESTORE-S1`](#fu-manual-restore-s1) | restoring an older snapshot through the API while the show runs crossfades without a dip, the other desk takes it on *Sync now*, and restoring `before` puts it back | Snapshot restore S1, 2026-11-08 |
@@ -160,6 +161,31 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-RESTORE-S2`
+
+**What it proves**: *the History panel restores a snapshot, says truly what it will change, and takes
+it back* (snapshot-restore plan session 2).
+
+**Why it is here**: the component tests draw the dialog over a mocked store; only a real show checks
+that the review's groups name what an operator changed, and only a desk with its network off shows the
+restore waiting for the next sync.
+
+**Test**, on a show synced between two desks (A and B):
+
+1. **Review.** On A, change a cue's colour, delete a cue and add a Look, then *Take snapshot*. In
+   Project settings → Sync → History, open the row before it: *Review and restore…*. The counts are
+   1 come back, 1 go, 1 change back (plus any you did not mean), each named in its group; the newest
+   row's *Review and restore…* is off.
+2. **Restore.** Add a note and press *Restore*. The toast says *Restored to …*, *pushed to the repo*;
+   the History list's newest row is marked *Restore of …* and carries the note.
+3. **Undo.** Press the toast's *Undo*: the review lists the same changes the other way round, and
+   restoring it puts the cue's colour, the cue and the Look back as you had them.
+4. **Offline.** Take A off the network and restore an older row: the review and the restore work, the
+   toast's notes say the repository couldn't be reached, and with the network back *Sync now* pushes it;
+   B takes it on its next sync.
 
 ---
 
