@@ -392,14 +392,15 @@ class ProjectCloneTest {
             assertNotEquals(source.buskPages.single().uuid, page.uuid, "clone must mint a fresh page identity")
 
             val pads = page.columns.flatMap { it.banks }.flatMap { it.pads }
-            assertEquals(8, pads.size)
+            assertEquals(9, pads.size)
             assertTrue(
                 pads.all { pad ->
-                    (pad.palette?.project?.id ?: pad.look?.project?.id ?: pad.cue?.project?.id) == clone.id
+                    (pad.palette?.project?.id ?: pad.look?.project?.id ?: pad.cue?.project?.id ?: pad.cueStack?.project?.id) == clone.id
                 },
                 "every pad points at a record of the clone, never of the source",
             )
             assertEquals(2, pads.count { it.palette?.name == "amber-key" }, "the record on two pads is on two pads of the clone")
+            assertEquals("song-1", pads.single { it.cueStack != null }.cueStack!!.name, "the stack pad names the clone's busk stack")
             assertEquals(clone.id, clone.cueSlots.single { it.look != null }.look!!.project.id, "the Look slot points at the clone's Look")
         }
     }

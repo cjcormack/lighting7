@@ -12,6 +12,11 @@ const plan: { data: StackMoveInDarkPlan | undefined } = { data: undefined }
 vi.mock('@/store/cueStacks', () => ({ useCueStackMoveInDarkQuery: () => plan }))
 vi.mock('@/store/scenery', () => ({ useSetStackSceneryMutation: () => [vi.fn()] }))
 vi.mock('@/components/scenery/SceneryEditor', () => ({ SceneryEditor: () => null }))
+vi.mock('@/components/busking/AddToBuskPageMenu', () => ({
+  AddToBuskPageMenu: ({ record }: { record: { kind: string; id: number } }) => (
+    <div data-testid="busk-append">{`${record.kind}:${record.id}`}</div>
+  ),
+}))
 
 import { CueStackForm } from './CueStackForm'
 
@@ -221,5 +226,36 @@ describe('CueStackForm · the running order and Release', () => {
     fireEvent.click(save())
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     expect(lastSave()).toMatchObject({ inRunningOrder: true, overShow: 'ADDS' })
+  })
+})
+
+/** A stack pad may name a busk stack only (lighting7 busk-stack plan D9, D11). */
+describe('CueStackForm · busk pages', () => {
+  it('offers *Add to busk page* for a stored busk stack, and not for one in the running order', () => {
+    draw({ ...STACK, inRunningOrder: false, releaseAtEnd: true })
+    expect(screen.getByTestId('busk-append')).toHaveTextContent('CUE_STACK:7')
+    cleanup()
+
+    draw(STACK)
+    fireEvent.click(screen.getByRole('switch', { name: 'In the running order' }))
+    expect(screen.queryByTestId('busk-append')).toBeNull()
+  })
+
+  it('asks before putting a stack with pads back into the running order, and resends with force', async () => {
+    const refused = { status: 409, data: { code: 'CUE_STACK_ON_PADS', error: 'on pads', pages: ['Act 1', 'Act 2'] } }
+    const save409 = vi.fn<(input: unknown, options?: { force?: boolean }) => Promise<void>>((_input, options) =>
+      options?.force ? Promise.resolve() : Promise.reject(refused),
+    )
+    draw({ ...STACK, name: 'Song 3', inRunningOrder: false, releaseAtEnd: true }, { onSave: save409 })
+    fireEvent.click(screen.getByRole('switch', { name: 'In the running order' }))
+    fireEvent.click(save())
+
+    expect(await screen.findByText(/is on busk pages ‘Act 1’ and ‘Act 2’/)).toBeTruthy()
+    expect(onOpenChange).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Take the pads off' }))
+    await waitFor(() => expect(save409).toHaveBeenCalledTimes(2))
+    expect(save409.mock.calls[1][1]).toEqual({ force: true })
+    expect(save409.mock.calls[1][0]).toMatchObject({ inRunningOrder: true })
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })
 })

@@ -1,4 +1,4 @@
-import type { BuskPadKind } from '@/api/buskApi'
+import type { HeldKind } from '@/api/buskApi'
 import type { BuskPaletteDragData } from '@/components/busking/buskDnd'
 
 /**
@@ -147,7 +147,7 @@ export function screenToClient(point: ScreenPoint, frame: WindowFrame): ClientPo
 
 /** What `hand.pickUp` takes — the record a drag is carrying, as the desk addresses it. */
 export interface EdgeDragRef {
-  kind: BuskPadKind
+  kind: HeldKind
   id: number
 }
 
@@ -173,6 +173,8 @@ export function edgeDragRef(activeData: unknown): EdgeDragRef | null {
   const record = drag.record
   if (record.kind === 'PALETTE') return { kind: 'PALETTE', id: record.palette.id }
   if (record.kind === 'LOOK') return { kind: 'LOOK', id: record.look.id }
+  // A stack pad stays where it is placed (lighting7 busk-stack plan D9): no hand, so no edge drag.
+  if (record.kind === 'CUE_STACK') return null
   return { kind: 'CUE', id: record.cue.id }
 }
 

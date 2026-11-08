@@ -807,6 +807,8 @@ class State(val config: ApplicationConfig) {
                 BuskPadKind.PALETTE -> DaoPalette.findById(id)?.project?.id?.value
                 BuskPadKind.LOOK -> DaoLook.findById(id)?.project?.id?.value
                 BuskPadKind.CUE -> DaoCue.findById(id)?.project?.id?.value
+                // The hand never holds a stack pad's stack.
+                BuskPadKind.CUE_STACK -> null
             } == projectId
         }
     }.getOrDefault(true)
@@ -1009,6 +1011,9 @@ class State(val config: ApplicationConfig) {
             cueLooseHeldProvider = { cueId ->
                 runCatching { show.cueStackManager.holds.looseHeld(cueId) }.getOrDefault(false)
             },
+            stackRunningProvider = { stackId ->
+                runCatching { show.cueStackManager.isStackActive(stackId) }.getOrDefault(false)
+            },
             buskRefsProvider = ::buildBuskRefs,
             stackFxAmountsProvider = { show.cueStackManager.fxAmounts },
             stackIdResolver = { stackUuid -> show.cueStackManager.stackIdForUuid(database, stackUuid) },
@@ -1036,6 +1041,7 @@ class State(val config: ApplicationConfig) {
                         BuskPadKind.LOOK -> pad.uuid to PadRef.Layer(pad.look!!.uuid, isLook = true)
                         // The pad names the cue and nothing else: a press holds it loose (cue model plan D6).
                         BuskPadKind.CUE -> pad.uuid to PadRef.Cue(pad.cue!!.id.value)
+                        BuskPadKind.CUE_STACK -> pad.uuid to PadRef.Stack(pad.cueStack!!.id.value)
                         // A malformed pad is absent everywhere it is read, an LED included.
                         null -> null
                     }
@@ -1139,7 +1145,7 @@ class State(val config: ApplicationConfig) {
                     // collector must not have that escape it, so each is best-effort.
                     deskSelection.prune()
                     runCatching { buskPageState.reconcile() }
-                    BuskPadKind.entries.forEach { kind -> runCatching { handState.reconcile(kind) } }
+                    BuskPadKind.entries.filter { it != BuskPadKind.CUE_STACK }.forEach { kind -> runCatching { handState.reconcile(kind) } }
                 } else {
                     // Before the publisher rebuilds: a selection naming the old project's heads must
                     // not survive into the new show's index, and an encoder bank pointing at an
@@ -1512,6 +1518,10 @@ class State(val config: ApplicationConfig) {
         // cloud-p1 plan step 13: the tunnel's and the desk's OAuth server's tables and columns dropped,
         // backed up first when a client or grant goes. After step 12. `RetiredRemoteAccessMigration.kt`.
         retiredRemoteAccess = RetiredRemoteAccessMigration.runIfNeeded(ds, database, dbPath)?.legacy == true
+
+        // busk-stack plan step 14: `busk_pads` rebuilt so its CHECK admits a pad naming a cue stack,
+        // backed up first when it holds pads. After step 13. `BuskPadStackMigration.kt`.
+        BuskPadStackMigration.runIfNeeded(ds, database, dbPath)
 
         databaseInitWindow = startedAt to java.time.Instant.now()
         return database

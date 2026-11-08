@@ -166,7 +166,7 @@ class ProjectRoundTripTest {
             if (!path.endsWith(".json")) continue
             for (name in old) assertTrue(name !in text, "$path says $name")
         }
-        assertEquals(FormatVersionJson(formatVersion = 51, minReader = 51), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+        assertEquals(FormatVersionJson(formatVersion = 52, minReader = 52), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
     }
 
     /**
@@ -1073,7 +1073,7 @@ class ProjectRoundTripTest {
         val banks = page.columns.flatMap { it.banks }
         assertEquals(listOf("keys", "moves", "cues", "fx"), banks.map { it.name })
         assertEquals(listOf("WRAP", "COLUMN", "WRAP", "WRAP"), banks.map { it.flow })
-        assertEquals(8, banks.sumOf { it.pads.size })
+        assertEquals(9, banks.sumOf { it.pads.size })
         val keys = banks.first()
         assertTrue(keys.solo)
         assertEquals(listOf("paletteUuid", "lookUuid", "cueUuid"), keys.pads.map { pad ->
@@ -1084,6 +1084,36 @@ class ProjectRoundTripTest {
             stream.toList().map { canonicalDecode(CueSlotJson.serializer(), Files.readString(it)) }
         }
         assertEquals(1, slots.count { it.lookUuid != null }, "the Look slot travels")
+    }
+
+    /**
+     * v52: a stack pad (busk-stack plan D9) names its busk stack by uuid and comes back on it; a v51
+     * reader, which would drop it as naming nothing, refuses the archive.
+     */
+    @Test
+    fun `a stack pad exports by its stack's uuid and imports onto it`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val page = canonicalDecode(BuskPageJson.serializer(), Files.list(exportDirA.resolve("buskPages")).use { it.findFirst().get() }.let(Files::readString))
+        val stackPad = page.columns.flatMap { it.banks }.flatMap { it.pads }.single { it.cueStackUuid != null }
+        assertEquals(listOf(null, null, null), listOf(stackPad.paletteUuid, stackPad.lookUuid, stackPad.cueUuid))
+        val songUuid = transaction(state.database) {
+            uk.me.cormack.lighting7.models.DaoCueStack.all().single { it.name == "song-1" }.uuid.toString()
+        }
+        assertEquals(songUuid, stackPad.cueStackUuid)
+        val format = canonicalDecode(FormatVersionJson.serializer(), Files.readString(exportDirA.resolve("formatVersion.json")))
+        assertTrue(format.minReader >= 52, "a v51 reader, which would drop the stack pad, refuses it")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 52)
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null).projectId
+        transaction(state.database) {
+            val pad = uk.me.cormack.lighting7.models.DaoBuskPad.all().single { it.uuid.toString() == stackPad.uuid }
+            assertEquals(uk.me.cormack.lighting7.models.BuskPadKind.CUE_STACK, pad.kind)
+            assertEquals("song-1", pad.cueStack!!.name)
+            assertEquals(imported, pad.cueStack!!.project.id.value)
+        }
     }
 
     /**
@@ -1448,7 +1478,7 @@ class ProjectRoundTripTest {
             canonicalDecode(BuskPageJson.serializer(), Files.readString(stream.findFirst().get()))
         }
         val banks = page.columns.flatMap { it.banks }
-        assertEquals(7, banks.sumOf { it.pads.size }, "one pad fewer, nothing else lost")
+        assertEquals(8, banks.sumOf { it.pads.size }, "one pad fewer, nothing else lost")
         assertEquals(listOf("keys", "moves", "cues", "fx"), banks.map { it.name })
         assertEquals(0, banks.first { it.name == "keys" }.pads.count { it.lookUuid != null }, "the dropped pad was the keys bank's Look")
         assertEquals(2, banks.first { it.name == "keys" }.pads.size)

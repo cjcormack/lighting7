@@ -2,7 +2,7 @@ import { InternalApiConnection, InternalEventType } from './internalApi'
 import { Subscription } from './subscription'
 import { createWsSubscribable } from './wsSubscriptionFactory'
 import { sendGesture } from './wsGesture'
-import type { BuskCue, BuskPadKind } from './buskApi'
+import type { BuskCue, HeldKind } from './buskApi'
 import type { LookSummary } from './looksApi'
 import type { PaletteSummary } from './palettesApi'
 import { parseSelectionSource, type SelectionSource } from './selectionApi'
@@ -45,7 +45,7 @@ import { parseSelectionSource, type SelectionSource } from './selectionApi'
 
 /** What the desk is holding. Exactly one of [palette] / [look] / [cue] is set, matching [kind]. */
 export interface HeldRecord {
-  kind: BuskPadKind
+  kind: HeldKind
   /** The record's int id **in the current project** — what every place mutation takes. */
   id: number
   /** The record's uuid, as a string. What a guarded [HandWsApi.drop] names. */
@@ -91,7 +91,7 @@ export interface HandWsApi {
    * for the pick-up, and cancelling for a frame that never arrived would take the gesture away and
    * give nothing back.
    */
-  pickUp(kind: BuskPadKind, id: number): boolean
+  pickUp(kind: HeldKind, id: number): boolean
   /**
    * Let go.
    *

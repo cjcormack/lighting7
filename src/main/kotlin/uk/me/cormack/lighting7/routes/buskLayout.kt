@@ -62,7 +62,7 @@ internal fun deleteBuskPageContents(page: DaoBuskPage) {
 }
 
 /**
- * Delete every pad that presses the named record — a template, a Look or a cue — and return the
+ * Delete every pad that presses the named record — a template, a Look, a cue or a stack — and return the
  * ids of the pages that lost one, so the caller can fire `buskLayoutChanged` for exactly those
  * after its transaction commits.
  *
@@ -74,12 +74,14 @@ internal fun deleteBuskPadsReferencing(
     paletteId: Int? = null,
     lookId: Int? = null,
     cueId: Int? = null,
+    cueStackId: Int? = null,
 ): Set<Int> {
-    require(listOfNotNull(paletteId, lookId, cueId).size == 1) { "exactly one record id" }
+    require(listOfNotNull(paletteId, lookId, cueId, cueStackId).size == 1) { "exactly one record id" }
     val pads = when {
         paletteId != null -> DaoBuskPad.find { DaoBuskPads.palette eq paletteId }
         lookId != null -> DaoBuskPad.find { DaoBuskPads.look eq lookId }
-        else -> DaoBuskPad.find { DaoBuskPads.cue eq cueId!! }
+        cueId != null -> DaoBuskPad.find { DaoBuskPads.cue eq cueId }
+        else -> DaoBuskPad.find { DaoBuskPads.cueStack eq cueStackId!! }
     }.toList()
     val pageIds = pads.mapTo(mutableSetOf()) { it.bank.column.page.id.value }
     pads.forEach { it.delete() }
@@ -113,6 +115,7 @@ internal fun buskPageCountsFor(kind: BuskPadKind, ids: Collection<Int>): Map<Int
         BuskPadKind.PALETTE -> DaoBuskPads.palette
         BuskPadKind.LOOK -> DaoBuskPads.look
         BuskPadKind.CUE -> DaoBuskPads.cue
+        BuskPadKind.CUE_STACK -> DaoBuskPads.cueStack
     }
     val pads = DaoBuskPad.find { recordColumn inList list }.toList()
     if (pads.isEmpty()) return emptyMap()

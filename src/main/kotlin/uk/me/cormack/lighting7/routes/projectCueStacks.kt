@@ -146,6 +146,8 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val manager = state.show.cueStackManager
             // Set when the write moves the stack between the show's band and the busk band (D5).
             var bandNow: Boolean? = null
+            // Pages whose stack pads the write renamed or took off, announced once it commits.
+            var padPages: Set<Int> = emptySet()
             val details = transaction(state.database) {
                 val stack = DaoCueStack.findById(resource.stackId) ?: return@transaction null
                 if (stack.project.id != project.id) return@transaction null
@@ -166,6 +168,15 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     if (stored.inRunningOrder && !runSettings.inRunningOrder && project.activeStackId == stack.id.value) {
                         return@transaction Result.failure(StackIsPlayhead(stack.name))
                     }
+                    // Back into the running order with pads (D11): asked first, `?force=true` takes them off.
+                    if (!stored.inRunningOrder && runSettings.inRunningOrder) {
+                        val onPages = buskPageNamesHoldingStack(stack.id.value)
+                        if (onPages.isNotEmpty()) {
+                            if (!resource.force) return@transaction Result.failure(StackOnPads(stack.name, onPages))
+                            padPages = deleteBuskPadsReferencing(cueStackId = stack.id.value)
+                        }
+                    }
+                    if (stack.name != input.name) padPages = padPages + buskPageIdsHoldingStack(stack.id.value)
                     stack.name = input.name
                     stack.runSettings = runSettings
                     if (stored.inRunningOrder != runSettings.inRunningOrder) bandNow = runSettings.inRunningOrder
@@ -177,6 +188,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 return@withCurrentProject when (it) {
                     is MoveInDarkInvalid -> call.respondMoveInDarkInvalid(it.cause ?: it)
                     is StackIsPlayhead -> call.respond(HttpStatusCode.Conflict, ErrorResponse(it.message!!, CODE_CUE_STACK_IS_PLAYHEAD))
+                    is StackOnPads -> call.respond(HttpStatusCode.Conflict, CueStackOnPadsResponse(it.message!!, pages = it.pages))
                     else -> call.respondCueStackInvalid(it)
                 }
             }
@@ -187,6 +199,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 if (manager.isStackActive(resource.stackId)) manager.runState.publishRunState(state, resource.stackId)
                 state.show.moveInDark.onStackSettingsChanged(resource.stackId)
                 state.show.fixtures.cueStackListChanged()
+                if (padPages.isNotEmpty()) state.show.fixtures.buskLayoutChanged(padPages.toList())
                 call.respond(details)
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
@@ -706,6 +719,8 @@ data class ProjectCueStackResource(
     val stackId: Int,
     /** DELETE: also delete the cues the stack leaves in no stack (cue model plan D17). */
     val deleteLooseCues: Boolean = false,
+    /** PUT: put a busk stack back into the running order though pads name it, taking them off (D11). */
+    val force: Boolean = false,
 )
 
 @Resource("/reorder")
@@ -1049,6 +1064,26 @@ private class MoveInDarkInvalid(cause: Throwable) : Exception(cause.message, cau
 private class StackIsPlayhead(name: String) :
     Exception("'$name' is the show's live stack: stop the show or move the playhead before taking it out of the running order")
 
+private class StackOnPads(name: String, val pages: List<String>) :
+    Exception("'$name' is on busk ${if (pages.size == 1) "page" else "pages"} ${pages.joinToString { "'$it'" }}: putting it back into the running order takes its pads off")
+
+/** 409 `CUE_STACK_ON_PADS` (busk-stack plan D11): the pages holding a pad for the stack, by name, in page order. */
+@Serializable
+internal data class CueStackOnPadsResponse(
+    val error: String,
+    val code: String = CODE_CUE_STACK_ON_PADS,
+    val pages: List<String>,
+)
+
+/** The pages holding a pad for [stackId]. Inside the caller's transaction. */
+private fun buskPageIdsHoldingStack(stackId: Int): Set<Int> =
+    DaoBuskPad.find { DaoBuskPads.cueStack eq stackId }.mapTo(HashSet()) { it.bank.column.page.id.value }
+
+private fun buskPageNamesHoldingStack(stackId: Int): List<String> {
+    val ids = buskPageIdsHoldingStack(stackId)
+    return DaoBuskPage.find { DaoBuskPages.id inList ids }.sortedWith(compareBy({ it.sortOrder }, { it.name })).map { it.name }
+}
+
 /** 400 `MOVE_IN_DARK_INVALID`, naming every problem. */
 private suspend fun io.ktor.server.application.ApplicationCall.respondMoveInDarkInvalid(error: Throwable) =
     respond(HttpStatusCode.BadRequest, ErrorResponse(error.message ?: "Invalid moveInDark", CODE_MOVE_IN_DARK_INVALID))
@@ -1228,6 +1263,8 @@ internal data class DeletedCueStackRows(
     /** Every cue the stack placed: their pads' faces lose a place. */
     val cueIds: List<Int>,
     val removedAnchors: Int,
+    /** The busk pages that lost a stack pad naming it. */
+    val buskPageIds: Set<Int>,
     val entryIds: Set<Int>,
     val looseCueIds: List<Int>,
     val deletion: CueDeletion,
@@ -1263,6 +1300,7 @@ internal fun deleteCueStackRows(
         entry.delete()
     }
     deleteStackScenery(stack.id)
+    val buskPageIds = deleteBuskPadsReferencing(cueStackId = stack.id.value)
     stack.delete()
 
     val stillPlaced = if (cueIds.isEmpty()) emptySet() else
@@ -1274,6 +1312,7 @@ internal fun deleteCueStackRows(
     return DeletedCueStackRows(
         cueIds = cueIds,
         removedAnchors = removedAnchors,
+        buskPageIds = buskPageIds,
         entryIds = entries.mapTo(HashSet()) { it.id.value },
         looseCueIds = if (deleteLooseCues) emptyList() else loose,
         deletion = deletion,
@@ -1285,6 +1324,7 @@ internal fun announceCueStacksDeleted(state: State, deleted: DeletedCueStackRows
     state.show.programmerStore.forgetIncludedEntries(deleted.entryIds)
     afterCuesDeleted(state, deleted.deletion)
     announceCuePadsChanged(state, deleted.cueIds - deleted.deletion.cueIds)
+    if (deleted.buskPageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(deleted.buskPageIds.toList())
     state.show.fixtures.cueStackListChanged()
     state.show.fixtures.cueListChanged()
     if (deleted.removedAnchors > 0) state.show.fixtures.promptBookChanged()

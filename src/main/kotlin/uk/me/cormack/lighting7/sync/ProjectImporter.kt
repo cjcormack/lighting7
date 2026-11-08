@@ -400,6 +400,10 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // archive's stacks add. Imported as stored, but for Replaces on a stack in the running order, or a value
 // the desk does not know, which read as Adds.
 //
+// v52 let a busk pad name a stack — `BuskPadJson.cueStackUuid` (busk-stack plan D9). SUPPORTED moved
+// because a v51 reader would drop a stack pad as naming nothing; MIN stays at 5, since an older
+// archive's pads name the other three.
+//
 // **These two constants are the real gate.** `FormatVersionJson.minReader` is *written* but never
 // read by the importer — `loadAndValidateArchive` compares against these — so bumping the DTO
 // alone leaves the gate wide open.
@@ -407,7 +411,7 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 51
+internal const val SUPPORTED_FORMAT_VERSION = 52
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -845,7 +849,7 @@ class ProjectImporter(private val state: State) {
         }
         if (has(RecordFolders.PROMPT_BOOK_ANNOTATIONS)) importPromptBookAnnotations(run, promptBook)
         if (has(RecordFolders.CUE_SLOTS)) importCueSlots(run, project, cueMap, lookMap)
-        if (has(RecordFolders.BUSK_PAGES)) importBuskPages(run, project, paletteMap, lookMap, cueMap)
+        if (has(RecordFolders.BUSK_PAGES)) importBuskPages(run, project, paletteMap, lookMap, cueMap, cueStackMap)
         if (has(RecordFolders.PARKED_CHANNELS)) importParkedChannels(run, project)
         if (has(RecordFolders.SHOW_PARK_RELEASES)) {
             // The release import reads the show's parks, so the ones just put back must be in the table.
@@ -1133,7 +1137,7 @@ class ProjectImporter(private val state: State) {
         importPromptBookAnnotations(run, promptBook)
         importCueSlots(run, project, cueMap, lookMap)
         // Pages after every record a pad can name.
-        importBuskPages(run, project, paletteMap, lookMap, cueMap)
+        importBuskPages(run, project, paletteMap, lookMap, cueMap, cueStackMap)
         importParkedChannels(run, project)
         importShowParkReleases(run, project)
         importControlSurfaceBindings(run, project)
@@ -2503,6 +2507,7 @@ class ProjectImporter(private val state: State) {
         paletteMap: Map<UUID, DaoPalette>,
         lookMap: Map<UUID, DaoLook>,
         cueMap: Map<UUID, DaoCue>,
+        cueStackMap: Map<UUID, DaoCueStack>,
     ) {
         run.read("buskPages") { json ->
             val p = canonicalDecode(BuskPageJson.serializer(), json)
@@ -2535,17 +2540,19 @@ class ProjectImporter(private val state: State) {
                         this.uuid = UUID.fromString(b.uuid)
                     }
                     b.pads.forEach { d ->
-                        if (buskPadKind(d.paletteUuid, d.lookUuid, d.cueUuid) == null) {
+                        if (buskPadKind(d.paletteUuid, d.lookUuid, d.cueUuid, d.cueStackUuid) == null) {
                             logger.warn("Busk pad {} on page {} names no record or more than one; dropping the pad", d.uuid, p.name)
                             return@forEach
                         }
                         val template = d.paletteUuid?.let { paletteMap[UUID.fromString(it)] }
                         val look = d.lookUuid?.let { lookMap[UUID.fromString(it)] }
                         val cue = d.cueUuid?.let { cueMap[UUID.fromString(it)] }
-                        if (template == null && look == null && cue == null) {
+                        val stack = d.cueStackUuid?.let { cueStackMap[UUID.fromString(it)] }
+                            ?.takeIf { it.type == CueStackType.STACK.name }
+                        if (template == null && look == null && cue == null && stack == null) {
                             logger.warn(
                                 "Busk pad {} on page {} names record {} which the archive does not carry; dropping the pad",
-                                d.uuid, p.name, d.paletteUuid ?: d.lookUuid ?: d.cueUuid,
+                                d.uuid, p.name, d.paletteUuid ?: d.lookUuid ?: d.cueUuid ?: d.cueStackUuid,
                             )
                             return@forEach
                         }
@@ -2555,6 +2562,7 @@ class ProjectImporter(private val state: State) {
                             this.palette = template
                             this.look = look
                             this.cue = cue
+                            this.cueStack = stack
                             this.uuid = UUID.fromString(d.uuid)
                         }
                     }

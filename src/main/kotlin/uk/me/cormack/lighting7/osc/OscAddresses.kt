@@ -92,7 +92,7 @@ object OscAddresses {
         Entry("/stack/{stack}/pause", Args.NONE, "Cancel the live entry's auto-advance timer", "CueStackPause", 1) { c, _, l ->
             l.stack(c["stack"]) { OscResolution.Press(BindingTarget.CueStackPause(it.id, it.uuid.toString()), "Pause ${it.name}'s follow", it.ref(OscRecordKind.STACK)) }
         },
-        Entry("/stack/{stack}/stop", Args.NONE, "Stop the stack, which drops the arm as any stop does", "CueStackStop", 1) { c, _, l ->
+        Entry("/stack/{stack}/stop", Args.NONE, "Stop the stack over its release time, which drops the arm as any stop does", "CueStackStop", 1) { c, _, l ->
             l.stack(c["stack"]) { OscResolution.Press(BindingTarget.CueStackStop(it.uuid.toString()), "Stop ${it.name}", it.ref(OscRecordKind.STACK)) }
         },
         Entry("/stack/{stack}/fx-amount", Args.LEVEL, "The stack's FX amount", "StackFxAmount", 1) { c, v, l ->
@@ -523,7 +523,7 @@ class DbOscLookup(private val projectId: Int) : OscLookup {
                 bank.name,
                 // A malformed pad, naming no record, is drawn nowhere, so it takes no place either.
                 pads[bank.id.value].orEmpty().sortedBy { it.sortOrder }.mapNotNull { pad ->
-                    val name = pad.palette?.name ?: pad.look?.name ?: pad.cue?.name ?: return@mapNotNull null
+                    val name = pad.palette?.name ?: pad.look?.name ?: pad.cue?.name ?: pad.cueStack?.name ?: return@mapNotNull null
                     OscRecord(pad.id.value, pad.uuid, name)
                 },
             )

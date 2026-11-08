@@ -162,6 +162,20 @@ export function padFaceOf(pad: BuskPad): PadFace {
       stackName: stacks,
     }
   }
+  // The frozen face a stack pad's ghost and the library row draw; the pad itself reads the stack's
+  // run state over it (`stackPad.ts`).
+  if (pad.kind === 'CUE_STACK' && pad.cueStack != null) {
+    return {
+      kind: 'CUE_STACK',
+      name: pad.cueStack.name,
+      detail: 'Stack',
+      swatch: null,
+      isFx: false,
+      notes: null,
+      cueNumber: null,
+      stackName: null,
+    }
+  }
   return { ...EMPTY_FACE, kind: pad.kind }
 }
 

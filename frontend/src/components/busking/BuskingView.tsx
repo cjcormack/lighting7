@@ -68,6 +68,11 @@ import { useSelectionVerbs } from './selectionVerbs'
 import type { PadBehaviour } from './padBehaviour'
 import { type FxPresence } from './buskingTypes'
 import { cueOpenPath } from '@/lib/cuesTable'
+import {
+  useAdvanceCueStackMutation,
+  useDeactivateCueStackMutation,
+  useProjectCueStackListQuery,
+} from '@/store/cueStacks'
 
 /**
  * The short-viewport fold, duplicated per site by convention — see the module note and
@@ -183,6 +188,11 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
   const { data: templates } = usePaletteListQuery({ projectId })
   const { data: looks } = useLookListQuery({ projectId })
   const cueRings = useCueRings(projectId)
+  // A stack pad's face is its stack as the list holds it, which every GO patches in place.
+  const { data: cueStacks } = useProjectCueStackListQuery(projectId)
+  const stacksById = useMemo(() => new Map((cueStacks ?? []).map((s) => [s.id, s])), [cueStacks])
+  const [advanceStack] = useAdvanceCueStackMutation()
+  const [deactivateStack] = useDeactivateCueStackMutation()
   const { editing } = useSelector(selectBuskEdit)
 
   const [createPage, { isLoading: creating }] = useCreateBuskPageMutation()
@@ -412,6 +422,17 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
           })
           .catch(ignoreReportedError)
       },
+      stackOf: (pad) => (pad.cueStack != null ? stacksById.get(pad.cueStack.id) : undefined),
+      onStackBack: (pad) => {
+        if (pad.cueStack == null) return
+        void advanceStack({ projectId, stackId: pad.cueStack.id, direction: 'BACKWARD' })
+          .unwrap()
+          .catch(ignoreReportedError)
+      },
+      onStackRelease: (pad) => {
+        if (pad.cueStack == null) return
+        void deactivateStack({ projectId, stackId: pad.cueStack.id }).unwrap().catch(ignoreReportedError)
+      },
       onApplyValues: (pad) => {
         if (pad.kind === 'PALETTE' && pad.palette != null) {
           void pressValues({ kind: 'palette', palette: pad.palette }, 'asValues')
@@ -422,6 +443,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
       onInspect: (pad) => {
         if (pad.kind === 'PALETTE') navigate(`/projects/${projectId}/palettes`)
         else if (pad.kind === 'LOOK') navigate(`/projects/${projectId}/looks`)
+        else if (pad.cueStack != null) navigate(`/projects/${projectId}/show/stacks/${pad.cueStack.id}`)
         // A cue opens at its first entry; a loose cue in the Cues table, filtered to it.
         else if (pad.cue != null) navigate(cueOpenPath(projectId, pad.cue))
       },
@@ -429,6 +451,8 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
       // cue, and placing it elsewhere makes a second pad rather than moving this one. (The MIDI
       // door is `PickUpPad(padUuid)` and resolves to the same record server-side.)
       onPickUp: (pad) => {
+        // A stack pad stays where it is placed (lighting7 busk-stack plan D9); its menu offers no Pick up.
+        if (pad.kind === 'CUE_STACK') return
         const id = pad.palette?.id ?? pad.look?.id ?? pad.cue?.id
         if (id != null) handPickUp(pad.kind, id)
       },
@@ -455,6 +479,9 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
     [
       presenceOf,
       cueRings,
+      stacksById,
+      advanceStack,
+      deactivateStack,
       pressPad,
       pressValues,
       projectId,

@@ -16,6 +16,8 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-RESTORE-S3`](#fu-manual-restore-s3) | a cue deleted last week comes back from the History panel with its place in its stack and the Look it layered, nothing else moves, and ⌘Z takes it back | Snapshot restore S3, 2026-11-08 |
+| [`FU-MANUAL-BUSK-STACK-S4`](#fu-manual-busk-stack-s4) | a bound `PressPad` on a stack pad lights while its stack runs and goes dark when it stops; `CueStackStop` and OSC's `/stop` fade over the release time | Busk stack session 4, 2026-11-08 |
+| [`FU-MANUAL-BUSK-STACK-S3`](#fu-manual-busk-stack-s3) | a stack pad steps a song by taps, a solo bank's song pad releases a sibling song, and moving the stack back into the running order asks first | Busk stack session 3, 2026-11-08 |
 | [`FU-MANUAL-RESTORE-S2`](#fu-manual-restore-s2) | restoring from the History panel: the review's counts match what changed, the toast's *Undo* puts it back, and a restore with the network off goes out on the next sync | Snapshot restore S2, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S2`](#fu-manual-busk-stack-s2) | Carabossy on Replaces takes the front wash from 80 % to 0, holds the movers' chase back, and fades the kitchen back on release with the chase growing back in phase; a song on Adds lifts heads over the base and never darkens them; a GO on Act 1 during Carabossy lands under her | Busk stack session 2, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S1`](#fu-manual-busk-stack-s1) | a song stack out of the running order: Act 1's last GO goes to Act 2, not the song; the song's own GO and a follow off its last cue release it over its release time; the Show view's stop fades | Busk stack session 1, 2026-11-07 |
@@ -231,6 +233,54 @@ lighting something different:
    stays up. Give its last cue a follow and start it again: the follow releases it the same way.
 4. **A stop fades.** With *Act 2* live, stop the show from the header: its light fades over 2 s rather
    than snapping. Set its release time to 0 and stop it again: it snaps.
+
+---
+
+## `FU-MANUAL-BUSK-STACK-S4`
+
+**What it proves**: *Surfaces* (busk-stack plan session 4) — a surface button on a stack pad shows
+whether its song is running, and a stop from a button or from QLab fades as the screen's stop does.
+
+**Why it is here**: the tests read the LED the publisher sends and the cue's fade weight; only the rig
+shows the hardware's LED and the light fading.
+
+**Test**, at the desk with an X-Touch attached and a busk stack *Song 3* (three cues, Release at the
+end, a 3 s release time) on a busk page:
+
+1. **The LED.** Bind a button to *Song 3*'s pad (`PressPad`) and another to *Song 3 — Stop*. The pad's
+   button is dark. Press it: the song starts on Q1 and the button lights. Press again: Q2, still lit.
+   Press past the last cue: the song releases, and the button goes dark at once while the light
+   fades.
+2. **Stop from a button.** Start the song from its pad, then press *Stop*: the light fades over 3 s,
+   not at once, and the pad's button goes dark when the press lands.
+3. **Stop from QLab.** Start the song, then send `/lighting7/stack/song-3/stop` from QLab: the same
+   3 s fade.
+
+---
+
+## `FU-MANUAL-BUSK-STACK-S3`
+
+**What it proves**: *Stack pads* (busk-stack plan session 3) — a pad that names a busk stack is that
+stack's GO, a solo bank of songs is a selector, and a stack with pads does not slip back into the
+running order unasked.
+
+**Why it is here**: the tests read the stack's run state and the press's answer; only the rig shows the
+pad's face following the stack through a song and a sibling's light fading rather than cutting.
+
+**Test**, at the desk with two busk stacks, *Song 3* (three cues, Release at the end) and *Song 5* (two
+cues, Release), each lighting something different:
+
+1. **Placing.** In the busk view's edit mode, filter the library to *Stacks*: both songs are listed and
+   *Act 1* is not. Drag both into one bank and make it solo. From *Song 3*'s settings, *Busk pages*
+   places it on another page too.
+2. **Stepping by taps.** Tap *Song 3*: it starts on Q1, the pad goes solid green and reads the live cue
+   and the next. Tap again: Q2, with the fade drawn under the face. Tap past the last cue: the song
+   releases over its release time and the pad reads *stopped* and *GO starts Q1 …*.
+3. **Solo.** Start *Song 3*, then tap *Song 5*: *Song 3* fades out over its release time while *Song 5*
+   comes up. Tap *Song 5* again: it advances, and nothing else moves. Hold *Song 5*: the menu offers GO,
+   Back, Release and View, and no *Pick up*; *Release* fades it out.
+4. **Back into the running order.** Open *Song 3*'s settings and switch *In the running order* on: Save
+   asks first, naming both pages. *Take the pads off* saves it, and its pads are gone from both pages.
 
 ---
 

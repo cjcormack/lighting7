@@ -109,7 +109,8 @@ internal class HandState(
         val expiresAtMs: Long = 0,
     ) {
         init {
-            require(buskPadKind(palette, look, cue) == kind) {
+            require(kind != BuskPadKind.CUE_STACK) { "the hand carries no cue stack" }
+            require(buskPadKind(palette, look, cue, null) == kind) {
                 "a held record must carry exactly one summary, matching its kind ($kind)"
             }
         }

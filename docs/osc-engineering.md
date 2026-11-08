@@ -21,7 +21,7 @@ Every address starts `/lighting7/` and acts on the **current project** (D7). The
 | `/stack/{stack}/go` | – | GO | `CueStackGo` |
 | `/stack/{stack}/back` | – | GO BACK | `CueStackBack` |
 | `/stack/{stack}/pause` | – | Cancel the live entry's follow timer | `CueStackPause` |
-| `/stack/{stack}/stop` | – | Stop the stack, which drops the arm as any stop does | `CueStackStop` |
+| `/stack/{stack}/stop` | – | Stop the stack over its release time, which drops the arm as any stop does | `CueStackStop` |
 | `/stack/{stack}/fx-amount` | number 0–1 | The stack's FX amount, taken whole | `StackFxAmount` |
 | `/cue/{cue}/on`, `/off` | – | Take or let go of a loose hold; nothing if already so | `LooseCueSet` |
 | `/cue/{cue}/press` | – | Toggle the loose hold | `FireCue` |
@@ -60,12 +60,14 @@ not, are no-ops answered *done · already live* (or *already on*, *already off*)
 twice changes nothing — no re-fire, no second *Tempo on GO*, no second cue events. The toggles and
 bare GO keep today's behaviour, re-fire included, for buttons pressed by hand. A GO TO is otherwise
 an ordinary GO TO, so it fires the events of the cue it lands on, armed, and none of a cue it skips
-(D11). OSC never arms the desk (D6); `/stop` drops the arm, as every stack stop does, whether the
-stack was running or not.
+(D11). OSC never arms the desk (D6); `/stop` is an operator's stop, fading the stack's cues over its
+release time (busk-stack plan D6), and drops the arm whether the stack was running or stopped, except on
+a stack whose release is still running, which it leaves as it is.
 
 **A Look is a programmer layer** whichever door puts it on: Clear takes it off, Record captures it,
 and in Blind it is staged, which its log row says (*staged: Blind*). A busk pad presses on whatever
-the desk has selected, so from QLab only Look and cue pads are predictable; a loose cue is a hold
+the desk has selected, so from QLab only Look, cue and stack pads are predictable (a stack pad names no
+fixtures, and its press is the busk stack's GO, busk-stack plan D9); a loose cue is a hold
 above every stack that the programmer does not touch. Show control is best written as GO TO and
 loose cues, with Looks where the operator may take them over.
 

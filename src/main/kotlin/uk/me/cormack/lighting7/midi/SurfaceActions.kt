@@ -121,7 +121,11 @@ interface SurfaceActions {
     /** Arm [entryUuid] as [stackUuid]'s next GO. */
     fun cueStackStandby(stackUuid: String, entryUuid: String): ActionOutcome
 
-    /** Stop [stackUuid], which drops the desk's arm as every stop does — running or not, as the REST deactivate does. */
+    /**
+     * Stop [stackUuid] as an operator does, its cues fading over its release time (busk-stack plan D6),
+     * as the REST deactivate does. It drops the desk's arm, running or stopped, except on a stack whose
+     * release is still running, which the press leaves as it is.
+     */
     fun cueStackStop(stackUuid: String): ActionOutcome
 
     /** Take or let go of [cueUuid]'s loose hold; nothing if it already is so (D4). */
@@ -437,7 +441,7 @@ class DefaultSurfaceActions(
     override fun cueStackStop(stackUuid: String): ActionOutcome {
         val stack = resolveStack(0, stackUuid) ?: return stackNotFound(stackUuid)
         val running = cueStackManager.isStackActive(stack.id)
-        cueStackManager.deactivateStack(stack.id, state)
+        cueStackManager.stopStack(state, stack.id)
         state.show.fixtures.cueStackListChanged()
         return if (running) ActionOutcome.DONE else ActionOutcome.Done("was not running")
     }
@@ -708,8 +712,15 @@ class DefaultSurfaceActions(
         val projectId = currentProjectId() ?: return ActionOutcome.NotFound("No current project")
         val selection = state.deskSelection.state.value
         return when (val outcome = BuskPressService.pressByUuid(state, projectId, uuid, selection.targets, selection.families)) {
+            // A stack pad on a stack with no cues started nothing, as the stack's own GO refuses it.
+            is BuskPressService.Outcome.Pressed if outcome.action == "empty" ->
+                ActionOutcome.Refused(ActionOutcome.STACK_EMPTY, "That stack pad's stack has no cue to GO to")
             is BuskPressService.Outcome.Pressed ->
                 ActionOutcome.Done(if (outcome.action == "applied") withBlind(outcome.action) else outcome.action)
+            is BuskPressService.Outcome.Conflict -> {
+                logger.warn("Surface pressPad dropped: {}", outcome.message)
+                ActionOutcome.Refused(outcome.code ?: ActionOutcome.GO_REFUSED, outcome.message)
+            }
             is BuskPressService.Outcome.Refused -> {
                 logger.warn("Surface pressPad dropped: {}", outcome.message)
                 ActionOutcome.Refused(outcome.code ?: "PRESS_REFUSED", outcome.message)
@@ -785,6 +796,9 @@ class DefaultSurfaceActions(
                 "Surface handPlaceInBank dropped: the hand holds a {} ({}) that is not in project {}",
                 outcome.what, outcome.id, projectId,
             )
+            // The hand holds no stack, so this cannot arise from it; logged rather than assumed away.
+            is AddPadOutcome.InRunningOrder ->
+                logger.warn("Surface handPlaceInBank dropped: '{}' is in the running order", outcome.name)
             is AddPadOutcome.Added -> {
                 state.show.fixtures.buskLayoutChanged(listOf(outcome.pageId))
                 state.handState.dropIfHolding(held.holdId)

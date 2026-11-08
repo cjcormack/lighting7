@@ -24,7 +24,9 @@ import uk.me.cormack.lighting7.models.DaoBuskPad
 import uk.me.cormack.lighting7.models.DaoBuskPads
 import uk.me.cormack.lighting7.models.DaoBuskPage
 import uk.me.cormack.lighting7.models.DaoBuskPages
+import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoPalette
@@ -40,7 +42,10 @@ internal const val CODE_BUSK_LAYOUT_INVALID = "BUSK_LAYOUT_INVALID"
 /** 400 code: the document names a column, bank or pad id that is not on this page, or names one twice. */
 internal const val CODE_BUSK_LAYOUT_IDENTITY = "BUSK_LAYOUT_IDENTITY"
 
-/** 400 code: a pad names a template, Look or cue that is not in this project. */
+/**
+ * 400 code: a pad names a template, Look, cue or stack that is not in this project, or a new or
+ * repointed pad names a stack in the running order (busk-stack plan D9).
+ */
 internal const val CODE_BUSK_LAYOUT_REF = "BUSK_LAYOUT_REF"
 
 /** 409 code: a page of that name already exists in the project. */
@@ -235,7 +240,7 @@ internal fun Route.routeApiRestProjectBusk(state: State) {
             val request = call.receive<AddBuskPadRequest>()
             val outcome = transaction(state.database) {
                 val bank = bankIn(project, resource.bankId) ?: return@transaction AddPadOutcome.NotFound
-                appendBuskPad(state, project, bank, request.paletteId, request.lookId, request.cueId)
+                appendBuskPad(state, project, bank, request.paletteId, request.lookId, request.cueId, request.cueStackId)
             }
             when (outcome) {
                 AddPadOutcome.NotFound -> call.respond(HttpStatusCode.NotFound, ErrorResponse(BANK_NOT_FOUND))
@@ -247,6 +252,10 @@ internal fun Route.routeApiRestProjectBusk(state: State) {
                         "Pad names a ${outcome.what} (${outcome.id}) that is not in this project",
                         code = CODE_BUSK_LAYOUT_REF,
                     ),
+                )
+                is AddPadOutcome.InRunningOrder -> call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse(inRunningOrderMessage(listOf(outcome.name)), code = CODE_BUSK_LAYOUT_REF),
                 )
                 is AddPadOutcome.Added -> {
                     state.show.fixtures.buskLayoutChanged(listOf(outcome.pageId))
@@ -332,11 +341,23 @@ internal data class BuskBankDto(
 internal data class BuskPadDto(
     val id: Int,
     val uuid: String,
-    /** `PALETTE`, `LOOK` or `CUE`. */
+    /** `PALETTE`, `LOOK`, `CUE` or `CUE_STACK`. */
     val kind: String,
     val palette: PaletteDto? = null,
     val look: LookDto? = null,
     val cue: BuskCueDto? = null,
+    val cueStack: BuskCueStackDto? = null,
+)
+
+/**
+ * What a stack pad names (busk-stack plan D9): the stack, by name. Its run state and its cues come
+ * from `cueRunStateChanged` and the stack list, which every window already follows.
+ */
+@Serializable
+internal data class BuskCueStackDto(
+    val id: Int,
+    val uuid: String,
+    val name: String,
 )
 
 /** What a cue pad draws: the mono number, the name, the stack. Lit state comes from the stack list. */
@@ -389,23 +410,29 @@ internal data class BuskLayoutBank(
 )
 
 /**
- * One pad appended to a bank. Exactly one of [paletteId] / [lookId] / [cueId], the same rule
- * [BuskLayoutPad] carries — there is no `padId`, because an append never names an existing pad.
+ * One pad appended to a bank. Exactly one of [paletteId] / [lookId] / [cueId] / [cueStackId], the
+ * same rule [BuskLayoutPad] carries — there is no `padId`, because an append never names an existing
+ * pad.
  */
 @Serializable
 internal data class AddBuskPadRequest(
     val paletteId: Int? = null,
     val lookId: Int? = null,
     val cueId: Int? = null,
+    val cueStackId: Int? = null,
 )
 
-/** Exactly one of [paletteId] / [lookId] / [cueId]. Int ids, like every REST body; uuids are sync's. */
+/**
+ * Exactly one of [paletteId] / [lookId] / [cueId] / [cueStackId], the last a busk stack's (D9). Int
+ * ids, like every REST body; uuids are sync's.
+ */
 @Serializable
 internal data class BuskLayoutPad(
     val padId: Int? = null,
     val paletteId: Int? = null,
     val lookId: Int? = null,
     val cueId: Int? = null,
+    val cueStackId: Int? = null,
 )
 
 // ─── Outcomes ───────────────────────────────────────────────────────────
@@ -425,6 +452,9 @@ internal sealed interface AddPadOutcome {
     data object NotFound : AddPadOutcome
     data class Invalid(val message: String) : AddPadOutcome
     data class Ref(val what: String, val id: Int) : AddPadOutcome
+
+    /** A stack pad naming a stack in the running order (busk-stack plan D9), a `BUSK_LAYOUT_REF`. */
+    data class InRunningOrder(val name: String) : AddPadOutcome
     /**
      * The append landed on the page [pageId] names.
      *
@@ -438,7 +468,7 @@ internal sealed interface AddPadOutcome {
 }
 
 /**
- * Append one pad naming exactly one of [paletteId] / [lookId] / [cueId] to [bank]. **Must be
+ * Append one pad naming exactly one of [paletteId] / [lookId] / [cueId] / [cueStackId] to [bank]. **Must be
  * called inside a transaction**, and the caller owns the `buskLayoutChanged` broadcast for the
  * returned page.
  *
@@ -453,10 +483,11 @@ internal fun appendBuskPad(
     paletteId: Int?,
     lookId: Int?,
     cueId: Int?,
+    cueStackId: Int?,
     buildPage: Boolean = true,
 ): AddPadOutcome {
-    val kind = buskPadKind(paletteId, lookId, cueId)
-        ?: return AddPadOutcome.Invalid("A pad must name exactly one of paletteId, lookId or cueId")
+    val kind = buskPadKind(paletteId, lookId, cueId, cueStackId)
+        ?: return AddPadOutcome.Invalid("A pad must name exactly one of paletteId, lookId, cueId or cueStackId")
     val records = BuskRecordCache(state)
     // Resolve the record **before** minting the pad, and set its arm inside the constructor. This
     // is the layout write's "returns before touching a row" rule, and here the database enforces
@@ -466,6 +497,7 @@ internal fun appendBuskPad(
     var newPalette: DaoPalette? = null
     var newLook: DaoLook? = null
     var newCue: DaoCue? = null
+    var newStack: DaoCueStack? = null
     when (kind) {
         BuskPadKind.PALETTE -> {
             val id = paletteId!!
@@ -479,6 +511,12 @@ internal fun appendBuskPad(
             val id = cueId!!
             newCue = records.cue(project, id) ?: return AddPadOutcome.Ref("cue", id)
         }
+        BuskPadKind.CUE_STACK -> {
+            val id = cueStackId!!
+            val stack = records.cueStack(project, id) ?: return AddPadOutcome.Ref("cue stack", id)
+            if (stack.inRunningOrder) return AddPadOutcome.InRunningOrder(stack.name)
+            newStack = stack
+        }
     }
     // Dense from zero like every other position here, but read as max + 1 rather than as a count,
     // so a bank that somehow holds a gap still appends *after* everything.
@@ -489,6 +527,7 @@ internal fun appendBuskPad(
         palette = newPalette
         look = newLook
         cue = newCue
+        cueStack = newStack
     }
     val page = bank.column.page
     return AddPadOutcome.Added(page.id.value, if (buildPage) records.pageDto(page) else null)
@@ -540,8 +579,8 @@ internal fun applyBuskLayout(
                     return BuskLayoutOutcome.Invalid("Flow '${bank.flow}' on bank '${bank.name}' is not one of ${BuskFlow.entries.map { it.name }}")
                 }
                 bank.pads.forEach { pad ->
-                    if (buskPadKind(pad.paletteId, pad.lookId, pad.cueId) == null) {
-                        return BuskLayoutOutcome.Invalid("A pad in bank '${bank.name}' must name exactly one of paletteId, lookId or cueId")
+                    if (buskPadKind(pad.paletteId, pad.lookId, pad.cueId, pad.cueStackId) == null) {
+                        return BuskLayoutOutcome.Invalid("A pad in bank '${bank.name}' must name exactly one of paletteId, lookId, cueId or cueStackId")
                     }
                 }
             }
@@ -563,7 +602,8 @@ internal fun applyBuskLayout(
     val templates = allPads.mapNotNull { it.paletteId }.toSet().associateWith { records.palette(project, it) }
     val looks = allPads.mapNotNull { it.lookId }.toSet().associateWith { records.look(project, it) }
     val cues = allPads.mapNotNull { it.cueId }.toSet().associateWith { records.cue(project, it) }
-    val missing = listOf("palettes" to templates, "looks" to looks, "cues" to cues)
+    val stacks = allPads.mapNotNull { it.cueStackId }.toSet().associateWith { records.cueStack(project, it) }
+    val missing = listOf("palettes" to templates, "looks" to looks, "cues" to cues, "cue stacks" to stacks)
         .map { (what, found) -> what to found.filterValues { it == null }.keys }
         .filter { it.second.isNotEmpty() }
     if (missing.isNotEmpty()) {
@@ -571,6 +611,15 @@ internal fun applyBuskLayout(
             "Layout names records not in this project — " + missing.joinToString("; ") { "${it.first} ${it.second.sorted()}" },
         )
     }
+    // A pad may name a busk stack only (busk-stack plan D9) — judged on the pads this write makes or
+    // points elsewhere. A pad re-sent naming the stack it already names passes, so one an import or an
+    // undo left on a stack now in the running order does not lock the rest of its page.
+    val inRunningOrder = allPads
+        .filter { d -> d.cueStackId != null && d.padId?.let { pads[it]?.readValues?.get(DaoBuskPads.cueStack)?.value } != d.cueStackId }
+        .mapNotNull { d -> stacks[d.cueStackId]?.takeIf { it.inRunningOrder }?.name }
+        .distinct()
+        .sorted()
+    if (inRunningOrder.isNotEmpty()) return BuskLayoutOutcome.Ref(inRunningOrderMessage(inRunningOrder))
 
     // Write: upsert everything named, then sweep what was not. Moves first, so a bank whose pads
     // have all moved elsewhere is empty by the time it is swept rather than taking them with it.
@@ -614,6 +663,7 @@ internal fun applyBuskLayout(
                     pad.palette = d.paletteId?.let { templates.getValue(it) }
                     pad.look = d.lookId?.let { looks.getValue(it) }
                     pad.cue = d.cueId?.let { cues.getValue(it) }
+                    pad.cueStack = d.cueStackId?.let { stacks.getValue(it) }
                     keptPads += pad.id.value
                 }
             }
@@ -659,6 +709,7 @@ internal class BuskRecordCache(private val state: State) {
     private val palettes = HashMap<Int, DaoPalette?>()
     private val looks = HashMap<Int, DaoLook?>()
     private val cues = HashMap<Int, DaoCue?>()
+    private val cueStacks = HashMap<Int, DaoCueStack?>()
     private val paletteDtos = HashMap<Int, PaletteDto>()
     private val lookDtos = HashMap<Int, LookDto>()
     private val cueDtos = HashMap<Int, BuskCueDto>()
@@ -697,6 +748,14 @@ internal class BuskRecordCache(private val state: State) {
 
     fun cue(project: DaoProject, id: Int): DaoCue? =
         cues.getOrPut(id) { DaoCue.findById(id)?.takeIf { it.project.id == project.id } }
+
+    /** A stack of the project; a separator is no stack. */
+    fun cueStack(project: DaoProject, id: Int): DaoCueStack? =
+        cueStacks.getOrPut(id) {
+            DaoCueStack.findById(id)?.takeIf { it.project.id == project.id && it.type == CueStackType.STACK.name }
+        }
+
+    fun dto(stack: DaoCueStack): BuskCueStackDto = BuskCueStackDto(stack.id.value, stack.uuid.toString(), stack.name)
 
     fun dto(template: DaoPalette): PaletteDto =
         paletteDtos.getOrPut(template.id.value) {
@@ -790,5 +849,10 @@ private fun DaoBuskPad.toDto(records: BuskRecordCache): BuskPadDto? {
         BuskPadKind.PALETTE -> BuskPadDto(id.value, uuid.toString(), kind.name, palette = records.dto(palette!!))
         BuskPadKind.LOOK -> BuskPadDto(id.value, uuid.toString(), kind.name, look = records.dto(look!!))
         BuskPadKind.CUE -> BuskPadDto(id.value, uuid.toString(), kind.name, cue = records.dto(cue!!))
+        BuskPadKind.CUE_STACK -> BuskPadDto(id.value, uuid.toString(), kind.name, cueStack = records.dto(cueStack!!))
     }
 }
+
+/** D9's refusal, naming each stack. */
+internal fun inRunningOrderMessage(names: List<String>): String =
+    "A pad may name only a busk stack, and ${names.joinToString { "'$it'" }} ${if (names.size == 1) "is" else "are"} in the running order"

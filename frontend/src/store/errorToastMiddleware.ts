@@ -250,11 +250,12 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
 export function ignoreReportedError(): void {}
 
 /**
- * Refusal codes the caller always handles itself. A desk answers one only to a request that asked
- * for it — `CUE_NUMBER_OUT_OF_ORDER` only to a write sent with `placement: 'ASK'`, whose caller then
- * asks the operator (`components/cues/CueNumberPlacement.tsx`) — so no other caller can be left silent.
+ * Refusal codes the caller always handles itself, by asking the operator. `CUE_NUMBER_OUT_OF_ORDER`
+ * comes only to a write sent with `placement: 'ASK'` (`components/cues/CueNumberPlacement.tsx`), and
+ * `CUE_STACK_ON_PADS` only to a stack `PUT`, whose one sender, `CueStackForm`, asks before resending it
+ * with `force` (lighting7 busk-stack plan D11).
  */
-export const SILENT_CODES: ReadonlySet<string> = new Set(['CUE_NUMBER_OUT_OF_ORDER'])
+export const SILENT_CODES: ReadonlySet<string> = new Set(['CUE_NUMBER_OUT_OF_ORDER', 'CUE_STACK_ON_PADS'])
 
 function refusalCode(payload: unknown): string | undefined {
   const data = (payload as { data?: { code?: unknown } } | undefined)?.data
