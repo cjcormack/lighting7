@@ -126,6 +126,7 @@ callers:
 |---|---|
 | `ProjectImporter.replaceFromWorkingTree` (a sync pull, a conflict resolution) | *Pulled from the sync repo* |
 | … from `VenueVersions` discard | *Venue draft discarded* |
+| `SnapshotRestore.restore`, after its import commits (`ProjectImporter.replaceInTransaction`, which leaves the clear to its caller) | *Restored a snapshot* |
 | `VenueUpdate.update`, `VenueAttach.attach`, `VenueDetach.detach`, `VenueExtract.extract` (not on a dry run) | *Venue updated*, *Attached to a venue*, *Detached from its venue*, *Venue extracted* |
 | `deleteProjectRows` | the history is forgotten, not cleared |
 

@@ -321,7 +321,7 @@ written, and its row marked *in review* with its branch. A session's PR is title
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Review and restore on the desk | planned | | | |
+| 1 | Review and restore on the desk | in review | `claude/relaxed-planck-rbdr44` | | |
 | 2 | The History panel and the review | planned | | | |
 | 3 | Bring back selected records | planned | | | |
 
@@ -375,6 +375,14 @@ the next; whoever merges the last fills its own.
   `docs/plans/manual-validation.md` (§6).
 - **Local:** `./gradlew compileTestKotlin`, then `./gradlew test` for the `sync`, `routes`, `venue`
   and `history` packages.
+- **As built**, where the code asked for something §3 does not say:
+  - The note, the sha and the token are checked before step 1, so a bad request never syncs.
+  - A first sync whose pulled tree fails to import without an `ImportError` (a record that is not JSON,
+    a constraint) refuses `RESTORE_UNREADABLE`, its message saying it was the pulled tree.
+  - A refusal is logged as `SyncLogEvent.RESTORE_FAILED`, beside `RESTORED`.
+  - `addresses.missing` names a universe as *Universe 1* (*Universe 2:1* off subnet 0).
+  - The before-an-Attach case is tested by deleting a universe and its override, which is what Attach
+    does to a paired universe's rows; the address check reads only the rows.
 
 ### Session 2 — The History panel and the review
 

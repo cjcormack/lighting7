@@ -1026,6 +1026,13 @@ actually produce export output when `testsupport/RichProjectFixture.kt` is
 exported. Add a table without answering the question and `./gradlew test`
 fails. See `docs/sync-engineering.md` §"How to add a new table".
 
+**A snapshot restore goes through the database too.** `GET`/`POST /projects/{id}/sync/restore` (admin
+only, shows only) extract an old commit's tree, import it with `ProjectImporter.replaceInTransaction` and
+snapshot the result as a new commit on top (`sync/SnapshotRestore.kt`): its review is that import rolled
+back and compared record by record in today's format, so a field the exporter and importer carry is
+restored without any work of the restore's own. The trailer `Restored-From: {sha}` is
+`CommitInfo.restoredFrom`. See `docs/sync-engineering.md` §"Restoring a snapshot".
+
 **Project cloning is derived, not separate.** `POST /project/{id}/clone` runs
 export → fresh UUIDs → import (`sync/ProjectCloner.kt`), so wiring a table
 through the exporter and importer is all that's needed for it to be cloned.

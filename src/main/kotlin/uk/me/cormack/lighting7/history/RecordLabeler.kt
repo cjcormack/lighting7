@@ -179,6 +179,9 @@ object RecordLabeler {
     /** One record by its kind and name, *Look “Warm wash”*, read from [image]. */
     fun name(key: RecordKey, image: RecordImage?): String = title(kindOf(key.tableName).noun, image)
 
+    /** What one record of [folder] is called, and several: `"cue" to "cues"`. */
+    fun nouns(folder: String): Pair<String, String> = kindOf(folder).let { it.noun to it.plural }
+
     private fun kindOf(folder: String): Kind = KINDS[folder] ?: OWNED[folder]?.kind ?: Kind(folder)
 
     private fun count(n: Int, kind: Kind) = "$n ${if (n == 1) kind.noun else kind.plural}"

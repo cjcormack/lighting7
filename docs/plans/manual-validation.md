@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-RESTORE-S1`](#fu-manual-restore-s1) | restoring an older snapshot through the API while the show runs crossfades without a dip, the other desk takes it on *Sync now*, and restoring `before` puts it back | Snapshot restore S1, 2026-11-08 |
 | [`FU-MANUAL-CLOUD-P1`](#fu-manual-cloud-p1) | Lighting7 Cloud's P1 exit: a phone on 4G busks the venue desk opened from the portal, Claude patches a rig through the desk's cloud URL with no tunnel, an emailed invite approved in the portal lands its operator as `OPERATOR`, unlinking, disabling, removing a membership and *End* each close a session within 5 s, the two switches refuse what they name and cannot be changed remotely, the Remote access tab, `/oauth/*`, `/mcp` and the tunnel are gone and an upgraded desk keeps its policy switches, and a running fade sees nothing of the sidecar or the cloud stopping | Cloud P1 S9, 2026-11-07 |
 | [`FU-MANUAL-OSC-S1`](#fu-manual-osc-s1) | a QLab Network cue lands cue 1 and fired again mid-fade moves nothing; a Look's `on` and `off` and a busk Look pad from QLab; a QLab machine off the allowlist shows with *Allow this sender*; an operator sees the log | OSC session 1, 2026-11-07 |
 | [`FU-MANUAL-OSC-S2`](#fu-manual-osc-s2) | the grand master follows a QLab fade cue sending floats; a copied address pasted into QLab works first time; renumbering a received cue warns on the desk | OSC session 2, 2026-11-07 |
@@ -157,6 +158,29 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-RESTORE-S1`
+
+**What it proves**: *an older snapshot comes back on a running show without a dip, reaches the other
+desk, and goes away again* (snapshot-restore plan session 1).
+
+**Why it is here**: the tests restore over bare repos and assert the hold on a mock rig; only the rig
+shows the reload's crossfade, and only two desks on GitHub show the push and the pull.
+
+**Test**, on a show synced between two desks (A and B), with a stack running on A and the rig lit:
+
+1. **Pick a snapshot.** On A, `GET /api/rest/projects/{id}/sync/log` and choose a commit from before a
+   change you can see on stage (a cue's colour, a deleted cue). `GET …/sync/restore/{sha}` lists it: the
+   counts match what changed, and `live` is true.
+2. **Restore.** `POST …/sync/restore {"sha": …, "token": …, "note": "rig check"}`. The rig crossfades
+   to the old state and no channel dips to zero on the way; a cue that was live stays live. The answer's
+   `sync.outcome` is `PUSHED` and its `before` names the commit to go back to.
+3. **The other desk.** On B, *Sync now*: it fast-forwards, and B's show is the restored one. The History
+   panel shows the restore as the newest commit, `Restored … from … UTC: rig check`.
+4. **Undo.** On A, review and restore `before`'s sha: the change you picked is back, again without a
+   dip, and B takes that too on its next sync.
 
 ---
 
