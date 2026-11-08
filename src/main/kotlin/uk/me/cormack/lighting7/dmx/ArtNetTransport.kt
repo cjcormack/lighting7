@@ -21,6 +21,17 @@ interface ArtNetTransport {
 }
 
 /**
+ * Sends nothing and binds no socket: `dmx.mock` in `local.conf`, for a desk run beside a live rig. The
+ * controller above it fades, composes and notifies its listeners as usual.
+ */
+internal object SilentArtNetTransport : ArtNetTransport {
+    override fun start() {}
+    override fun stop() {}
+    override fun broadcastDmx(subnet: Int, universe: Int, dmxData: ByteArray) {}
+    override fun unicastDmx(address: String, subnet: Int, universe: Int, dmxData: ByteArray) {}
+}
+
+/**
  * Sends ArtDMX, written from Artistic Licence's Art-Net 4 specification. It only sends; nothing
  * reads the socket. `ArtDmxGoldenTest` pins every byte, including where they depart from the
  * specification:

@@ -2740,8 +2740,10 @@ behind on output, held or running against. A publish and a venue pull re-judge t
 show the hall moves under **mid-run** is never blacked out: it carries on as if run against its pin —
 output live, the new version's trigger and command channels reserved, arming refused — and opens held
 the next time it is opened (`VenueHoldService.refreshCurrent`; decided with Chris, 2026-10-11, since an
-unattended venue sync could otherwise black out a performance). `venue.hold`,
-`docs/websocket-engineering.md`.
+unattended venue sync could otherwise black out a performance). An Attach behind on output and a
+snapshot restore whose restored pin is behind on output do the same for the live show they reload
+(`VenueHoldService.runAgainstOnLoad`, recorded before the reload; `docs/sync-engineering.md`
+§"Restoring a snapshot"). `venue.hold`, `docs/websocket-engineering.md`.
 
 **Update** (`venue/VenueUpdate.kt`, P3, P8): `GET /projects/{id}/venue/update?to=n` is the review,
 `POST …/venue/update {to?, decisions, dryRun?}` the update, both roles (a stored show write, as a hide

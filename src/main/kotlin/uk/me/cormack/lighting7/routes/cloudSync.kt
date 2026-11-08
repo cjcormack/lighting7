@@ -50,6 +50,10 @@ import uk.me.cormack.lighting7.sync.canonicalDecode
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.toHttpStatus
 import uk.me.cormack.lighting7.sync.withAttribution
+import uk.me.cormack.lighting7.sync.RestoreRequest
+import uk.me.cormack.lighting7.sync.RestoreResultDto
+import uk.me.cormack.lighting7.sync.RestoreReviewDto
+import uk.me.cormack.lighting7.sync.RestoreStaleException
 import java.util.UUID
 import uk.me.cormack.lighting7.models.nowUtc
 import uk.me.cormack.lighting7.models.toIsoUtc
@@ -307,6 +311,72 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                     ),
                 )
             }
+            call.respond(result)
+        }
+    }
+
+    // ─── Snapshot restore (sync-restore plan §3) ─────────────────────────
+
+    get<ProjectSyncRestoreReviewResource> { resource ->
+        withProject(state, resource.parent.parent.projectId) { project ->
+            val review = try {
+                remoteSyncEngine.reviewRestore(project.id.value, resource.sha)
+            } catch (e: SyncException) {
+                respondSyncError(e)
+                return@withProject
+            }
+            call.respond(review)
+        }
+    }
+
+    post<ProjectSyncRestoreResource> { resource ->
+        val request = call.receive<RestoreRequest>()
+        withProject(state, resource.parent.projectId) { project ->
+            val install = transaction(state.database) {
+                DaoInstall.all().firstOrNull()?.let { it.uuid to it.friendlyName }
+                    ?: error("Install row missing — `ensureInstallRow` should have created it on startup.")
+            }
+            state.emitCloudSyncEvent(CloudSyncStartedOutMessage(project.id.value))
+            val result = try {
+                remoteSyncEngine.restore(
+                    projectId = project.id.value,
+                    projectUuid = project.uuid,
+                    installUuid = install.first,
+                    installFriendlyName = install.second,
+                    sha = request.sha,
+                    token = request.token,
+                    note = request.note,
+                )
+            } catch (e: SyncException) {
+                state.emitCloudSyncEvent(
+                    CloudSyncFailedOutMessage(
+                        projectId = project.id.value,
+                        errorCode = e.code.name,
+                        message = e.message ?: e.code.name,
+                    ),
+                )
+                if (e is RestoreStaleException) {
+                    call.respond(
+                        e.code.toHttpStatus(),
+                        RestoreStaleResponse(e.message ?: e.code.name, e.code.name, e.review),
+                    )
+                } else {
+                    respondSyncError(e)
+                }
+                return@withProject
+            }
+            // A push that opened a conflict session has announced it already, as `/run`'s does.
+            if (result.sync?.outcome != SyncOutcome.CONFLICTS_PENDING) state.emitCloudSyncEvent(
+                CloudSyncDoneOutMessage(
+                    projectId = project.id.value,
+                    outcome = (result.sync?.outcome ?: SyncOutcome.NO_OP).name,
+                    headSha = result.sync?.headSha ?: result.commit.sha,
+                    pushed = result.sync?.pushed ?: 0,
+                    pulled = result.sync?.pulled ?: 0,
+                    replaced = result.sync?.replaced ?: 0,
+                    message = restoreDoneMessage(result),
+                ),
+            )
             call.respond(result)
         }
     }
@@ -600,6 +670,12 @@ data class ProjectSyncCredentialsResource(val parent: ProjectSyncResource)
 @Resource("/run")
 data class ProjectSyncRunResource(val parent: ProjectSyncResource)
 
+@Resource("/restore")
+data class ProjectSyncRestoreResource(val parent: ProjectSyncResource)
+
+@Resource("/{sha}")
+data class ProjectSyncRestoreReviewResource(val parent: ProjectSyncRestoreResource, val sha: String)
+
 @Resource("/conflicts")
 data class ProjectSyncConflictsResource(val parent: ProjectSyncResource)
 
@@ -655,6 +731,16 @@ data class SetCredentialsRequest(val pat: String)
 
 @Serializable
 data class ReconnectRequest(val repoUrl: String)
+
+/** `RESTORE_REVIEW_STALE`'s body: the review the restore would now make, to show in its place. */
+@Serializable
+data class RestoreStaleResponse(val error: String, val code: String, val review: RestoreReviewDto)
+
+private fun restoreDoneMessage(result: RestoreResultDto): String {
+    val c = result.counts
+    val target = result.commit.restoredFrom?.take(7)?.let { " $it" } ?: ""
+    return "Restored$target: ${c.back} back, ${c.gone} gone, ${c.changed} changed"
+}
 
 /** Error response carrying a stable [code] so the frontend can branch on cause. */
 @Serializable

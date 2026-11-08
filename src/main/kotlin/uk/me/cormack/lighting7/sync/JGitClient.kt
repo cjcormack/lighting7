@@ -37,6 +37,12 @@ object JGitClient {
     private fun remoteUrl(repo: Repository, remote: String): String? = repo.config.getString("remote", remote, "url")
 
 
+    /**
+     * How long a fetch or push may wait on the remote without a byte before JGit gives up with a
+     * [GitTransportException]. Without it a hung remote holds the project's sync lock indefinitely.
+     */
+    const val TRANSPORT_TIMEOUT_SECONDS = 30
+
     /** Initial branch for new repos. JGit defaults to `master`; we want `main`. */
     const val DEFAULT_BRANCH = "main"
 
@@ -175,6 +181,12 @@ object JGitClient {
         }
     }
 
+    /** [ref]'s commit info, or null when it resolves to nothing. */
+    fun commitInfo(repo: Repository, ref: String): CommitInfo? {
+        val id = repo.resolve(ref) ?: return null
+        return repo.parseCommit(id).toCommitInfo()
+    }
+
     /** HEAD's commit info, or null on an unborn repo (before the first commit). */
     fun head(repo: Repository): CommitInfo? {
         val headRef = repo.exactRef("HEAD") ?: return null
@@ -275,6 +287,7 @@ object JGitClient {
             try {
                 val result = network("fetch", remoteUrl(repo, remote)) {
                     git.fetch()
+                        .setTimeout(TRANSPORT_TIMEOUT_SECONDS)
                         .setRemote(remote)
                         .setRefSpecs(RefSpec("+refs/heads/$branch:refs/remotes/$remote/$branch"))
                         .setCredentialsProvider(credentials.toProvider())
@@ -313,6 +326,7 @@ object JGitClient {
                               else "refs/heads/$branch:refs/heads/$branch"
                 val results = network("push", remoteUrl(repo, remote)) {
                     git.push()
+                        .setTimeout(TRANSPORT_TIMEOUT_SECONDS)
                         .setRemote(remote)
                         .setRefSpecs(RefSpec(refSpec))
                         .setCredentialsProvider(credentials.toProvider())
@@ -392,6 +406,7 @@ object JGitClient {
             try {
                 network("fetch", remoteUrl(repo, remote)) {
                     git.fetch()
+                        .setTimeout(TRANSPORT_TIMEOUT_SECONDS)
                         .setRemote(remote)
                         .setRefSpecs(RefSpec("+refs/tags/*:${remoteTagPrefix(remote)}*"))
                         .setTagOpt(org.eclipse.jgit.transport.TagOpt.NO_TAGS)
@@ -421,6 +436,7 @@ object JGitClient {
             try {
                 val results = network("push", remoteUrl(repo, remote)) {
                     git.push()
+                        .setTimeout(TRANSPORT_TIMEOUT_SECONDS)
                         .setRemote(remote)
                         .setRefSpecs(
                             RefSpec("refs/heads/$branch:refs/heads/$branch"),
@@ -597,7 +613,7 @@ object JGitClient {
             || "authentication" in lower
             || "401" in msg
             || "403" in msg
-        return if (isAuth) GitAuthException(msg, this) else RuntimeException(msg, this)
+        return if (isAuth) GitAuthException(msg, this) else GitTransportException(msg, this)
     }
 
     private fun RevCommit.toCommitInfo(): CommitInfo {
@@ -610,6 +626,7 @@ object JGitClient {
             // RevCommit.commitTime is seconds-since-epoch; multiply for canonical millis.
             whenMs = commitTime.toLong() * 1000L,
             message = fullMessage.trim(),
+            restoredFrom = restoredFromTrailer(fullMessage),
         )
     }
 }
@@ -633,7 +650,18 @@ data class CommitInfo(
     val message: String,
     val installShortUuid: String? = null,
     val installFriendlyName: String? = null,
+    /** The full sha a restore commit brought back, from its `Restored-From:` trailer; null on any other commit. */
+    val restoredFrom: String? = null,
 )
+
+/** The trailer [SnapshotRestore] writes on a restore's commit, after a blank line. */
+const val RESTORED_FROM_TRAILER = "Restored-From:"
+
+private val RESTORED_FROM_REGEX = Regex("""^${Regex.escape(RESTORED_FROM_TRAILER)} ([0-9a-f]{40})$""")
+
+/** The sha a `Restored-From:` trailer names, read only from a line of its own. */
+fun restoredFromTrailer(message: String): String? =
+    message.lineSequence().firstNotNullOfOrNull { RESTORED_FROM_REGEX.matchEntire(it.trim())?.groupValues?.get(1) }
 
 private val INSTALL_MARKER_REGEX = Regex("""\[install:([0-9a-f]{8})]""")
 
@@ -703,3 +731,10 @@ sealed class HistoryRelation {
  * `AUTH_FAILED` so the UI can prompt the user to re-enter the PAT.
  */
 class GitAuthException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
+
+/**
+ * A fetch, push or clone that failed on the way to the remote for any reason but its credentials: a
+ * refused connection, a timeout, a host that does not resolve. A [RuntimeException], as it was before
+ * it had a name, so every existing catch still holds.
+ */
+class GitTransportException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)

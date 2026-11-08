@@ -7,8 +7,8 @@ import java.util.concurrent.atomic.AtomicLong
 /**
  * Per-test SQLite database used by route-level integration tests. Each call to
  * [reset] rotates [path] to a freshly-created empty SQLite file in a temp
- * directory, so the next [State][uk.me.cormack.lighting7.state.State] re-runs
- * `createMissingTablesAndColumns` against a clean database.
+ * directory, so the next [State][uk.me.cormack.lighting7.state.State] builds its schema
+ * afresh.
  */
 object IntegrationTestDb {
 

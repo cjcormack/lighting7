@@ -60,7 +60,7 @@ class Show(
      */
     carried: ShowCarry? = null,
 ) {
-    val fixtures = Fixtures()
+    val fixtures = Fixtures(mockOutput = state.dmxMock)
     val fxScriptCompiler = FxScriptCompiler(state.scriptingHostConfiguration)
     val fxRegistry = FxRegistry().apply {
         // Load built-in effects from .fx.kts resource files. Compilation is the single biggest

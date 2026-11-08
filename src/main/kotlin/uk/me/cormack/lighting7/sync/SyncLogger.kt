@@ -157,6 +157,12 @@ object SyncLogEvent {
      * would end on the last failure with no way to tell "fixed" from "still broken".
      */
     const val AUTO_SYNC_RECOVERED = "AUTO_SYNC_RECOVERED"
+
+    /** A snapshot restored (sync-restore plan §3): *Restored 3f2a91c from … UTC: 3 back, 2 gone, 9 changed*. */
+    const val RESTORED = "RESTORED"
+
+    /** A restore refused or failed, with its code. */
+    const val RESTORE_FAILED = "RESTORE_FAILED"
 }
 
 /** Wire shape for a single [DaoSyncLogEntry] row. */

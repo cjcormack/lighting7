@@ -9,8 +9,9 @@ import { useProjectListQuery } from "@/store/projects"
  * cross-project sync events surface even when the user isn't on the sync page.
  *
  * The sync page already toasts on its own mutation results — this component skips
- * events for the project the user is currently viewing on `/sync/projects/{id}` to
- * avoid double-toasting in the common single-tab case.
+ * events for the project whose Sync tab the user is viewing, `/projects/{id}/settings/sync`
+ * (or the old `/sync/projects/{id}` that redirects to it), to avoid double-toasting in the
+ * common single-tab case.
  */
 export function SyncNotifications() {
   const { data: projects } = useProjectListQuery()
@@ -27,6 +28,7 @@ export function SyncNotifications() {
       projectsRef.current?.find((p) => p.id === id)?.name ?? `project ${id}`
 
     const onSyncPageFor = (id: number) =>
+      pathnameRef.current === `/projects/${id}/settings/sync` ||
       pathnameRef.current === `/sync/projects/${id}`
 
     const subDone = lightingApi.cloudSync.subscribeDone((event) => {
@@ -40,6 +42,8 @@ export function SyncNotifications() {
 
     const subFailed = lightingApi.cloudSync.subscribeFailed((event) => {
       if (onSyncPageFor(event.projectId)) return
+      // A restore whose review moved on is a step in another window's review dialog, which shows the new one.
+      if (event.errorCode === "RESTORE_REVIEW_STALE") return
       toast.error(`${projectName(event.projectId)}: ${event.message}`, {
         id: `cloud-sync-${event.projectId}`,
         duration: 8000,

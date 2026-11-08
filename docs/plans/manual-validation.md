@@ -16,8 +16,10 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-BUSK-STACK-S3`](#fu-manual-busk-stack-s3) | a stack pad steps a song by taps, a solo bank's song pad releases a sibling song, and moving the stack back into the running order asks first | Busk stack session 3, 2026-11-08 |
+| [`FU-MANUAL-RESTORE-S2`](#fu-manual-restore-s2) | restoring from the History panel: the review's counts match what changed, the toast's *Undo* puts it back, and a restore with the network off goes out on the next sync | Snapshot restore S2, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S2`](#fu-manual-busk-stack-s2) | Carabossy on Replaces takes the front wash from 80 % to 0, holds the movers' chase back, and fades the kitchen back on release with the chase growing back in phase; a song on Adds lifts heads over the base and never darkens them; a GO on Act 1 during Carabossy lands under her | Busk stack session 2, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S1`](#fu-manual-busk-stack-s1) | a song stack out of the running order: Act 1's last GO goes to Act 2, not the song; the song's own GO and a follow off its last cue release it over its release time; the Show view's stop fades | Busk stack session 1, 2026-11-07 |
+| [`FU-MANUAL-RESTORE-S1`](#fu-manual-restore-s1) | restoring an older snapshot through the API while the show runs crossfades without a dip, the other desk takes it on *Sync now*, and restoring `before` puts it back | Snapshot restore S1, 2026-11-08 |
 | [`FU-MANUAL-CLOUD-P1`](#fu-manual-cloud-p1) | Lighting7 Cloud's P1 exit: a phone on 4G busks the venue desk opened from the portal, Claude patches a rig through the desk's cloud URL with no tunnel, an emailed invite approved in the portal lands its operator as `OPERATOR`, unlinking, disabling, removing a membership and *End* each close a session within 5 s, the two switches refuse what they name and cannot be changed remotely, the Remote access tab, `/oauth/*`, `/mcp` and the tunnel are gone and an upgraded desk keeps its policy switches, and a running fade sees nothing of the sidecar or the cloud stopping | Cloud P1 S9, 2026-11-07 |
 | [`FU-MANUAL-OSC-S1`](#fu-manual-osc-s1) | a QLab Network cue lands cue 1 and fired again mid-fade moves nothing; a Look's `on` and `off` and a busk Look pad from QLab; a QLab machine off the allowlist shows with *Allow this sender*; an operator sees the log | OSC session 1, 2026-11-07 |
 | [`FU-MANUAL-OSC-S2`](#fu-manual-osc-s2) | the grand master follows a QLab fade cue sending floats; a copied address pasted into QLab works first time; renumbering a received cue warns on the desk | OSC session 2, 2026-11-07 |
@@ -163,6 +165,31 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 ---
 
+## `FU-MANUAL-RESTORE-S2`
+
+**What it proves**: *the History panel restores a snapshot, says truly what it will change, and takes
+it back* (snapshot-restore plan session 2).
+
+**Why it is here**: the component tests draw the dialog over a mocked store; only a real show checks
+that the review's groups name what an operator changed, and only a desk with its network off shows the
+restore waiting for the next sync.
+
+**Test**, on a show synced between two desks (A and B):
+
+1. **Review.** On A, change a cue's colour, delete a cue and add a Look, then *Take snapshot*. In
+   Project settings → Sync → History, open the row before it: *Review and restore…*. The counts are
+   1 come back, 1 go, 1 change back (plus any you did not mean), each named in its group; the newest
+   row's *Review and restore…* is off.
+2. **Restore.** Add a note and press *Restore*. The toast says *Restored to …*, *pushed to the repo*;
+   the History list's newest row is marked *Restore of …* and carries the note.
+3. **Undo.** Press the toast's *Undo*: the review lists the same changes the other way round, and
+   restoring it puts the cue's colour, the cue and the Look back as you had them.
+4. **Offline.** Take A off the network and restore an older row: the review and the restore work, the
+   toast's notes say the repository couldn't be reached, and with the network back *Sync now* pushes it;
+   B takes it on its next sync.
+
+---
+
 ## `FU-MANUAL-BUSK-STACK-S1`
 
 **What it proves**: *Busk stacks and the running order* (busk-stack plan session 1) — a stack out of
@@ -235,6 +262,29 @@ and *Song* (Adds; a chase and a colour change on the front wash):
    its colour wins over the kitchen's.
 4. **Latest GO wins.** With *Act 1* and *Act 2* both live, GO *Act 1*: its colour wins wherever both set
    one, whichever stack was made first; a follow on *Act 2* does not take it back.
+
+---
+
+## `FU-MANUAL-RESTORE-S1`
+
+**What it proves**: *an older snapshot comes back on a running show without a dip, reaches the other
+desk, and goes away again* (snapshot-restore plan session 1).
+
+**Why it is here**: the tests restore over bare repos and assert the hold on a mock rig; only the rig
+shows the reload's crossfade, and only two desks on GitHub show the push and the pull.
+
+**Test**, on a show synced between two desks (A and B), with a stack running on A and the rig lit:
+
+1. **Pick a snapshot.** On A, `GET /api/rest/projects/{id}/sync/log` and choose a commit from before a
+   change you can see on stage (a cue's colour, a deleted cue). `GET …/sync/restore/{sha}` lists it: the
+   counts match what changed, and `live` is true.
+2. **Restore.** `POST …/sync/restore {"sha": …, "token": …, "note": "rig check"}`. The rig crossfades
+   to the old state and no channel dips to zero on the way; a cue that was live stays live. The answer's
+   `sync.outcome` is `PUSHED` and its `before` names the commit to go back to.
+3. **The other desk.** On B, *Sync now*: it fast-forwards, and B's show is the restored one. The History
+   panel shows the restore as the newest commit, `Restored … from … UTC: rig check`.
+4. **Undo.** On A, review and restore `before`'s sha: the change you picked is back, again without a
+   dip, and B takes that too on its next sync.
 
 ---
 

@@ -6,9 +6,11 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.locate.UnitLocate
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.dmx.ArtNetController
+import uk.me.cormack.lighting7.dmx.DefaultArtNetTransport
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.OutputHold
 import uk.me.cormack.lighting7.dmx.ParkSource
+import uk.me.cormack.lighting7.dmx.SilentArtNetTransport
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureCommands
@@ -161,6 +163,7 @@ object DbFixtureLoader {
                         refreshIntervalMs = config.refreshIntervalMs,
                         initialValues = priorValues,
                         parkSource = parkSource,
+                        transport = if (fixtures.mockOutput) SilentArtNetTransport else DefaultArtNetTransport(),
                         hold = hold?.output,
                     )
                 }

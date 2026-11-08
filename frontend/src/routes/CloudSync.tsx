@@ -245,7 +245,7 @@ function ProjectSyncPanels({
           <ConflictPanel projectId={projectId} />
           {/* key= forces a fresh mount per project so accumulated paged state resets cleanly. */}
           <ActivityPanel key={`activity-${projectId}`} projectId={projectId} />
-          <HistoryPanel key={`history-${projectId}`} projectId={projectId} />
+          <HistoryPanel key={`history-${projectId}`} projectId={projectId} isVenue={isVenue} />
         </>
       )}
     </div>
