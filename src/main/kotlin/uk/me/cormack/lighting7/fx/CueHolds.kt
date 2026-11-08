@@ -92,9 +92,10 @@ class CueHolds internal constructor(
     /**
      * How a release's contribution leaves: dropped now, or over the GO's fade — its rows left at full
      * weight for the caller's crossfade to take down, its effects shrinking to nothing on their own
-     * ramp and removed at 0 ([FxEngine.fadeOutFx]).
+     * ramp and removed at 0 ([FxEngine.fadeOutFx]). [RELEASE] is a stop's (busk-stack plan D6): as
+     * [FADE_OUT], but its rows are left at the weight they stand at, for the release to take down.
      */
-    enum class Departure { SNAP, FADE_OUT }
+    enum class Departure { SNAP, FADE_OUT, RELEASE }
 
     /**
      * [first] when this hold brought the cue on; [hasRows] when it published Layer 4 rows;
@@ -280,7 +281,13 @@ class CueHolds internal constructor(
      * ([Arrival.FADE_IN], [Departure.FADE_OUT]), and the time and curve its effects' envelopes ramp
      * over. [SNAP] for neither.
      */
-    private data class Fade(val durationMs: Long, val curve: EasingCurve, val crossfade: Boolean) {
+    private data class Fade(
+        val durationMs: Long,
+        val curve: EasingCurve,
+        val crossfade: Boolean,
+        /** A release's: the rows keep the weight they stand at rather than fading out from full. */
+        val fromWhereItStands: Boolean = false,
+    ) {
         /** Whether the effects ramp; a crossfade of 0 ms moves them as a snap does. */
         val fades: Boolean get() = crossfade && durationMs > 0
 
@@ -376,7 +383,14 @@ class CueHolds internal constructor(
                 fxEngine.repriorityCues(mapOf(cueId to remaining))
                 return Released(last = false, fxRemoved = 0, fadingRows = false)
             }
-            return takeOff(state, cueId, if (departure == Departure.FADE_OUT) Fade(fadeMs, curve, crossfade = true) else Fade.SNAP)
+            return takeOff(
+                state, cueId,
+                when (departure) {
+                    Departure.SNAP -> Fade.SNAP
+                    Departure.FADE_OUT -> Fade(fadeMs, curve, crossfade = true)
+                    Departure.RELEASE -> Fade(fadeMs, curve, crossfade = true, fromWhereItStands = true)
+                },
+            )
         } finally {
             onChanged()
         }
@@ -845,7 +859,7 @@ class CueHolds internal constructor(
         val fading = fade.crossfade && fxEngine.cueLayer.hasAssignments(cueId)
         if (fading) {
             // A prior mid-flight crossfade may have left it partial; it fades out from full.
-            fxEngine.cueLayer.updateFadeWeights(mapOf(cueId to 1.0))
+            if (!fade.fromWhereItStands) fxEngine.cueLayer.updateFadeWeights(mapOf(cueId to 1.0))
         } else {
             fxEngine.cueLayer.removeAssignments(cueId)
         }

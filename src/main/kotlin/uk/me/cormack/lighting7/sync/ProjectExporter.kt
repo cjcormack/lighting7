@@ -397,6 +397,9 @@ class ProjectExporter(private val state: State) {
                     type = s.type,
                     label = s.label,
                     scenery = stackSceneryOf(s.id).map { it.toJson() },
+                    inRunningOrder = s.inRunningOrder,
+                    releaseAtEnd = s.releaseAtEnd,
+                    releaseTimeMs = s.releaseTime.toMillis(),
                 ).withMoveInDark(s.moveInDarkSettings)
             },
 

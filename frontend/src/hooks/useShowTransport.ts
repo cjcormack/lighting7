@@ -18,6 +18,7 @@ import {
 import type { RunnerAnimSpan } from '../store/runnerSlice'
 import { useRunnerAnimation } from './useRunnerAnimation'
 import { useAnimatedProgress } from './useAnimatedProgress'
+import { isGoReleases, isNothingOnDeck, nextInRunningOrder } from '../lib/runningOrder'
 
 interface UseShowTransportArgs {
   projectId: number
@@ -74,6 +75,13 @@ export interface ShowTransport {
    * `fadeProgress`/`fadeRemainMs` above change on every render of this hook's host.
    */
   fade: RunnerAnimSpan | null
+  /**
+   * The playhead stack has no cue of its own on deck (lighting7 busk-stack plan §3 "Release"): GO is
+   * the boundary GO, into the next stack in the running order.
+   */
+  nothingOnDeck: boolean
+  /** The playhead stack is on its last cue with *Release* set: GO releases it rather than crossing. */
+  goReleases: boolean
   /** `!isShowActive || !canOperate` — disables the transport. */
   goDisabled: boolean
   go: () => void
@@ -303,15 +311,20 @@ export function useShowTransport({
 
   const autoProgress = useAnimatedProgress(frameRateProgress ? runner.auto : null)
 
+  const goReleases = isGoReleases(activeStack, serverActiveCueId, runner.standbyCueId)
+  const nothingOnDeck = isNothingOnDeck(runner.standbyCueId, runner.releasedAtEnd)
+
   const go = useCallback(() => {
     onBeforeGo?.()
-    // Boundary GO: nothing on deck → advance to the next runnable stack in show order.
-    if (runner.standbyCueId == null) {
-      if (activeStackId == null || !stacks) return
-      const runnable = stacks.filter((s) => s.type === 'STACK')
-      const curIdx = runnable.findIndex((s) => s.id === activeStackId)
-      const nextStack = curIdx >= 0 ? runnable[curIdx + 1] : undefined
-      if (nextStack) {
+    // GO past a Release stack's last cue releases it; the GO after that crosses.
+    if (goReleases && activeStackId != null) {
+      advanceCueStack({ projectId, stackId: activeStackId, direction: 'FORWARD' })
+      cancelAnimations()
+      return
+    }
+    // Boundary GO: nothing on deck → advance to the next stack in the running order.
+    if (nothingOnDeck) {
+      if (nextInRunningOrder(stacks, activeStackId)) {
         advanceProgram({ projectId, direction: 'FORWARD' })
         cancelAnimations()
       }
@@ -322,7 +335,7 @@ export function useShowTransport({
     // in lock-step via fireGoServer.
     dispatch(goAction({ stackId: activeStackId, cues: activeStack.cues, loop: activeStack.loop }))
     fireGoServer()
-  }, [onBeforeGo, runner.standbyCueId, stacks, activeStackId, activeStack, advanceProgram, projectId, cancelAnimations, dispatch, fireGoServer])
+  }, [onBeforeGo, goReleases, nothingOnDeck, stacks, activeStackId, activeStack, advanceCueStack, advanceProgram, projectId, cancelAnimations, dispatch, fireGoServer])
 
   const back = useCallback(() => {
     if (activeStackId == null || !activeStack) return
@@ -365,6 +378,8 @@ export function useShowTransport({
     fadeProgress,
     fadeRemainMs,
     fade: fadeAnim,
+    nothingOnDeck,
+    goReleases,
     goDisabled,
     go,
     back,

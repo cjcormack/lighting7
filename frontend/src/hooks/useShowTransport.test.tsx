@@ -100,6 +100,14 @@ describe('useShowTransport', () => {
   })
 
   afterEach(() => {
+    // The runner is a module singleton, and a reset keeps the desk's `releasedAtEnd`: clear it.
+    for (const id of [10, 11]) {
+      store.dispatch(runnerSlice.actions.applyServerRunState({
+        projectId: 1, stackId: id, activeCueId: null, nextCueId: null, activeEntryId: null, nextEntryId: null,
+        standbyEntryId: null, nextIsArmed: false, transition: false, fadeDurationMs: null, fadeElapsedMs: null,
+        autoAdvance: false, autoAdvanceDelayMs: null,
+      }))
+    }
     dispatchSpy.mockRestore()
     store.dispatch(restApi.util.resetApiState())
     vi.unstubAllGlobals()
@@ -379,6 +387,43 @@ describe('useShowTransport', () => {
     act(() => result.current.go())
     await flush()
     expect(posts('show/advance')).toHaveLength(1)
+  })
+
+  it('skips a busk stack when crossing a stack boundary, and has nowhere to go past one', async () => {
+    const a = mkStack({ id: 10, activeCueId: 3, nextCueId: null })
+    const busk = mkStack({ id: 11, name: 'Song', sortOrder: 1, inRunningOrder: false })
+    const { result } = draw({ activeStackId: 10, stacks: [a, busk] })
+    act(() => result.current.go())
+    await flush()
+    expect(posts('show/advance')).toHaveLength(0)
+  })
+
+  it('GO on a Release stack\'s last cue releases it, and the GO after that crosses', async () => {
+    const a = mkStack({ id: 10, activeCueId: 3, nextCueId: null, releaseAtEnd: true })
+    const b = mkStack({ id: 11, name: 'Act 2', sortOrder: 1 })
+    const { result } = draw({ activeStackId: 10, stacks: [a, b] })
+    expect(result.current.goReleases).toBe(true)
+
+    act(() => result.current.go())
+    await flush()
+    expect(posts('cue-stacks/10/advance')).toHaveLength(1)
+    expect(posts('show/advance')).toHaveLength(0)
+
+    // The desk answers the stack stopped, released at its end, with its first cue named as next.
+    act(() => {
+      store.dispatch(runnerSlice.actions.applyServerRunState({
+        projectId: 1, stackId: 10, activeCueId: null, nextCueId: 1, activeEntryId: null, nextEntryId: 1,
+        standbyEntryId: null, nextIsArmed: false, transition: false, fadeDurationMs: null, fadeElapsedMs: null,
+        autoAdvance: false, autoAdvanceDelayMs: null, releasedAtEnd: true,
+      }))
+    })
+    const { result: after } = draw({ activeStackId: 10, stacks: [{ ...a, activeCueId: null, nextCueId: 1 }, b] })
+    expect(after.current.goReleases).toBe(false)
+    expect(after.current.nothingOnDeck).toBe(true)
+    act(() => after.current.go())
+    await flush()
+    expect(posts('show/advance')).toHaveLength(1)
+    expect(posts('cue-stacks/10/advance')).toHaveLength(1)
   })
 
   it('runs onBeforeGo first, even when GO turns out to be a no-op', async () => {

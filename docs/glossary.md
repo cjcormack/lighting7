@@ -166,6 +166,10 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | A stored state of the rig | Look | | | Look | screen, wire | done | `src:components/looks/LookSheet.tsx` |
 | One step of a show | Cue | | | Cue | screen, wire | done | `src:components/runner/CueSheet.tsx` |
 | An ordered list of cues run with GO | Cue stack | | | Cue stack | screen, wire | done | `src:components/promptbook/CueStackPanel.tsx` |
+| A cue stack out of the running order, run from its own GO, a pad, a binding, MCP or OSC (busk-stack plan D1) | Busk stack | a stack with `inRunningOrder` false; column `cue_stacks.in_running_order` | | | screen, wire, docs | done | `doc:docs/cue-stacks-engineering.md` |
+| The stacks the show's playhead steps through, separators and busk stacks left out (busk-stack plan D2) | Running order | `orderedStacks` (`routes/projectShow.kt`), `lib/runningOrder.ts`; the stack setting *In the running order* | | | screen, docs | done | `doc:docs/cue-stacks-engineering.md` |
+| A stack let go, after its last cue or by a stop, fading over its release time (busk-stack plan D3, D6); not the programmer's *Release* of a target | Release | `releaseAtEnd`, `CueStackManager.stopStack`, `ActivateResult.released`, `releasedAtEnd`; column `release_at_end` | | | screen, wire | done | `src:components/cues/CueStackForm.tsx` |
+| How long a stack's stop fades its light (busk-stack plan D6) | Release time | `releaseTimeMs`; column `release_time` | | | screen, wire | done | `src:components/cues/CueStackForm.tsx` |
 | Values being set by hand, above every cue | Programmer | | | Programmer | screen, wire | done | `src:lib/windowViews.ts` |
 | A channel held at a level whatever else sends | Park | | | Park | screen, wire | done | `src:components/channels/DmxSheet.tsx` |
 | Heads to their known point | Locate | | | Locate | screen, wire | done | `src:components/patches/LocateBox.tsx` |

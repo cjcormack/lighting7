@@ -591,7 +591,7 @@ internal class VenueSetupTools(private val state: State) {
             val copy = DaoCueStack.new {
                 name = s.name
                 project = target
-                loop = s.loop
+                runSettings = s.runSettings
                 type = CueStackType.STACK.name
                 label = s.label
                 sortOrder = stackOrder++

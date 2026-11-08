@@ -33,6 +33,9 @@ const STACK: CueStack = {
   moveInDark: { on: true, when: 'EARLY', delayMs: 1250, timeMs: 2000, families: ['POSITION', 'COLOUR', 'BEAM'] },
 }
 
+/** The run settings a stack in the running order, staying at its end, saves as. */
+const RUN = { inRunningOrder: true, releaseAtEnd: false, releaseTimeMs: 2000 }
+
 const onSave = vi.fn(() => Promise.resolve())
 const onOpenChange = vi.fn()
 
@@ -59,7 +62,7 @@ describe('CueStackForm · Move in dark', () => {
     fireEvent.click(save())
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     expect(onSave.mock.calls[0]).toEqual([
-      { name: 'Act 2', loop: false, moveInDark: { on: true, when: 'EARLY', delayMs: 1000, timeMs: 2000, families: ['POSITION', 'COLOUR', 'BEAM'] } },
+      { name: 'Act 2', loop: false, ...RUN, moveInDark: { on: true, when: 'EARLY', delayMs: 1000, timeMs: 2000, families: ['POSITION', 'COLOUR', 'BEAM'] } },
     ])
   })
 
@@ -68,7 +71,7 @@ describe('CueStackForm · Move in dark', () => {
     expect(screen.getByLabelText('Delay')).toHaveValue('1.3s')
     fireEvent.click(save())
     await waitFor(() => expect(onSave).toHaveBeenCalled())
-    expect(onSave.mock.calls[0]).toEqual([{ name: 'Main', loop: false }])
+    expect(onSave.mock.calls[0]).toEqual([{ name: 'Main', loop: false, ...RUN }])
   })
 
   it('writes When, the times and the families it was given', async () => {
@@ -80,7 +83,7 @@ describe('CueStackForm · Move in dark', () => {
     fireEvent.click(save())
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     expect(onSave.mock.calls[0]).toEqual([
-      { name: 'Main', loop: false, moveInDark: { on: true, when: 'LATE', delayMs: 500, timeMs: 3000, families: ['POSITION', 'BEAM'] } },
+      { name: 'Main', loop: false, ...RUN, moveInDark: { on: true, when: 'LATE', delayMs: 500, timeMs: 3000, families: ['POSITION', 'BEAM'] } },
     ])
   })
 
@@ -102,7 +105,7 @@ describe('CueStackForm · Move in dark', () => {
     fireEvent.click(save())
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     expect(onSave.mock.calls[0]).toEqual([
-      { name: 'Main', loop: false, moveInDark: { on: false, when: 'EARLY', delayMs: 1250, timeMs: 2000, families: ['POSITION', 'COLOUR', 'BEAM'] } },
+      { name: 'Main', loop: false, ...RUN, moveInDark: { on: false, when: 'EARLY', delayMs: 1250, timeMs: 2000, families: ['POSITION', 'COLOUR', 'BEAM'] } },
     ])
   })
 
@@ -132,7 +135,7 @@ describe('CueStackForm · Move in dark', () => {
     expect(save()).toBeEnabled()
     fireEvent.click(save())
     await waitFor(() => expect(onSave).toHaveBeenCalled())
-    expect(onSave.mock.calls[0]).toEqual([{ name: 'Main', loop: false, moveInDark: { on: false } }])
+    expect(onSave.mock.calls[0]).toEqual([{ name: 'Main', loop: false, ...RUN, moveInDark: { on: false } }])
   })
 
   it('keeps what is typed when the same stack is re-read, and starts afresh on another', () => {
@@ -151,5 +154,51 @@ describe('CueStackForm · Move in dark', () => {
   it('a separator has no block', () => {
     draw({ ...STACK, type: 'SEPARATOR' })
     expect(document.querySelector('[data-move-in-dark-block]')).toBeNull()
+  })
+})
+
+describe('CueStackForm · the running order and Release', () => {
+  const lastSave = () => (onSave.mock.calls[0] as unknown as [Record<string, unknown>])[0]
+
+  it('turning In the running order off sets Release, and Save sends a busk stack', async () => {
+    draw(STACK)
+    const inOrder = screen.getByRole('switch', { name: 'In the running order' })
+    expect(inOrder).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: 'Stay' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(inOrder)
+    expect(screen.getByRole('radio', { name: 'Release' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(save())
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(lastSave()).toMatchObject({ loop: false, inRunningOrder: false, releaseAtEnd: true })
+  })
+
+  it('a looping stack taken out of the running order keeps its Loop', async () => {
+    draw({ ...STACK, loop: true })
+    fireEvent.click(screen.getByRole('switch', { name: 'In the running order' }))
+    expect(screen.getByRole('radio', { name: 'Loop' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(save())
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(lastSave()).toMatchObject({ loop: true, inRunningOrder: false, releaseAtEnd: false })
+  })
+
+  it('After the last cue is one choice: Loop and Release are never sent together', async () => {
+    draw({ ...STACK, releaseAtEnd: true })
+    expect(screen.getByRole('radio', { name: 'Release' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(screen.getByRole('radio', { name: 'Loop' }))
+    fireEvent.click(save())
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(lastSave()).toMatchObject({ loop: true, releaseAtEnd: false })
+  })
+
+  it('Release time is in seconds, 0–60, and holds Save back outside it', async () => {
+    draw({ ...STACK, releaseTimeMs: 3000 })
+    const field = screen.getByLabelText('Release time')
+    expect(field).toHaveValue('3')
+    fireEvent.change(field, { target: { value: '61' } })
+    expect(save()).toBeDisabled()
+    fireEvent.change(field, { target: { value: '0.5' } })
+    fireEvent.click(save())
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(lastSave()).toMatchObject({ releaseTimeMs: 500 })
   })
 })

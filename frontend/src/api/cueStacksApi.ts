@@ -128,6 +128,15 @@ export interface CueStack {
   scenery?: SceneryChange[]
   /** Move in dark (lighting7 move-in-dark plan D2). Absent from an older desk, which reads as off. */
   moveInDark?: StackMoveInDark
+  /**
+   * Off for a *busk stack*, which the show's playhead never reaches (lighting7 busk-stack plan D1).
+   * Absent from a desk before it, which reads as in the running order.
+   */
+  inRunningOrder?: boolean
+  /** *After the last cue: Release* (D3): one more GO, or a follow off it, releases the stack. */
+  releaseAtEnd?: boolean
+  /** How long a stop fades the stack's light (D6), in ms; 0 snaps. */
+  releaseTimeMs?: number
 }
 
 /**
@@ -179,6 +188,13 @@ export interface CueStackInput {
   label?: string | null
   /** Explicit position; when omitted the row is appended to the end of the project's order. */
   sortOrder?: number
+  /**
+   * The run settings (busk-stack plan §3): absent on a `PUT` keeps what is stored. Turning
+   * `inRunningOrder` off without naming `releaseAtEnd` sets it unless the stack loops.
+   */
+  inRunningOrder?: boolean
+  releaseAtEnd?: boolean
+  releaseTimeMs?: number
 }
 
 /** The stack's entries in their new order — markers included. */
@@ -263,6 +279,8 @@ export interface CueStackActivateResponse {
 }
 
 export interface CueStackDeactivateResponse {
+  /** An advance that went past the last cue and released the stack (lighting7 busk-stack plan D3). */
+  released?: boolean
   stackId: number
   removedCount: number
 }
@@ -337,6 +355,11 @@ export interface CueRunStateEvent {
   fadeElapsedMs: number | null
   autoAdvance: boolean
   autoAdvanceDelayMs: number | null
+  /**
+   * The stack stopped by going past its last cue with *Release* set, until its next start
+   * (lighting7 busk-stack plan D3). Absent when false, and from a desk before it.
+   */
+  releasedAtEnd?: boolean
 }
 
 /** Response of `POST /cue-stacks/{stackId}/standby`. */

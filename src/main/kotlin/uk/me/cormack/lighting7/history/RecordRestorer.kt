@@ -35,6 +35,8 @@ import uk.me.cormack.lighting7.sync.ProjectExporter
 import uk.me.cormack.lighting7.sync.ProjectImporter
 import uk.me.cormack.lighting7.sync.RecordImage
 import uk.me.cormack.lighting7.sync.RecordKey
+import uk.me.cormack.lighting7.sync.canonicalDecode
+import uk.me.cormack.lighting7.sync.dto.CueStackJson
 import java.util.UUID
 
 /**
@@ -89,6 +91,7 @@ internal class RecordRestorer(private val state: State) {
         val current = state.projectManager.currentProjectOrNull?.id?.value == projectId
         val origin = WriteOrigin(caller, window, kind = kind)
         var applied: Applied? = null
+        var playheadCleared = false
         val outcome = try {
             WriteOrigin.with(origin) {
                 transaction(state.database) {
@@ -125,7 +128,7 @@ internal class RecordRestorer(private val state: State) {
                     newClash(project, ready.targets, clashesBefore)?.let { throw BlockedException(it) }
                     verify(projectId, ready.targets)?.let { throw BlockedException(it) }
                     // Nothing below can refuse the undo, so a stack is stopped only once it surely goes.
-                    stopLeavingStacks(project, ready.targets, current)
+                    playheadCleared = stopLeavingStacks(project, ready.targets, current)
                     val stageChanged = stageBefore.filter { (cueId, content) -> DaoCue.findById(cueId)?.stageContent() != content }.keys
                     applied = Applied(ready.targets, before, removal, stageChanged)
                     Outcome.Done(ready.entries)
@@ -141,6 +144,8 @@ internal class RecordRestorer(private val state: State) {
             Outcome.Blocked(blockedRecord(projectId, e.message, pendingTargets(origin)), "Something else has taken its name or its place since")
         }
         val done = applied
+        // Every window follows the playhead from `showChanged`, which the restore's own effects do not send.
+        if (outcome is Outcome.Done && playheadCleared && current) state.show.fixtures.showChanged(projectId, null, null)
         if (outcome is Outcome.Done && done != null) {
             // Its commit marked them unless it wrote nothing: records already where the entries put them.
             state.history.mark(projectId, outcome.entries.map { it.id }, undone = kind == WriteOrigin.Kind.UNDO)
@@ -268,18 +273,26 @@ internal class RecordRestorer(private val state: State) {
 
     /**
      * A stack the undo takes away is stopped, on the live project, and is no longer the project's
-     * playhead on any — as a stack delete does. Inside the transaction, once the restore cannot refuse.
+     * playhead on any — as a stack delete does. One it leaves out of the running order (busk-stack plan
+     * D4) is no longer the playhead either, and runs on. Inside the transaction, once the restore cannot
+     * refuse.
      */
-    private fun stopLeavingStacks(project: DaoProject, targets: Map<RecordKey, RecordImage?>, current: Boolean) {
+    private fun stopLeavingStacks(project: DaoProject, targets: Map<RecordKey, RecordImage?>, current: Boolean): Boolean {
         val manager = state.show.cueStackManager
-        for (key in targets.filter { it.key.tableName == RecordFolders.CUE_STACKS && it.value == null }.keys) {
+        val before = project.activeStackId
+        for ((key, image) in targets.filter { it.key.tableName == RecordFolders.CUE_STACKS }) {
             val id = state.history.recordOf(project.id.value, key)?.rowId ?: continue
-            if (current) {
-                manager.deactivateStack(id, state)
-                manager.forgetStack(id)
+            if (image == null) {
+                if (current) {
+                    manager.deactivateStack(id, state)
+                    manager.forgetStack(id)
+                }
+                if (project.activeStackId == id) project.activeStackId = null
+            } else if (project.activeStackId == id && !canonicalDecode(CueStackJson.serializer(), image.json).inRunningOrder) {
+                project.activeStackId = null
             }
-            if (project.activeStackId == id) project.activeStackId = null
         }
+        return before != null && project.activeStackId == null
     }
 
     /**

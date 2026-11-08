@@ -187,6 +187,7 @@ data class CueRunStateChangedOutMessage(
     val fadeElapsedMs: Long?,
     val autoAdvance: Boolean,
     val autoAdvanceDelayMs: Long?,
+    val releasedAtEnd: Boolean = false,
 ) : BroadcastOutMessage() {
     companion object {
         fun of(runState: CueRunState) = CueRunStateChangedOutMessage(
@@ -203,6 +204,7 @@ data class CueRunStateChangedOutMessage(
             fadeElapsedMs = runState.fadeElapsedMs,
             autoAdvance = runState.autoAdvance,
             autoAdvanceDelayMs = runState.autoAdvanceDelayMs,
+            releasedAtEnd = runState.releasedAtEnd,
         )
     }
 }

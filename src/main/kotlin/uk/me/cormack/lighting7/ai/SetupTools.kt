@@ -1642,6 +1642,15 @@ class SetupTools(
         if (stackName != null && stackName.length > 255) problems += "stackName must be at most 255 characters"
         val moveInDark = if (stackId != null) null else parseToolMoveInDark(input["moveInDark"], MoveInDarkSettings.NEW_STACK)
             .getOrElse { problems += it.message!!; null }
+        val runSettings = if (stackId != null) null else {
+            val releaseTimeMs = toolReleaseTimeMs(input["releaseTimeMs"]).getOrElse { problems += it.message!!; null }
+            CueStackRunSettings.resolve(
+                null, input.boolean("loop") == true,
+                inRunningOrder = input.boolean("inRunningOrder"),
+                releaseAtEnd = input.boolean("releaseAtEnd"),
+                releaseTimeMs = releaseTimeMs,
+            ).getOrElse { problems += it.message!!; null }
+        }
 
         data class Context(
             val stackError: String?,
@@ -1768,7 +1777,7 @@ class SetupTools(
             val stack = stackId?.let { DaoCueStack.findById(it)!! } ?: DaoCueStack.new {
                 name = stackName!!
                 this.project = project
-                loop = input.boolean("loop") == true
+                runSettings?.let { this.runSettings = it }
                 type = CueStackType.STACK.name
                 sortOrder = (project.cueStacks.maxOfOrNull { it.sortOrder } ?: -1) + 1
                 moveInDarkSettings = moveInDark ?: MoveInDarkSettings.NEW_STACK

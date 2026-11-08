@@ -7059,6 +7059,24 @@ in `OffPlayheadBanner`. The confirmation is not ceremony: `POST /show/go-to` dea
 being left and then calls `activateAtFirstCue` on the target, so the target's first cue genuinely
 fires and the desk darkens it again — a visible blip on top of losing the current cue.
 
+**Busk stacks come after the show's own** (lighting7 busk-stack plan D1–D4). A stack with
+`inRunningOrder` false is a busk stack, run from its own GO or a pad, never the playhead's. The tab
+strip and the stack list (`ShowOverview`) draw the running order's stacks and separators, then a
+*Busk* divider and the busk stacks, each running one with a live dot and its live entry's number,
+and the list numbers only the running order's rows, a busk stack being no step of the show
+(`lib/runningOrder.ts`'s `splitBuskStacks`); a drag in the list reorders within its side of the
+divider (`reorderWithinGroup`). The off-playhead banner offers no *Make this stack live* for one. The
+transport's boundary GO, the next-stack label and `canStart` read the **running order**
+(`runningOrder`, `nextInRunningOrder`); the counts that decide whether the strip and the phone's
+picker draw keep every stack, busk stacks included. Two predicates answer the GO: **GO releases**
+(`isGoReleases`: the playhead stack is set to Release, live, nothing armed) sends GO to the stack's own
+advance, which releases it, and **nothing on deck** (`isNothingOnDeck`: no next cue, or the run
+state's `releasedAtEnd`) makes it the boundary GO; `useShowTransport` exposes both, and the phone's
+GO/END reads them through `RunnerDisplayState`. *Make this stack live* deactivates with `snap: true`,
+since a stop otherwise fades over the stack's release time. `CueStackForm` carries *In the running
+order*, *After the last cue* (Stay · Loop · Release, one choice) and *Release time*; turning the
+switch off sets Release unless the stack loops.
+
 **And the Stacks button has to be able to leave one.** `/show`, `/show/stacks/:id`,
 `/show/stacks/:id/table` and `/show/stacks/:id/timeline` are four sibling routes with an `element` each, so going back from a stack
 **remounts** `ShowPage` — which reset the `initialDrillDoneRef` that makes the "drill into the live

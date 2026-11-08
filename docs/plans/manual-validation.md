@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-BUSK-STACK-S1`](#fu-manual-busk-stack-s1) | a song stack out of the running order: Act 1's last GO goes to Act 2, not the song; the song's own GO and a follow off its last cue release it over its release time; the Show view's stop fades | Busk stack session 1, 2026-11-07 |
 | [`FU-MANUAL-CLOUD-P1`](#fu-manual-cloud-p1) | Lighting7 Cloud's P1 exit: a phone on 4G busks the venue desk opened from the portal, Claude patches a rig through the desk's cloud URL with no tunnel, an emailed invite approved in the portal lands its operator as `OPERATOR`, unlinking, disabling, removing a membership and *End* each close a session within 5 s, the two switches refuse what they name and cannot be changed remotely, the Remote access tab, `/oauth/*`, `/mcp` and the tunnel are gone and an upgraded desk keeps its policy switches, and a running fade sees nothing of the sidecar or the cloud stopping | Cloud P1 S9, 2026-11-07 |
 | [`FU-MANUAL-OSC-S1`](#fu-manual-osc-s1) | a QLab Network cue lands cue 1 and fired again mid-fade moves nothing; a Look's `on` and `off` and a busk Look pad from QLab; a QLab machine off the allowlist shows with *Allow this sender*; an operator sees the log | OSC session 1, 2026-11-07 |
 | [`FU-MANUAL-OSC-S2`](#fu-manual-osc-s2) | the grand master follows a QLab fade cue sending floats; a copied address pasted into QLab works first time; renumbering a received cue warns on the desk | OSC session 2, 2026-11-07 |
@@ -157,6 +158,29 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-BUSK-STACK-S1`
+
+**What it proves**: *Busk stacks and the running order* (busk-stack plan session 1) — a stack out of
+the running order is never reached by the show's GO, releases itself at its end, and a stop fades.
+
+**Why it is here**: the tests read fade weights off the cue layer; only the rig shows that a release
+looks like a fade rather than a cut, and that the Show view's GO crosses where the operator expects.
+
+**Test**, at the desk with a show of three stacks — *Act 1* (two cues), *Song* and *Act 2* — each cue
+lighting something different:
+
+1. **Out of the running order.** Open *Song*'s settings: switch *In the running order* off. *After the
+   last cue* moves to *Release*. Save. On the Show view *Song* is listed after a *Busk* divider.
+2. **The show's GO skips it.** Start the show and GO through *Act 1*: its last GO goes to *Act 2*, and
+   the next-stack label beside GO read *→ Act 2*, never *Song*.
+3. **Its own GO releases it.** Open *Song*'s tab, start it from its own controls and GO past its last
+   cue: it reads stopped at once, and its light fades out over its release time (2 s) while *Act 2*
+   stays up. Give its last cue a follow and start it again: the follow releases it the same way.
+4. **A stop fades.** With *Act 2* live, stop the show from the header: its light fades over 2 s rather
+   than snapping. Set its release time to 0 and stop it again: it snaps.
 
 ---
 
