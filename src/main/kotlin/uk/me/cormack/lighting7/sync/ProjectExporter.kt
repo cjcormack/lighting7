@@ -400,6 +400,7 @@ class ProjectExporter(private val state: State) {
                     inRunningOrder = s.inRunningOrder,
                     releaseAtEnd = s.releaseAtEnd,
                     releaseTimeMs = s.releaseTime.toMillis(),
+                    overShow = s.overShow.name,
                 ).withMoveInDark(s.moveInDarkSettings)
             },
 

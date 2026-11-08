@@ -289,5 +289,62 @@ class BuskStackRoutesTest : RouteIntegrationTest() {
         assertFalse(client.stack(id).inRunningOrder)
         assertNull(playhead(), "a busk stack is never the playhead")
         assertEquals(listOf<Int?>(null), heard, "and every window is told the playhead moved")
+        assertEquals(
+            uk.me.cormack.lighting7.fx.StackRanks.Band.BUSK,
+            state.show.cueStackManager.holds.ranks.placeOf(id)?.band,
+            "and it runs on in the busk band",
+        )
+    }
+
+    @Test
+    fun `Over the show is a busk stack's, kept on a PUT, and Adds once back in the running order`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val inOrder = client.send("POST", "/cue-stacks", """{"name":"Act 1","overShow":"REPLACES"}""")
+        assertEquals(HttpStatusCode.BadRequest, inOrder.status)
+        assertEquals(CODE_CUE_STACK_INVALID, inOrder.code())
+        assertTrue("overShow" in inOrder.bodyAsText())
+        val unknown = client.send("POST", "/cue-stacks", """{"name":"Act 1","inRunningOrder":false,"overShow":"SOMETIMES"}""")
+        assertEquals(HttpStatusCode.BadRequest, unknown.status)
+
+        val act = client.createStack("Act 1")
+        assertEquals("ADDS", act.overShow)
+        val cara = client.createStack("Carabossy", ""","inRunningOrder":false,"overShow":"REPLACES"""")
+        assertEquals("REPLACES", cara.overShow)
+        val kept = client.send("PUT", "/cue-stacks/${cara.id}", """{"name":"Carabossy","releaseTimeMs":3000}""").body<CueStackDetails>()
+        assertEquals("REPLACES", kept.overShow, "a PUT naming none keeps it")
+
+        val refused = client.send("PUT", "/cue-stacks/${cara.id}", """{"name":"Carabossy","inRunningOrder":true,"overShow":"REPLACES"}""")
+        assertEquals(HttpStatusCode.BadRequest, refused.status)
+        assertEquals(CODE_CUE_STACK_INVALID, refused.code())
+
+        val back = client.send("PUT", "/cue-stacks/${cara.id}", """{"name":"Carabossy","inRunningOrder":true}""")
+        assertEquals(HttpStatusCode.OK, back.status, back.bodyAsText())
+        val rejoined = back.body<CueStackDetails>()
+        assertTrue(rejoined.inRunningOrder)
+        assertEquals("ADDS", rejoined.overShow, "back in the running order it adds")
+    }
+
+    @Test
+    fun `a live stack turned into a busk stack takes the busk band's top`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+        val act = client.createStack("Act 1")
+        val song = client.createStack("Song")
+        client.createCue("Q1", act.id)
+        client.createCue("S1", song.id)
+        val manager = state.show.cueStackManager
+        manager.activateAtFirstCue(state, song.id)
+        assertEquals(uk.me.cormack.lighting7.fx.StackRanks.Band.SHOW, manager.holds.ranks.placeOf(song.id)?.band)
+
+        val busk = client.send("PUT", "/cue-stacks/${song.id}", """{"name":"Song","inRunningOrder":false}""")
+        assertEquals(HttpStatusCode.OK, busk.status, busk.bodyAsText())
+
+        assertEquals(
+            uk.me.cormack.lighting7.fx.StackRanks.Place(uk.me.cormack.lighting7.fx.StackRanks.Band.BUSK, 1),
+            manager.holds.ranks.placeOf(song.id),
+        )
     }
 }

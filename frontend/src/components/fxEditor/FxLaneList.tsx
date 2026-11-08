@@ -37,6 +37,7 @@ const HELD_BACK_WORDS: Readonly<Record<string, string>> = {
   STOMP: 'a layer above stomps it',
   PROGRAMMER: 'your value holds it back',
   BLIND: 'held · Blind',
+  REPLACED: 'a replacing stack holds it; it resumes in phase as that stack fades',
 }
 
 export interface LaneListProps {
@@ -300,7 +301,7 @@ function CardView({
             {heldByBlind && <HeldBlindMark />}
             {reasons.map((r) => (
               <span key={r} data-held-back={r} className="rounded border border-dashed px-1 text-[9.5px] text-muted-foreground" title={HELD_BACK_WORDS[r] ?? r}>
-                held back
+                {r === 'REPLACED' ? 'held · replaced' : 'held back'}
               </span>
             ))}
           </span>

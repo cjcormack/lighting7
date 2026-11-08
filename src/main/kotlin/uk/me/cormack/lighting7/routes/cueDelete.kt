@@ -6,7 +6,8 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import uk.me.cormack.lighting7.fx.stackEntryPriorities
+import uk.me.cormack.lighting7.fx.stackEntryPositions
+import uk.me.cormack.lighting7.fx.StackEntryPositions
 import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.BindingTargetJson
 import uk.me.cormack.lighting7.midi.discriminator
@@ -158,7 +159,7 @@ internal data class EntryRemoval(
     val stackIds: Set<Int>,
     val anchorsRemoved: Int,
     /** The surviving entries' priorities in every stack that lost one: positions shifted. */
-    val priorities: Map<Int, Int>,
+    val priorities: StackEntryPositions,
 ) {
     companion object {
         val NONE = EntryRemoval(emptySet(), emptySet(), emptySet(), 0, emptyMap())
@@ -193,7 +194,7 @@ internal fun removeEntries(state: State, project: DaoProject, entries: List<DaoC
         cueIds = entries.mapNotNullTo(HashSet()) { it.cueId },
         stackIds = if (current) stacks.mapTo(HashSet()) { it.id.value } else emptySet(),
         anchorsRemoved = anchors,
-        priorities = if (current) stacks.fold(emptyMap()) { acc, s -> acc + stackEntryPriorities(s) } else emptyMap(),
+        priorities = if (current) stacks.fold(emptyMap()) { acc, s -> acc + stackEntryPositions(s) } else emptyMap(),
     )
 }
 

@@ -1649,6 +1649,7 @@ class SetupTools(
                 inRunningOrder = input.boolean("inRunningOrder"),
                 releaseAtEnd = input.boolean("releaseAtEnd"),
                 releaseTimeMs = releaseTimeMs,
+                overShow = (input["overShow"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull,
             ).getOrElse { problems += it.message!!; null }
         }
 

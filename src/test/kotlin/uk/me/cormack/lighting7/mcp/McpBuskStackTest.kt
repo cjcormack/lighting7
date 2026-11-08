@@ -74,4 +74,58 @@ class McpBuskStackTest : RouteIntegrationTest() {
         val run = current["cueRun"]!!.jsonArray.map { it.jsonObject }.single { it["stackId"]!!.jsonPrimitive.int == stackId }
         assertTrue(run["releasedAtEnd"]!!.jsonPrimitive.boolean)
     }
+
+    @Test
+    fun `create_cue_stack takes Over the show on a busk stack only`() {
+        val cara = ok("create_cue_stack", """{"name":"Carabossy","inRunningOrder":false,"overShow":"REPLACES"}""")
+        assertEquals("REPLACES", cara["overShow"]!!.jsonPrimitive.content)
+        val refused = call("create_cue_stack", """{"name":"Act 1","overShow":"REPLACES"}""")
+        assertFalse(refused.success)
+        assertTrue("overShow" in refused.result || "overShow" in refused.description)
+        assertFalse(call("build_cue_stack", """{"stackName":"Act 2","overShow":"REPLACES","cues":[{"name":"Q1"}]}""").success)
+    }
+
+    @Test
+    fun `get_current_state names what a replacing stack holds and the FX it holds back`() {
+        uk.me.cormack.lighting7.testsupport.LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val act = ok("create_cue_stack", """{"name":"Act 1"}""")["stackId"]!!.jsonPrimitive.int
+        val cara = ok("create_cue_stack", """{"name":"Carabossy","inRunningOrder":false,"overShow":"REPLACES"}""")["stackId"]!!.jsonPrimitive.int
+        org.jetbrains.exposed.v1.jdbc.transactions.transaction(state.database) {
+            for ((stackId, level) in listOf(act to "204", cara to "0")) {
+                val cue = uk.me.cormack.lighting7.models.DaoCue.new {
+                    project = uk.me.cormack.lighting7.models.DaoProject[projectId]
+                    name = "Q$stackId"
+                }
+                uk.me.cormack.lighting7.models.DaoCueAttributeAssignment.new {
+                    this.cue = cue
+                    targetType = "fixture"; targetKey = "hex-1"; attribute = "dimmer"; value = level; sortOrder = 0
+                }
+                uk.me.cormack.lighting7.models.DaoCueStackEntry.new {
+                    stack = uk.me.cormack.lighting7.models.DaoCueStack[stackId]; this.cue = cue; ordinal = 1.0; cueNumber = "1"
+                }
+            }
+        }
+        ok("go_cue_stack", """{"stackId":$act}""")
+        val chase = state.show.fxEngine.addFx(
+            uk.me.cormack.lighting7.fx.FxInstance(
+                effect = uk.me.cormack.lighting7.testsupport.WindowedSlider(60u),
+                target = uk.me.cormack.lighting7.fx.SliderTarget("hex-1", "dimmer"),
+                timing = uk.me.cormack.lighting7.fx.FxTiming(cycle = uk.me.cormack.lighting7.fx.CycleLength.ONE_BEAT),
+                blendMode = uk.me.cormack.lighting7.fx.BlendMode.OVERRIDE,
+            ),
+        )
+        ok("go_cue_stack", """{"stackId":$cara}""")
+
+        val current = ok("get_current_state", """{"include":["cue_stacks"]}""")
+        val stack = current["cueStacks"]!!.jsonArray.map { it.jsonObject }.single { it["id"]!!.jsonPrimitive.int == cara }
+        assertEquals("REPLACES", stack["overShow"]!!.jsonPrimitive.content)
+        val replacing = current["replacing"]!!.jsonArray.single().jsonObject
+        assertEquals(cara, replacing["stackId"]!!.jsonPrimitive.int)
+        val held = replacing["holds"]!!.jsonArray.single().jsonObject
+        assertEquals("hex-1", held["target"]!!.jsonPrimitive.content)
+        assertEquals("0", held["value"]!!.jsonPrimitive.content)
+        val back = replacing["holdsBackFx"]!!.jsonArray.single().jsonObject
+        assertEquals(chase, back["fxId"]!!.jsonPrimitive.long)
+        assertEquals(0.0, back["paintsAt"]!!.jsonPrimitive.content.toDouble())
+    }
 }

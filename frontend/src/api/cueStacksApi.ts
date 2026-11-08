@@ -137,7 +137,16 @@ export interface CueStack {
   releaseAtEnd?: boolean
   /** How long a stop fades the stack's light (D6), in ms; 0 snaps. */
   releaseTimeMs?: number
+  /** *Over the show* (D7), a busk stack's: its cues add to the show, or replace it. Absent reads as `ADDS`. */
+  overShow?: StackOverShow
 }
+
+/**
+ * *Over the show* (lighting7 busk-stack plan D7): `ADDS` composes a busk stack's cues with the show's by
+ * the usual rules; `REPLACES` makes every attribute they set win outright, dimmers included, the FX
+ * under them held back until the stack releases.
+ */
+export type StackOverShow = 'ADDS' | 'REPLACES'
 
 /**
  * A stack's *Move in dark*: whether dark heads move ahead of the cue that lights them, *Early* (the
@@ -195,6 +204,8 @@ export interface CueStackInput {
   inRunningOrder?: boolean
   releaseAtEnd?: boolean
   releaseTimeMs?: number
+  /** A busk stack's *Over the show*; putting a stack back into the running order without one sets `ADDS`. */
+  overShow?: StackOverShow
 }
 
 /** The stack's entries in their new order — markers included. */

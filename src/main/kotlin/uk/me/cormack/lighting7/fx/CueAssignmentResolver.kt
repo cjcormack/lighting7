@@ -98,6 +98,12 @@ class CueAssignmentResolver {
          * literal. Composition ignores it; provenance reads the winning row's.
          */
         val reference: java.util.UUID? = null,
+        /**
+         * The replacing stack this row folds in, or null for a row that composes by the key's rule
+         * (busk-stack plan D7) — [CueHolds]' [CueStamp.replaceGroup], stamped by [CueAssignmentLayer].
+         * A positive group is a stack's id; a negative one a single cue's ([ownReplaceGroup]).
+         */
+        val replaceGroup: Int? = null,
     )
 
     /** See [Assignment.bundleRole]. */
@@ -139,6 +145,23 @@ class CueAssignmentResolver {
     companion object {
         /** No rows — composes to nothing at any weights. */
         val EMPTY_COOK = Cook(emptyList())
+
+        private val EMPTY_COMPOSED = Composed(emptyMap(), emptyMap())
+
+        /** The cue id a replacing fold's floor composes under: no cue's, and no fade weight's. */
+        private const val FLOOR_CUE_ID = Int.MIN_VALUE
+
+        /**
+         * The weight a replacing stack leaves [effect] on a key with [groups] (busk-stack plan D8): the
+         * product of (1 − *W*) over the groups that hold it back — 1 where none does, 0 under a group
+         * fully in. A programmer-band effect is never held back.
+         */
+        fun replacedWeight(groups: List<ReplacingGroup>?, priority: Int, cueId: Int?, stackOf: (Int) -> Int?): Double {
+            if (groups.isNullOrEmpty() || FxEngine.isProgrammerFxPriority(priority)) return 1.0
+            var weight = 1.0
+            for (group in groups) if (group.holdsBack(priority, cueId, stackOf)) weight *= (1.0 - group.weight)
+            return weight
+        }
 
         /**
          * Flatten a [resolveIndexed]-shaped map to per-[Key] entries. The one place the
@@ -287,6 +310,35 @@ class CueAssignmentResolver {
         val attribute: String,
         val contributors: List<Assignment>,
         val rule: CompositionRule,
+    ) {
+        /** Whether a replacing stack's row is among [contributors] (busk-stack plan D7): [compose] folds it. */
+        val replacing: Boolean = contributors.any { it.replaceGroup != null }
+    }
+
+    /**
+     * One replacing stack on one key at one frame (busk-stack plan D7): its [group], the lowest
+     * priority its rows on the key hold ([position]) — below which what composes is blended out — the
+     * combined fade [weight] of those rows, and the cues they are, whose own effects it never holds back.
+     */
+    class ReplacingGroup(val group: Int, val position: Int, val weight: Double, val cueIds: Set<Int>) {
+        /** The stack, for a group a stack's hold gives; null for a single cue's own ([ownReplaceGroup]). */
+        val stackId: Int? get() = group.takeIf { it > 0 }
+
+        /**
+         * Whether this group holds back an effect at [priority] owned by [cueId]: it sits below the
+         * group, and is neither one of its cues' nor its stack's — [stackOf] reads a priority back to
+         * the stack whose rank it is in (`StackRanks.stackAt`; P3, a live or releasing stack's rank is
+         * its own), so a cue the stack is fading out keeps its effects too.
+         */
+        fun holdsBack(priority: Int, cueId: Int?, stackOf: (Int) -> Int?): Boolean =
+            priority < position && (cueId == null || cueId !in cueIds) &&
+                !(stackId != null && stackOf(priority) == stackId)
+    }
+
+    /** [compose]'s values, and every key a replacing stack sets with the groups on it, low to high. */
+    class Composed(
+        val index: Map<String, Map<String, AttributeValue>>,
+        val replaced: Map<String, Map<String, List<ReplacingGroup>>>,
     )
 
     /**
@@ -311,7 +363,7 @@ class CueAssignmentResolver {
         for ((targetKey, attributes) in grouped) {
             val buckets = ArrayList<Bucket>(attributes.size)
             for ((attribute, contributors) in attributes) {
-                val effective = applySpecificity(contributors)
+                val effective = specificWithinGroups(contributors)
                 if (effective.isEmpty()) continue
                 val rule = effective.first().let {
                     it.compositionOverride.takeUnless { r -> r == CompositionRule.UNSET }
@@ -357,22 +409,133 @@ class CueAssignmentResolver {
      * This runs on cue apply *and once per crossfade frame (~62 fps)* — the nested maps it
      * allocates land on a hot path; keep it lean.
      */
-    fun compose(cook: Cook, weights: FadeWeights): Map<String, Map<String, AttributeValue>> {
-        if (cook.targets.isEmpty()) return emptyMap()
+    fun compose(cook: Cook, weights: FadeWeights): Map<String, Map<String, AttributeValue>> = composeFull(cook, weights).index
+
+    /** [compose], with the keys a replacing stack sets ([Composed.replaced]) — what the engine publishes. */
+    fun composeFull(cook: Cook, weights: FadeWeights): Composed {
+        if (cook.targets.isEmpty()) return EMPTY_COMPOSED
         val out = HashMap<String, Map<String, AttributeValue>>(cook.targets.size)
+        var replaced: HashMap<String, Map<String, List<ReplacingGroup>>>? = null
         for (target in cook.targets) {
             val composed = HashMap<String, AttributeValue>(target.attributes.size)
+            var targetReplaced: HashMap<String, List<ReplacingGroup>>? = null
             for (bucket in target.attributes) {
-                composed[bucket.attribute] = when (bucket.rule) {
-                    CompositionRule.HTP -> composeHtp(bucket.contributors, weights)
-                    CompositionRule.LTP -> composeLtp(bucket.contributors, weights)
-                    CompositionRule.UNSET -> composeLtp(bucket.contributors, weights) // defensive
+                if (bucket.replacing) {
+                    val groups = ArrayList<ReplacingGroup>(2)
+                    composed[bucket.attribute] = composeReplaced(bucket, weights, groups)
+                    if (groups.isNotEmpty()) {
+                        val map = targetReplaced ?: HashMap<String, List<ReplacingGroup>>().also { targetReplaced = it }
+                        map[bucket.attribute] = groups
+                    }
+                } else {
+                    composed[bucket.attribute] = composeByRule(bucket.rule, bucket.contributors, weights)
                 }
             }
             target.bundle?.let { reconcileBundledEmitters(composed, it) }
             out[target.targetKey] = composed
+            targetReplaced?.let { (replaced ?: HashMap<String, Map<String, List<ReplacingGroup>>>().also { m -> replaced = m })[target.targetKey] = it }
         }
-        return out
+        return Composed(out, replaced ?: emptyMap())
+    }
+
+    private fun composeByRule(rule: CompositionRule, contributors: List<Assignment>, weights: FadeWeights): AttributeValue =
+        when (rule) {
+            CompositionRule.HTP -> composeHtp(contributors, weights)
+            CompositionRule.LTP -> composeLtp(contributors, weights)
+            CompositionRule.UNSET -> composeLtp(contributors, weights) // defensive
+        }
+
+    /**
+     * **Replaces** (busk-stack plan D7): a replacing stack's rows are the floor of the key they set. The
+     * key folds upward in priority order, one replacing group at a time: the contributors below the
+     * lowest group compose by the key's rule into the floor; each group's own rows — a crossfade's or a
+     * release's two among them — compose among themselves into its value *R* at their weights scaled to
+     * sum to one, and the floor is blended toward *R* by the group's combined weight *W* = min(1, Σw);
+     * the floor, at weight 1 since it already holds that fade, then composes by the key's rule with the
+     * contributors above the group and below the next. What is above the highest group composes over
+     * the last floor the same way. A group with nothing under it composes as its rows would alone.
+     *
+     * Each group on the key is recorded in [groups], low to high, for the effects it holds back.
+     */
+    private fun composeReplaced(bucket: Bucket, weights: FadeWeights, groups: MutableList<ReplacingGroup>): AttributeValue {
+        val rule = bucket.rule
+        val byGroup = LinkedHashMap<Int, MutableList<Assignment>>()
+        val others = ArrayList<Assignment>()
+        for (a in bucket.contributors) {
+            val group = a.replaceGroup
+            if (group == null) others += a else byGroup.getOrPut(group) { ArrayList(2) } += a
+        }
+        val ordered = byGroup.entries
+            .map { (group, rows) -> Triple(group, rows.minOf { it.priority }, rows) }
+            .sortedWith(compareBy({ it.second }, { it.first }))
+
+        val template = bucket.contributors.first()
+        var floor: AttributeValue? = null
+        var floorPosition = Int.MIN_VALUE
+        fun withFloor(rows: List<Assignment>): List<Assignment> {
+            val value = floor ?: return rows
+            return rows + template.copy(cueId = FLOOR_CUE_ID, priority = floorPosition, fadeWeight = 1.0, value = value, replaceGroup = null)
+        }
+
+        for ((group, position, rows) in ordered) {
+            val segment = others.filter { it.priority in floorPosition until position }
+            val below = withFloor(segment).takeIf { it.isNotEmpty() }?.let { composeByRule(rule, it, weights) }
+            var sum = 0.0
+            for (row in rows) sum += weights.of(row)
+            val weight = sum.coerceAtMost(1.0)
+            groups += ReplacingGroup(group, position, weight, rows.mapTo(HashSet()) { it.cueId })
+            floor = when {
+                weight <= 0.0 -> below
+                below == null -> composeByRule(rule, rows, weights)
+                else -> {
+                    // Its rows' own blend, at weights scaled to one: the fade is [weight]'s alone.
+                    val scale = if (sum < 1.0) 1.0 / sum else 1.0
+                    val own = composeByRule(rule, rows.map { it.copy(fadeWeight = weights.of(it) * scale) }, FadeWeights.NONE)
+                    blendTowards(below, own, weight)
+                }
+            }
+            floorPosition = position
+        }
+        val above = others.filter { it.priority >= floorPosition }
+        val top = withFloor(above)
+        return if (top.isEmpty()) composeByRule(rule, bucket.contributors, weights) else composeByRule(rule, top, weights)
+    }
+
+    /** [from] blended toward [to] by [progress], as an LTP crossfade blends ([interpolate]), exact at either end. */
+    private fun blendTowards(from: AttributeValue, to: AttributeValue, progress: Double): AttributeValue = when {
+        progress >= 1.0 -> to
+        progress <= 0.0 -> from
+        else -> interpolate(from, to, progress)
+    }
+
+    /**
+     * The crossfade's per-type blend from [from] to [to] at [progress] — an LTP crossfade's
+     * ([composeLtp]) and a replacing stack's fold ([composeReplaced]) alike:
+     * - Sliders: linear interpolation, from 0 when [from] is no slider.
+     * - Colour: RGB-linear via [blendExtendedColours], from black when [from] is no colour.
+     * - Settings: snap at 50% fade progress.
+     * - Position: linear pan/tilt; [to] at once when [from] is no position.
+     */
+    private fun interpolate(from: AttributeValue, to: AttributeValue, progress: Double): AttributeValue = when (to) {
+        is AttributeValue.Slider -> {
+            val o = (from as? AttributeValue.Slider)?.value?.toInt() ?: 0
+            AttributeValue.Slider((o + (to.value.toInt() - o) * progress).toInt().coerceIn(0, 255).toUByte())
+        }
+        is AttributeValue.Colour -> {
+            val o = (from as? AttributeValue.Colour)?.value ?: ExtendedColour.BLACK
+            AttributeValue.Colour(blendExtendedColours(o, to.value, progress))
+        }
+        is AttributeValue.Setting -> if (progress < 0.5) from else to
+        is AttributeValue.Position -> {
+            val o = from as? AttributeValue.Position
+            if (o == null) {
+                to
+            } else {
+                val pan = (o.pan.toInt() + (to.pan.toInt() - o.pan.toInt()) * progress).toInt().coerceIn(0, 255)
+                val tilt = (o.tilt.toInt() + (to.tilt.toInt() - o.tilt.toInt()) * progress).toInt().coerceIn(0, 255)
+                AttributeValue.Position(pan.toUByte(), tilt.toUByte())
+            }
+        }
     }
 
     /**
@@ -470,6 +633,16 @@ class CueAssignmentResolver {
             fun group(groupKey: String, attribute: String): Key =
                 Key(TargetRef.Group(groupKey), attribute)
         }
+    }
+
+    /**
+     * [applySpecificity] within each replace group, and among the rows that compose by the key's rule
+     * apart from them (busk-stack plan D7): a fixture row of a cue under a replacing stack must not drop
+     * that stack's group row, which is its own floor.
+     */
+    private fun specificWithinGroups(contributors: List<Assignment>): List<Assignment> {
+        if (contributors.none { it.replaceGroup != null }) return applySpecificity(contributors)
+        return contributors.groupBy { it.replaceGroup }.values.flatMap { applySpecificity(it) }
     }
 
     /**
@@ -599,32 +772,6 @@ class CueAssignmentResolver {
         // No crossfade in flight — winner's value stands.
         if (outgoing == null || winnerWeight >= 1.0) return winner.value
 
-        val progress = winnerWeight.coerceIn(0.0, 1.0)
-
-        return when (val w = winner.value) {
-            is AttributeValue.Slider -> {
-                val o = (outgoing.value as? AttributeValue.Slider)?.value?.toInt() ?: 0
-                val blended = (o + (w.value.toInt() - o) * progress).toInt().coerceIn(0, 255)
-                AttributeValue.Slider(blended.toUByte())
-            }
-            is AttributeValue.Colour -> {
-                val o = (outgoing.value as? AttributeValue.Colour)?.value ?: ExtendedColour.BLACK
-                AttributeValue.Colour(blendExtendedColours(o, w.value, progress))
-            }
-            is AttributeValue.Setting -> {
-                // Discrete — snap at 50% fade progress.
-                if (progress < 0.5) outgoing.value else w
-            }
-            is AttributeValue.Position -> {
-                val o = outgoing.value as? AttributeValue.Position
-                if (o == null) {
-                    w
-                } else {
-                    val pan = (o.pan.toInt() + (w.pan.toInt() - o.pan.toInt()) * progress).toInt().coerceIn(0, 255)
-                    val tilt = (o.tilt.toInt() + (w.tilt.toInt() - o.tilt.toInt()) * progress).toInt().coerceIn(0, 255)
-                    AttributeValue.Position(pan.toUByte(), tilt.toUByte())
-                }
-            }
-        }
+        return interpolate(outgoing.value, winner.value, winnerWeight.coerceIn(0.0, 1.0))
     }
 }

@@ -110,7 +110,7 @@ internal fun copyCuesFrom(state: State, target: DaoProject, request: CopyCuesFro
  * the [live] project, [announceEntriesPlaced] with [priorities]. `POST /cues/copy-from` and
  * `copy_cues` both end here.
  */
-internal fun announceCuesCopied(state: State, response: CopyCuesFromResponse, priorities: Map<Int, Int>, live: Boolean) {
+internal fun announceCuesCopied(state: State, response: CopyCuesFromResponse, priorities: uk.me.cormack.lighting7.fx.StackEntryPositions, live: Boolean) {
     val fixtures = state.show.fixtures
     if (response.looksCopied.isNotEmpty()) fixtures.lookListChanged()
     if (response.palettesCopied.isNotEmpty()) fixtures.paletteListChanged()

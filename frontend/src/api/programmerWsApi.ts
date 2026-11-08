@@ -318,7 +318,7 @@ export interface KeyStackLayer {
    * Why, exactly when `heldBack` is true: a layer's stomp above it, the programmer's value on the key,
    * or Blind holding the programmer's effects (show-cue-editing plan D7). Absent from an older desk.
    */
-  heldBackReason?: 'STOMP' | 'PROGRAMMER' | 'BLIND' | null
+  heldBackReason?: 'STOMP' | 'PROGRAMMER' | 'BLIND' | 'REPLACED' | null
   cueId?: number | null
   cueStackId?: number | null
   /** A programmer layer's id or a cue layer's, whichever produced this one. */

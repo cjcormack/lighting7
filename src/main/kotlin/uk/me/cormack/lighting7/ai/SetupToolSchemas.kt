@@ -778,6 +778,7 @@ internal val buildCueStackTool = ToolDef(
         prop("inRunningOrder", "boolean", "New stack only: false makes a busk stack, run from its own GO or a pad and never reached by the show's advance; it then releases at its end unless loop is on. Default true.")
         prop("releaseAtEnd", "boolean", "New stack only: after the last cue, one more GO (or a follow off it) releases the stack. Not with loop.")
         prop("releaseTimeMs", "integer", "New stack only: how long a stop or a release fades, 0–60000 ms. Default 2000.")
+        prop("overShow", "string", "New busk stack only (inRunningOrder false): ADDS (default) composes with the show; REPLACES makes every attribute its cues set win outright, dimmers included, holding the FX under it back until it releases.")
         put("moveInDark", JsonObject(moveInDarkSchema + ("description" to JsonPrimitive("New stack only. " + moveInDarkSchema["description"]!!.jsonPrimitive.content))))
         arrayProp("scenery", sceneryItemSchema(forCue = false), "The stack's set: the states its elements hold while it is live, under its cues ('the Act 2 set appears with Act 2'). Replaces the stack's set when given.")
         arrayProp("cues", showCueSchema, "In running order.")

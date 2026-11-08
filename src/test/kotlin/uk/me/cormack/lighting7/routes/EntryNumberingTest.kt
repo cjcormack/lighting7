@@ -18,7 +18,7 @@ import org.junit.Test
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
-import uk.me.cormack.lighting7.fx.cueDerivedPriority
+import uk.me.cormack.lighting7.fx.stackPriority
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.entriesOf
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -277,19 +277,19 @@ class EntryNumberingTest : RouteIntegrationTest() {
         putOnStage(stackId, ids[2])
 
         client.delete("/api/rest/projects/$projectId/cues/${ids[0]}?force=true")
-        assertEquals(cueDerivedPriority(stackId, 1), livePriority(ids[2]), "Q1 deleted: Q3 is second")
+        assertEquals(stackPriority(state.show.cueStackManager.holds.ranks.placeOf(stackId), 1), livePriority(ids[2]), "Q1 deleted: Q3 is second")
 
         val marker = addMarker(client, stackId, "Interval", at = 0)
-        assertEquals(cueDerivedPriority(stackId, 2), livePriority(ids[2]), "a marker before it pushes it down")
+        assertEquals(stackPriority(state.show.cueStackManager.holds.ranks.placeOf(stackId), 2), livePriority(ids[2]), "a marker before it pushes it down")
 
         client.delete("/api/rest/projects/$projectId/cue-stacks/$stackId/markers/${marker.entryId}")
-        assertEquals(cueDerivedPriority(stackId, 1), livePriority(ids[2]), "and its removal brings it back")
+        assertEquals(stackPriority(state.show.cueStackManager.holds.ranks.placeOf(stackId), 1), livePriority(ids[2]), "and its removal brings it back")
 
         val resp = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
             setBody(NewCue(name = "Q0", cueStackId = stackId, sortOrder = 0))
         }
         assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
-        assertEquals(cueDerivedPriority(stackId, 2), livePriority(ids[2]), "an insert before it pushes it down")
+        assertEquals(stackPriority(state.show.cueStackManager.holds.ranks.placeOf(stackId), 2), livePriority(ids[2]), "an insert before it pushes it down")
     }
 }

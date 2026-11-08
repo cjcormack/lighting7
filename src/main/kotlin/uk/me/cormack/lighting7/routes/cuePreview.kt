@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.sceneryStateObject
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.fx.cueDerivedPriority
+import uk.me.cormack.lighting7.fx.ownReplaceGroup
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.state.SceneryService
 
@@ -87,7 +88,7 @@ internal fun previewCueLook(state: State, stackId: Int, requestedEntryId: Int?):
         ?: state.show.cueStackManager.runState.effectiveNext(state, stackId)?.entryId
         ?: return null
 
-    val applyData = transaction(state.database) {
+    val (applyData, replaces) = transaction(state.database) {
         // The caller names the stack and the entry (cue model plan P2, P7).
         val entry = DaoCueStackEntry.findById(entryId)?.takeIf { it.stackId == stackId }
             ?: throw IllegalArgumentException("Entry $entryId is not in stack $stackId")
@@ -95,13 +96,16 @@ internal fun previewCueLook(state: State, stackId: Int, requestedEntryId: Int?):
             ?: throw IllegalArgumentException("Entry $entryId is a marker, which cannot be previewed")
         // At the priority the GO would give it: this entry's hold beside any the cue already has.
         val placed = buildCueApplyData(cue, entry)
-        holds.priorityOf(cue.id.value)?.let { placed.copy(livePriority = maxOf(it, cueDerivedPriority(placed))) } ?: placed
+        val data = holds.priorityOf(cue.id.value)?.let { placed.copy(livePriority = maxOf(it, cueDerivedPriority(placed, holds.ranks))) } ?: placed
+        data to entry.stack.replacesShow
     }
     // What the GO leaves alone: every published cue but the ones only this stack holds — a cue
     // another stack or a loose press keeps live stays on stage through the GO (cue model plan D3) —
     // and the previewed cue's own published rows, which its incoming ones stand in for.
     val retained = engine.cueLayer.assignmentsExcludingCues(holds.cuesHeldOnlyBy(stackId) + applyData.cueId)
-    return composePreview(state, applyData, retained) {
+    // A replacing stack's GO lands its rows in its group (busk-stack plan D7), as the hold would stamp them.
+    val replaceGroup = if (replaces) stackId else holds.snapshot().firstOrNull { it.cueId == applyData.cueId }?.replaceGroup
+    return composePreview(state, applyData, retained, replaceGroup) {
         state.sceneryService.preview(stackId, entryId, applyData.cueId)
     }
 }
@@ -123,7 +127,9 @@ internal fun previewLooseCue(state: State, cueId: Int): PreviewCueResponse {
         buildCueApplyData(cue, null).copy(livePriority = holds.nextLoosePriority())
     }
     val retained = engine.cueLayer.assignmentsExcludingCues(setOf(cueId))
-    return composePreview(state, applyData, retained) { state.sceneryService.previewLoose(cueId) }
+    // A press keeps a cue a replacing stack holds replacing, in its own group (busk-stack plan D7).
+    val replaceGroup = holds.snapshot().firstOrNull { it.cueId == cueId }?.replaceGroup?.let { ownReplaceGroup(cueId) }
+    return composePreview(state, applyData, retained, replaceGroup) { state.sceneryService.previewLoose(cueId) }
 }
 
 /**
@@ -135,10 +141,13 @@ private fun composePreview(
     state: State,
     applyData: CueApplyData,
     retained: List<CueAssignmentResolver.Assignment>,
+    /** The replace group the incoming rows fold in, null to compose them by each key's rule. */
+    replaceGroup: Int?,
     scenery: () -> List<SceneryService.PreviewEntry>,
 ): PreviewCueResponse {
     val cueId = applyData.cueId
-    val incoming = buildCombinedCueLayerRows(state, cueId, applyData, priority = cueDerivedPriority(applyData)).rows
+    val incoming = buildCombinedCueLayerRows(state, cueId, applyData, priority = cueDerivedPriority(applyData, state.show.cueStackManager.holds.ranks)).rows
+        .let { rows -> if (replaceGroup == null) rows else rows.map { it.copy(replaceGroup = replaceGroup) } }
 
     // A fresh resolver, not `engine.layerResolver`: [CueAssignmentResolver.resolve] is a pure
     // function of its rows, so composing here cannot disturb what is on stage.

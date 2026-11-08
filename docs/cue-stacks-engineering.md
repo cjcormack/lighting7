@@ -264,6 +264,13 @@ outside 0–60 s; the `PUT`'s three run settings, like `moveInDark`, keep what i
 `POST` or `PUT` that makes a busk stack and names no `releaseAtEnd` sets it unless the stack loops
 (`CueStackRunSettings.resolve`, which MCP's `create_cue_stack` and `build_cue_stack` share).
 
+A busk stack also says how it sits **over the show** (D7, `over_show`): **Adds**, the default, composes
+its cues with the show's by the usual rules, in the busk band above every show stack; **Replaces**
+makes every key its cue sets its own, intensity included, the FX under it held back until it releases
+(§"Holds"; `docs/lighting-composition-model.md` §"Replacing stacks"). Replaces on a stack in the running
+order is `CUE_STACK_INVALID`, and a `PUT` that puts a stack back into the running order and names no
+`overShow` sets Adds.
+
 Release at the end is `advanceStack` FORWARD from the last cue entry with nothing armed: it stops the
 stack as [the stop](#a-stop-fades) does and answers `ActivateResult.released`, which the REST advance
 words as the stack stopped (`CueStackDeactivateResponse.released`) and MCP's `go_cue_stack` and
@@ -287,7 +294,8 @@ mid-crossfade, the cue that fade was taking out) fades from the weight it stood 
 stack's **Release time** (`release_time`, default 2 s), its FX shrinking with it, or stays at full where
 another hold (a loose press, another stack) keeps it. It is never left at part weight. The rest of the
 teardown — the stack's own cue-less FX, Move in dark, the standby, scenery and the desk's arm — runs as
-before. A release time of 0 is the old snap.
+before. A release time of 0 is the old snap. A replacing stack's release hands every key it set back to what
+the stacks below it compose to, by the same weight.
 
 The mechanics: the crossfade driver's **release** (`CueCrossfadeDriver.startRelease`) holds every cue
 of the stop with the weight it started from, ramped as w₀ × (1 − eased) and dropped at the end;
@@ -344,13 +352,30 @@ The registry decides three things:
 - **`release` of its last hold takes it off** — triggers and timed FX stopped, FX removed
   or shrinking to nothing over the GO's fade, its rows dropped or left at full weight for the
   caller's crossfade to take down. Any other release only restamps.
-- **A cue's priority is its highest hold's.** A stack hold composes at the entry's
-  `cueDerivedPriority` (the stack band plus the entry's position, markers counted); a loose hold at
-  `LOOSE_BAND + seq` (`2_000_000_000 +`), above every stack, the newest press on top (D10). So a pad
-  pressed over a running stack wins on every LTP attribute until it is let go, and the stack takes
-  over again on release with nothing re-fired. A write that shifts entry positions (reorder, add-cue,
-  sort, a cue created, recorded or deleted mid-list, an entry or a marker added or removed) calls
-  `holds.restampEntries(stackEntryPriorities(stack))`, which re-ranks only the stack holds it names.
+- **A cue's priority is its highest hold's.** A stack hold composes at its stack's band and rank,
+  then the entry's position, markers counted (`stackPriority`; busk-stack plan D5, P3: **latest GO
+  wins**, show stacks below busk stacks — `docs/lighting-composition-model.md` §"Holds and the loose
+  band"); a loose hold at `LOOSE_BAND + seq` (`2_000_000_000 +`), above every stack, the newest press
+  on top (D10). So a pad pressed over a running stack wins on every LTP attribute until it is let go,
+  and the stack takes over again on release with nothing re-fired. A write that shifts entry
+  positions (reorder, add-cue, sort, a cue created, recorded or deleted mid-list, an entry or a marker
+  added or removed) calls `holds.restampEntries(stackEntryPositions(stack))`, `stackId → entryId →
+  position`, which re-ranks only the stack holds of the stacks it names, each at its stack's rank.
+- **The ranks** (`CueHolds.ranks`, `fx/StackRanks.kt`): an operator's GO — start, GO, GO TO, BACK,
+  the REST and MCP doors, a pad — takes the top of its band (`activateEntry(…, operator = true)`, the
+  default); a follow (`scheduleAutoAdvance`) and a reload's re-GO keep the stack's rank. A stop gives
+  it up once its release ends (`CueCrossfadeDriver.onReleaseEnded`), a snap stop at once, and the
+  stack PUT moving a live stack into or out of the running order takes the top of its new band
+  (`onBandChanged`). `applyRankChanges` restamps every moved stack's holds, the rows and leaving
+  effects its crossfade or release still has fading (`fadingCuesOf`) and its Move in dark
+  contributor. A 1 000th running stack in one band is 409 `CUE_STACK_LIMIT` on the activate, advance
+  and go-to routes.
+- **Replaces** (D7): a hold of a busk stack on *Over the show: Replaces* (`DaoCueStack.replacesShow`,
+  read at the GO) gives its cue a **replace group**, beside its priority as `CueStamp`, which the
+  layer stamps on its rows and keeps while they fade; the resolver folds such a key to the stack's
+  rows over whatever is under them, and the effects under it are held back by its weight
+  (`docs/lighting-composition-model.md` §"Replacing stacks"). A change to the setting lands at the
+  stack's next GO.
 
 So FX envelopes follow the holds, as the rows' weights do (effects plan §3.5): a GO between
 two entries of a cue that stays held moves no envelope, a GO onto a cue another stack or a press
@@ -405,9 +430,9 @@ the Look cache) would deadlock the two until Hikari timed out.
 
 What holds every live cue is published as **`cueHolds.state`** — `State.cueHoldsFrame`, a
 `StateFlow` that outlives a show so a socket survives a project switch (§"WebSocket"). Runtime only:
-never persisted, never synced. A same-project reload carries the stacks' entries, their standbys and
-the loose cues in press order (`ShowCarry`), re-taking each loose hold without firing its events; a
-project switch starts empty.
+never persisted, never synced. A same-project reload carries the stacks' entries, their ranks, their
+standbys and the loose cues in press order (`ShowCarry`), restoring the ranks before the re-GOs and
+re-taking each loose hold without firing its events; a project switch starts empty.
 
 ### Edited since GO and Update stage
 

@@ -25,7 +25,8 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.fx.stackEntryPriorities
+import uk.me.cormack.lighting7.fx.stackEntryPositions
+import uk.me.cormack.lighting7.fx.StackEntryPositions
 import uk.me.cormack.lighting7.routes.CODE_CUE_IN_USE
 import uk.me.cormack.lighting7.routes.CopyCuesFromRequest
 import uk.me.cormack.lighting7.routes.CopyCuesOutcome
@@ -374,12 +375,12 @@ internal class VenueSetupTools(private val state: State) {
         val target = state.toolProject(input)
         val dryRun = input.bool("dryRun") == true
 
-        var priorities = emptyMap<Int, Int>()
+        var priorities: StackEntryPositions = emptyMap()
         val outcome = transaction(state.database) {
             val request = CopyCuesFromRequest(from.project.id.value, ids, stackId, dryRun = dryRun)
             copyCuesFrom(state, DaoProject[target.project.id], request).also { o ->
                 if (o is CopyCuesOutcome.Copied && !dryRun && target.isCurrent) {
-                    o.response.stackId?.let { priorities = stackEntryPriorities(DaoCueStack[it]) }
+                    o.response.stackId?.let { priorities = stackEntryPositions(DaoCueStack[it]) }
                 }
                 if (o !is CopyCuesOutcome.Copied || dryRun) TransactionManager.current().rollback()
             }

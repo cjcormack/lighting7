@@ -166,7 +166,7 @@ class ProjectRoundTripTest {
             if (!path.endsWith(".json")) continue
             for (name in old) assertTrue(name !in text, "$path says $name")
         }
-        assertEquals(FormatVersionJson(formatVersion = 50, minReader = 50), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+        assertEquals(FormatVersionJson(formatVersion = 51, minReader = 51), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
     }
 
     /**
@@ -285,17 +285,19 @@ class ProjectRoundTripTest {
         assertEquals(false, song.inRunningOrder)
         assertEquals(true, song.releaseAtEnd)
         assertEquals(3000, song.releaseTimeMs)
+        assertEquals("REPLACES", song.overShow)
         val show = stacks.single { it.name == "show-1" }
         assertEquals(true, show.inRunningOrder)
         assertEquals(false, show.releaseAtEnd)
         assertEquals(2000, show.releaseTimeMs)
+        assertEquals("ADDS", show.overShow)
 
         val format = canonicalDecode(
             uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
             Files.readString(exportDirA.resolve("formatVersion.json")),
         )
-        assertTrue(format.minReader >= 50, "a v49 reader, which would put a busk stack in the running order, refuses it")
-        assertTrue(SUPPORTED_FORMAT_VERSION >= 50)
+        assertTrue(format.minReader >= 51, "a v50 reader, which would run a replacing stack as one that adds, refuses it")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 51)
         assertEquals(
             uk.me.cormack.lighting7.sync.dto.CueStackJson(uuid = "x", name = "Old"),
             canonicalDecode(uk.me.cormack.lighting7.sync.dto.CueStackJson.serializer(), """{"uuid":"x","name":"Old"}"""),

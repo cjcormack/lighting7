@@ -898,6 +898,17 @@ internal fun kotlinx.serialization.json.JsonObjectBuilder.putStackRunSettingsSch
         put("type", "integer")
         put("description", "How long a stop or a release fades the stack's light, 0–60000 ms. Default 2000; 0 snaps.")
     })
+    put("overShow", buildJsonObject {
+        put("type", "string")
+        put("enum", buildJsonArray { add("ADDS"); add("REPLACES") })
+        put(
+            "description",
+            "A busk stack's only (inRunningOrder false): ADDS (the default) composes its cues with the show's by the usual rules, " +
+                "so a song's chase lifts heads over the base look and never darkens them; REPLACES makes every attribute its cue " +
+                "sets win outright, dimmers included — what is under it on that attribute fades out as it comes in, the FX under " +
+                "it are held back, and its release hands the stage back. A character's entrance taking the stage is REPLACES.",
+        )
+    })
 }
 
 /** A tool's `releaseTimeMs`: absent is null, else a whole number of milliseconds or a problem. */

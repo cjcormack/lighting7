@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-BUSK-STACK-S2`](#fu-manual-busk-stack-s2) | Carabossy on Replaces takes the front wash from 80 % to 0, holds the movers' chase back, and fades the kitchen back on release with the chase growing back in phase; a song on Adds lifts heads over the base and never darkens them; a GO on Act 1 during Carabossy lands under her | Busk stack session 2, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S1`](#fu-manual-busk-stack-s1) | a song stack out of the running order: Act 1's last GO goes to Act 2, not the song; the song's own GO and a follow off its last cue release it over its release time; the Show view's stop fades | Busk stack session 1, 2026-11-07 |
 | [`FU-MANUAL-OSC-S1`](#fu-manual-osc-s1) | a QLab Network cue lands cue 1 and fired again mid-fade moves nothing; a Look's `on` and `off` and a busk Look pad from QLab; a QLab machine off the allowlist shows with *Allow this sender*; an operator sees the log | OSC session 1, 2026-11-07 |
 | [`FU-MANUAL-FX-SPEED-S4`](#fu-manual-fx-speed-s4) | ×½ and ×2 on a busked master halve and double it mid-song, a hold included, and greyed at 20 and 300; a fader and an encoder on *FX speed* move the selection's Local FX with no jump, the fader picking up at the lead FX | FX speed session 4, 2026-11-07 |
@@ -178,6 +179,30 @@ lighting something different:
    stays up. Give its last cue a follow and start it again: the follow releases it the same way.
 4. **A stop fades.** With *Act 2* live, stop the show from the header: its light fades over 2 s rather
    than snapping. Set its release time to 0 and stop it again: it snaps.
+
+## `FU-MANUAL-BUSK-STACK-S2`
+
+**What it proves**: *Over the show* (busk-stack plan session 2) — latest GO wins with busk stacks above
+the show, and a replacing stack takes what its cue sets, intensity included, and hands it back.
+
+**Why it is here**: the tests read the composed cue layer and an effect's weight; only the rig shows
+that a replacing stack's release reads as a fade back to the kitchen rather than a cut, and that a chase
+held back resumes in step rather than restarting.
+
+**Test**, at the desk with *Act 1* live on Q14 *Kitchen, night* (the front wash at 80 %, a dimmer chase
+on the movers) and two busk stacks: *Carabossy* (Replaces, Release at the end, release time 3 s; Q1 the
+stage-left special green and the front wash and the movers' dimmers at 0, following into Q2 after 4 s)
+and *Song* (Adds; a chase and a colour change on the front wash):
+
+1. **Replaces.** Start *Carabossy*: the wash goes to 0 and the movers' chase stops painting at once.
+   Its follow into Q2 keeps both there. When it releases, the wash fades back to 80 % over 3 s and the
+   chase grows back in, in step with where it would have been.
+2. **A GO underneath.** Start *Carabossy* again and GO *Act 1* to Q15 while she is up: nothing she sets
+   moves; anything else Q15 changes shows at once, and the rest when she releases.
+3. **Adds.** Start *Song*: its chase lifts the wash over the base look and never darkens it below 80 %;
+   its colour wins over the kitchen's.
+4. **Latest GO wins.** With *Act 1* and *Act 2* both live, GO *Act 1*: its colour wins wherever both set
+   one, whichever stack was made first; a follow on *Act 2* does not take it back.
 
 ## `FU-MANUAL-OSC-S1`
 

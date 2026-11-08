@@ -66,6 +66,9 @@ internal class CueCrossfadeDriver(
 
     private val fades = ConcurrentHashMap<Int, Fade>()
 
+    /** Told when a release runs to its end — not when one is cancelled — so its stack gives up its rank. */
+    @Volatile var onReleaseEnded: (stackId: Int) -> Unit = {}
+
     /**
      * Start a fade on [stackId], replacing any in-flight one.
      *
@@ -100,19 +103,30 @@ internal class CueCrossfadeDriver(
 
     /**
      * Start [stackId]'s release (busk-stack plan §3 "Release"): every cue of [fromWeights] ramped from
-     * its weight to 0 over [durationMs], as w₀ × (1 − eased), and its rows dropped at the end. Replaces
-     * any fade the stack has, which the caller has already [detach]ed.
+     * its weight to 0 over [durationMs], as w₀ × (1 − eased), and its rows dropped at the end. A cue with
+     * no rows (an effects-only one, its effects shrinking on their own ramps) is held all the same, so
+     * the stack keeps its rank until they have gone ([onReleaseEnded]). Replaces any fade the stack has,
+     * which the caller has already [detach]ed.
      */
     fun startRelease(stackId: Int, fromWeights: Map<Int, Double>, durationMs: Long, easingCurve: EasingCurve, scope: CoroutineScope) {
         val fade = Fade()
         fade.releasing.putAll(fromWeights)
         val job = scope.launch(start = CoroutineStart.LAZY) {
             runRelease(fade, durationMs, easingCurve)
-            fades.remove(stackId, fade)
+            if (fades.remove(stackId, fade)) onReleaseEnded(stackId)
         }
         fade.job = job
         fades[stackId] = fade
         job.start()
+    }
+
+    /** The cues [stackId]'s fade is taking out: a GO fade's outgoing cue, or every cue of a release. */
+    fun fadingCuesOf(stackId: Int): Set<Int> {
+        val fade = fades[stackId] ?: return emptySet()
+        return buildSet {
+            fade.outgoingCueId?.let(::add)
+            addAll(fade.releasing.keys)
+        }
     }
 
     /** Whether [stackId] has a release running. */
