@@ -34,6 +34,9 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v52: stack pads (busk-stack plan D9). `BuskPadJson` gains `cueStackUuid`. The writer and
+    // `minReader` move to **52**: a v51 reader would drop a stack pad as naming nothing and push the
+    // drop. See `docs/sync-engineering.md` §"Version 52 — Stack pads".
     // v51: Over the show (busk-stack plan D7). `CueStackJson` gains `overShow`, `ADDS | REPLACES`. The
     // writer and `minReader` move to **51**: a v50 reader would run a replacing stack as one that adds
     // and push it back so. See `docs/sync-engineering.md` §"Version 51 — Over the show".
@@ -385,9 +388,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 51,
+    val formatVersion: Int = 52,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 51,
+    val minReader: Int = 52,
 )
 
 /**
@@ -1337,8 +1340,8 @@ data class BuskBankJson(
 )
 
 /**
- * A pad: an ordered reference to **exactly one** of a template, a Look or a cue, by uuid — the
- * [CueLayerJson] pattern, three-armed. A pad whose record the archive does not carry, or which
+ * A pad: an ordered reference to **exactly one** of a template, a Look, a cue or a busk stack (v52),
+ * by uuid — the [CueLayerJson] pattern, four-armed. A pad whose record the archive does not carry, or which
  * names none or two, is **dropped with a warning** on import rather than aborting the pull: a pad
  * is an enrichment of its record (a place on a page), not content, so a page that has lost a pad
  * is still a whole page. Contrast a cue layer, which is nothing without its source and does abort.
@@ -1350,6 +1353,7 @@ data class BuskPadJson(
     val paletteUuid: String? = null,
     val lookUuid: String? = null,
     val cueUuid: String? = null,
+    val cueStackUuid: String? = null,
 )
 
 /**

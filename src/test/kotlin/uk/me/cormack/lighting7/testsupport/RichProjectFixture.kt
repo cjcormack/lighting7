@@ -1060,7 +1060,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         loop = false; type = CueStackType.SEPARATOR.name; sortOrder = 1
     }
     // A busk stack (v50): out of the running order, Release at the end, a 3 s release; on Replaces (v51).
-    DaoCueStack.new {
+    val songStack = DaoCueStack.new {
         this.project = project; name = "song-1"; loop = false
         type = CueStackType.STACK.name; sortOrder = 3
         inRunningOrder = false
@@ -1103,6 +1103,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoBuskPad.new { bank = movesBank; sortOrder = 0; palette = positionPalette }
     // A loose cue (no stack) on a pad: held loose when pressed (cue model plan §3.2, D6).
     DaoBuskPad.new { bank = movesBank; sortOrder = 1; cue = looseCue }
+    // A stack pad (v52) on the busk stack above (busk-stack plan D9).
+    DaoBuskPad.new { bank = movesBank; sortOrder = 2; cueStack = songStack }
     DaoBuskBank.new {
         column = sideColumn; sortOrder = 1; name = "cues"; solo = false; flow = BuskFlow.WRAP.name
     }

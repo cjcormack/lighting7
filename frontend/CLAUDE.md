@@ -1578,7 +1578,7 @@ backward or bouncing palette and the amount where it is under 100 % — *Colour 
 row is columns, each with a **width share in twelfths**; a column stacks banks top to bottom; a bank
 has a name, a `solo` flag and a `flow` (`WRAP` | `COLUMN` | `SCROLL` — the last one line of fixed-width
 pads scrolling sideways, the rig row's own flow, offered to banks since 2026-09-21) and holds ordered **pads**, each a
-reference to exactly one palette, Look or cue. One record may sit on several pads, on several
+reference to exactly one palette, Look, cue or busk stack. One record may sit on several pads, on several
 pages. Backend contract in `lighting7/models/buskLayout.kt` and
 `../docs/lighting-composition-model.md` §"The busk layout"; the plan is
 `../docs/plans/completed/busk-layout-plan.md` and the design authority is `look-groups-design/`.
@@ -2756,8 +2756,8 @@ grid's, but the capture/bubble trick is delicate enough that a second copy of it
 two silently stops working. The overlay half is a **document-wide** query, never an ancestor walk,
 for the same reason the rule is stated the way it is.
 
-**`lib/handTargets.ts` is the one eligibility table.** A bank takes all three kinds (a pad *is* a
-reference to one of them); a slot takes a cue or a Look, which lands whole (it has no selection,
+**`lib/handTargets.ts` is the one eligibility table.** A bank takes all three kinds the hand holds (a pad
+*is* a reference to one of them), and nothing takes a stack, which the hand never carries; a slot takes a cue or a Look, which lands whole (it has no selection,
 D7; absolute-looks plan D1); both layer stacks take a Look or a palette. So a cue lands only on a bank or a
 slot, which falls out of the table rather than being stated a fifth time. It is eligibility and
 never permission: every place still runs its own mutation.
@@ -7902,6 +7902,19 @@ path may quietly change where it lands.
     takes loose. The stack's hold is never the pad's to drop. Its keys are every held cue, for a
     surface that asks only "is it on stage" (it replaced `useActiveCueIds`). `GoToStackRequest.cueId` lost its only caller and is
     gone: `/show/go-to` names a stack and lands on its first cue.
+  - **A stack pad is a busk stack's own GO** (lighting7 busk-stack plan D9, D10): the pad names a
+    stack out of the running order, and its press is that stack's GO — start, advance, release past
+    the last cue — never the playhead's. Its face is `components/busking/stackPad.ts`'s reading of
+    the stack as the stack list holds it (the list `cueRunStateChanged` patches, read once by the view
+    and handed down as `PadBehaviour.stackOf`), so it needs no subscription of its own: the stack's
+    name, the live cue and the next, solid green while running, *GO starts Q1 …* while stopped,
+    *no cues* when empty, and a fade bar timed from the runner slice's last GO for the stack. Its menu
+    is GO, Back (the stack's advance BACKWARD), Release (its stop, over its release time) and View;
+    no *Pick up*, because the hand never carries a stack — `HeldKind` is every pad kind but
+    `CUE_STACK`, and `canHandLand` takes one nowhere. The library's *Stacks* filter lists busk stacks
+    only, and `CueStackForm` places a stored busk stack through *Add to busk page*. Putting a stack
+    with pads back into the running order is refused `CUE_STACK_ON_PADS` (in `SILENT_CODES`); the form
+    asks, naming the pages, and resends with `force`.
   - **GO and BACK are the transport's, in one place** — the ShowBar's until the busk-chrome plan's
     session A, the side sheet's Show tab's footer since (§Focus and the side sheet). The stack
     cards' GO was two requests behind one gesture — `transport.go()` on the live stack,

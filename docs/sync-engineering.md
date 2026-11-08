@@ -262,7 +262,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 51`, `minReader = 51`. Rules for future
+Current writer emits `formatVersion = 52`, `minReader = 52`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -449,6 +449,18 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 52 — Stack pads
+
+A busk pad may name a busk stack (busk-stack plan D9; `docs/lighting-composition-model.md` §"The busk
+layout"): `BuskPadJson` gains `cueStackUuid`, the fourth of its exactly-one references, read through the
+`cueStackMap` the importer already builds. `SUPPORTED_FORMAT_VERSION = 52`, `MIN_SUPPORTED_FORMAT_VERSION`
+stays 5, and **`minReader` moves to 52** with the writer: a v51 reader would drop a stack pad as naming
+nothing and push the drop. An older archive's pads name the other three. A stack pad whose stack the
+archive does not carry, or that names a separator, is dropped with a warning like any other pad; one
+naming a stack in the running order is imported as stored, and its press is that stack's GO.
+`RichProjectFixture`'s `moves` bank carries a stack pad on its busk stack. A project with no stack pad
+exports byte-for-byte as at v51 (only `formatVersion.json` says 52).
 
 ### Version 51 — Over the show
 

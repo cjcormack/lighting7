@@ -335,12 +335,13 @@ FX are not held back by itself.
 ### Stack pads (D9, D10, D11)
 
 `busk_pads.cue_stack_id`, a nullable reference to `cue_stacks`, the CHECK widened to four arms, and
-`BuskPadKind.CUE_STACK`. One-shot **step 13**, `BuskPadStackMigration`, after step 12: while
-`sqlite_master`'s DDL for `busk_pads` has a CHECK that does not name `cue_stack_id` (the column
+`BuskPadKind.CUE_STACK`. One-shot **step 14**, `BuskPadStackMigration`, after step 13 (corrected in
+session 3: the cloud-p1 plan's `RetiredRemoteAccessMigration` took 13 after this plan was written):
+while `sqlite_master`'s DDL for `busk_pads` has a CHECK that does not name `cue_stack_id` (the column
 itself appears in that DDL once the reconciliation has added it, so the CHECK expression is what is
-read), the table is rebuilt from the model through `rebuildFromModel` after a `VACUUM INTO
-'<db>.pre-busk-stack-<utc>.db'` backup, rows copied by id; a database without that CHECK is only
-marked 13. The layout `PUT` and `POST …/banks/{bid}/pads` take `cueStackId` as the fourth exactly-one
+read), the table is rebuilt from the model through `rebuildFromModel`, rows copied by id, after a
+`VACUUM INTO '<db>.pre-busk-stack-<utc>.db'` backup when the table holds pads; a database without
+that CHECK is only marked 14. The layout `PUT` and `POST …/banks/{bid}/pads` take `cueStackId` as the fourth exactly-one
 id, 400 `BUSK_LAYOUT_REF` for a stack in the running order (D9); `BuskPadDto` embeds
 `{id, uuid, name}`. A stack delete sweeps its pads in `deleteCueStackRows` and announces their pages;
 a rename announces them too. The other exhaustive readers of `BuskPadKind` take the new arm:
@@ -391,8 +392,8 @@ written, and its row marked *in review* with its branch. A session's PR is title
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
 | 1 | Busk stacks and the running order | merged | `claude/blissful-pasteur-r0ys12` | [#392](https://github.com/cjcormack/lighting7/pull/392) | `d1a99f6` |
-| 2 | Over the show | in review | `claude/busk-stack-s8cddn` | | |
-| 3 | Stack pads | planned | | | |
+| 2 | Over the show | in review | `claude/busk-stack-s8cddn` | [#395](https://github.com/cjcormack/lighting7/pull/395) | `e1c4094` |
+| 3 | Stack pads | in review | `claude/busk-stack-t9q7si` | | |
 | 4 | Surfaces | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -565,8 +566,8 @@ never on the previous session's. Run it again once the previous session has merg
 that branch with a merge commit, never a rebase (root `CLAUDE.md` §"Git workflow").
 
 - **Storage:** `busk_pads.cue_stack_id`, the four-arm CHECK, `BuskPadKind.CUE_STACK`, `buskPadKind`;
-  step 13, `BuskPadStackMigration` (§3 "Stack pads"), its frozen
-  `src/test/resources/db/pre-busk-stack.sql` written from a step-12 database and never regenerated.
+  step 14, `BuskPadStackMigration` (§3 "Stack pads"), its frozen
+  `src/test/resources/db/pre-busk-stack.sql` written from a step-13 database and never regenerated.
 - **Routes:** the layout `PUT`, the append and `BuskPadDto`; D9's and D11's guards; the delete sweep
   and the rename announce; the new arm in `State.buildBuskRefs`, `handRecordResolves` and the hand's
   reconcile; `HandSocket` and `HandService` refusing a stack pad.
@@ -588,10 +589,29 @@ that branch with a merge commit, never a rebase (root `CLAUDE.md` §"Git workflo
   `ProjectRoundTripTest`; `BuskPad.test.tsx`, `LibraryPalette`'s tests, `buskLayout.test.ts` (a stack
   pad round-trips through `toLayoutRequest`) and `handTargets.test.ts`'s kind list.
 - **Docs:** `docs/lighting-composition-model.md` §"The busk layout"; `docs/sync-engineering.md`
-  (v52); the root `CLAUDE.md` (step 13 in §Database, the busk endpoints); `docs/osc-engineering.md`
+  (v52); the root `CLAUDE.md` (step 14 in §Database, the busk endpoints); `docs/osc-engineering.md`
   (a stack pad among the predictable pads); `docs/glossary.md`'s row for *stack pad*;
   `FU-MANUAL-BUSK-STACK-S3`.
 - **Local:** the full `./gradlew test` (a migration and a bump) and `npm run check:quick`.
+- **As built** (where the code led away from the text above):
+  - The step is **14**, after the cloud-p1 plan's step 13; an empty `busk_pads` is rebuilt without a
+    backup, since it has nothing to lose. Every migration test's final version moved to 14 with it.
+  - The CHECK is read by its parentheses (`BuskPadStackMigration.checkExpression`), because
+    `ALTER TABLE … ADD COLUMN` writes the new column into the DDL after the constraints.
+  - D11's refusal is its own body, `CueStackOnPadsResponse {error, code, pages}`, the pages by name in
+    page order. `CueStackForm` asks, naming them, and resends with `force`; `CUE_STACK_ON_PADS` joins
+    the client's `SILENT_CODES` so the refusal is not toasted as well.
+  - OSC's pad positions skipped any pad naming none of the first three records, so a stack pad took no
+    `/busk/{page}/{bank}/{pad}` place; `OscAddresses` counts it now.
+  - An import keeps a stack pad naming a stack in the running order as stored (its press is that
+    stack's GO), and drops one naming a separator as naming nothing. So does an undo of the `PUT` that
+    took the stack out of the running order once a pad has been placed on it; D11 is the `PUT`'s alone.
+  - D9's refusal on the layout write is judged on the pads it makes or points at another stack: a pad
+    re-sent naming the stack it already names passes, so one left by an import or an undo does not
+    lock the rest of its page. The append, which only makes pads, refuses as written.
+  - The library's slot-refusal hint reads *banks only* on a stack row, not *needs a selection*.
+  - A stack press announces `cueStackListChanged` after it, as the REST activate, advance and
+    deactivate do.
 
 ### Session 4 — Surfaces
 

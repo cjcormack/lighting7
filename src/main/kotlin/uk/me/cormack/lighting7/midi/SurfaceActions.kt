@@ -708,8 +708,15 @@ class DefaultSurfaceActions(
         val projectId = currentProjectId() ?: return ActionOutcome.NotFound("No current project")
         val selection = state.deskSelection.state.value
         return when (val outcome = BuskPressService.pressByUuid(state, projectId, uuid, selection.targets, selection.families)) {
+            // A stack pad on a stack with no cues started nothing, as the stack's own GO refuses it.
+            is BuskPressService.Outcome.Pressed if outcome.action == "empty" ->
+                ActionOutcome.Refused(ActionOutcome.STACK_EMPTY, "That stack pad's stack has no cue to GO to")
             is BuskPressService.Outcome.Pressed ->
                 ActionOutcome.Done(if (outcome.action == "applied") withBlind(outcome.action) else outcome.action)
+            is BuskPressService.Outcome.Conflict -> {
+                logger.warn("Surface pressPad dropped: {}", outcome.message)
+                ActionOutcome.Refused(outcome.code ?: ActionOutcome.GO_REFUSED, outcome.message)
+            }
             is BuskPressService.Outcome.Refused -> {
                 logger.warn("Surface pressPad dropped: {}", outcome.message)
                 ActionOutcome.Refused(outcome.code ?: "PRESS_REFUSED", outcome.message)
@@ -785,6 +792,9 @@ class DefaultSurfaceActions(
                 "Surface handPlaceInBank dropped: the hand holds a {} ({}) that is not in project {}",
                 outcome.what, outcome.id, projectId,
             )
+            // The hand holds no stack, so this cannot arise from it; logged rather than assumed away.
+            is AddPadOutcome.InRunningOrder ->
+                logger.warn("Surface handPlaceInBank dropped: '{}' is in the running order", outcome.name)
             is AddPadOutcome.Added -> {
                 state.show.fixtures.buskLayoutChanged(listOf(outcome.pageId))
                 state.handState.dropIfHolding(held.holdId)

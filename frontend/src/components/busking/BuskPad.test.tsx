@@ -7,8 +7,10 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
 import { store } from '@/store'
+import { applyServerRunState } from '@/store/runnerSlice'
 import type { BuskPad } from '@/api/buskApi'
 import type { PaletteSummary } from '@/api/palettesApi'
+import type { CueStack } from '@/api/cueStacksApi'
 import { BuskPadButton } from './BuskPad'
 
 /**
@@ -300,5 +302,145 @@ describe('the hold menu', () => {
     draw(palettePad(), { editing: true })
     fireEvent.contextMenu(screen.getByTitle('Amber Key'))
     expect(screen.queryByRole('menuitem')).toBeNull()
+  })
+})
+
+/**
+ * A stack pad (lighting7 busk-stack plan D9, §4): taller, three lines — the stack, the live cue and
+ * the next — solid green while it runs, *GO starts Q1 …* while stopped, *no cues* when empty, and a
+ * menu of GO, Back, Release and View with no Pick up.
+ */
+describe('a stack pad', () => {
+  const stackPad: BuskPad = { id: 5, uuid: 'p5', kind: 'CUE_STACK', cueStack: { id: 9, uuid: 's9', name: 'Song 3' } }
+
+  function row(entryId: number, id: number, cueNumber: string, name: string) {
+    return { entryId, id, cueType: 'STANDARD', cueNumber, name, fadeDurationMs: 0, sortOrder: entryId } as unknown as CueStack['cues'][number]
+  }
+
+  function stack(overrides: Partial<CueStack> = {}): CueStack {
+    return {
+      id: 9,
+      name: 'Song 3',
+      loop: false,
+      sortOrder: 4,
+      type: 'STACK',
+      cues: [row(1, 11, '1', 'Bow'), row(2, 12, '2', 'Chorus'), row(3, 13, '3', 'Bridge')],
+      activeCueId: null,
+      activeEntryId: null,
+      nextCueId: null,
+      nextEntryId: null,
+      inRunningOrder: false,
+      releaseAtEnd: true,
+      ...overrides,
+    } as CueStack
+  }
+
+  function hold(pad: HTMLElement) {
+    vi.useFakeTimers()
+    fireEvent.pointerDown(pad, { clientX: 5, clientY: 5 })
+    act(() => {
+      vi.advanceTimersByTime(600)
+    })
+    vi.useRealTimers()
+  }
+
+  it('draws the cue a tap starts on while stopped, and is not pressed', () => {
+    draw(stackPad, { stack: stack() })
+    expect(screen.getByText('Song 3')).toBeTruthy()
+    expect(screen.getByText('— stopped')).toBeTruthy()
+    expect(screen.getByText('GO starts Q1 Bow')).toBeTruthy()
+    expect(screen.getByRole('button')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('draws the live cue and the next while running, solid and pressed', () => {
+    draw(stackPad, { stack: stack({ activeCueId: 12, activeEntryId: 2, nextCueId: 13, nextEntryId: 3 }) })
+    expect(screen.getByText('Q2 Chorus')).toBeTruthy()
+    expect(screen.getByText('→ Q3 Bridge')).toBeTruthy()
+    const pad = screen.getByRole('button')
+    expect(pad).toHaveAttribute('aria-pressed', 'true')
+    expect(pad.className).toContain('bg-green-500/25')
+  })
+
+  it('says a Release stack’s last cue lets it go', () => {
+    draw(stackPad, { stack: stack({ activeCueId: 13, activeEntryId: 3 }) })
+    expect(screen.getByText('→ release')).toBeTruthy()
+  })
+
+  it('says *no cues* for an empty stack, and offers no GO', () => {
+    draw(stackPad, { stack: stack({ cues: [] }), onStackBack: () => {}, onStackRelease: () => {} })
+    expect(screen.getByText('no cues')).toBeTruthy()
+    hold(screen.getByRole('button'))
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['View'])
+  })
+
+  it('offers GO and View while stopped, and Back and Release besides while running — never Pick up', () => {
+    draw(stackPad, { stack: stack(), onStackBack: () => {}, onStackRelease: () => {} })
+    hold(screen.getByRole('button'))
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['GO', 'View'])
+    cleanup()
+
+    const onPress = vi.fn()
+    const onStackBack = vi.fn()
+    const onStackRelease = vi.fn()
+    draw(stackPad, { stack: stack({ activeCueId: 12, activeEntryId: 2 }), onPress, onStackBack, onStackRelease })
+    hold(screen.getByRole('button'))
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['GO', 'Back', 'Release', 'View'])
+    fireEvent.click(screen.getByText('Back'))
+    expect(onStackBack).toHaveBeenCalledTimes(1)
+    cleanup()
+
+    draw(stackPad, { stack: stack({ activeCueId: 12, activeEntryId: 2 }), onPress, onStackBack, onStackRelease })
+    hold(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('Release'))
+    expect(onStackRelease).toHaveBeenCalledTimes(1)
+    expect(onPress).not.toHaveBeenCalled()
+  })
+
+  it('offers each of GO and Back only where it does something (D9)', () => {
+    // A Stay stack on its last cue: a tap does nothing, so no GO; Back still steps it.
+    draw(stackPad, { stack: stack({ releaseAtEnd: false, activeCueId: 13, activeEntryId: 3 }), onStackBack: () => {}, onStackRelease: () => {} })
+    hold(screen.getByRole('button'))
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Back', 'Release', 'View'])
+    cleanup()
+
+    // The first cue of a stack that does not loop: nothing behind it.
+    draw(stackPad, { stack: stack({ activeCueId: 11, activeEntryId: 1 }), onStackBack: () => {}, onStackRelease: () => {} })
+    hold(screen.getByRole('button'))
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['GO', 'Release', 'View'])
+  })
+
+  it('names the stack as the list holds it, so a rename by any door shows', () => {
+    draw(stackPad, { stack: stack({ name: 'Encore' }) })
+    expect(screen.getByText('Encore')).toBeTruthy()
+    expect(screen.queryByText('Song 3')).toBeNull()
+  })
+
+  it('draws a fade only for a GO heard since it mounted, never replaying an old one', () => {
+    const frame = (transition: boolean, activeCueId: number, activeEntryId: number) =>
+      applyServerRunState({
+        projectId: 1, stackId: 9, activeCueId, activeEntryId, nextCueId: null, nextEntryId: null,
+        standbyEntryId: null, nextIsArmed: false, transition, fadeDurationMs: 4000, fadeElapsedMs: 0,
+        autoAdvance: false, autoAdvanceDelayMs: null,
+      })
+    // A GO long before the pad mounted: the slice has moved on from it.
+    act(() => void store.dispatch(frame(true, 12, 2)))
+    const slow = (overrides: Partial<CueStack>) =>
+      stack({ ...overrides, cues: [row(1, 11, '1', 'Bow'), { ...row(2, 12, '2', 'Chorus'), fadeDurationMs: 4000 } as CueStack['cues'][number]] })
+    const { container } = draw(stackPad, { stack: slow({ activeCueId: 12, activeEntryId: 2 }) })
+    expect(container.querySelector('.bg-green-500\\/20')).toBeNull()
+
+    act(() => void store.dispatch(frame(true, 11, 1)))
+    expect(container.querySelector('.bg-green-500\\/20')).toBeTruthy()
+  })
+
+  it('is GO on a tap, and ⌥ changes nothing', () => {
+    const onPress = vi.fn()
+    const onApplyValues = vi.fn()
+    draw(stackPad, { stack: stack(), onPress, onApplyValues })
+    const pad = screen.getByRole('button')
+    fireEvent.pointerDown(pad, { altKey: true, clientX: 0, clientY: 0 })
+    fireEvent.pointerUp(pad)
+    expect(onPress).toHaveBeenCalledTimes(1)
+    expect(onApplyValues).not.toHaveBeenCalled()
   })
 })

@@ -14,6 +14,8 @@ import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
 import uk.me.cormack.lighting7.fx.takeLooseCue
+import uk.me.cormack.lighting7.fx.CODE_CUE_STACK_LIMIT
+import uk.me.cormack.lighting7.fx.CueStackLimitException
 
 /**
  * **A busk pad press, decided once.** The busk view's `POST /busk/pads/{padId}/press` and a
@@ -33,7 +35,10 @@ internal object BuskPressService {
 
     /** What a press did, or why it did nothing. */
     sealed interface Outcome {
-        /** [kind] is `PALETTE`, `LOOK` or `CUE`; [action] is `"applied"` or `"removed"`. */
+        /**
+         * [kind] is `PALETTE`, `LOOK`, `CUE` or `CUE_STACK`. [action] is `"applied"` or `"removed"`, or
+         * for a stack pad `started`, `advanced`, `released`, `stayed` or `empty` (busk-stack plan D9).
+         */
         data class Pressed(
             val kind: String,
             val action: String,
@@ -54,6 +59,13 @@ internal object BuskPressService {
 
         /** A target the press named does not resolve in the live patch. */
         data class TargetMissing(val message: String) : Outcome
+
+        /**
+         * A stack pad's GO the desk could not make as things stand — a full band (`CUE_STACK_LIMIT`),
+         * or a stack that stopped or went between the press's read and its GO — a 409, as the stack
+         * routes answer it.
+         */
+        data class Conflict(val message: String, val code: String?) : Outcome
     }
 
     /**
@@ -87,6 +99,8 @@ internal object BuskPressService {
             BuskPadKind.LOOK -> PressRecord.Look(pad.look!!.layerSource())
             // A cue pad names the cue and holds it loose (cue model plan D6): no stack, no entry.
             BuskPadKind.CUE -> PressRecord.Cue(pad.cue!!.id.value)
+            // A stack pad names a busk stack and GOs it (busk-stack plan D9).
+            BuskPadKind.CUE_STACK -> PressRecord.Stack(pad.cueStack!!.id.value)
             // A malformed pad is absent everywhere it is read, this route included.
             null -> return null
         }
@@ -101,6 +115,7 @@ internal object BuskPressService {
         }
         val ownUuid = (record as? PressRecord.Layer)?.source?.uuid
         val ownCue = (record as? PressRecord.Cue)?.cueId
+        val ownStack = (record as? PressRecord.Stack)?.stackId
         return PressPlan(
             projectId = projectId,
             record = record,
@@ -109,7 +124,7 @@ internal object BuskPressService {
                     when (sibling.kind) {
                         BuskPadKind.PALETTE -> sibling.palette!!.uuid
                         BuskPadKind.LOOK -> sibling.look!!.uuid
-                        BuskPadKind.CUE, null -> null
+                        BuskPadKind.CUE, BuskPadKind.CUE_STACK, null -> null
                     }
                 }
                 .also { it.remove(ownUuid) },
@@ -117,6 +132,11 @@ internal object BuskPressService {
                 .filter { it.kind == BuskPadKind.CUE }
                 .map { it.cue!!.id.value }
                 .filter { it != ownCue }
+                .distinct(),
+            stackSiblings = siblings
+                .filter { it.kind == BuskPadKind.CUE_STACK }
+                .map { it.cueStack!!.id.value }
+                .filter { it != ownStack }
                 .distinct(),
         )
     }
@@ -145,7 +165,8 @@ internal object BuskPressService {
         cycle: Double? = null,
         fadeMs: Long = 0,
     ): Outcome {
-        val holds = state.show.cueStackManager.holds
+        val manager = state.show.cueStackManager
+        val holds = manager.holds
         val stack = state.show.programmerLayerStack
 
         /**
@@ -156,6 +177,14 @@ internal object BuskPressService {
         fun stopCueSiblings(): Int = plan.cueSiblings.count { cueId ->
             holds.looseHeld(cueId).also { held -> if (held) holds.dropLoose(state, cueId) }
         }
+
+        /**
+         * Stop every running sibling stack over its release time (busk-stack plan D6, D10); returns how
+         * many. Only an *on* press calls this.
+         */
+        fun stopStackSiblings(announce: Boolean = true): Int = plan.stackSiblings.count { stackId ->
+            manager.isStackActive(stackId).also { running -> if (running) manager.stopStack(state, stackId) }
+        }.also { if (announce && it > 0) state.show.fixtures.cueStackListChanged() }
 
         return when (val record = plan.record) {
             is PressRecord.Layer -> {
@@ -194,7 +223,7 @@ internal object BuskPressService {
                         releaseSiblings = plan.layerSiblings,
                         fadeMs = fadeMs,
                     )
-                    val stopped = if (outcome.action == "applied") stopCueSiblings() else 0
+                    val stopped = if (outcome.action == "applied") stopCueSiblings() + stopStackSiblings() else 0
                     // The busk-pad door of the press log. Templates only — a Look has no recents
                     // row — and only on the arm that put it on, since a release is not a press
                     // (`PalettePressLog`). A refusal above has already returned.
@@ -212,7 +241,7 @@ internal object BuskPressService {
                 // leaving whatever stack also holds it on stage.
                 if (!holds.looseHeld(record.cueId)) {
                     val released = stack.release(plan.layerSiblings)
-                    val stopped = stopCueSiblings()
+                    val stopped = stopCueSiblings() + stopStackSiblings()
                     val press = holds.takeLooseCue(state, record.cueId)
                         ?: return Outcome.NotFound
                     Outcome.Pressed(BuskPadKind.CUE.name, "applied", press.acquired.fxCount, released + stopped)
@@ -221,7 +250,44 @@ internal object BuskPressService {
                     Outcome.Pressed(BuskPadKind.CUE.name, "removed", removed, 0)
                 }
             }
+            // The stack's own GO announces the list once, sibling stops included.
+            is PressRecord.Stack -> pressStack(state, record) {
+                stack.release(plan.layerSiblings) + stopCueSiblings() + stopStackSiblings(announce = false)
+            }
         }
+    }
+
+    /**
+     * A stack pad's tap is the stack's GO (busk-stack plan D9). Stopped, it starts the stack on its
+     * armed or first cue and, in a solo bank, takes [releaseSiblings] off (D10); running, it advances
+     * one cue and takes nothing off — at the end of the stack that releases it, loops or stays, as the
+     * stack is set. A stack with no cues answers `empty` and touches nothing.
+     */
+    private fun pressStack(state: State, record: PressRecord.Stack, releaseSiblings: () -> Int): Outcome {
+        val manager = state.show.cueStackManager
+        val kind = BuskPadKind.CUE_STACK.name
+        // GO's meaning is `CueStackManager.go`'s alone; what it did is read from what the stack was.
+        val wasActive = manager.isStackActive(record.stackId)
+        val was = manager.getActiveEntryId(record.stackId)
+        val result = try {
+            manager.go(state, record.stackId)
+        } catch (e: CueStackLimitException) {
+            return Outcome.Conflict(e.message ?: "Too many live stacks", CODE_CUE_STACK_LIMIT)
+        } catch (e: IllegalArgumentException) {
+            // A stopped stack with no cue entries has nothing to start.
+            if (!wasActive) return Outcome.Pressed(kind, "empty", 0, 0)
+            return Outcome.Conflict(e.message ?: "The stack moved under the press", null)
+        } catch (e: IllegalStateException) {
+            return Outcome.Conflict(e.message ?: "The stack moved under the press", null)
+        } ?: return Outcome.Pressed(kind, "empty", 0, 0)
+        val outcome = when {
+            !wasActive -> Outcome.Pressed(kind, "started", result.fxCount, releaseSiblings())
+            result.released -> Outcome.Pressed(kind, "released", 0, 0)
+            result.entryId == was -> Outcome.Pressed(kind, "stayed", 0, 0)
+            else -> Outcome.Pressed(kind, "advanced", result.fxCount, 0)
+        }
+        state.show.fixtures.cueStackListChanged()
+        return outcome
     }
 
     /** [plan] then [apply], for a caller with nothing to say between the two. */
@@ -249,6 +315,8 @@ internal data class PressPlan(
     val layerSiblings: Set<UUID>,
     /** The cue on every sibling pad. */
     val cueSiblings: List<Int>,
+    /** The stack on every sibling stack pad (busk-stack plan D10). */
+    val stackSiblings: List<Int>,
 )
 
 internal sealed interface PressRecord {
@@ -268,4 +336,7 @@ internal sealed interface PressRecord {
 
     /** A cue pad's cue, held loose by a press (cue model plan D6) — it names no stack. */
     data class Cue(val cueId: Int) : PressRecord
+
+    /** A stack pad's busk stack, which a press GOs (busk-stack plan D9). */
+    data class Stack(val stackId: Int) : PressRecord
 }

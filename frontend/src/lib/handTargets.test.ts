@@ -41,6 +41,8 @@ function paletteDrag(kind: BuskPadKind, eligible?: boolean) {
 }
 
 const KINDS: BuskPadKind[] = ['PALETTE', 'LOOK', 'CUE']
+/** Every pad kind, checked by the compiler: a fifth kind fails to type-check here until it is added. */
+const EVERY_KIND: Record<BuskPadKind, true> = { PALETTE: true, LOOK: true, CUE: true, CUE_STACK: true }
 
 describe('canHandLand', () => {
   it('lets a bank take all three kinds — a pad is a reference to exactly one of them', () => {
@@ -71,6 +73,14 @@ describe('canHandLand', () => {
   it('lets a slot take any Look, which lands whole, and no palette', () => {
     expect(canHandLand({ kind: 'LOOK' }, 'slot')).toBe(true)
     expect(canHandLand({ kind: 'PALETTE' }, 'slot')).toBe(false)
+  })
+
+  it('takes a stack nowhere: the hand never carries a stack pad (lighting7 busk-stack plan D9)', () => {
+    expect(HAND_TARGET_KINDS.filter((target) => canHandLand({ kind: 'CUE_STACK' }, target))).toEqual([])
+    // Every kind but a stack lands on a bank.
+    for (const kind of Object.keys(EVERY_KIND) as BuskPadKind[]) {
+      expect(canHandLand({ kind }, 'bank'), kind).toBe(kind !== 'CUE_STACK')
+    }
   })
 })
 

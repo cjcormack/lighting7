@@ -29,8 +29,8 @@ import org.slf4j.LoggerFactory
  * - A [DaoBuskBanks] bank stacks in its column top to bottom, has a name, is `solo` or stacking, and
  *   has a `flow`: pads wrap to the bank's width, run one per line or scroll sideways ([BuskFlow]). Solo never
  *   decides a bank's shape.
- * - A [DaoBuskPads] pad is an **ordered reference** to exactly one template, Look or cue (D3). One
- *   record may sit on several pads, on several pages.
+ * - A [DaoBuskPads] pad is an **ordered reference** to exactly one template, Look, cue or busk stack
+ *   (D3; busk-stack plan D9). One record may sit on several pads, on several pages.
  *
  * Nothing is positioned by hand, so nothing overlaps and columns stack on a narrow screen — this is
  * MagicQ's fixed execute grid, not QLC+'s free canvas.
@@ -38,7 +38,7 @@ import org.slf4j.LoggerFactory
  * What the layout deliberately does **not** do:
  *
  * - **It never guards a delete.** A pad is an enrichment of its record, not content. Deleting a
- *   template, Look or cue deletes its pads inside the same transaction, and the template and Look
+ *   template, Look, cue or stack deletes its pads inside the same transaction, and the template and Look
  *   delete guards do not learn about pads. Sync reads a pad whose record the archive lacks as
  *   absent, with a warning, for the same reason.
  * - **It never touches the cook.** A bank changes what a *press* does — which siblings a solo bank
@@ -164,23 +164,27 @@ object DaoBuskPads : IntIdTable("busk_pads") {
     val sortOrder = integer("sort_order")
 
     /**
-     * What this pad presses: **exactly one** of [palette] / [look] / [cue] is set — the
-     * [DaoCueLayers] pattern, three-armed. Nullable FKs rather than a `(kind, id)` pair so a pad
+     * What this pad presses: **exactly one** of [palette] / [look] / [cue] / [cueStack] is set — the
+     * [DaoCueLayers] pattern, four-armed. Nullable FKs rather than a `(kind, id)` pair so a pad
      * pointing at a deleted record cannot be expressed once the record's delete has swept its pads.
      */
     val palette = reference("palette_id", DaoPalettes).nullable()
     val look = reference("look_id", DaoLooks).nullable()
     val cue = reference("cue_id", DaoCues).nullable()
+
+    /** A busk stack (busk-stack plan D9): one out of the running order, which a press GOs. */
+    val cueStack = reference("cue_stack_id", DaoCueStacks).nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
-        // Exactly one referent, stated to the database as well as to the code. Reaches only a DB
-        // created after it was added — see the `cue_layers` note; `buskPadKind` holds the line on
-        // one that predates it.
+        // Exactly one referent, stated to the database as well as to the code. SQLite cannot alter a
+        // CHECK, so a database written before an arm was added keeps the old one until it is rebuilt
+        // (`BuskPadStackMigration`); `buskPadKind` holds the line on one that predates the CHECK.
         check("busk_pad_exactly_one_ref") {
-            (palette.isNotNull() and look.isNull() and cue.isNull()) or
-                (palette.isNull() and look.isNotNull() and cue.isNull()) or
-                (palette.isNull() and look.isNull() and cue.isNotNull())
+            (palette.isNotNull() and look.isNull() and cue.isNull() and cueStack.isNull()) or
+                (palette.isNull() and look.isNotNull() and cue.isNull() and cueStack.isNull()) or
+                (palette.isNull() and look.isNull() and cue.isNotNull() and cueStack.isNull()) or
+                (palette.isNull() and look.isNull() and cue.isNull() and cueStack.isNotNull())
         }
     }
 }
@@ -193,6 +197,7 @@ class DaoBuskPad(id: EntityID<Int>) : IntEntity(id) {
     var palette by DaoPalette optionalReferencedOn DaoBuskPads.palette
     var look by DaoLook optionalReferencedOn DaoBuskPads.look
     var cue by DaoCue optionalReferencedOn DaoBuskPads.cue
+    var cueStack by DaoCueStack optionalReferencedOn DaoBuskPads.cueStack
     var uuid by DaoBuskPads.uuid
 
     /** Which arm this pad's row sets, or null for a malformed row every reader treats as absent. */
@@ -201,14 +206,19 @@ class DaoBuskPad(id: EntityID<Int>) : IntEntity(id) {
             readValues[DaoBuskPads.palette],
             readValues[DaoBuskPads.look],
             readValues[DaoBuskPads.cue],
+            readValues[DaoBuskPads.cueStack],
         )
 }
 
-/** The three things a pad can press. Serialised by name on the wire and in sync. */
+/**
+ * The four things a pad can press. Serialised by name on the wire and in sync. The hand carries the
+ * first three only: a stack pad stays where it is placed (busk-stack plan D9).
+ */
 enum class BuskPadKind {
     PALETTE,
     LOOK,
     CUE,
+    CUE_STACK,
 }
 
 private val buskPadLogger = LoggerFactory.getLogger("buskPad")
@@ -220,11 +230,12 @@ private val buskPadLogger = LoggerFactory.getLogger("buskPad")
  * layout route int ids and the importer uuid strings. Null means malformed (none set, or more than
  * one); the caller drops the pad and, if it is a reader, says so through [warnMalformedBuskPad].
  */
-fun buskPadKind(template: Any?, look: Any?, cue: Any?): BuskPadKind? {
+fun buskPadKind(template: Any?, look: Any?, cue: Any?, cueStack: Any?): BuskPadKind? {
     val set = listOfNotNull(
         template?.let { BuskPadKind.PALETTE },
         look?.let { BuskPadKind.LOOK },
         cue?.let { BuskPadKind.CUE },
+        cueStack?.let { BuskPadKind.CUE_STACK },
     )
     return set.singleOrNull()
 }

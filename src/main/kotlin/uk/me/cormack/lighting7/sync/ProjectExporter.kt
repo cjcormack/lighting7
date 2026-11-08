@@ -945,6 +945,7 @@ class ProjectExporter(private val state: State) {
                                                         paletteUuid = pad.palette?.uuid?.toString(),
                                                         lookUuid = pad.look?.uuid?.toString(),
                                                         cueUuid = pad.cue?.uuid?.toString(),
+                                                        cueStackUuid = pad.cueStack?.uuid?.toString(),
                                                     )
                                                 },
                                         )

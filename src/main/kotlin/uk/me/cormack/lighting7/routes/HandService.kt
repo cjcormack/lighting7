@@ -73,6 +73,8 @@ internal object HandService {
                 BuskPadKind.PALETTE -> kind to pad.palette!!.id.value
                 BuskPadKind.LOOK -> kind to pad.look!!.id.value
                 BuskPadKind.CUE -> kind to pad.cue!!.id.value
+                // A stack pad stays where it is placed (busk-stack plan D9).
+                BuskPadKind.CUE_STACK -> null
             }
         }
     }
@@ -105,6 +107,7 @@ internal object HandService {
             BuskPadKind.CUE -> records.cue(project, id)?.let {
                 HandState.Held(kind, it.id.value, it.uuid.toString(), cue = records.dto(it), pickedUpOn = pickedUpOn)
             }
+            BuskPadKind.CUE_STACK -> null
         }
     }
 
@@ -135,6 +138,7 @@ internal object HandService {
                 paletteId = held.id.takeIf { held.kind == BuskPadKind.PALETTE },
                 lookId = held.id.takeIf { held.kind == BuskPadKind.LOOK },
                 cueId = held.id.takeIf { held.kind == BuskPadKind.CUE },
+                cueStackId = null,
                 // A button has nowhere to put a page document; it needs the id to broadcast and
                 // nothing else, and building the rest would be several queries per press.
                 buildPage = false,

@@ -13,6 +13,7 @@ import { canHandLand } from '@/lib/handTargets'
 import type { BuskCue } from '@/api/buskApi'
 import { isCueRow } from '@/api/cueStacksApi'
 import { cuePlacesByCue } from '@/lib/cuePlaces'
+import { stackLibraryDetail } from './stackPad'
 import { EditorLabel } from '../editor/EditorLabel'
 import {
   describeLookContents,
@@ -37,7 +38,15 @@ import { RigPalette } from './RigPalette'
  * constraint to reach for.
  */
 
-type KindFilter = 'all' | 'palette' | 'look' | 'cue'
+type KindFilter = 'all' | 'palette' | 'look' | 'cue' | 'stack'
+
+const KIND_LABELS: Record<KindFilter, string> = {
+  all: 'All',
+  palette: 'Palettes',
+  look: 'Looks',
+  cue: 'Cues',
+  stack: 'Stacks',
+}
 type FamilyFilter = 'any' | AttributeFamily
 
 interface PaletteRow {
@@ -119,7 +128,10 @@ function PaletteRowItem({
         <div className="truncate text-[11px] text-muted-foreground">{row.detail}</div>
       </div>
       {refused && (
-        <span className="shrink-0 text-[10px] text-muted-foreground">needs a selection</span>
+        <span className="shrink-0 text-[10px] text-muted-foreground">
+          {/* A slot takes no stack: a stack pad lives on a bank (lighting7 busk-stack plan D9). */}
+          {row.kind === 'stack' ? 'banks only' : 'needs a selection'}
+        </span>
       )}
       {onPage && (
         <span className="inline-flex h-4 shrink-0 items-center rounded-full bg-muted px-1.5 text-[10px]">
@@ -303,6 +315,28 @@ function LibraryTab({
         cueNumber: face.cueNumber,
       })
     }
+    // A pad may name a busk stack only (lighting7 busk-stack plan D9): a stack in the running order
+    // is the playhead's, and is not listed.
+    for (const stack of stacks ?? []) {
+      if (stack.type !== 'STACK' || stack.inRunningOrder !== false) continue
+      const record = { id: stack.id, uuid: stack.uuid, name: stack.name }
+      const pad = { kind: 'CUE_STACK' as const, cueStack: record }
+      out.push({
+        key: `cue_stack:${stack.id}`,
+        dragId: buskPaletteId('CUE_STACK', stack.id),
+        record: pad,
+        face: padFaceOf(pad),
+        name: stack.name,
+        detail: stackLibraryDetail(stack),
+        badge: 'Stack',
+        kind: 'stack',
+        families: [],
+        slotEligible: canHandLand({ kind: 'CUE_STACK' }, 'slot'),
+        swatch: null,
+        isFx: false,
+        cueNumber: null,
+      })
+    }
     return out
   }, [templates, looks, stacks])
 
@@ -339,14 +373,14 @@ function LibraryTab({
           />
         </div>
         <div className="flex items-center gap-0.5 rounded-[10px] border bg-card p-0.5">
-          {(['all', 'palette', 'look', 'cue'] as KindFilter[]).map((value) => (
+          {(['all', 'palette', 'look', 'cue', 'stack'] as KindFilter[]).map((value) => (
             <SegButton
               key={value}
               active={kind === value}
               onClick={() => setKind(value)}
               className="flex-1"
             >
-              {value === 'all' ? 'All' : value === 'palette' ? 'Palettes' : value === 'look' ? 'Looks' : 'Cues'}
+              {KIND_LABELS[value]}
             </SegButton>
           ))}
         </div>

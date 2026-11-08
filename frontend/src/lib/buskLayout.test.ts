@@ -155,6 +155,24 @@ describe('dropping a library record', () => {
   it('will not land on a bank zone', () => {
     expect(applyDrop(samplePage(), { kind: 'palette', record }, { kind: 'new-row' })).toBeNull()
   })
+
+  it('lands a busk stack as a stack pad, which the layout write names by cueStackId', () => {
+    const stack = { kind: 'CUE_STACK' as const, cueStack: { id: 9, name: 'Song 3' } }
+    const next = applyDrop(samplePage(), { kind: 'palette', record: stack }, {
+      kind: 'pad',
+      at: { row: 0, column: 0, bank: 0, pad: 0 },
+    })!
+    expect(toLayoutRequest(next).rows[0].columns[0].banks[0].pads[0]).toEqual({ cueStackId: 9 })
+    expect(recordsOnPage(next).has('cue_stack:9')).toBe(true)
+    expect(parseBuskDragId(buskPaletteId('CUE_STACK', 9))).toEqual({ kind: 'palette', recordKind: 'CUE_STACK', id: 9 })
+  })
+
+  it('keeps a saved stack pad through the layout write', () => {
+    const page = samplePage()
+    page.rows[0].columns[0].banks[0].pads.push({ id: 77, kind: 'CUE_STACK', cueStack: { id: 9, name: 'Song 3' } })
+    const pads = toLayoutRequest(page).rows[0].columns[0].banks[0].pads
+    expect(pads[pads.length - 1]).toEqual({ padId: 77, cueStackId: 9 })
+  })
 })
 
 describe('moving a pad', () => {

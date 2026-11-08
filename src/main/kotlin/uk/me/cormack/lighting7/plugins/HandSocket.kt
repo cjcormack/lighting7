@@ -85,6 +85,11 @@ suspend fun handleHand(scope: SocketScope, message: HandInMessage) {
                 logger.warn("hand.pickUp dropped: '{}' is not a pad kind", message.kind)
                 return
             }
+            // A stack pad stays where it is placed (busk-stack plan D9).
+            if (kind == BuskPadKind.CUE_STACK) {
+                logger.warn("hand.pickUp dropped: the hand carries no cue stack")
+                return
+            }
             val projectId = runCatching { scope.state.projectManager.currentProject.id.value }.getOrNull() ?: run {
                 logger.debug("hand.pickUp dropped: no current project")
                 return

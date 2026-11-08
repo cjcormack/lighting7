@@ -65,7 +65,8 @@ stack was running or not.
 
 **A Look is a programmer layer** whichever door puts it on: Clear takes it off, Record captures it,
 and in Blind it is staged, which its log row says (*staged: Blind*). A busk pad presses on whatever
-the desk has selected, so from QLab only Look and cue pads are predictable; a loose cue is a hold
+the desk has selected, so from QLab only Look, cue and stack pads are predictable (a stack pad names no
+fixtures, and its press is the busk stack's GO, busk-stack plan D9); a loose cue is a hold
 above every stack that the programmer does not touch. Show control is best written as GO TO and
 loose cues, with Looks where the operator may take them over.
 

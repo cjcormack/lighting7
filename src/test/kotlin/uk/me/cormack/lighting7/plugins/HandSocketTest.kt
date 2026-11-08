@@ -13,6 +13,7 @@ import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.models.CueStackType
+import uk.me.cormack.lighting7.routes.HandService
 import uk.me.cormack.lighting7.state.SelectionSource
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.awaitEachOf
@@ -147,10 +148,30 @@ class HandSocketTest : RouteIntegrationTest() {
 
         client.webSocket("/api") {
             awaitOfType<HandStateOutMessage>()
-            sendSerialized<InMessage>(HandPickUpInMessage("CUE_STACK", paletteId))
+            sendSerialized<InMessage>(HandPickUpInMessage("SCENE", paletteId))
             sendSerialized<InMessage>(HandPickUpInMessage("PALETTE", paletteId))
             assertEquals(paletteId, awaitOfType<HandStateOutMessage> { it.item != null }.item?.id)
         }
+    }
+
+    @Test
+    fun `a stack pad's stack is never picked up`() = testApplication {
+        mountTestApp(state)
+        val paletteId = seedPalette("Warm wash")
+        val cueId = seedCue("Song 3")
+        assertTrue(cueId > 0)
+        val stackId = transaction(state.database) { DaoCueStack.all().single { it.name == "Song 3-stack" }.id.value }
+        val client = createWsClient()
+
+        client.webSocket("/api") {
+            awaitOfType<HandStateOutMessage>()
+            // The pick-up of a palette behind it is the stopping point: every `hand.state` up to it is empty.
+            sendSerialized<InMessage>(HandPickUpInMessage("CUE_STACK", stackId))
+            sendSerialized<InMessage>(HandPickUpInMessage("PALETTE", paletteId))
+            val held = awaitOfType<HandStateOutMessage> { it.item != null }.item!!
+            assertEquals(BuskPadKind.PALETTE, held.kind, "the stack never reached the hand (busk-stack plan D9)")
+        }
+        assertNull(HandService.resolve(state, projectId, BuskPadKind.CUE_STACK, stackId, pickedUpOn = null))
     }
 
     @Test

@@ -18,6 +18,17 @@ import { useSetStackSceneryMutation } from '@/store/scenery'
 import { useCueStackMoveInDarkQuery } from '@/store/cueStacks'
 import { MOVE_IN_DARK_OFF, NEW_STACK_MOVE_IN_DARK, stackDraftOf, stackDraftResult, type StackMoveInDarkDraft } from '@/lib/moveInDark'
 import { MoveInDarkStackBlock } from './MoveInDarkStackBlock'
+import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import type { CueStack, CueStackInput, StackOverShow } from '@/api/cueStacksApi'
 import type { SceneryChange } from '@/api/sceneryApi'
 
@@ -37,6 +48,22 @@ const OVER_SHOW_OPTIONS: { value: StackOverShow; label: string; hint: string }[]
   { value: 'ADDS', label: 'Adds', hint: 'Its cues compose with the show’s: a chase lifts heads over the base and never darkens them' },
   { value: 'REPLACES', label: 'Replaces', hint: 'Every attribute its cue sets wins, dimmers included; the FX under them wait' },
 ]
+
+/**
+ * The busk pages a 409 `CUE_STACK_ON_PADS` names (lighting7 busk-stack plan D11), or null for any
+ * other refusal: putting a stack with pads back into the running order asks first.
+ */
+export function stackOnPadsOf(error: unknown): string[] | null {
+  const e = error as { status?: unknown; data?: { code?: unknown; pages?: unknown } } | null | undefined
+  if (e?.status !== 409 || e.data?.code !== 'CUE_STACK_ON_PADS' || !Array.isArray(e.data.pages)) return null
+  return e.data.pages.filter((p): p is string => typeof p === 'string')
+}
+
+/** `'Act 1'`, `'Act 1' and 'Act 2'`, `'Act 1', 'Act 2' and 'Act 3'`. */
+function pageList(pages: string[]): string {
+  const quoted = pages.map((p) => `‘${p}’`)
+  return quoted.length <= 1 ? (quoted[0] ?? '') : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`
+}
 
 const DEFAULT_RELEASE_MS = 2000
 const MAX_RELEASE_MS = 60_000
@@ -61,7 +88,8 @@ interface CueStackFormProps {
   stack: CueStack | null
   /** The stack's set as the desk holds it now; edited in place and saved by itself. */
   scenery?: SceneryChange[]
-  onSave: (input: CueStackInput) => Promise<void>
+  /** [options.force] puts a stack with pads back into the running order, taking its pads off (D11). */
+  onSave: (input: CueStackInput, options?: { force?: boolean }) => Promise<void>
   isSaving: boolean
   /**
    * Open the cue table on the cues Move in dark's read-out counts (the sheet closes first). Absent,
@@ -107,6 +135,8 @@ export function CueStackForm({
   const [releaseTime, setReleaseTime] = useState(String(DEFAULT_RELEASE_MS / 1000))
   const [overShow, setOverShow] = useState<StackOverShow>('ADDS')
   const [setStackScenery] = useSetStackSceneryMutation()
+  // A save the desk refused because busk pages name the stack: the pages, while it asks (D11).
+  const [onPads, setOnPads] = useState<{ pages: string[]; input: CueStackInput } | null>(null)
   const runnable = stack == null || stack.type === 'STACK'
   // What the block opened on, so a Save that left it alone writes nothing, and one that left a time
   // alone writes it as stored: the fields show tenths of a second, and would round a stored 1.25 s.
@@ -180,6 +210,20 @@ export function CueStackForm({
     // closing would discard the operator's edits behind the toast.
     try {
       await onSave(input)
+    } catch (error) {
+      const pages = stackOnPadsOf(error)
+      if (pages != null) setOnPads({ pages, input })
+      return
+    }
+    onOpenChange(false)
+  }
+
+  const saveTakingPadsOff = async () => {
+    const pending = onPads
+    setOnPads(null)
+    if (pending == null) return
+    try {
+      await onSave(pending.input, { force: true })
     } catch {
       return
     }
@@ -290,6 +334,18 @@ export function CueStackForm({
             </>
           )}
 
+          {/* A busk stack as stored, since a pad may name only one (D9): the switch flipped and not
+              yet saved has not made it one. */}
+          {stack != null && stack.type === 'STACK' && stack.inRunningOrder === false && (
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label>Busk pages</Label>
+                <p className="text-xs text-muted-foreground">A stack pad runs it from a bank: tap is GO</p>
+              </div>
+              <AddToBuskPageMenu projectId={projectId} record={{ kind: 'CUE_STACK', id: stack.id, name: stack.name }} />
+            </div>
+          )}
+
           {runnable && (
             <MoveInDarkStackBlock
               draft={dark}
@@ -346,6 +402,21 @@ export function CueStackForm({
           </Button>
         </SheetFooter>
       </SheetContent>
+      <AlertDialog open={onPads != null} onOpenChange={(open) => !open && setOnPads(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Take its pads off?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {onPads != null &&
+                `${stack?.name ?? 'This stack'} is on busk ${onPads.pages.length === 1 ? 'page' : 'pages'} ${pageList(onPads.pages)}. A pad runs only a busk stack, so putting it back into the running order takes its pads off.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void saveTakingPadsOff()}>Take the pads off</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   )
 }
