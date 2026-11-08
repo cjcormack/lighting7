@@ -65,11 +65,7 @@ function StatusCard({ state }: { state: OscState | null }) {
       </Card>
     )
   }
-  const status = state.listening
-    ? `Listening on UDP ${state.port}`
-    : state.enabled
-      ? 'Not listening'
-      : 'Off'
+  const status = !state.enabled ? 'Off' : listeningOn(state) ?? 'Not listening'
   return (
     <Card className="p-4 space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -85,17 +81,27 @@ function StatusCard({ state }: { state: OscState | null }) {
       )}
       <p className="text-xs text-muted-foreground">
         A QLab Network cue sends an address such as <code>/lighting7/stack/act-1/cue/5/go</code> to
-        this computer. Only the senders listed here are heard.
+        this computer, over UDP or TCP. Only the senders listed here are heard.
       </p>
     </Card>
   )
+}
+
+function listeningOn(state: OscState): string | null {
+  const on = [state.listening && 'UDP', state.tcpListening && 'TCP'].filter(Boolean)
+  return on.length === 0 ? null : `Listening on ${on.join(' and ')} ${state.port}`
 }
 
 interface DraftSender {
   id?: number
   name: string
   address: string
+  replies?: boolean
 }
+
+/** A sender as the desk compares it, so a draft that only spelled `replies: false` out is not dirty. */
+const comparable = (list: DraftSender[]) =>
+  JSON.stringify(list.map((s) => ({ id: s.id, name: s.name, address: s.address, replies: s.replies === true })))
 
 function SettingsCard({
   settings,
@@ -130,7 +136,7 @@ function SettingsCard({
     enabled: settings.enabled,
     port: Number(port),
     bindAddress: bindAddress.trim() || null,
-    senders: senders.map((s) => ({ id: s.id, name: s.name.trim(), address: s.address.trim() })),
+    senders: senders.map((s) => ({ id: s.id, name: s.name.trim(), address: s.address.trim(), replies: s.replies === true })),
   })
 
   const submit = async (body: OscSettingsRequest) => {
@@ -146,7 +152,7 @@ function SettingsCard({
   const dirty =
     port !== String(settings.port) ||
     (bindAddress.trim() || null) !== (settings.bindAddress ?? null) ||
-    JSON.stringify(senders) !== JSON.stringify(settings.senders)
+    comparable(senders) !== comparable(settings.senders)
 
   return (
     <Card className="p-4 space-y-4">
@@ -174,7 +180,7 @@ function SettingsCard({
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="osc-port">UDP port</Label>
+          <Label htmlFor="osc-port">Port, UDP and TCP</Label>
           <Input id="osc-port" inputMode="numeric" value={port} onChange={(e) => setPort(e.target.value)} />
         </div>
         <div className="space-y-1.5">
@@ -192,8 +198,14 @@ function SettingsCard({
         {senders.length === 0 && (
           <p className="text-xs text-muted-foreground">No senders yet: every packet is refused.</p>
         )}
+        {senders.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            A sender with <em>Replies</em> is answered with <code>/lighting7/reply</code>: the address, its
+            outcome and what it did, to the port it sent from.
+          </p>
+        )}
         {senders.map((sender, i) => (
-          <div key={sender.id ?? `new-${i}`} className="flex gap-2">
+          <div key={sender.id ?? `new-${i}`} className="flex items-center gap-2">
             <Input
               aria-label="Sender name"
               placeholder="QLab"
@@ -206,6 +218,18 @@ function SettingsCard({
               value={sender.address}
               onChange={(e) => setSenders(senders.map((s, j) => (j === i ? { ...s, address: e.target.value } : s)))}
             />
+            <label
+              className="flex shrink-0 items-center gap-1.5 text-xs"
+              title="Answer each message with /lighting7/reply, saying what it did"
+            >
+              <input
+                type="checkbox"
+                aria-label={`Replies to ${sender.name || sender.address || 'sender'}`}
+                checked={sender.replies === true}
+                onChange={(e) => setSenders(senders.map((s, j) => (j === i ? { ...s, replies: e.target.checked } : s)))}
+              />
+              Replies
+            </label>
             <Button
               variant="ghost"
               size="icon"

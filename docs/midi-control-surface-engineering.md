@@ -865,8 +865,9 @@ From `State.kt`:
 
 ## Not implemented (architecture accommodates)
 
-OSC in is implemented as a fixed address set over UDP (`docs/osc-engineering.md`); learnable OSC
-addresses and feedback are the OSC plan's session 3.
+OSC in is implemented as a fixed address set over UDP and SLIP-framed TCP, with optional replies
+(`docs/osc-engineering.md`); learnable OSC addresses and feedback to a learned sender wait as
+`FU-OSC-LEARN` in `docs/plans/followups.md`.
 
 - Network MIDI / RTP-MIDI
 - MSC (MIDI Show Control)

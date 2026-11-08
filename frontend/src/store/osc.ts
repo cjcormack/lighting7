@@ -9,6 +9,8 @@ export interface OscSender {
   id: number
   name: string
   address: string
+  /** Each message it sends is answered with a `/lighting7/reply`; absent is off. */
+  replies?: boolean
 }
 
 /** `GET /install/osc`: this machine's listener and allowlist. Admin only, and never remote. */
@@ -25,7 +27,7 @@ export interface OscSettingsRequest {
   enabled: boolean
   bindAddress?: string | null
   port: number
-  senders: { id?: number; name: string; address: string }[]
+  senders: { id?: number; name: string; address: string; replies?: boolean }[]
 }
 
 export const oscApi = restApi.injectEndpoints({

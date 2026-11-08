@@ -81,10 +81,13 @@ class InstallOscRoutesTest : RouteIntegrationTest() {
         val id = stored.senders.single().id
         val second = http.put("/api/rest/install/osc") {
             header(HttpHeaders.Cookie, cookie); contentType(ContentType.Application.Json)
-            setBody("""{"enabled":false,"port":9000,"senders":[{"id":$id,"name":"QLab Mac","address":"192.168.1.20"},{"name":"Sound","address":"192.168.1.21"}]}""")
+            setBody("""{"enabled":false,"port":9000,"senders":[{"id":$id,"name":"QLab Mac","address":"192.168.1.20","replies":true},{"name":"Sound","address":"192.168.1.21"}]}""")
         }.body<OscSettingsDto>()
         assertEquals(listOf(id), second.senders.filter { it.name == "QLab Mac" }.map { it.id })
         assertEquals(2, second.senders.size)
+        // Replies are off unless a sender asks for them.
+        assertEquals(listOf("QLab Mac" to true, "Sound" to false), second.senders.map { it.name to it.replies })
+        assertEquals(second, http.get("/api/rest/install/osc") { header(HttpHeaders.Cookie, cookie) }.body<OscSettingsDto>())
     }
 
     @Test

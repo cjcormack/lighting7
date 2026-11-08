@@ -18,6 +18,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-CLOUD-P1`](#fu-manual-cloud-p1) | Lighting7 Cloud's P1 exit: a phone on 4G busks the venue desk opened from the portal, Claude patches a rig through the desk's cloud URL with no tunnel, an emailed invite approved in the portal lands its operator as `OPERATOR`, unlinking, disabling, removing a membership and *End* each close a session within 5 s, the two switches refuse what they name and cannot be changed remotely, the Remote access tab, `/oauth/*`, `/mcp` and the tunnel are gone and an upgraded desk keeps its policy switches, and a running fade sees nothing of the sidecar or the cloud stopping | Cloud P1 S9, 2026-11-07 |
 | [`FU-MANUAL-OSC-S1`](#fu-manual-osc-s1) | a QLab Network cue lands cue 1 and fired again mid-fade moves nothing; a Look's `on` and `off` and a busk Look pad from QLab; a QLab machine off the allowlist shows with *Allow this sender*; an operator sees the log | OSC session 1, 2026-11-07 |
 | [`FU-MANUAL-OSC-S2`](#fu-manual-osc-s2) | the grand master follows a QLab fade cue sending floats; a copied address pasted into QLab works first time; renumbering a received cue warns on the desk | OSC session 2, 2026-11-07 |
+| [`FU-MANUAL-OSC-S3`](#fu-manual-osc-s3) | a QLab Network cue over TCP lands its cue; a sender with replies on reads `/lighting7/reply` back | OSC session 3, 2026-11-08 |
 | [`FU-MANUAL-FX-SPEED-S4`](#fu-manual-fx-speed-s4) | ×½ and ×2 on a busked master halve and double it mid-song, a hold included, and greyed at 20 and 300; a fader and an encoder on *FX speed* move the selection's Local FX with no jump, the fader picking up at the lead FX | FX speed session 4, 2026-11-07 |
 | [`FU-MANUAL-FX-SPEED-S3`](#fu-manual-fx-speed-s3) | dragging Speed on a running chase changes its rate with no jump, letting go on ×2 settles it on the beat within a cycle, and TAP in the live FX editor holds its master, the rail reading *Held* | FX speed session 3, 2026-11-07 |
 | [`FU-MANUAL-FX-SPEED-S2`](#fu-manual-fx-speed-s2) | a tempo the operator tapped and captured on the rail outlives a GO of a cue that sets the same master, Record puts it into the cue's *Tempo on GO*, and that cue sets it after a Clear | FX speed session 2, 2026-11-07 |
@@ -156,6 +157,28 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-OSC-S3`
+
+**What it proves**: *QLab reaches the desk over TCP, and a sender that asks is told what each
+message did* (OSC plan session 3).
+
+**Why it is here**: the tests frame SLIP and read replies over loopback; only QLab shows that its
+TCP patch frames the way the desk reads and that its reply reaches whatever is listening for it.
+
+**Test**, at the desk with QLab 5 on the show network and OSC enabled for it (`FU-MANUAL-OSC-S1`,
+step 1), a show with a stack *Act 1*:
+
+1. **TCP.** In QLab's Network patch set the protocol to TCP, same host and port. A Network cue
+   sending `/lighting7/stack/act-1/cue/1/go` lands cue 1, and the OSC tab reads *Listening on UDP and
+   TCP 8415*.
+2. **Replies.** Tick *Replies* on QLab's sender and save. Watch QLab's OSC monitor (Window → OSC
+   Monitor), or `oscdump` on the QLab machine for UDP: firing the cue again brings back
+   `/lighting7/reply "/lighting7/stack/act-1/cue/1/go" "done" "GO TO 1 … · already live"`, and
+   `/lighting7/stack/act-9/go` brings back `not_found`.
+3. **Off.** Untick *Replies* and save: nothing comes back.
 
 ---
 
