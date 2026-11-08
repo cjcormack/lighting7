@@ -1,6 +1,7 @@
 # OSC: QLab and other show-control senders drive the desk
 
-> **Document status: READY — written 2026-11-07 from the page Chris and Claude agreed that day.**
+> **Document status: DONE — sessions 1–3 merged (2026-11-08).** Written 2026-11-07 from the page
+> Chris and Claude agreed that day.
 > Three sessions, each one PR, each stacked on the one before while that one is unmerged, each run
 > by `/next-session` (§5). The page and the record are in
 > [`osc-design/INDEX.md`](osc-design/INDEX.md).
@@ -269,8 +270,8 @@ written, and its row marked *in review* with its branch. A session's PR is title
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
 | 1 | Listener, stacks, Looks, cues and busk | merged | `claude/festive-dirac-ywtlap` | [#384](https://github.com/cjcormack/lighting7/pull/384) | `5959702` |
-| 2 | Masters, tempo and finding addresses | in review | `claude/gracious-albattani-cqe2mu` | [#388](https://github.com/cjcormack/lighting7/pull/388) | `04ea06a` |
-| 3 | Replies and TCP | in review | `claude/blissful-noether-8tvvc1` | | |
+| 2 | Masters, tempo and finding addresses | merged | `claude/gracious-albattani-cqe2mu` | [#388](https://github.com/cjcormack/lighting7/pull/388) | `04ea06a` |
+| 3 | Replies and TCP | merged | `claude/blissful-noether-8tvvc1` | [#390](https://github.com/cjcormack/lighting7/pull/390) | `33795f1` |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -436,15 +437,19 @@ keeps this section's original Learn and feedback bullets. This session does the 
 
 ## 6. Operator checks
 
-One row in `manual-validation.md` per merged session, at the desk with QLab 5 on the show network:
+One row in [`manual-validation.md`](../manual-validation.md) per merged session, at the desk with
+QLab 5 on the show network:
 
-- `FU-MANUAL-OSC-S1`: a QLab Network cue sending `/lighting7/stack/act-1/cue/1/go` lands cue 1;
-  fired again mid-fade, nothing moves; a Look's `on` and `off`; a busk Look pad; a QLab machine not
-  on the allowlist shows in the log with *Allow this sender*; an operator sees the log.
-- `FU-MANUAL-OSC-S2`: the grand master from a QLab fade cue sending floats; a copied address pasted
-  into QLab works first time; renumbering a received cue warns.
-- `FU-MANUAL-OSC-S3`: a QLab Network cue over TCP lands its cue; a sender with replies on reads
-  `/lighting7/reply` back (QLab's OSC monitor or `oscdump`).
+- Session 1, [`FU-MANUAL-OSC-S1`](../manual-validation.md#fu-manual-osc-s1): a QLab Network cue
+  sending `/lighting7/stack/act-1/cue/1/go` lands cue 1; fired again mid-fade, nothing moves; a
+  Look's `on` and `off`; a busk Look pad; a QLab machine not on the allowlist shows in the log with
+  *Allow this sender*; an operator sees the log.
+- Session 2, [`FU-MANUAL-OSC-S2`](../manual-validation.md#fu-manual-osc-s2): the grand master from
+  a QLab fade cue sending floats; a copied address pasted into QLab works first time; renumbering a
+  received cue warns.
+- Session 3, [`FU-MANUAL-OSC-S3`](../manual-validation.md#fu-manual-osc-s3): a QLab Network cue over
+  TCP lands its cue; a sender with replies on reads `/lighting7/reply` back (QLab's OSC monitor or
+  `oscdump`).
 
 ## 7. Explicitly out of scope
 
