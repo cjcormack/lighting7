@@ -30,12 +30,10 @@ removed it. Each is load-bearing; none is a micro-optimisation.
 
 `State.initDatabase` branches on `isEmptyDatabase()`. `createMissingTablesAndColumns`
 reconciles the model against the live schema through JDBC metadata, and sqlite-jdbc answers
-that by re-parsing every table's DDL: **~1220 ms for these 41 tables, paid whether or not
-anything is missing** (an immediate second call costs the same again). A database with no
+that by re-parsing every table's DDL: **~1220 ms for the 41 tables of 2026-08, paid whether or
+not anything is missing** (an immediate second call costs the same again). A database with no
 tables has nothing to reconcile, so plain `SchemaUtils.create` is equivalent there and runs in
-~6 ms. Detecting the empty case costs 0.2 ms.
-
-This is also ~1.2 s off a new desk's first boot.
+~6 ms. Detecting the empty case costs 0.2 ms. It took the same off a new desk's first boot.
 
 `FreshSchemaEquivalenceTest` guards it by building a database both ways and diffing
 `sqlite_master`. Index *names* are excluded: Exposed's two paths name the same unique indices

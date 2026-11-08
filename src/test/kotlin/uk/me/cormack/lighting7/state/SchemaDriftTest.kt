@@ -73,18 +73,22 @@ class SchemaDriftTest {
     @Test
     fun `a missing table, column or index puts its table out of step, and a renamed index does not`() {
         val database = builtDatabase()
+        val scriptsIndex = DaoScripts.indices.single()
         transaction(database) {
-            var scriptsIndex = ""
-            exec("SELECT name FROM pragma_index_list('scripts') WHERE name NOT LIKE 'sqlite_%'") { rs ->
-                rs.next(); scriptsIndex = rs.getString("name")
+            // `create` names the index differently from the model, so drop it by its live name.
+            val live = ArrayList<String>()
+            exec("SELECT name FROM pragma_index_list('${DaoScripts.tableName}') WHERE name NOT LIKE 'sqlite_%'") { rs ->
+                while (rs.next()) live += rs.getString("name")
             }
             exec("DROP TABLE ${DaoLookFx.tableName}")
             exec("ALTER TABLE ${DaoProjects.tableName} DROP COLUMN ${DaoProjects.description.name}")
-            exec("DROP INDEX $scriptsIndex")
+            exec("DROP INDEX ${live.single()}")
         }
         assertEquals(setOf(DaoLookFx.tableName, DaoProjects.tableName, DaoScripts.tableName), database.outOfStep())
 
-        transaction(database) { exec("CREATE UNIQUE INDEX scripts_renamed ON scripts (project_id, name)") }
+        transaction(database) {
+            exec("CREATE UNIQUE INDEX scripts_renamed ON ${DaoScripts.tableName} (${scriptsIndex.columns.joinToString { it.name }})")
+        }
         assertEquals(setOf(DaoLookFx.tableName, DaoProjects.tableName), database.outOfStep())
     }
 

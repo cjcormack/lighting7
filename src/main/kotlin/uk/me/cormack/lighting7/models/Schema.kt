@@ -5,8 +5,8 @@ import org.jetbrains.exposed.v1.core.Table
 /**
  * Every table in the schema, in FK-safe creation order.
  *
- * This is the single source of truth for "what tables exist": `State` passes it to
- * `SchemaUtils.createMissingTablesAndColumns`, and `SyncCoverageTest` asserts every entry
+ * This is the single source of truth for "what tables exist": `State` builds the schema from
+ * it, and `SyncCoverageTest` asserts every entry
  * has a recorded sync disposition. Adding a table here without deciding whether its rows
  * are portable show content, machine-local, or transient runtime state fails that test —
  * which is the point. See the "Database changes and cloud sync" decision tree in
