@@ -1,4 +1,4 @@
-import { restApi } from "./restApi"
+import { restApi, SHOW_RECORD_TAGS } from "./restApi"
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -131,6 +131,18 @@ export type SyncErrorCode =
   | "VENUE_DRAFT_NOT_SYNCED"
   /** A venue repo's tag is not a version this desk can read. */
   | "VENUE_REPO_INVALID"
+  /** The snapshot isn't HEAD or an ancestor of it, or the project has no history. */
+  | "RESTORE_COMMIT_UNKNOWN"
+  /** The restore would now do something other than the review confirmed; the body carries the new one. */
+  | "RESTORE_REVIEW_STALE"
+  /** The snapshot is the show as it is. */
+  | "RESTORE_NO_CHANGES"
+  /** A note over 200 characters or holding a line break; a blank sha or token. */
+  | "RESTORE_INVALID"
+  /** The snapshot's archive is older than this desk reads. */
+  | "RESTORE_TOO_OLD"
+  /** The snapshot's tree can't be imported for another reason. */
+  | "RESTORE_UNREADABLE"
 
 export interface CommitInfo {
   sha: string
@@ -143,6 +155,8 @@ export interface CommitInfo {
   installShortUuid?: string | null
   /** Friendly name from `installs.json` at HEAD; null when the short UUID isn't in the registry. */
   installFriendlyName?: string | null
+  /** The full sha a restore commit's `Restored-From:` trailer names; null on every other commit. */
+  restoredFrom?: string | null
 }
 
 /** A single row from the per-project activity log; mirrors `SyncLogEntryDto`. */
@@ -171,6 +185,108 @@ export interface SnapshotResponse {
   workingTreePath: string
   commit: CommitInfo | null
 }
+
+// ─── Snapshot restore (sync-restore plan §3) ──────────────────────────
+
+export type RestoreChange = "BACK" | "GONE" | "CHANGED"
+
+export interface RestoreCounts {
+  back: number
+  gone: number
+  changed: number
+}
+
+export interface RestoreRecord {
+  uuid: string
+  /** The History sheet's name for it, e.g. `Cue “Rose garden”`. */
+  label: string
+  change: RestoreChange
+}
+
+/** One kind of record the restore changes, in the importer's folder order, its records by label. */
+export interface RestoreKind {
+  folder: string
+  noun: string
+  plural: string
+  records: RestoreRecord[]
+}
+
+export interface RestoreText {
+  now?: string | null
+  then?: string | null
+}
+
+export interface RestoreStageSize {
+  widthM?: number | null
+  depthM?: number | null
+  heightM?: number | null
+}
+
+/** A venue pin, or a detached show's origin. `name` where this desk holds the venue. */
+export interface RestoreVenueRef {
+  uuid: string
+  name?: string | null
+  version: number
+}
+
+/** The show's own fields the restore changes, each `{now, then}`; `nameKept` the snapshot's name it leaves off (P6). */
+export interface RestoreProject {
+  name?: RestoreText | null
+  description?: RestoreText | null
+  stageSize?: { now?: RestoreStageSize | null; then?: RestoreStageSize | null } | null
+  origin?: { now?: RestoreVenueRef | null; then?: RestoreVenueRef | null } | null
+  nameKept?: string | null
+}
+
+/** The venue pin before and after. `behind` judges the restored pin; `runAgainst` that the live show runs against it (D8). */
+export interface RestoreVenue {
+  now?: RestoreVenueRef | null
+  then?: RestoreVenueRef | null
+  behind: "NONE" | "DRAWING" | "OUTPUT"
+  runAgainst: boolean
+}
+
+/** P7: overrides copied back from the venue, and the universes left with no address on this desk. */
+export interface RestoreAddresses {
+  copied: number
+  missing: string[]
+}
+
+/** `GET …/sync/restore/{sha}`: what restoring the snapshot would do, changing nothing. */
+export interface RestoreReview {
+  target: CommitInfo
+  head?: CommitInfo | null
+  /** Sent back with the restore; a restore whose review has moved on refuses `RESTORE_REVIEW_STALE`. */
+  token: string
+  noChanges: boolean
+  counts: RestoreCounts
+  kinds: RestoreKind[]
+  project?: RestoreProject | null
+  venue?: RestoreVenue | null
+  addresses?: RestoreAddresses | null
+  /** The project is current: it reloads. */
+  live: boolean
+  sync: { repo?: string | null; lastSyncedAt?: string | null; push: boolean }
+}
+
+export interface RestoreRequest {
+  sha: string
+  token: string
+  note?: string | null
+}
+
+/** `POST …/sync/restore`'s answer. Restoring `before` undoes it (D3). */
+export interface RestoreResult {
+  commit: CommitInfo
+  before: CommitInfo
+  counts: RestoreCounts
+  /** The push's run; absent when it was skipped, `notes` saying why. */
+  sync?: SyncRunResult | null
+  notes: string[]
+}
+
+/** A restore note's limit, the desk's `MAX_NOTE_LENGTH`. */
+export const RESTORE_NOTE_MAX_LENGTH = 200
 
 // ─── Phase 5/6 conflict-session types ──────────────────────────────────
 
@@ -384,6 +500,38 @@ export const cloudSyncApi = restApi.injectEndpoints({
       invalidatesTags: ['CloudSyncConfig', 'CloudSyncStatus', 'CloudSyncLog', 'CloudSyncConflicts'],
     }),
 
+    /**
+     * The restore of one snapshot, rolled back on the desk. Never cached: each open reads it afresh,
+     * since its token is only good for the show as it is.
+     */
+    cloudSyncRestoreReview: build.query<RestoreReview, { projectId: number; sha: string }>({
+      query: ({ projectId, sha }) => `projects/${projectId}/sync/restore/${encodeURIComponent(sha)}`,
+      keepUnusedDataFor: 0,
+    }),
+    cloudSyncRestore: build.mutation<RestoreResult, { projectId: number; body: RestoreRequest }>({
+      query: ({ projectId, body }) => ({
+        url: `projects/${projectId}/sync/restore`,
+        method: 'POST',
+        body,
+      }),
+      // A restore rebuilds every record of the project, clears its undo history, can move its venue
+      // pin, commits and syncs, and the push can open a conflict session. A project that is not
+      // current reloads nothing, so no socket frame refreshes its caches.
+      invalidatesTags: [
+        'CloudSyncConfig',
+        'CloudSyncStatus',
+        'CloudSyncLog',
+        'CloudSyncActivity',
+        'CloudSyncConflicts',
+        'ProjectList',
+        'History',
+        'SceneImage',
+        'Venue',
+        'VenueUpdate',
+        ...SHOW_RECORD_TAGS,
+      ],
+    }),
+
     // ─── Phase 5 conflict-session endpoints ─────────────────────────
 
     cloudSyncConflicts: build.query<ConflictsResponse, number>({
@@ -452,6 +600,8 @@ export const {
   useSetCloudSyncCredentialsMutation,
   useClearCloudSyncCredentialsMutation,
   useCloudSyncRunMutation,
+  useCloudSyncRestoreReviewQuery,
+  useCloudSyncRestoreMutation,
   useCloudSyncConflictsQuery,
   useCloudSyncResolveMutation,
   useCloudSyncApplyMutation,

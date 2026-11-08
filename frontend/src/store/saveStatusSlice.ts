@@ -78,6 +78,7 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
 
   // ── Cloud sync: drives its own progress UI, and the pollers would strobe the pill ──
   'cloudSyncRun',
+  'cloudSyncRestore',
   'cloudSyncSnapshot',
   'cloudSyncImport',
   'cloudSyncResolve',

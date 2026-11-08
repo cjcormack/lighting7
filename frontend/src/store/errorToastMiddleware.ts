@@ -199,6 +199,7 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'cloudSyncResolve',
   'cloudSyncApply',
   'cloudSyncAbort',
+  'cloudSyncRestore', // RestoreReviewDialog draws the refusal, and puts a stale answer's review in place
   'setCloudSyncCredentials',
   'clearCloudSyncCredentials',
   'createGithubRepo',

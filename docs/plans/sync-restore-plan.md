@@ -321,8 +321,8 @@ written, and its row marked *in review* with its branch. A session's PR is title
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Review and restore on the desk | in review | `claude/relaxed-planck-rbdr44` | | |
-| 2 | The History panel and the review | planned | | | |
+| 1 | Review and restore on the desk | in review | `claude/relaxed-planck-rbdr44` | [#393](https://github.com/cjcormack/lighting7/pull/393) | `2a4fa05` |
+| 2 | The History panel and the review | in review | `claude/sync-restore-fy9kx9` | | |
 | 3 | Bring back selected records | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -398,6 +398,21 @@ the next; whoever merges the last fills its own.
   messages, *Undo* opening the review for `before`).
 - **Docs:** `docs/sync-engineering.md` (the UI in a line); `FU-MANUAL-RESTORE-S2`.
 - **Local:** `npm run check:quick` in `frontend/`.
+- **As built**, where the code asked for something §4 does not say:
+  - The venue line has no installed version (*installed v5* on the page): the review carries the
+    restored pin's `behind`, not the installed number.
+  - A venue's History rows have no *Review and restore…*, only *Copy commit id*, since the route
+    answers `VENUE_DRAFT_NOT_SYNCED` for a venue.
+  - The restore also invalidates `History`, `SceneImage`, `Venue`, `VenueUpdate` and every show-record
+    tag undo does (`SHOW_RECORD_TAGS`, now in `F/store/restApi.ts`): it rewrites every record, clears the
+    undo history and can move the pin, and a project that is not current gets no reload to refresh them.
+  - The toast's *Undo* links to the Sync tab with `?review={before}`, which `HistoryPanel` opens, so it
+    works after the panel has gone.
+  - The global sync toaster's own-page check named `/sync/projects/{id}`, which only redirects now; it
+    names the Sync tab too, so a restore's refusal and its done frame aren't toasted over the dialog.
+    It also skips a `RESTORE_REVIEW_STALE` failure in other windows: that is a step in a review.
+  - A review that is not of the live show still says the undo history starts again, since the
+    restore clears it either way.
 
 ### Session 3 — Bring back selected records
 

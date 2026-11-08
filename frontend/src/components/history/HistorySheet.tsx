@@ -52,7 +52,7 @@ export function HistorySheet() {
         <SheetFooter className="flex-col items-stretch gap-2 sm:flex-col">
           <p className="text-xs text-muted-foreground">
             Keeps the last 50 programmer steps and 500 show changes while the desk runs. A sync pull, a
-            venue update, attach, detach, extract or discard, and a restart clear it.
+            snapshot restore, a venue update, attach, detach, extract or discard, and a restart clear it.
           </p>
           <div className="flex justify-end">
             <SheetClose asChild>
