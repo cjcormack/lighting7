@@ -153,6 +153,7 @@ private fun Application.runShowStartup(state: State, startedAt: Instant, boot: B
     val show = Tracing.span(BootTrace.OP_PHASE, "show_init") { state.initializeShow() }
     // start() loads fixtures then pre-warms cue scripts — the slow tail after FX compilation.
     state.bootProgress.update(BootPhase.FIXTURES, "Loading fixtures & pre-warming cues…", 60)
+    if (state.dmxMock) log.warn("dmx.mock is on: no universe will send Art-Net")
     Tracing.span(BootTrace.OP_PHASE, "fixtures") { show.start() }
     Tracing.span(BootTrace.OP_PHASE, "mdns") { registerMdns(state) }
     state.bootProgress.markReady()

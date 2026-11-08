@@ -498,6 +498,19 @@ it into nibbles to follow the specification would re-address every one of them. 
 always sends 512 channels, so Length never departs. A frame over 512 channels is refused with
 `IllegalArgumentException`.
 
+## Mock output
+
+`dmx.mock = true` in `local.conf` gives every universe `DbFixtureLoader` builds as Art-Net the
+`SilentArtNetTransport`, which binds no socket and sends nothing. It is for a development desk run
+in the venue beside the one driving the rig, which would otherwise broadcast the same universes on
+6454 and fight it.
+
+Only the transport changes. The controller is still an `ArtNetController`, so fades, transmit
+modifiers, the hold and the channel listeners run as they do live, and every view draws what the
+desk would have sent; Diagnostics' packet rate counts those unsent frames. A universe whose
+`controllerType` is `MOCK` is a `MockDmxController` either way. The flag is read once at startup
+(`State.dmxMock`) and carried by each show's `Fixtures`; the desk logs a warning when it is on.
+
 ## The hold
 
 A show on a venue whose pinned version is behind the installed one **on output** is **held** (venue

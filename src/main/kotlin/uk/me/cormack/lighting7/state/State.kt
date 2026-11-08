@@ -187,6 +187,13 @@ class State(val config: ApplicationConfig) {
     val syncPushEnabled: Boolean = config.optionalBoolean("sync.push", default = true)
 
     /**
+     * `dmx.mock` in `local.conf` (default `false`). `true` gives every Art-Net universe a transport
+     * that sends nothing, so a development desk can run in the venue without fighting the live rig's
+     * nodes. See `docs/dmx-engineering.md` §"Mock output".
+     */
+    val dmxMock: Boolean = config.optionalBoolean("dmx.mock", default = false)
+
+    /**
      * Root directory for prompt-book script PDFs, stored content-addressed as
      * `{projectUuid}/{sha256}.pdf`. Defaults to `<appDataDir>/prompt-scripts` and is
      * overridable via `promptBooks.scriptStoreRoot` in `local.conf` (handy for tests).

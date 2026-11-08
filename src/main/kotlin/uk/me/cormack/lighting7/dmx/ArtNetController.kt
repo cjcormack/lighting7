@@ -84,6 +84,9 @@ class ArtNetController(
 
     override val held: Boolean get() = hold?.isHeld == true
 
+    /** Built on the [SilentArtNetTransport] (`dmx.mock`): nothing this controller transmits leaves the machine. */
+    internal val mockOutput: Boolean get() = transport === SilentArtNetTransport
+
     private val transmitModifiers = java.util.concurrent.CopyOnWriteArrayList<TransmitModifier>()
 
     private var previousSentDmxData = ByteArray(512)
