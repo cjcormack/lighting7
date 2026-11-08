@@ -235,6 +235,9 @@ export function BuskBankCluster({
         hasSelection={behaviour.hasSelection ?? true}
         onInspect={() => behaviour.onInspect(pad)}
         onPickUp={() => behaviour.onPickUp(pad)}
+        stack={behaviour.stackOf?.(pad)}
+        onStackBack={behaviour.onStackBack && (() => behaviour.onStackBack?.(pad))}
+        onStackRelease={behaviour.onStackRelease && (() => behaviour.onStackRelease?.(pad))}
         onRemove={() => commit((page) => removePad(page, { ...at, pad: index }))}
       />,
     )

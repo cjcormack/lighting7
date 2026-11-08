@@ -104,6 +104,7 @@ object CueStackRelease {
 const val CODE_CUE_STACK_INVALID = "CUE_STACK_INVALID"
 const val CODE_CUE_STACK_IS_PLAYHEAD = "CUE_STACK_IS_PLAYHEAD"
 const val CODE_CUE_STACK_NOT_IN_SHOW = "CUE_STACK_NOT_IN_SHOW"
+const val CODE_CUE_STACK_ON_PADS = "CUE_STACK_ON_PADS"
 
 /**
  * A stack's run settings (busk-stack plan §3 "Stack settings"): what follows its last cue and how a

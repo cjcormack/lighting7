@@ -164,8 +164,10 @@ export function buskAddBody(record: BuskAddRecord): {
   paletteId?: number
   lookId?: number
   cueId?: number
+  cueStackId?: number
 } {
   if (record.kind === 'PALETTE') return { paletteId: record.id }
   if (record.kind === 'LOOK') return { lookId: record.id }
+  if (record.kind === 'CUE_STACK') return { cueStackId: record.id }
   return { cueId: record.id }
 }

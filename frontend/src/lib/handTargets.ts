@@ -12,8 +12,11 @@ import type { BuskPadKind } from '@/api/buskApi'
  *
  * ### The four rows, and why each is what it is
  *
- * - **A bank takes all three.** A busk pad *is* a reference to exactly one template, Look or cue
- *   (`BuskPadKind` is the same three), so there is nothing a bank can refuse.
+ * - **A bank takes all three.** A busk pad *is* a reference to exactly one template, Look, cue or
+ *   stack, so there is nothing a bank can refuse of what the hand holds.
+ * - **Nothing takes a stack.** The hand never carries one — a stack pad stays where it is placed
+ *   (lighting7 busk-stack plan D9) — so a library row naming a busk stack lands on a bank by a drag
+ *   alone, and is no hand candidate anywhere.
  * - **A cue slot takes a cue or a Look.** A slot has no selection, so it can hold only what needs
  *   none (busk-layout plan D7): a palette always lands on the selection, and a Look lands whole
  *   (absolute-looks plan D1). This is `dnd/slotDrop.ts`'s rule and must stay identical to it.
@@ -56,6 +59,7 @@ export interface HandCandidate {
 
 /** Can this record be placed here? */
 export function canHandLand(candidate: HandCandidate, target: HandTargetKind): boolean {
+  if (candidate.kind === 'CUE_STACK') return false
   switch (target) {
     case 'bank':
       return true

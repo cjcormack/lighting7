@@ -966,9 +966,9 @@ routes already took a `mask`.
 The busk page is a thing the operator **builds**, not a view the library lays out
 (`docs/plans/completed/busk-layout-plan.md`, D1–D2): a page is rows, a row is columns each with a width share
 in twelfths, a column stacks banks top to bottom, and a bank holds ordered **pads** — each a
-reference to exactly one palette, Look or cue (`busk_pages` → `busk_columns` → `busk_banks` →
-`busk_pads`, `models/buskLayout.kt`). One record may sit on several pads. Nothing is positioned by
-hand, so nothing overlaps.
+reference to exactly one palette, Look, cue or busk stack (`busk_pages` → `busk_columns` →
+`busk_banks` → `busk_pads`, `models/buskLayout.kt`). One record may sit on several pads. Nothing is
+positioned by hand, so nothing overlaps.
 
 **A pad is an enrichment, never content and never a guard.** Deleting a palette, Look or cue
 deletes its pads inside the same transaction — the record's route sweeps them by hand, since SQLite
@@ -1001,6 +1001,19 @@ solo siblings — a palette's family replacement is `toggle`'s own, so it runs o
 exactly as a cue slot presses: a toggle, live above every stack without being any stack's playhead,
 drawn solid while the press holds it and as an outline while only a stack does.
 
+**A stack pad is a busk stack's GO** (busk-stack plan D9). It names a stack out of the running order,
+never one in it — both writes refuse that with `BUSK_LAYOUT_REF`, naming the stack — and its press is
+the stack's own GO: stopped, the stack starts on its armed or first cue (`activateAtFirstCue`);
+running, it advances one cue (`advanceStack` FORWARD), so on the last cue a Release stack lets go over
+its release time, a Loop stack goes round and a Stay stack stays. The press answers `kind: CUE_STACK`
+and `action` `started`, `advanced`, `released`, `stayed` or `empty` (a stack with no cues, which
+starts nothing). Its menu's *Back* and *Release* are the stack's own advance BACKWARD and its stop
+(`stopStack`); it has no *Pick up*, because the hand carries palettes, Looks and cues and a stack pad
+stays where it is placed — `hand.pickUp` refuses one. The pad's face is the stack as the stack list
+holds it, which `cueRunStateChanged` patches: no new frame. A stack's delete sweeps its pads, a rename
+announces their pages, and putting a busk stack with pads back into the running order is 409
+`CUE_STACK_ON_PADS` naming the pages until `?force=true` takes the pads off (D11).
+
 **Solo has one meaning for every kind** (D6): pressing one pad *on* turns its siblings off. A palette
 sibling under a palette press is narrowed on the pressed heads by `toggle`'s own rule — the
 per-target reading the ring uses, so a sibling holding exactly the pressed heads comes off, one that
@@ -1009,9 +1022,12 @@ overlaps is narrowed, a disjoint one is untouched. A **Look** comes and goes who
 and a Look press takes every layer sibling off whole. A cue sibling that is live is stopped. A **cue
 press** takes its layer siblings off *wholesale* through `ProgrammerLayerStack.release` — the one
 additive method the layout gave the engine, one mutation and one recook — because a cue has no
-targets to narrow by. An **off** press releases nothing, whatever the kind; a stacking bank (solo
-off) has no siblings at all. Nothing in the cook reads the layout: a bank changes what a press
-does, never what a cue composes to.
+targets to narrow by. A **stack pad's** press is *on* only when it starts its stack: it takes its
+siblings off as a cue press does and stops every running sibling stack over its release time, and one
+that advances takes nothing off (busk-stack plan D10). A palette, Look or cue pad's on press also stops
+running sibling stacks, so a solo bank of songs is a selector. An **off** press releases nothing,
+whatever the kind; a stacking bank (solo off) has no siblings at all. Nothing in the cook reads the
+layout: a bank changes what a press does, never what a cue composes to.
 
 **A Look needs no selection.** It lands whole (absolute-looks plan D1), so a press with nothing
 selected and one with anything selected are the same press — which is how a cue-slot tile, which has

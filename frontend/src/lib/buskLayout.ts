@@ -6,6 +6,7 @@ import type {
   BuskBank,
   BuskColumn,
   BuskCue,
+  BuskCueStack,
   BuskLayoutBankInput,
   BuskLayoutPadInput,
   BuskLayoutRequest,
@@ -50,6 +51,7 @@ export type PaletteRecord =
   | { kind: 'PALETTE'; palette: PaletteSummary }
   | { kind: 'LOOK'; look: LookSummary }
   | { kind: 'CUE'; cue: BuskCue }
+  | { kind: 'CUE_STACK'; cueStack: BuskCueStack }
 
 export type DragSource =
   | { kind: 'palette'; record: PaletteRecord }
@@ -140,7 +142,7 @@ export function parseBuskDragId(id: string): ParsedBuskId | null {
   const gutter = /^bgut:(\d+)\.(\d+)$/.exec(id)
   if (gutter) return { kind: 'gutter', row: +gutter[1], column: +gutter[2] }
 
-  const palette = /^palette:(palette|look|cue):(\d+)$/.exec(id)
+  const palette = /^palette:(palette|look|cue|cue_stack):(\d+)$/.exec(id)
   if (palette) {
     return {
       kind: 'palette',
@@ -204,6 +206,7 @@ export function recordsOnPage(page: BuskPage): Set<string> {
 export function padRecordId(pad: BuskPad): number | null {
   if (pad.kind === 'PALETTE') return pad.palette?.id ?? null
   if (pad.kind === 'LOOK') return pad.look?.id ?? null
+  if (pad.kind === 'CUE_STACK') return pad.cueStack?.id ?? null
   return pad.cue?.id ?? null
 }
 
@@ -261,6 +264,7 @@ export function newPad(record: PaletteRecord): BuskPad {
   const base = { localKey: mintLocalKey(), kind: record.kind }
   if (record.kind === 'PALETTE') return { ...base, palette: record.palette }
   if (record.kind === 'LOOK') return { ...base, look: record.look }
+  if (record.kind === 'CUE_STACK') return { ...base, cueStack: record.cueStack }
   return { ...base, cue: record.cue }
 }
 
@@ -321,6 +325,7 @@ function padInput(pad: BuskPad): BuskLayoutPadInput {
   if (recordId != null) {
     if (pad.kind === 'PALETTE') input.paletteId = recordId
     else if (pad.kind === 'LOOK') input.lookId = recordId
+    else if (pad.kind === 'CUE_STACK') input.cueStackId = recordId
     else input.cueId = recordId
   }
   return input

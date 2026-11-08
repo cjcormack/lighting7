@@ -4,7 +4,7 @@ import { restApi, trackHistoryWrites } from './restApi'
 import { entryUndoAction } from '../components/history/historyActions'
 import { lightingApi } from '../api/lightingApi'
 import type { HeldRecord } from '../api/handApi'
-import type { BuskPadKind } from '../api/buskApi'
+import type { HeldKind } from '../api/buskApi'
 
 /**
  * The desk's **hand** — see `api/handApi.ts` for the wire and its rules.
@@ -63,7 +63,7 @@ export function useHand(): HeldRecord | null {
  * Returns whether the frame reached the rig, which only the edge drag reads — see
  * {@link import('@/api/handApi').HandWsApi.pickUp}.
  */
-export function handPickUp(kind: BuskPadKind, id: number): boolean {
+export function handPickUp(kind: HeldKind, id: number): boolean {
   return lightingApi.hand.pickUp(kind, id)
 }
 
@@ -75,7 +75,7 @@ export function handPickUp(kind: BuskPadKind, id: number): boolean {
  * hand is shared, so anything can move it in between — another window, a control surface, the
  * operator's own second pick-up.
  */
-export function handHolds(record: { kind: BuskPadKind; id: number }): boolean {
+export function handHolds(record: { kind: HeldKind; id: number }): boolean {
   const held = lightingApi.hand.getState()
   return held != null && held.kind === record.kind && held.id === record.id
 }
@@ -97,7 +97,7 @@ export function handHolds(record: { kind: BuskPadKind; id: number }): boolean {
  * subscription is torn down on every exit, including the timeout.
  */
 export function whenHandHolds(
-  record: { kind: BuskPadKind; id: number },
+  record: { kind: HeldKind; id: number },
   timeoutMs: number,
 ): Promise<HeldRecord | null> {
   const matches = (held: HeldRecord | null) =>

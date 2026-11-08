@@ -523,7 +523,7 @@ class DbOscLookup(private val projectId: Int) : OscLookup {
                 bank.name,
                 // A malformed pad, naming no record, is drawn nowhere, so it takes no place either.
                 pads[bank.id.value].orEmpty().sortedBy { it.sortOrder }.mapNotNull { pad ->
-                    val name = pad.palette?.name ?: pad.look?.name ?: pad.cue?.name ?: return@mapNotNull null
+                    val name = pad.palette?.name ?: pad.look?.name ?: pad.cue?.name ?: pad.cueStack?.name ?: return@mapNotNull null
                     OscRecord(pad.id.value, pad.uuid, name)
                 },
             )

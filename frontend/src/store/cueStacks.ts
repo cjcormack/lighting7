@@ -142,10 +142,11 @@ export const cueStacksApi = restApi.injectEndpoints({
 
     saveProjectCueStack: build.mutation<
       CueStack,
-      { projectId: number; stackId: number } & CueStackInput
+      // `force` puts a busk stack with pads back into the running order, taking its pads off (D11).
+      { projectId: number; stackId: number; force?: boolean } & CueStackInput
     >({
-      query: ({ projectId, stackId, ...body }) => ({
-        url: `projects/${projectId}/cue-stacks/${stackId}`,
+      query: ({ projectId, stackId, force, ...body }) => ({
+        url: `projects/${projectId}/cue-stacks/${stackId}${force ? '?force=true' : ''}`,
         method: 'PUT',
         body,
       }),

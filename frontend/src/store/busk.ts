@@ -148,11 +148,11 @@ export const buskApi = restApi.injectEndpoints({
       BuskPage,
       { projectId: number; pageId: number; bankId: number } & AddBuskPadRequest
     >({
-      query: ({ projectId, bankId, paletteId, lookId, cueId }) => ({
+      query: ({ projectId, bankId, paletteId, lookId, cueId, cueStackId }) => ({
         url: `projects/${projectId}/busk/banks/${bankId}/pads`,
         method: 'POST',
         // Spelled out rather than spread, so `pageId` and `bankId` cannot leak into the body.
-        body: { paletteId, lookId, cueId },
+        body: { paletteId, lookId, cueId, cueStackId },
       }),
       async onQueryStarted({ projectId, pageId }, { dispatch, queryFulfilled }) {
         beginBuskPageWrite(pageId)

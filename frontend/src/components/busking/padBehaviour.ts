@@ -1,6 +1,7 @@
 import type { BuskPad } from '@/api/buskApi'
 import type { HeldRecord } from '@/api/handApi'
 import type { CueRing } from '@/api/cueHoldsApi'
+import type { CueStack } from '@/api/cueStacksApi'
 import type { FxPresence } from './buskingTypes'
 
 /**
@@ -41,4 +42,10 @@ export interface PadBehaviour {
    * layout between it and a bank do not.
    */
   onHandPlace: (bankId: number, bankName: string, held: HeldRecord) => void
+  /** A stack pad's stack as the stack list holds it, for its live face (lighting7 busk-stack plan D9). */
+  stackOf?: (pad: BuskPad) => CueStack | undefined
+  /** A stack pad's menu *Back*: the stack one cue back. */
+  onStackBack?: (pad: BuskPad) => void
+  /** A stack pad's menu *Release*: the stack stopped over its release time. */
+  onStackRelease?: (pad: BuskPad) => void
 }

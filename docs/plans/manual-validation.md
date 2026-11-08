@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-BUSK-STACK-S3`](#fu-manual-busk-stack-s3) | a stack pad steps a song by taps, a solo bank's song pad releases a sibling song, and moving the stack back into the running order asks first | Busk stack session 3, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S2`](#fu-manual-busk-stack-s2) | Carabossy on Replaces takes the front wash from 80 % to 0, holds the movers' chase back, and fades the kitchen back on release with the chase growing back in phase; a song on Adds lifts heads over the base and never darkens them; a GO on Act 1 during Carabossy lands under her | Busk stack session 2, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S1`](#fu-manual-busk-stack-s1) | a song stack out of the running order: Act 1's last GO goes to Act 2, not the song; the song's own GO and a follow off its last cue release it over its release time; the Show view's stop fades | Busk stack session 1, 2026-11-07 |
 | [`FU-MANUAL-CLOUD-P1`](#fu-manual-cloud-p1) | Lighting7 Cloud's P1 exit: a phone on 4G busks the venue desk opened from the portal, Claude patches a rig through the desk's cloud URL with no tunnel, an emailed invite approved in the portal lands its operator as `OPERATOR`, unlinking, disabling, removing a membership and *End* each close a session within 5 s, the two switches refuse what they name and cannot be changed remotely, the Remote access tab, `/oauth/*`, `/mcp` and the tunnel are gone and an upgraded desk keeps its policy switches, and a running fade sees nothing of the sidecar or the cloud stopping | Cloud P1 S9, 2026-11-07 |
@@ -182,6 +183,32 @@ lighting something different:
    stays up. Give its last cue a follow and start it again: the follow releases it the same way.
 4. **A stop fades.** With *Act 2* live, stop the show from the header: its light fades over 2 s rather
    than snapping. Set its release time to 0 and stop it again: it snaps.
+
+---
+
+## `FU-MANUAL-BUSK-STACK-S3`
+
+**What it proves**: *Stack pads* (busk-stack plan session 3) — a pad that names a busk stack is that
+stack's GO, a solo bank of songs is a selector, and a stack with pads does not slip back into the
+running order unasked.
+
+**Why it is here**: the tests read the stack's run state and the press's answer; only the rig shows the
+pad's face following the stack through a song and a sibling's light fading rather than cutting.
+
+**Test**, at the desk with two busk stacks, *Song 3* (three cues, Release at the end) and *Song 5* (two
+cues, Release), each lighting something different:
+
+1. **Placing.** In the busk view's edit mode, filter the library to *Stacks*: both songs are listed and
+   *Act 1* is not. Drag both into one bank and make it solo. From *Song 3*'s settings, *Busk pages*
+   places it on another page too.
+2. **Stepping by taps.** Tap *Song 3*: it starts on Q1, the pad goes solid green and reads the live cue
+   and the next. Tap again: Q2, with the fade drawn under the face. Tap past the last cue: the song
+   releases over its release time and the pad reads *stopped* and *GO starts Q1 …*.
+3. **Solo.** Start *Song 3*, then tap *Song 5*: *Song 3* fades out over its release time while *Song 5*
+   comes up. Tap *Song 5* again: it advances, and nothing else moves. Hold *Song 5*: the menu offers GO,
+   Back, Release and View, and no *Pick up*; *Release* fades it out.
+4. **Back into the running order.** Open *Song 3*'s settings and switch *In the running order* on: Save
+   asks first, naming both pages. *Take the pads off* saves it, and its pads are gone from both pages.
 
 ---
 

@@ -108,9 +108,9 @@ function StackEditor({
   const [saveStack, { isLoading }] = useSaveProjectCueStackMutation()
   const stack = stackId == null ? null : ((stacks ?? []).find((s) => s.id === stackId) ?? null)
   const onSave = useCallback(
-    async (input: CueStackInput) => {
+    async (input: CueStackInput, options?: { force?: boolean }) => {
       if (stackId == null) return
-      await saveStack({ projectId, stackId, ...input }).unwrap()
+      await saveStack({ projectId, stackId, ...input, force: options?.force }).unwrap()
     },
     [projectId, saveStack, stackId],
   )

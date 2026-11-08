@@ -724,7 +724,7 @@ internal fun deleteProjectRows(state: State, project: DaoProject) {
     }
 
     // Delete associated records in FK-safe order. Busk pages first: a pad is a plain
-    // FK onto a template, Look or cue with no cascade (`DaoBuskPads`), swept by hand.
+    // FK onto a template, Look, cue or stack with no cascade (`DaoBuskPads`), swept by hand.
     project.buskPages.forEach { deleteBuskPage(it) }
     // And the rig, for the same reason: a tile is a plain FK onto a group or a patch.
     deleteBuskRig(project)

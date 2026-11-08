@@ -37,6 +37,7 @@ internal const val CODE_PALETTE_NEEDS_SELECTION = "PALETTE_NEEDS_SELECTION"
  *   the press carries, on taking every sibling off whole and off taking every layer of it off;
  * - a **cue** → apply / stop through `CueStackManager`, exactly as a cue slot presses: a toggle,
  *   lit from the stack's `activeCueId`, live without being the playhead. Never the playhead's GO.
+ * - a **stack** → the busk stack's GO (busk-stack plan D9): stopped it starts, running it advances.
  *
  * **Solo has one meaning for every kind** (D6): pressing one *on* turns its siblings off. A palette
  * sibling under a palette press is narrowed on the pressed heads by `toggle`'s own
@@ -44,8 +45,10 @@ internal const val CODE_PALETTE_NEEDS_SELECTION = "PALETTE_NEEDS_SELECTION"
  * press takes every layer sibling off whole (absolute-looks plan P3); a cue sibling that is live is
  * stopped; and a cue press takes its layer siblings off *wholesale* through
  * [uk.me.cormack.lighting7.fx.ProgrammerLayerStack.release], because a cue has no targets to narrow
- * by. An **off** press releases nothing, whatever the kind. A stacking bank
- * (solo off) has no siblings at all.
+ * by. A running sibling stack is stopped over its release time by every kind's on press, and a stack
+ * pad's press is *on* only when it starts its stack (busk-stack plan D10); an advance takes nothing
+ * off. An **off** press releases nothing, whatever the kind. A stacking bank (solo off) has no
+ * siblings at all.
  *
  * The engine's rules do not move here: `/palettes/{id}/toggle` and `/looks/{id}/toggle` remain
  * for the programmer's palette strip and the AI, with no solo siblings. A palette's family
@@ -80,6 +83,8 @@ internal fun Route.routeApiRestBuskPress(state: State) {
                 )
                 is BuskPressService.Outcome.Refused ->
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, code = outcome.code))
+                is BuskPressService.Outcome.Conflict ->
+                    call.respond(HttpStatusCode.Conflict, ErrorResponse(outcome.message, code = outcome.code))
                 // A target that vanished between the read and the press is a 404 about the target,
                 // not about the pad — the shape `toggle`'s IllegalStateException already carried.
                 is BuskPressService.Outcome.TargetMissing ->
@@ -114,9 +119,9 @@ internal data class BuskPressRequest(
 
 @Serializable
 internal data class BuskPressResponse(
-    /** `PALETTE`, `LOOK` or `CUE`. */
+    /** `PALETTE`, `LOOK`, `CUE` or `CUE_STACK`. */
     val kind: String,
-    /** `"applied"` or `"removed"`. */
+    /** `"applied"` or `"removed"`; a stack pad's `started`, `advanced`, `released`, `stayed` or `empty`. */
     val action: String,
     val fxCount: Int,
     /**

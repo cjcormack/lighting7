@@ -42,8 +42,11 @@ export const BUSK_FLOW_LABELS: Readonly<Record<BuskFlow, string>> = {
   SCROLL: 'Scroll',
 }
 
-/** The three things a pad can press. */
-export type BuskPadKind = 'PALETTE' | 'LOOK' | 'CUE'
+/** The four things a pad can press: the last a busk stack, whose GO it is (lighting7 busk-stack plan D9). */
+export type BuskPadKind = 'PALETTE' | 'LOOK' | 'CUE' | 'CUE_STACK'
+
+/** What the desk's hand can hold: every kind but a stack, since a stack pad stays where it is placed (D9). */
+export type HeldKind = Exclude<BuskPadKind, 'CUE_STACK'>
 
 /**
  * The width shares a column may take, **in twelfths**: ¼, ⅓, ½, ⅔, ¾ and full.
@@ -89,7 +92,17 @@ export interface BuskCue {
 }
 
 /**
- * One pad: an ordered reference to exactly one template, Look or cue (D3).
+ * What a stack pad names: the busk stack, by name. Its run state and cues are the stack list's and
+ * the runner slice's, which every window already follows.
+ */
+export interface BuskCueStack {
+  id: number
+  uuid?: string
+  name: string
+}
+
+/**
+ * One pad: an ordered reference to exactly one template, Look, cue or busk stack (D3).
  *
  * The record's **own summary DTO** is embedded rather than a flattened name / swatch / detail line,
  * so the view needs no second fetch and an effect template's detail line can read a *live*
@@ -108,6 +121,7 @@ export interface BuskPad {
   palette?: PaletteSummary | null
   look?: LookSummary | null
   cue?: BuskCue | null
+  cueStack?: BuskCueStack | null
 }
 
 export interface BuskBank {
@@ -162,12 +176,13 @@ export interface ReorderBuskPagesRequest {
   pageIds: number[]
 }
 
-/** Exactly one of the three is set. */
+/** Exactly one of the four is set; `cueStackId` names a busk stack only (`BUSK_LAYOUT_REF` otherwise). */
 export interface BuskLayoutPadInput {
   padId?: number
   paletteId?: number
   lookId?: number
   cueId?: number
+  cueStackId?: number
 }
 
 export interface BuskLayoutBankInput {
@@ -209,13 +224,14 @@ export interface BuskLayoutRequest {
  * The additive exception to the whole-page write: the surfaces that place a pad from outside the
  * busk view (the cue editor's Cue tab, the template editor, the Look sheet, the programmer's create sheets)
  * hold no page document to splice and re-`PUT`, and an id survives any reshuffle of the page that
- * keeps the bank alive. Exactly one of the three is set. The server answers the **whole page**, the
+ * keeps the bank alive. Exactly one of the four is set. The server answers the **whole page**, the
  * same contract `BuskLayoutRequest` has and for the same reason: the ids it minted.
  */
 export interface AddBuskPadRequest {
   paletteId?: number
   lookId?: number
   cueId?: number
+  cueStackId?: number
 }
 
 /**
@@ -237,7 +253,8 @@ export interface BuskPressRequest {
 
 export interface BuskPressResponse {
   kind: BuskPadKind
-  action: 'applied' | 'removed'
+  /** A stack pad's tap is its stack's GO, and answers what that did (lighting7 busk-stack plan D9). */
+  action: 'applied' | 'removed' | 'started' | 'advanced' | 'released' | 'stayed' | 'empty'
   fxCount: number
   /**
    * What an *on* press turned off: the palettes of the pressed palette's family and kind it
@@ -264,5 +281,8 @@ export const BUSK_LAYOUT_INVALID = 'BUSK_LAYOUT_INVALID'
 /** 400: the document names a column, bank or pad that is not on this page, or names one twice. */
 export const BUSK_LAYOUT_IDENTITY = 'BUSK_LAYOUT_IDENTITY'
 
-/** 400: a pad names a template, Look or cue that is not in this project — see the echo note in `store/busk.ts`. */
+/**
+ * 400: a pad names a template, Look, cue or stack that is not in this project, or a new pad names a
+ * stack in the running order (lighting7 busk-stack plan D9) — see the echo note in `store/busk.ts`.
+ */
 export const BUSK_LAYOUT_REF = 'BUSK_LAYOUT_REF'

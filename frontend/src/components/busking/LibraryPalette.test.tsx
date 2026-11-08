@@ -45,6 +45,8 @@ const stacks = [
       { id: 21, name: 'Act 2', sortOrder: 1, layerCount: 0, adHocFxCount: 0, autoAdvance: false, autoAdvanceDelayMs: null, fadeDurationMs: null, fadeCurve: 'LINEAR', cueNumber: null, cueNumberAuto: false, notes: null, cueType: 'MARKER' },
     ],
   },
+  // A busk stack (lighting7 busk-stack plan D1): out of the running order, so a pad may name it.
+  { id: 4, name: 'Song 3', loop: false, sortOrder: 1, type: 'STACK', label: null, activeCueId: null, nextCueId: null, canEdit: true, canDelete: true, cues: [], inRunningOrder: false, releaseAtEnd: true },
 ]
 
 function draw(onPage = new Set<string>()) {
@@ -132,6 +134,15 @@ describe('the library palette', () => {
     expect(rowNames()).toEqual(['Blackout'])
   })
 
+  it('lists busk stacks under Stacks, and never a stack in the running order', async () => {
+    draw()
+    await screen.findByText('Song 3')
+    fireEvent.click(screen.getByRole('button', { name: 'Stacks' }))
+    expect(rowNames()).toEqual(['Song 3'])
+    expect(screen.getByText('0 cues · release')).toBeTruthy()
+    expect(screen.queryByText('Main Show')).toBeNull()
+  })
+
   it('marks exactly the records with a pad on the page being edited', async () => {
     draw(new Set(['look:6', 'cue:20']))
     await loaded()
@@ -188,5 +199,7 @@ describe('the palette while a slot is the drop target', () => {
     expect(refusedIn('Ballyhoo')).toBe(false)
     expect(refusedIn('Storm Wash')).toBe(false)
     expect(refusedIn('Blackout')).toBe(false)
+    // A stack pad lives on a bank, and says so rather than asking for a selection.
+    expect(screen.getByText('Song 3').closest('.min-h-10')!.textContent).toContain('banks only')
   })
 })

@@ -389,9 +389,9 @@ export function ShowOverview({
   }, [])
 
   const handleSaveStack = useCallback(
-    async (input: CueStackInput) => {
+    async (input: CueStackInput, options?: { force?: boolean }) => {
       if (editingStack) {
-        await saveStack({ projectId, stackId: editingStack.id, ...input }).unwrap()
+        await saveStack({ projectId, stackId: editingStack.id, ...input, force: options?.force }).unwrap()
       } else {
         const created = await createStack({ projectId, ...input }).unwrap()
         onDrillStack(created.id) // jump straight into the new stack
