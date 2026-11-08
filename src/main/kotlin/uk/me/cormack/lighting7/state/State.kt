@@ -1414,20 +1414,20 @@ class State(val config: ApplicationConfig) {
             // Table list lives in models/Schema.kt so the sync-coverage guard can assert
             // against the same set the schema is built from.
             //
-            // **Branching on an empty database is a ~1.2 s win, not a micro-optimisation.**
             // `createMissingTablesAndColumns` reconciles the model against the live schema via
-            // JDBC metadata, and sqlite-jdbc answers that by re-parsing each table's DDL: for
-            // these 41 tables it costs ~1220 ms, and it costs that whether or not anything is
-            // actually missing (measured: an immediate second call costs the same again). A
-            // database with no tables at all has nothing to reconcile, so plain `create()` —
-            // `CREATE TABLE IF NOT EXISTS` plus the declared indices — is equivalent there and
-            // runs in ~6 ms. That is the whole of the test suite's per-test fixture cost (487
-            // tests each built a fresh DB), and it also takes ~1.2 s off a new desk's first boot.
+            // JDBC metadata, and sqlite-jdbc answers that by regex over each table's DDL: ~8 s for
+            // all ~70 tables on a CI runner, whether or not anything is missing. So an empty
+            // database takes plain `create()` (~6 ms, FreshSchemaEquivalenceTest), and any other
+            // reconciles only the tables `tablesOutOfStep` finds lacking something — on a desk
+            // already up to date, none (SchemaDriftTest).
             if (isEmptyDatabase()) {
                 SchemaUtils.create(*ALL_TABLES.toTypedArray())
             } else {
-                @Suppress("DEPRECATION")
-                SchemaUtils.createMissingTablesAndColumns(*ALL_TABLES.toTypedArray())
+                val outOfStep = tablesOutOfStep(ALL_TABLES)
+                if (outOfStep.isNotEmpty()) {
+                    @Suppress("DEPRECATION")
+                    SchemaUtils.createMissingTablesAndColumns(*outOfStep.toTypedArray())
+                }
                 dropLegacyUuidIndexes()
             }
 

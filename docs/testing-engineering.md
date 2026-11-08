@@ -42,9 +42,17 @@ This is also ~1.2 s off a new desk's first boot.
 differently (`projects_name` vs `projects_name_unique`) and log about it on every
 reconciliation. Everything else must match.
 
-**A test that needs the reconcile path still gets it** — `InstallBootstrapTest` builds a `State`
-against a database an earlier `State` already populated, so it sees a non-empty database and pays
-the full ~1.4 s. That is correct, and it is why it is among the slowest classes.
+**A non-empty database reconciles only the tables out of step with the model.** The cost grew with
+the schema — tables × foreign keys × DDL length, all regex — to ~8 s per `State` on a CI runner by
+2026-11, at ~70 tables, and every migration test and every desk boot paid it once or twice: the
+`state` package alone was 47 % of the suite's time and the Backend job had passed 12 minutes.
+`State.initDatabase` now hands `createMissingTablesAndColumns` only what `tablesOutOfStep`
+(`state/SchemaDrift.kt`) finds lacking a table, column or index — matched as Exposed matches an
+index, by ordered columns and uniqueness — and nothing at all for a database already up to date. On
+SQLite the reconcile changes nothing in a table that lacks none of those, so the schema comes out the
+same. `SchemaDriftTest` holds it there: it boots the oldest frozen database (`pre-cue-model.sql`) and
+checks that a full reconcile afterwards finds nothing left to do. That test and
+`FreshSchemaEquivalenceTest` are the two that still pay a full reconcile, deliberately.
 
 ### 2. One process-wide FX compilation cache (~70 ms per test)
 
