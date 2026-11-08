@@ -96,7 +96,7 @@ class State(val config: ApplicationConfig) {
 
     /**
      * Desk-local accounts and sessions. Must construct after [database] (property order
-     * does that) so `createMissingTablesAndColumns` has created its tables before the
+     * does that) so `initDatabase` has created its tables before the
      * in-memory caches load. `auth.bcryptCost` exists so tests can run at cost 4;
      * production configs should never set it.
      */
@@ -1367,7 +1367,7 @@ class State(val config: ApplicationConfig) {
      * per-test SQLite file). Deliberately narrow: it is the one case where the model cannot
      * disagree with the live schema, so the cheap `SchemaUtils.create` path in [initDatabase]
      * is safe. Any table at all — including a partially-created schema from an interrupted
-     * first boot — falls back to full reconciliation.
+     * first boot — takes the reconcile of the tables `tablesOutOfStep` finds lacking something.
      *
      * Excludes SQLite's own `sqlite_*` internal tables, which appear as soon as an
      * AUTOINCREMENT column or an internal index exists.
@@ -1414,20 +1414,16 @@ class State(val config: ApplicationConfig) {
             // Table list lives in models/Schema.kt so the sync-coverage guard can assert
             // against the same set the schema is built from.
             //
-            // **Branching on an empty database is a ~1.2 s win, not a micro-optimisation.**
-            // `createMissingTablesAndColumns` reconciles the model against the live schema via
-            // JDBC metadata, and sqlite-jdbc answers that by re-parsing each table's DDL: for
-            // these 41 tables it costs ~1220 ms, and it costs that whether or not anything is
-            // actually missing (measured: an immediate second call costs the same again). A
-            // database with no tables at all has nothing to reconcile, so plain `create()` —
-            // `CREATE TABLE IF NOT EXISTS` plus the declared indices — is equivalent there and
-            // runs in ~6 ms. That is the whole of the test suite's per-test fixture cost (487
-            // tests each built a fresh DB), and it also takes ~1.2 s off a new desk's first boot.
+            // An empty database takes `create()` (FreshSchemaEquivalenceTest); any other reconciles
+            // only the tables `tablesOutOfStep` finds lacking something (SchemaDriftTest).
             if (isEmptyDatabase()) {
                 SchemaUtils.create(*ALL_TABLES.toTypedArray())
             } else {
-                @Suppress("DEPRECATION")
-                SchemaUtils.createMissingTablesAndColumns(*ALL_TABLES.toTypedArray())
+                val outOfStep = tablesOutOfStep(ALL_TABLES)
+                if (outOfStep.isNotEmpty()) {
+                    @Suppress("DEPRECATION")
+                    SchemaUtils.createMissingTablesAndColumns(*outOfStep.toTypedArray())
+                }
                 dropLegacyUuidIndexes()
             }
 
