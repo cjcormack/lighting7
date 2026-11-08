@@ -92,7 +92,7 @@ object OscAddresses {
         Entry("/stack/{stack}/pause", Args.NONE, "Cancel the live entry's auto-advance timer", "CueStackPause", 1) { c, _, l ->
             l.stack(c["stack"]) { OscResolution.Press(BindingTarget.CueStackPause(it.id, it.uuid.toString()), "Pause ${it.name}'s follow", it.ref(OscRecordKind.STACK)) }
         },
-        Entry("/stack/{stack}/stop", Args.NONE, "Stop the stack, which drops the arm as any stop does", "CueStackStop", 1) { c, _, l ->
+        Entry("/stack/{stack}/stop", Args.NONE, "Stop the stack over its release time, which drops the arm as any stop does", "CueStackStop", 1) { c, _, l ->
             l.stack(c["stack"]) { OscResolution.Press(BindingTarget.CueStackStop(it.uuid.toString()), "Stop ${it.name}", it.ref(OscRecordKind.STACK)) }
         },
         Entry("/stack/{stack}/fx-amount", Args.LEVEL, "The stack's FX amount", "StackFxAmount", 1) { c, v, l ->

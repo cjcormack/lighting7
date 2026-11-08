@@ -288,7 +288,8 @@ next stack in the running order. On the last stack the phone's GO reads END.
 ### A stop fades
 
 A deliberate stop is `CueStackManager.stopStack` (D6): the REST deactivate, `/show/deactivate`, MCP's
-`deactivate_cue_stack` and Release at the end. The stack reads stopped at once — out of the live table,
+`deactivate_cue_stack`, a stack pad's *Release* and a solo bank's release of a sibling stack, a
+`CueStackStop` button and OSC's `/stop`, and Release at the end. The stack reads stopped at once — out of the live table,
 its follow cancelled, its run state stopped — and each cue it had on stage (its live cue and,
 mid-crossfade, the cue that fade was taking out) fades from the weight it stood at to 0 over the
 stack's **Release time** (`release_time`, default 2 s), its FX shrinking with it, or stays at full where

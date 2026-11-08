@@ -1011,6 +1011,9 @@ class State(val config: ApplicationConfig) {
             cueLooseHeldProvider = { cueId ->
                 runCatching { show.cueStackManager.holds.looseHeld(cueId) }.getOrDefault(false)
             },
+            stackRunningProvider = { stackId ->
+                runCatching { show.cueStackManager.isStackActive(stackId) }.getOrDefault(false)
+            },
             buskRefsProvider = ::buildBuskRefs,
             stackFxAmountsProvider = { show.cueStackManager.fxAmounts },
             stackIdResolver = { stackUuid -> show.cueStackManager.stackIdForUuid(database, stackUuid) },
@@ -1038,8 +1041,7 @@ class State(val config: ApplicationConfig) {
                         BuskPadKind.LOOK -> pad.uuid to PadRef.Layer(pad.look!!.uuid, isLook = true)
                         // The pad names the cue and nothing else: a press holds it loose (cue model plan D6).
                         BuskPadKind.CUE -> pad.uuid to PadRef.Cue(pad.cue!!.id.value)
-                        // Unlit until the busk-stack plan's session 4 gives it a ref.
-                        BuskPadKind.CUE_STACK -> null
+                        BuskPadKind.CUE_STACK -> pad.uuid to PadRef.Stack(pad.cueStack!!.id.value)
                         // A malformed pad is absent everywhere it is read, an LED included.
                         null -> null
                     }

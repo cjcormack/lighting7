@@ -13,6 +13,7 @@ import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fx.FxSpeed
+import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.LayerResolver
@@ -113,6 +114,8 @@ class SurfaceFeedbackPublisherTest {
         val looks = HashMap<UUID, LookSnapshot>()
         val palettes = HashMap<UUID, PaletteSnapshot>()
         val layers: ProgrammerLayerStack
+        /** The stacks a stack pad's LED reads as running. */
+        val runningStacks: MutableSet<Int> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
         init {
             fixtures.register {
@@ -168,6 +171,7 @@ class SurfaceFeedbackPublisherTest {
                 fxStateProvider = { fxStates },
                 programmerLayerStackProvider = { layers },
                 buskRefsProvider = { buskRefs },
+                stackRunningProvider = { it in runningStacks },
             )
         }
 
@@ -1277,6 +1281,48 @@ class SurfaceFeedbackPublisherTest {
             h.selection.set(listOf(hex1))
             yield()
             assertEquals(LedState.ON, led("btn-3"), "and covers hex-1")
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `a stack pad's LED is lit while its stack runs, through start, GO and release`() = runBlocking {
+        val songStack = 12
+        val padUuid = UUID.nameUUIDFromBytes("pad:Song".toByteArray())
+        val h = Harness(
+            listOf(binding(1, "btn-1", BindingTarget.PressPad(padUuid.toString()))),
+            buskRefs = BuskRefs(pads = mapOf(padUuid to PadRef.Stack(songStack)), pageIds = emptyMap()),
+        )
+        fun runState(activeCueId: Int?, releasedAtEnd: Boolean = false) = CueRunState(
+            projectId = projectId, stackId = songStack, activeCueId = activeCueId, nextCueId = null,
+            activeEntryId = activeCueId, nextEntryId = null, standbyEntryId = null, nextIsArmed = false,
+            transition = true, fadeDurationMs = null, fadeElapsedMs = null, autoAdvance = false,
+            autoAdvanceDelayMs = null, seq = 0, releasedAtEnd = releasedAtEnd,
+        )
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            fun led() = h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue("btn-1").led
+
+            assertEquals(LedState.OFF, led(), "dark while the stack is stopped")
+
+            h.runningStacks += songStack
+            h.fixtures.cueRunStateChanged(runState(activeCueId = 101))
+            yield()
+            assertEquals(LedState.ON, led(), "lit once it starts")
+
+            h.fixtures.cueRunStateChanged(runState(activeCueId = 102))
+            yield()
+            assertEquals(LedState.ON, led(), "and still lit after a GO")
+
+            h.runningStacks -= songStack
+            h.fixtures.cueRunStateChanged(runState(activeCueId = null, releasedAtEnd = true))
+            yield()
+            assertEquals(LedState.OFF, led(), "dark again once it is released")
         } finally {
             h.publisher.stop()
             scope.cancel()
