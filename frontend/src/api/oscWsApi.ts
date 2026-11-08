@@ -44,9 +44,12 @@ export interface OscAddressWarning {
 /** Mirrors `OscStateDto` in lighting7's `osc/OscService.kt`. Counts are since the desk started. */
 export interface OscState {
   enabled: boolean
+  /** On UDP. */
   listening: boolean
+  /** On TCP, the same port, SLIP-framed; absent is false. */
+  tcpListening?: boolean
   port: number
-  /** Why the desk is not listening although enabled — the port in use, say. */
+  /** Why the desk is not listening on UDP or TCP although enabled — the port in use, say. */
   error?: string | null
   received: number
   dropped: number

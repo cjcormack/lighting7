@@ -29,6 +29,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FE-SHARED-LOOK-EDIT-GUARD`](#fu-fe-shared-look-edit-guard) | Ready | FE | — |
 | [`FU-FE-FAN-NAMES`](#fu-fe-fan-names) | Ready | FE | — |
 | [`FU-MIDI-RING-STYLE-MIXED`](#fu-midi-ring-style-mixed) | Trigger | MIDI | a second profile declares a `FAN` or `PAN` encoder ring |
+| [`FU-OSC-LEARN`](#fu-osc-learn) | Trigger | OSC | a sender whose addresses can't be set (TouchOSC or similar) is in use |
 | [`FU-AI-SET-SELECTION`](#fu-ai-set-selection) | Trigger | AI | a conversation asks the AI to select fixtures rather than act on them |
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
 | [`FU-SPEED-CUSTOM-RATIO`](#fu-speed-custom-ratio) | Trigger | Speed | an operator asks for a ratio beyond the five chips |
@@ -939,6 +940,32 @@ applied and clear it on every other write, which is a second fact about the sele
 button's sake.
 
 **Trigger**: an operator asks which sub-selection is standing.
+
+### `FU-OSC-LEARN`
+
+**Learnable OSC addresses, and feedback to a learned sender** · Trigger · OSC plan session 3
+(2026-11-08), split off by Chris: no such sender is in use yet
+
+The fixed `/lighting7/` set (OSC plan D1) needs the sender to type the desk's address. A sender whose
+addresses are its own (TouchOSC, a lighting app's layout) needs the desk to learn them instead, and
+then to send its faders and LEDs back. What it takes, as the plan scoped it:
+
+- **Learn (D1):** an `osc` device type whose controls are its bindings' addresses, outside
+  `/lighting7/`. Every profile in `midi/devices/` declares its controls statically, so this is the
+  first whose controls are dynamic, which `ControlSurfaceDevice` and `ControlSurfaceRegistry` must
+  allow. An address with a float argument is continuous and one without a button, a float at 0 a
+  release. OSC hands the router a resolved input through a public entry, skipping `matchEvent`.
+  `MidiLearnSessionManager` captures the next address from an allowed sender. A binding on an
+  address under `/lighting7/`, one longer than `control_id`'s 100 characters, or to a target D6
+  excludes is refused at bind time. Learned bindings are ordinary `control_surface_bindings` rows,
+  `Portable` as today.
+- **Feedback (D14):** `osc/OscController.kt` sends fader positions and LEDs to a bound sender's
+  address and port, fed by `SurfaceFeedbackPublisher`, through the reply queues session 3 built
+  (`osc/OscReplies.kt`), so a sender that stops reading still holds up nobody.
+- **Tests:** Learn over OSC, the bind-time refusals, feedback against a loopback receiver.
+- **Operator check:** a TouchOSC fader learned onto a group dimmer moves the rig and follows it back.
+
+**Trigger**: a sender whose addresses can't be set is in use.
 
 ### `FU-MIDI-RING-STYLE-MIXED`
 

@@ -113,7 +113,7 @@ What the code says, read at `8c35838`. `F/` is `frontend/src`, `K/` is
 
 | # | Decision |
 |---|---|
-| D1 | **A fixed address set comes first; learnable addresses come later.** The desk publishes addresses under `/lighting7/`, named after the records that already exist (§3), so a QLab cue needs no setup on the desk. Learn is for senders whose addresses can't be changed (session 3). |
+| D1 | **A fixed address set comes first; learnable addresses come later.** The desk publishes addresses under `/lighting7/`, named after the records that already exist (§3), so a QLab cue needs no setup on the desk. Learn is for senders whose addresses can't be changed (`FU-OSC-LEARN`). |
 | D2 | **Every address resolves to a `BindingTarget` dispatched through `SurfaceActions`.** No OSC-specific show logic: OSC and MIDI share one dispatcher (§3 "Dispatch"). A new action is added as a target, so a MIDI surface gains it too, and an OSC press does what a surface press does, the desk selection included. |
 | D3 | **Names appear in addresses as slugs, and an ambiguous match is refused, never guessed.** OSC forbids spaces and reserves `#*,?[]{}`. The slug is `SetupTools.slug`'s rule, and an incoming segment is lower-cased before it is matched. An address that matches two records is refused as ambiguous and the log names both. Separators are never matched. A name that slugs to nothing has no address, and the address listing (session 2) says so. A cue address works only for a cue whose name is unique; a cue in a stack is addressed by number. There is no second, exact-name argument form. |
 | D4 | **Explicit forms beside every toggle, and each lands the same state however many times it arrives.** GO TO cue *n* beside GO, and on and off beside press, for loose cues and Looks. GO TO onto the entry already live, `on` for a cue already loose-held or a Look already applied, and `off` for one that is not are **no-ops**, answered done ("already live"), so a QLab cue fired twice changes nothing: no re-fire, no second *Tempo on GO*, no second events. The toggles and bare GO stay for buttons pressed by hand, and keep today's re-fire. |
@@ -125,8 +125,8 @@ What the code says, read at `8c35838`. `F/` is `frontend/src`, `K/` is
 | D10 | **Continuous values bypass the 7-bit path.** The grand master, tempo and a stack's FX amount take floats whole, rather than through the `UByte` arms MIDI uses. |
 | D11 | **Cue events keep today's rule.** A GO TO fires the events of the cue it lands on, armed, as a GO does; a skipped cue's events never fire. An OSC GO TO is an ordinary GO TO (D4's no-op aside), so nothing about events changes. |
 | D12 | **Every signed-in window on the desk's own listener sees the address log**; only admins change the settings and the allowlist. The operator at the desk is the one who needs to see that a QLab cue did nothing. |
-| D13 | **The default port is UDP 8415**, beside 8413 and 8414, changeable in settings. |
-| D14 | **Replies and feedback wait for session 3.** QLab reads nothing back. They come with Learn, when a TouchOSC-style sender needs them. |
+| D13 | **The default port is 8415**, for UDP and TCP alike, beside 8413 and 8414, changeable in settings. |
+| D14 | **Replies and feedback wait for session 3.** QLab reads nothing back. Session 3 adds the per-sender reply; fader and LED feedback come with Learn (`FU-OSC-LEARN`), when a TouchOSC-style sender needs them. |
 
 The plan adds three of its own:
 
@@ -218,8 +218,8 @@ is no undo address.
 
 ### Wire
 
-- `GET/PUT /api/rest/install/osc`: `{enabled, bindAddress, port, senders: [{id, name, address}]}`,
-  admin only. Both are 403 `OSC_SETTINGS_LOCAL_ONLY` when `call.isRemote`; the `PUT` is 400
+- `GET/PUT /api/rest/install/osc`: `{enabled, bindAddress, port, senders: [{id, name, address,
+  replies}]}` (`replies` since session 3, off by default), admin only. Both are 403 `OSC_SETTINGS_LOCAL_ONLY` when `call.isRemote`; the `PUT` is 400
   `OSC_SETTINGS_INVALID` naming every problem at once (a port outside 1024–65535, a bad address, a
   sender twice).
 - `GET /api/rest/projects/{id}/osc/addresses` (session 2): every address the project answers to,
@@ -231,14 +231,14 @@ is no undo address.
 - `osc.state`: outbound, `StateFlow`-backed, machine-scoped (registered in
   `setupMachineSubscriptions` and skipped when `scope.remote`), to every signed-in socket on the
   desk's own listener, conflated to 4 a second:
-  `{enabled, listening, port, error?, received, dropped, refused, refusedSenders: [{address, count, lastAt}], recent: [{at, sender, address, args, outcome, detail}], warnings: [{id, at, changes: [{address, was, now?, reason?}]}]}`
-  (`warnings` since session 2).
+  `{enabled, listening, tcpListening, port, error?, received, dropped, refused, refusedSenders: [{address, count, lastAt}], recent: [{at, sender, address, args, outcome, detail}], warnings: [{id, at, changes: [{address, was, now?, reason?}]}]}`
+  (`warnings` since session 2; `tcpListening` since session 3, `listening` being UDP's).
   A bind failure (the port in use) is `error`, never a failed startup.
 
 ### Storage
 
 `osc_settings` (one row) and `osc_senders`, both `MachineLocal` in `SyncDispositions`. No
-`formatVersion` change and no migration. Learned bindings (session 3) are ordinary
+`formatVersion` change and no migration. Learned bindings (`FU-OSC-LEARN`) will be ordinary
 `control_surface_bindings` rows, `Portable` as today.
 
 ## 4. UX
@@ -269,8 +269,8 @@ written, and its row marked *in review* with its branch. A session's PR is title
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
 | 1 | Listener, stacks, Looks, cues and busk | merged | `claude/festive-dirac-ywtlap` | [#384](https://github.com/cjcormack/lighting7/pull/384) | `5959702` |
-| 2 | Masters, tempo and finding addresses | in review | `claude/gracious-albattani-cqe2mu` | | |
-| 3 | Learnable addresses, feedback and TCP | planned | | | |
+| 2 | Masters, tempo and finding addresses | in review | `claude/gracious-albattani-cqe2mu` | [#388](https://github.com/cjcormack/lighting7/pull/388) | `04ea06a` |
+| 3 | Replies and TCP | in review | `claude/blissful-noether-8tvvc1` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -392,28 +392,47 @@ the next; whoever merges the last fills its own.
 - Beyond this section: any numeric argument that is not finite (a NaN float) is a *bad message* for
   every row that takes one, session 1's `/fx-amount` included.
 
-### Session 3 — Learnable addresses, feedback and TCP
+### Session 3 — Replies and TCP
 
-**Needs:** operator: a sender whose addresses can't be set (TouchOSC or similar) is in use.
+Chris, 2026-11-08: no sender whose addresses can't be set is in use, so Learn and the fader and LED
+feedback that only a learned binding has wait as `FU-OSC-LEARN` in `docs/plans/followups.md`, which
+keeps this section's original Learn and feedback bullets. This session does the rest.
 
-- **Learn (D1):** an `osc` device type whose controls are its bindings' addresses, outside
-  `/lighting7/`. Every profile in `K/midi/devices/` declares its controls statically, so this is the
-  first whose controls are dynamic, which `ControlSurfaceDevice` and `ControlSurfaceRegistry` must
-  allow. An address with a float argument is continuous and one without a button, a float at 0 a
-  release. OSC hands the router a resolved input through a public entry, skipping `matchEvent`.
-  `MidiLearnSessionManager` captures the next address from an allowed sender. A binding on an address
-  under `/lighting7/`, one longer than `control_id`'s 100 characters, or to a target D6 excludes is
-  refused at bind time.
-- **Feedback (D14):** `K/osc/OscController.kt` sends fader positions and LEDs to a bound sender's
-  address and port, fed by `SurfaceFeedbackPublisher`; a `/lighting7/reply` with each fixed
-  address's outcome, behind a per-sender switch.
-- **TCP:** OSC 1.1 SLIP framing on the same port.
-- **Tests:** Learn over OSC, the bind-time refusals, feedback against a loopback receiver, SLIP
-  framing.
-- **Docs:** `docs/osc-engineering.md`, `docs/midi-control-surface-engineering.md`;
-  `FU-MANUAL-OSC-S3`.
+- **Replies (D14):** a `/lighting7/reply` carrying each fixed address's outcome, sent to the sender's
+  address and the port it sent from (a TCP reply on its own connection), behind a per-sender switch on
+  the allowlist entry, off by default.
+- **TCP:** OSC 1.1 SLIP framing on the same port, from allowed senders only, held to D8: the read
+  never touches the database or the show, and hands messages to the same channel.
+- **Tests:** a reply against a loopback receiver, the switch off sending nothing, SLIP framing
+  (escapes, a frame split across reads, an oversized frame), a TCP connection from a refused sender,
+  P3's flood test over TCP.
+- **Docs:** `docs/osc-engineering.md`, the root `CLAUDE.md`; `FU-MANUAL-OSC-S3`; `FU-OSC-LEARN`.
 - **Local:** `./gradlew compileTestKotlin`, then `./gradlew test` for the `osc` and `midi` packages,
   and `npm run check:quick`.
+
+**Where session 3 followed the code over this section:**
+
+- **The reply's shape:** `/lighting7/reply` with three strings — the address received, the outcome in
+  lower case (`done`, `not_found`, …) and the log row's detail, sent once the row is logged. Only an
+  address under `/lighting7/` is answered, and never a `/lighting7/reply`: a peer that acknowledges
+  what it is sent in its own namespace, or another desk with replies on, would otherwise answer the
+  desk forever and push real cues out of the channel. A message the full channel drops is never
+  answered.
+- **Replies leave through queues the collector only offers to** (`osc/OscReplies.kt`, 64 deep, a
+  thread each: `osc-reply` for UDP, `osc-tcp-reply-N` per connection), dropping a reply rather than
+  waiting, since a TCP peer that stops reading would otherwise block the collector on its socket. A
+  UDP reply is sent from the listening socket, so it comes from the desk's port.
+- **UDP and TCP bind separately on the one port, each reconciled on its own**, so another program
+  holding it on one still leaves the other listening, and a save that moves neither leaves a running
+  one alone (a live QLab connection kept); `osc.state` gains `tcpListening` and `error` names
+  whichever failed.
+- **TCP's bounds:** eight connections at once, a ninth closing the one idle longest rather than being
+  refused, so a peer that vanished without closing never locks its reconnect out (keepalive on, Nagle
+  off for the replies); a frame at most a datagram's 65,507 bytes (longer is a *bad message* and the
+  connection reads on); a connection from an address off the allowlist is closed unread and counted
+  as a refused sender. The sender is looked up for every frame, so the reply switch takes effect at
+  once, and a settings save closes the connections of senders it removed. A peer that half-closes
+  after sending keeps its connection two seconds for the replies.
 
 ## 6. Operator checks
 
@@ -424,7 +443,8 @@ One row in `manual-validation.md` per merged session, at the desk with QLab 5 on
   on the allowlist shows in the log with *Allow this sender*; an operator sees the log.
 - `FU-MANUAL-OSC-S2`: the grand master from a QLab fade cue sending floats; a copied address pasted
   into QLab works first time; renumbering a received cue warns.
-- `FU-MANUAL-OSC-S3`: a TouchOSC fader learned onto a group dimmer moves the rig and follows it back.
+- `FU-MANUAL-OSC-S3`: a QLab Network cue over TCP lands its cue; a sender with replies on reads
+  `/lighting7/reply` back (QLab's OSC monitor or `oscdump`).
 
 ## 7. Explicitly out of scope
 
