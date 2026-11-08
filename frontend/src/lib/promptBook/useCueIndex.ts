@@ -60,6 +60,7 @@ export function useCueIndex(stacks: CueStack[] | undefined, activeStackId: numbe
   // Default target stack for a cue created from a selection: the live stack (if runnable),
   // else the sole runnable stack, else the first in show order. null → no stack to add to.
   const defaultStackId = useMemo(() => {
+    // Every stack, busk stacks included (busk-stack plan D4): the book indexes every stack's cues.
     const runnable = (stacks ?? []).filter((s) => s.type === 'STACK')
     if (runnable.length === 0) return null
     if (activeStackId != null && runnable.some((s) => s.id === activeStackId)) return activeStackId

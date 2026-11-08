@@ -4,6 +4,7 @@ import type { CueStack } from '../api/cueStacksApi'
 import { useDeactivateCueStackMutation, useGoToStackMutation } from '../store/cueStacks'
 import { resetStack } from '../store/runnerSlice'
 import type { ShowBarState } from './useShowBarProps'
+import { isInRunningOrder } from '../lib/runningOrder'
 
 /**
  * Move the playhead to a stack the operator is reading — `OffPlayheadBanner`'s *Make live*.
@@ -16,8 +17,8 @@ import type { ShowBarState } from './useShowBarProps'
  *  - **No client-side deactivate of the stack being left.** `POST /show/go-to` already calls
  *    `deactivateStack(previous)` server-side (`routes/projectShow.kt`).
  *  - **`go-to` fires the target's first cue** (`activateAtFirstCue`), so the desk darkens it again
- *    to arrive armed rather than playing — a real, brief blip, which is why `OffPlayheadBanner`
- *    confirms first when something is live.
+ *    at once (`snap`, not over its release time) to arrive armed rather than playing — a real,
+ *    brief blip, which is why `OffPlayheadBanner` confirms first when something is live.
  *  - **The runner is reset explicitly.** Between `go-to` resolving and the deactivate landing the
  *    server reports the freshly-activated first cue, and a reset reading that would mark cue 1 as
  *    already run.
@@ -33,12 +34,12 @@ export function useMakeStackLive(
   const { cancelAnimations } = transport
   return useCallback(
     (target: CueStack) => {
-      if (target.type !== 'STACK' || target.id === activeStackId) return
+      if (!isInRunningOrder(target) || target.id === activeStackId) return
       cancelAnimations()
       goToStack({ projectId, stackId: target.id })
         .unwrap()
         .then(() => {
-          deactivateCueStack({ projectId, stackId: target.id })
+          deactivateCueStack({ projectId, stackId: target.id, snap: true })
           dispatch(
             resetStack({
               stackId: target.id,

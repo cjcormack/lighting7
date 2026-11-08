@@ -237,9 +237,10 @@ full (`CueHolds.kt:846-848`), which the GO path keeps; and `stopStack` does not 
   unless another hold keeps them. Fading a stack's first cue in is out of scope (§7).
 - **Other stops.** A stack delete, a project switch or the undo restorer mid-release removes the rows
   at once. `/show/advance` and `/show/go-to` must call `deactivateStack` on the stack they leave
-  only while it is active. Today they call it whenever there is a previous stack
+  unless it is stopped and still releasing. Today they call it whenever there is a previous stack
   (`projectShow.kt:152-154`, `:194-196`); with the change, a GO into Act 2 during Act 1's release
-  leaves the release running.
+  leaves the release running. (Corrected in session 1: "only while it is active" would also skip a
+  stopped stack's teardown, leaving a standby armed on it to fire when the show comes back.)
 - **Release at the end** is `advanceStack` FORWARD from the last cue entry with `releaseAtEnd` set.
   It answers an explicit result rather than null (an `ActivateResult` with `released = true`, or a
   sealed result), and each caller words it: the REST advance (`projectCueStacks.kt:495`) the
@@ -389,8 +390,8 @@ written, and its row marked *in review* with its branch. A session's PR is title
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Busk stacks and the running order | planned | | | |
-| 2 | Over the show | planned | | | |
+| 1 | Busk stacks and the running order | merged | `claude/blissful-pasteur-r0ys12` | [#392](https://github.com/cjcormack/lighting7/pull/392) | `d1a99f6` |
+| 2 | Over the show | in review | `claude/busk-stack-s8cddn` | | |
 | 3 | Stack pads | planned | | | |
 | 4 | Surfaces | planned | | | |
 
@@ -408,7 +409,7 @@ the next; whoever merges the last fills its own.
 - **Sync (P2):** `CueStackJson` gains the three fields; `SUPPORTED_FORMAT_VERSION` and the writer to
   50, `minReader` 50; `RichProjectFixture` gets a busk stack with Release and a 3 s release time.
 - **The running order (D2, D3, D4):** `orderedStacks` filters on the setting; `/show/go-to` refuses a
-  busk stack; `/show/advance` and `/show/go-to` leave a stack that is no longer active alone.
+  busk stack; `/show/advance` and `/show/go-to` leave a stack that is stopped and releasing alone.
 - **Release (D3, D6):** `CueStackManager.stopStack` and its contract (§3 "Release"): the driver's
   release fade, the stop skipping `takeOff`'s pin, the shared teardown tail; Release at the end in
   `advanceStack` with its explicit result and every caller's wording; `releasedAtEnd` in the run
@@ -517,6 +518,35 @@ the next; whoever merges the last fills its own.
   the FX blend's *Replace it* (`OVERRIDE`); `FU-MANUAL-BUSK-STACK-S2`.
 - **Local:** the full `./gradlew test` (composition across `fx`, `routes` and `sync`) and
   `npm run check:quick`.
+- **As built** (where the code led away from the text above):
+  - `stackEntryPriorities` became `stackEntryPositions`, `stackId → entryId → position`: a priority
+    needs the stack's rank, which a transaction cannot know, so `CueHolds.restampEntries` turns the
+    positions into priorities at each stack's place and hands Move in dark `stackId → entryId →
+    priority`. The ranks are `fx/StackRanks.kt`, kept by `CueHolds.ranks`; `stackAt` is the
+    priority-to-stack lookup `weighingStackOf` reads.
+  - A cue's replace group is its top hold's stack when that hold replaces, else the cue's own
+    (`ownReplaceGroup`, negative): a loose press on Carabossy's cue keeps it replacing at the press's
+    priority, without folding it in with the cue her stack GOs to next. A group's place on a key is
+    the lowest priority its rows hold there; an effect is held back by a group below which it sits,
+    unless it is one of the group's cues' or in its stack's rank (a leaving cue's).
+  - The resolver's specificity rule (a fixture row beating a group row on one head) has always reached
+    across cues; it now runs within each replace group and among the rows that compose by the key's
+    rule apart, so a show cue's fixture row cannot cancel a replacing stack's group row. The Next GO
+    preview stamps a replacing stack's incoming rows with its group, as its GO's hold would.
+  - An effects-only cue is held in a stop's release too, with no rows to ramp, so its stack keeps its
+    rank until its effects have shrunk. Rank changes are serialised in `CueStackManager` and restamp
+    from the places as they stand, and a release's end gives up no rank a GO is taking. An undo that
+    moves a running stack into or out of the running order moves its band as the stack `PUT` does.
+  - `REPLACED` is a weight rather than a switch: the key stack and the sampler paint a replaced
+    effect at what is left, and provenance skips one weighed to 0.
+  - A live stack moved between the running order and the busk band takes the top of its new band
+    (`CueStackManager.onBandChanged`).
+  - An unstamped build reads its stack's band from the entry's placement
+    (`CueApplyData.stackInRunningOrder`).
+  - The Values grid's FX lens has `REPLACED` in its vocabulary but no way to answer it: it infers a
+    stomp from provenance naming a cue on the key (`CellFxLens.lensHeldReason`), which is also what a
+    replacing stack fully in looks like there, so it words that hold as a stomp. The fixture sheet's
+    stack and the FX editor's preview, which read the desk's reason, say it right.
 
 ### Session 3 — Stack pads
 

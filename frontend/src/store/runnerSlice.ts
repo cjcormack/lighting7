@@ -60,6 +60,12 @@ interface StackRunnerState {
    */
   serverActiveCueId: number | null
   /**
+   * The server's word that the stack stopped by going past its last cue with *Release* set
+   * (lighting7 busk-stack plan D3), until its next start: nothing is on deck, whatever
+   * `standbyCueId` names.
+   */
+  releasedAtEnd: boolean
+  /**
    * Whether the server will actually roll the stack forward on its own, per the last frame —
    * null until one arrives. Not the same as the cue's `autoAdvance` flag: a cue-edit Live
    * session and the surface's Pause binding both cancel the timer on a cue still configured
@@ -92,6 +98,7 @@ function getOrCreate(state: RunnerState, stackId: number): StackRunnerState {
       serverActiveCueId: null,
       serverAutoAdvance: null,
       serverAutoAdvanceDelayMs: null,
+      releasedAtEnd: false,
     }
   }
   return state.stacks[stackId]
@@ -282,6 +289,8 @@ export const runnerSlice = createSlice({
         serverTransition: 0,
         serverAutoAdvance: null,
         serverAutoAdvanceDelayMs: null,
+        // The server's fact, which a local reset knows nothing to change.
+        releasedAtEnd: state.stacks[stackId]?.releasedAtEnd ?? false,
       }
       // `serverNextCueId` when the caller has it (the backend owns "next"); the local walk is the
       // fallback for a caller that doesn't, e.g. a stack loaded without run state.
@@ -345,6 +354,7 @@ export const runnerSlice = createSlice({
       s.serverActiveCueId = activeCueId
       s.serverAutoAdvance = action.payload.autoAdvance
       s.serverAutoAdvanceDelayMs = action.payload.autoAdvanceDelayMs
+      s.releasedAtEnd = action.payload.releasedAtEnd ?? false
       s.standbyCueId = nextCueId
       s.standbyEntryId = action.payload.nextEntryId ?? null
       if (nextCueId != null) {
@@ -418,6 +428,7 @@ const EMPTY_STACK_RUNNER: StackRunnerState = {
   serverActiveCueId: null,
   serverAutoAdvance: null,
   serverAutoAdvanceDelayMs: null,
+  releasedAtEnd: false,
 }
 
 export function selectStackRunner(state: { runner: RunnerState }, stackId: number): StackRunnerState {

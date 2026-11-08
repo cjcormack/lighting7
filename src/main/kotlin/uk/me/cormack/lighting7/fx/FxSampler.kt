@@ -69,6 +69,9 @@ internal class FxSampler(
         /** [effect]'s stack's FX amount (D10): 1 but for a cue's FX. */
         fun stackAmount(effect: FxInstance): Double
 
+        /** What the replacing stacks over [key]'s [attribute] leave [effect] (busk-stack plan D8): 1 under none. */
+        fun replaced(effect: FxInstance, key: String, attribute: String): Double
+
         /** Every clock as it reads now. */
         fun clock(): FxSampleClock
     }
@@ -313,7 +316,9 @@ internal class FxSampler(
         val own = painting.map { DoubleArray(n) }
         val reasons = painting.map { (effect, _) -> heldBack(effect, key, attribute) }
         val dynamics = painting.map { (effect, _) -> reads.dynamicsOf(effect) }
-        val weights = painting.mapIndexed { i, (effect, _) -> FxBlend.weight(dynamics[i].amount, ENVELOPE, view.stackAmount(effect)) }
+        val weights = painting.mapIndexed { i, (effect, _) ->
+            FxBlend.weight(dynamics[i].amount, ENVELOPE, view.stackAmount(effect)) * view.replaced(effect, key, attribute)
+        }
         // An FX whose object cannot be built (its type no longer registered) holds, as one that throws.
         val stateful = painting.map { (effect, _) ->
             if (effect.effect !is StatefulFx) null
@@ -358,7 +363,8 @@ internal class FxSampler(
                 val value = onHead(effect.target, fixture, before, output)
                 if (output is FxOutput.Steps) outputs[i].setStep(s, output)
                 outputs[i].set(s, value ?: before)
-                if (value != null && reasons[i] == null && weights[i] > 0.0) {
+                // A replacing stack's hold-back is a weight, already in [weights]; every other reason is a switch.
+                if (value != null && (reasons[i] == null || reasons[i] == HeldBackReason.REPLACED) && weights[i] > 0.0) {
                     running = withPlanes(blend(effect.target, before, value, effect.blendMode, weights[i]), planes)
                 }
             }

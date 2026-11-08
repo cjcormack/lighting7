@@ -27,6 +27,9 @@ export interface RunnerDisplayState {
   activeEntryId: number | null
   standbyEntryId: number | null
   completedCueIds: number[]
+  /** The transport's two GO questions (lighting7 busk-stack plan §3 "Release"). */
+  nothingOnDeck: boolean
+  goReleases: boolean
 }
 
 interface RunMobileProps {
@@ -145,8 +148,10 @@ export function RunMobile({
     [onRequeueCue],
   )
 
-  const goLabel = standbyCue || nextStack ? 'GO' : 'END'
-  const goDisabled = !standbyCue && !nextStack
+  // A Release stack's last GO releases it; with nothing on deck GO is the boundary GO or the END.
+  const goes = display.goReleases || (!display.nothingOnDeck && standbyCue != null) || nextStack != null
+  const goLabel = goes ? 'GO' : 'END'
+  const goDisabled = !goes
 
   return (
     <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
@@ -203,6 +208,7 @@ export function RunMobile({
         <SpeedMastersChip />
       </div>
 
+      {/* A busk stack keeps its FX amount, so the plain STACK test (busk-stack plan D4). */}
       {stack && stack.type === 'STACK' && <MobileStackFxAmount key={stack.id} projectId={projectId} stackId={stack.id} stackName={stack.name} />}
 
       {/* Stacked Current + Next cards */}

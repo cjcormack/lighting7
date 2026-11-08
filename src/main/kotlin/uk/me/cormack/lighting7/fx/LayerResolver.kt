@@ -82,7 +82,23 @@ class LayerResolver(
          * only.
          */
         val referenceWinners: Map<CueAssignmentResolver.Key, java.util.UUID> = emptyMap(),
+        /**
+         * Every key a replacing stack sets (busk-stack plan D7, D8), fixtureKey → attribute → its
+         * groups low to high at this frame's weights: what the effects under them are weighed by
+         * ([replacedWeight]). Empty while no stack replaces, which the hot path reads first.
+         */
+        val replaced: Map<String, Map<String, List<CueAssignmentResolver.ReplacingGroup>>> = emptyMap(),
     ) {
+        /**
+         * What the replacing stacks on (`fixtureKey`, `attribute`) leave an effect at [priority] of
+         * [cueId]: 1 under none. [stackOf] is [LayerResolver.stackAt]; [LayerResolver.replacedWeight]
+         * passes it.
+         */
+        fun replacedWeight(fixtureKey: String, attribute: String, priority: Int, cueId: Int?, stackOf: (Int) -> Int?): Double {
+            if (replaced.isEmpty()) return 1.0
+            return CueAssignmentResolver.replacedWeight(replaced[fixtureKey]?.get(attribute), priority, cueId, stackOf)
+        }
+
         /**
          * [index] flattened to (targetKey, attribute) keys, derived on first read.
          * Deliberately lazy: crossfade frames rebuild this snapshot at ~62 fps and nothing on
@@ -101,6 +117,17 @@ class LayerResolver(
 
     @Volatile
     private var cueLayer: CueLayerSnapshot = CueLayerSnapshot.EMPTY
+
+    /**
+     * The stack whose rank a priority is in (`StackRanks.stackAt`), which the show's
+     * [CueStackManager] installs: how a replacing stack tells its own effects from the ones it holds
+     * back (busk-stack plan D8).
+     */
+    @Volatile var stackAt: (Int) -> Int? = { null }
+
+    /** [layer]'s [CueLayerSnapshot.replacedWeight], against this show's [stackAt]. */
+    fun replacedWeight(layer: CueLayerSnapshot, fixtureKey: String, attribute: String, priority: Int, cueId: Int?): Double =
+        layer.replacedWeight(fixtureKey, attribute, priority, cueId, stackAt)
 
     /**
      * The [CueAssignmentResolver.Cook] of the last [applyAssignments] — the weight-independent
@@ -178,12 +205,14 @@ class LayerResolver(
         fadeDurations: Map<CueAssignmentResolver.Key, Long>,
         referenceWinners: Map<CueAssignmentResolver.Key, java.util.UUID>,
     ) {
+        val composed = cueAssignmentResolver.composeFull(cooked, weights)
         cueLayer = CueLayerSnapshot(
-            index = cueAssignmentResolver.compose(cooked, weights),
+            index = composed.index,
             winners = winners,
             layerWinners = layerWinners,
             fadeDurations = fadeDurations,
             referenceWinners = referenceWinners,
+            replaced = composed.replaced,
         )
     }
 
@@ -205,12 +234,14 @@ class LayerResolver(
         if (assignments.isEmpty()) return CueLayerSnapshot.EMPTY
         val cooked = cueAssignmentResolver.cook(assignments)
         val winners = selectWinners(assignments, weights)
+        val composed = cueAssignmentResolver.composeFull(cooked, weights)
         return CueLayerSnapshot(
-            index = cueAssignmentResolver.compose(cooked, weights),
+            index = composed.index,
             winners = winners.mapValues { (_, a) -> a.cueId },
             layerWinners = winners.mapNotNull { (key, a) -> a.layerWinner?.let { key to it } }.toMap(),
             fadeDurations = cueAssignmentResolver.fadeDurationsFor(cooked, winners),
             referenceWinners = referenceWinnersOf(winners),
+            replaced = composed.replaced,
         )
     }
 

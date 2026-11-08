@@ -15,6 +15,8 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-BUSK-STACK-S2`](#fu-manual-busk-stack-s2) | Carabossy on Replaces takes the front wash from 80 % to 0, holds the movers' chase back, and fades the kitchen back on release with the chase growing back in phase; a song on Adds lifts heads over the base and never darkens them; a GO on Act 1 during Carabossy lands under her | Busk stack session 2, 2026-11-08 |
+| [`FU-MANUAL-BUSK-STACK-S1`](#fu-manual-busk-stack-s1) | a song stack out of the running order: Act 1's last GO goes to Act 2, not the song; the song's own GO and a follow off its last cue release it over its release time; the Show view's stop fades | Busk stack session 1, 2026-11-07 |
 | [`FU-MANUAL-RESTORE-S1`](#fu-manual-restore-s1) | restoring an older snapshot through the API while the show runs crossfades without a dip, the other desk takes it on *Sync now*, and restoring `before` puts it back | Snapshot restore S1, 2026-11-08 |
 | [`FU-MANUAL-CLOUD-P1`](#fu-manual-cloud-p1) | Lighting7 Cloud's P1 exit: a phone on 4G busks the venue desk opened from the portal, Claude patches a rig through the desk's cloud URL with no tunnel, an emailed invite approved in the portal lands its operator as `OPERATOR`, unlinking, disabling, removing a membership and *End* each close a session within 5 s, the two switches refuse what they name and cannot be changed remotely, the Remote access tab, `/oauth/*`, `/mcp` and the tunnel are gone and an upgraded desk keeps its policy switches, and a running fade sees nothing of the sidecar or the cloud stopping | Cloud P1 S9, 2026-11-07 |
 | [`FU-MANUAL-OSC-S1`](#fu-manual-osc-s1) | a QLab Network cue lands cue 1 and fired again mid-fade moves nothing; a Look's `on` and `off` and a busk Look pad from QLab; a QLab machine off the allowlist shows with *Allow this sender*; an operator sees the log | OSC session 1, 2026-11-07 |
@@ -158,6 +160,55 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-BUSK-STACK-S1`
+
+**What it proves**: *Busk stacks and the running order* (busk-stack plan session 1) — a stack out of
+the running order is never reached by the show's GO, releases itself at its end, and a stop fades.
+
+**Why it is here**: the tests read fade weights off the cue layer; only the rig shows that a release
+looks like a fade rather than a cut, and that the Show view's GO crosses where the operator expects.
+
+**Test**, at the desk with a show of three stacks — *Act 1* (two cues), *Song* and *Act 2* — each cue
+lighting something different:
+
+1. **Out of the running order.** Open *Song*'s settings: switch *In the running order* off. *After the
+   last cue* moves to *Release*. Save. On the Show view *Song* is listed after a *Busk* divider.
+2. **The show's GO skips it.** Start the show and GO through *Act 1*: its last GO goes to *Act 2*, and
+   the next-stack label beside GO read *→ Act 2*, never *Song*.
+3. **Its own GO releases it.** Open *Song*'s tab, start it from its own controls and GO past its last
+   cue: it reads stopped at once, and its light fades out over its release time (2 s) while *Act 2*
+   stays up. Give its last cue a follow and start it again: the follow releases it the same way.
+4. **A stop fades.** With *Act 2* live, stop the show from the header: its light fades over 2 s rather
+   than snapping. Set its release time to 0 and stop it again: it snaps.
+
+---
+
+## `FU-MANUAL-BUSK-STACK-S2`
+
+**What it proves**: *Over the show* (busk-stack plan session 2) — latest GO wins with busk stacks above
+the show, and a replacing stack takes what its cue sets, intensity included, and hands it back.
+
+**Why it is here**: the tests read the composed cue layer and an effect's weight; only the rig shows
+that a replacing stack's release reads as a fade back to the kitchen rather than a cut, and that a chase
+held back resumes in step rather than restarting.
+
+**Test**, at the desk with *Act 1* live on Q14 *Kitchen, night* (the front wash at 80 %, a dimmer chase
+on the movers) and two busk stacks: *Carabossy* (Replaces, Release at the end, release time 3 s; Q1 the
+stage-left special green and the front wash and the movers' dimmers at 0, following into Q2 after 4 s)
+and *Song* (Adds; a chase and a colour change on the front wash):
+
+1. **Replaces.** Start *Carabossy*: the wash goes to 0 and the movers' chase stops painting at once.
+   Its follow into Q2 keeps both there. When it releases, the wash fades back to 80 % over 3 s and the
+   chase grows back in, in step with where it would have been.
+2. **A GO underneath.** Start *Carabossy* again and GO *Act 1* to Q15 while she is up: nothing she sets
+   moves; anything else Q15 changes shows at once, and the rest when she releases.
+3. **Adds.** Start *Song*: its chase lifts the wash over the base look and never darkens it below 80 %;
+   its colour wins over the kitchen's.
+4. **Latest GO wins.** With *Act 1* and *Act 2* both live, GO *Act 1*: its colour wins wherever both set
+   one, whichever stack was made first; a follow on *Act 2* does not take it back.
 
 ---
 

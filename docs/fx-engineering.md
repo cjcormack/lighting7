@@ -1199,6 +1199,17 @@ press — or at full at once over a value the programmer holds (effects plan §3
 at full first). Provenance leaves a held FX out of its winners and the attribute stack lists it `heldBack`
 with reason `BLIND`.
 
+**A replacing stack holds FX back by a weight** (busk-stack plan D8). On a key a busk stack on
+*Replaces* sets, every FX below it but the programmer band's and its own is weighed by ∏(1 − *W*)
+over the replacing stacks above it, *W* each one's combined fade weight there
+(`CueAssignmentResolver.replacedWeight`, read off `CueLayerSnapshot.replaced`). It is a factor after
+the blend beside `amount × envelope × stackAmount` — `FxEngine.underReplacing` at the four apply
+sites, skipping the apply at 0 — not a switch: the instance keeps running and its phase, held fully
+while the stack is in and handing back as it fades. `FxSuppression.isSuppressed` stays a boolean for
+the other three reasons; `heldBackReason` answers `REPLACED` last, while the weight is below 1, and
+the sampler and the key stack paint such an effect at what is left. Provenance skips one weighed to 0.
+Stomp's removal is never used for this (`docs/lighting-composition-model.md` §"Replacing stacks").
+
 **Local FX sit above every layer's FX** (FX editor plan D5, §3.5). Within the band, a programmer
 layer's FX sit at `BASE + layer index` (`ProgrammerLayerStack.priorityFor`, clamped at
 `PROGRAMMER_FX_RANK_CLAMP`) and Local FX (`FxInstance.isLocalFx`) at
@@ -1388,8 +1399,8 @@ operator built in the programmer is the one a cue or Look plays back
 Priority assignment:
 
 - Manual FX: `priority = 0`
-- Cue-owned FX: `priority = stackId * 1_000_000 + sortOrder * 1_000 + 1`
-  (leaves gaps for future fine-tuning without renumbering)
+- Cue-owned FX: their cue's priority — a stack hold's `band + rank * 1_000_000 + position * 1_000 + 1`
+  (`stackPriority`, busk-stack plan D5), a loose hold's `LOOSE_BAND + seq`
 - A programmer layer's FX: `PROGRAMMER_FX_PRIORITY_BASE + layer index`
 - Local FX: `PROGRAMMER_FX_PRIORITY_BASE + LOCAL_OFFSET + localRank`, above every layer's
   (§"Programmer suppression and the priority band")

@@ -4,7 +4,8 @@ import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
-import type { CueStack } from '@/api/cueStacksApi'
+import { cueRowById, isCueRow, type CueStack } from '@/api/cueStacksApi'
+import { splitBuskStacks } from '@/lib/runningOrder'
 
 /** How much of the visible width a chevron press moves. */
 const PAGE_FRACTION = 0.8
@@ -40,6 +41,9 @@ const PAGE_FRACTION = 0.8
  * `aria-current` says which one you are on. And deliberately no scroll-snap — it fights the
  * programmatic `scrollIntoView` above, and the items are variable-width so it would land
  * off-centre anyway.
+ *
+ * **Busk stacks come last**, past a *Busk* divider (lighting7 busk-stack plan D4): readable and
+ * editable here, never the playhead, each running one with a live dot and its live cue's number.
  *
  * Renders nothing for a single-stack show; the ShowBar carries the stack name in that case.
  */
@@ -82,6 +86,47 @@ export function StackTabStrip({
   }
 
   if (runnableStackCount <= 1) return null
+  const { show, busk } = splitBuskStacks(stacks)
+
+  const renderTab = (s: CueStack) => {
+    if (s.type === 'SEPARATOR') return <TabDivider key={s.id} label={s.label ?? s.name} />
+    const busking = s.inRunningOrder === false && s.activeCueId != null
+    // By entry: one cue may be placed twice in a stack, each place with its own number.
+    const buskLiveCue = busking
+      ? (s.cues.filter(isCueRow).find((c) => c.entryId === s.activeEntryId) ?? cueRowById(s.cues, s.activeCueId))
+      : null
+    const standardCount = s.cues.filter((c) => c.cueType === 'STANDARD').length
+    return (
+      <Button
+        key={s.id}
+        data-stack-id={s.id}
+        variant="ghost"
+        onClick={() => onSelectStack(s)}
+        aria-current={s.id === selectedStackId ? 'page' : undefined}
+        className={cn(
+          'flex items-center gap-2 px-5 h-full rounded-none border-r text-xs font-medium text-muted-foreground relative shrink-0',
+          'hover:text-foreground hover:bg-muted/10',
+          s.id === selectedStackId &&
+            'text-foreground bg-muted/20 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
+        )}
+      >
+        {(s.id === liveStackId || busking) && (
+          <span
+            aria-label="Live"
+            className="size-1.5 rounded-full bg-green-500 shadow-[0_0_6px_currentColor]"
+          />
+        )}
+        {s.name}
+        {buskLiveCue?.cueNumber && (
+          <span className="font-mono text-[10px] text-green-600 dark:text-green-400">Q{buskLiveCue.cueNumber}</span>
+        )}
+        {s.loop && <RotateCcw className="size-3 text-muted-foreground" />}
+        <span className="font-mono text-[9.5px] rounded-full border bg-muted/40 px-1.5 text-muted-foreground/80 ml-0.5">
+          {standardCount}
+        </span>
+      </Button>
+    )
+  }
 
   return (
     <div
@@ -97,56 +142,25 @@ export function StackTabStrip({
         aria-label="Stack tabs"
         className="flex flex-1 items-stretch overflow-x-auto"
       >
-        {stacks.map((s) => {
-          if (s.type === 'SEPARATOR') {
-            return (
-              <div
-                key={s.id}
-                className="flex items-center h-full px-2 gap-1.5 shrink-0 pointer-events-none"
-              >
-                <div className="w-px h-4 bg-border" />
-                <span className="text-xs font-medium uppercase text-muted-foreground whitespace-nowrap">
-                  {s.label ?? s.name}
-                </span>
-                <div className="w-px h-4 bg-border" />
-              </div>
-            )
-          }
-          const standardCount = s.cues.filter((c) => c.cueType === 'STANDARD').length
-          return (
-            <Button
-              key={s.id}
-              data-stack-id={s.id}
-              variant="ghost"
-              onClick={() => onSelectStack(s)}
-              aria-current={s.id === selectedStackId ? 'page' : undefined}
-              className={cn(
-                'flex items-center gap-2 px-5 h-full rounded-none border-r text-xs font-medium text-muted-foreground relative shrink-0',
-                'hover:text-foreground hover:bg-muted/10',
-                s.id === selectedStackId &&
-                  'text-foreground bg-muted/20 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary',
-              )}
-            >
-              {s.id === liveStackId && (
-                <span
-                  aria-label="Live"
-                  className="size-1.5 rounded-full bg-green-500 shadow-[0_0_6px_currentColor]"
-                />
-              )}
-              {s.name}
-              {s.loop && <RotateCcw className="size-3 text-muted-foreground" />}
-              <span className="font-mono text-[9.5px] rounded-full border bg-muted/40 px-1.5 text-muted-foreground/80 ml-0.5">
-                {standardCount}
-              </span>
-            </Button>
-          )
-        })}
+        {show.map(renderTab)}
+        {busk.length > 0 && <TabDivider label="Busk" />}
+        {busk.map(renderTab)}
       </div>
 
       {/* Edge affordances — a fade so the cut-off tab reads as continuing, and a press target so
           it can be reached without a trackpad gesture. Both only while there is more that way. */}
       {overflow.left && <ScrollEdge side="left" onClick={() => page(-1)} />}
       {overflow.right && <ScrollEdge side="right" onClick={() => page(1)} />}
+    </div>
+  )
+}
+
+function TabDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center h-full px-2 gap-1.5 shrink-0 pointer-events-none">
+      <div className="w-px h-4 bg-border" />
+      <span className="text-xs font-medium uppercase text-muted-foreground whitespace-nowrap">{label}</span>
+      <div className="w-px h-4 bg-border" />
     </div>
   )
 }

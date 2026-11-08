@@ -179,6 +179,7 @@ export function CueActions({
   const running = programState?.activeStackId != null
   const blind = useProgrammerBlind()
   const { data: stacks } = useProjectCueStackListQuery(projectId)
+  // Every stack, busk stacks included (busk-stack plan D4): a cue may be moved or shared into any stack.
   const runnable = (stacks ?? []).filter((s) => s.type === 'STACK')
   const { includeCue, isLoading: including } = useInclude(projectId)
   const [duplicateCue] = useDuplicateCueMutation()

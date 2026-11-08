@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.ai
 
-import uk.me.cormack.lighting7.fx.stackEntryPriorities
+import uk.me.cormack.lighting7.fx.stackEntryPositions
+import uk.me.cormack.lighting7.fx.StackEntryPositions
 import uk.me.cormack.lighting7.routes.runFixtureCommand
 import uk.me.cormack.lighting7.routes.FixtureCommandResult
 import uk.me.cormack.lighting7.dmx.UnparkOutcome
@@ -758,6 +759,14 @@ class AiTools(private val state: State) {
                                 put("name", stack.name)
                                 put("cueCount", cueCount)
                                 put("loop", stack.loop)
+                                if (stack.type == CueStackType.STACK.name) {
+                                    // Off is a busk stack, which the show's playhead never reaches.
+                                    put("inRunningOrder", stack.inRunningOrder)
+                                    put("releaseAtEnd", stack.releaseAtEnd)
+                                    put("releaseTimeMs", stack.releaseTime.toMillis())
+                                    if (!stack.inRunningOrder) put("overShow", stack.overShow.name)
+                                    if (manager.runState.isReleasedAtEnd(stack.id.value)) put("releasedAtEnd", true)
+                                }
                                 put("isActive", activeCueId != null)
                                 manager.getActiveEntryId(stack.id.value)?.let { put("activeEntryId", it) }
                                 activeCueId?.let { put("activeCueId", it) }
@@ -781,6 +790,35 @@ class AiTools(private val state: State) {
                         }
                 }
                 put("cueStacks", buildJsonArray { stacks.forEach { add(it) } })
+                // What each replacing stack holds now (busk-stack plan D7, D8): the values it sets,
+                // and the effects under it it holds back, which resume in phase as it fades.
+                val replacing = state.show.fxEngine.replacing()
+                if (replacing.isNotEmpty()) put("replacing", buildJsonArray {
+                    for (group in replacing) addJsonObject {
+                        group.stackId?.let { put("stackId", it) }
+                        // A cue's own group: a loose press keeps a replacing stack's cue replacing.
+                        if (group.stackId == null) {
+                            put("cueId", -group.group)
+                            put("cueHeldLoose", true)
+                        }
+                        putJsonArray("holds") {
+                            for (key in group.keys) addJsonObject {
+                                put("target", key.fixtureKey)
+                                put("attribute", key.attribute)
+                                key.value?.let { put("value", it.serialize()) }
+                                if (key.weight < 1.0) put("weight", key.weight)
+                            }
+                        }
+                        if (group.heldBack.isNotEmpty()) putJsonArray("holdsBackFx") {
+                            for (fx in group.heldBack) addJsonObject {
+                                put("fxId", fx.fxId)
+                                put("target", fx.fixtureKey)
+                                put("attribute", fx.attribute)
+                                put("paintsAt", fx.leaves)
+                            }
+                        }
+                    }
+                })
             }
 
             if ("cue_run" in include) {
@@ -809,6 +847,7 @@ class AiTools(private val state: State) {
                             frame.fadeElapsedMs?.let { put("fadeElapsedMs", it) }
                             put("autoAdvance", frame.autoAdvance)
                             frame.autoAdvanceDelayMs?.let { put("autoAdvanceDelayMs", it) }
+                            if (frame.releasedAtEnd) put("releasedAtEnd", true)
                             // The heads Move in dark is watching or holding now, for which entry.
                             val dark = state.show.moveInDark.statusOf(frame.stackId).values
                             if (dark.isNotEmpty()) putJsonArray("movesInDark") {
@@ -1315,7 +1354,7 @@ class AiTools(private val state: State) {
         val moveInDark = parseToolCueMoveInDark(input["moveInDark"], CueMoveInDarkSettings.DEFAULT)
             .getOrElse { return errorResult(it.message ?: "Invalid moveInDark") }
         var refusal: String? = null
-        var priorities = emptyMap<Int, Int>()
+        var priorities: StackEntryPositions = emptyMap()
         val created = transaction(state.database) {
             // Checked before the cue exists, so a refused placement writes nothing.
             val placement = stackId?.let { id -> placementIn(id, project, input) { refusal = it } ?: return@transaction null }
@@ -1330,7 +1369,7 @@ class AiTools(private val state: State) {
             replaceCueScenery(newCue, scenery)
             replaceCueEvents(newCue, events)
             val entry = placement?.let { placeCueInStack(it.stack, newCue, cueNumber = it.number, position = it.position) }
-            if (placement != null) priorities = stackEntryPriorities(placement.stack)
+            if (placement != null) priorities = stackEntryPositions(placement.stack)
             newCue.id.value to entry?.let { buildJsonObject { putEntry(it) } }
         } ?: return errorResult(refusal ?: "Cue stack $stackId not found")
         val (cueId, entry) = created
@@ -1682,13 +1721,21 @@ class AiTools(private val state: State) {
         val loop = input["loop"]?.jsonPrimitive?.booleanOrNull ?: false
         val moveInDark = parseToolMoveInDark(input["moveInDark"], MoveInDarkSettings.NEW_STACK)
             .getOrElse { return errorResult(it.message!!) }
+        val releaseTimeMs = toolReleaseTimeMs(input["releaseTimeMs"]).getOrElse { return errorResult(it.message!!) }
+        val run = CueStackRunSettings.resolve(
+            null, loop,
+            inRunningOrder = input["inRunningOrder"]?.jsonPrimitive?.booleanOrNull,
+            releaseAtEnd = input["releaseAtEnd"]?.jsonPrimitive?.booleanOrNull,
+            releaseTimeMs = releaseTimeMs,
+            overShow = input["overShow"]?.jsonPrimitive?.contentOrNull,
+        ).getOrElse { return errorResult(it.message!!) }
 
         val project = state.projectManager.currentProject
         val stack = transaction(state.database) {
             DaoCueStack.new {
                 this.name = name
                 this.project = project
-                this.loop = loop
+                runSettings = run
                 moveInDarkSettings = moveInDark
             }
         }
@@ -1697,11 +1744,15 @@ class AiTools(private val state: State) {
         val stackId = stack.id.value
         return ToolExecutionResult(
             success = true,
-            description = "Created cue stack '$name' (id=$stackId, loop=$loop)",
+            description = "Created ${if (run.inRunningOrder) "cue stack" else "busk stack"} '$name' (id=$stackId, loop=${run.loop}, releaseAtEnd=${run.releaseAtEnd})",
             result = buildJsonObject {
                 put("stackId", stackId)
                 put("name", name)
-                put("loop", loop)
+                put("loop", run.loop)
+                put("inRunningOrder", run.inRunningOrder)
+                put("releaseAtEnd", run.releaseAtEnd)
+                put("releaseTimeMs", run.releaseTimeMs)
+                put("overShow", run.overShow.name)
             }.toString()
         )
     }
@@ -1745,11 +1796,11 @@ class AiTools(private val state: State) {
         val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
 
         val manager = state.show.cueStackManager
-        val removedCount = manager.deactivateStack(stackId, state)
+        val removedCount = manager.stopStack(state, stackId)
 
         return ToolExecutionResult(
             success = true,
-            description = "Deactivated stack $stackId ($removedCount FX removed)",
+            description = "Stopped stack $stackId, fading over its release time ($removedCount FX removed)",
             result = buildJsonObject {
                 put("stackId", stackId)
                 put("removedCount", removedCount)
@@ -1775,12 +1826,17 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "Advanced stack $stackId ${directionStr.lowercase()} to cue '${result.cueName}' (${result.fxCount} FX)",
+            description = if (result.released) {
+                "Released stack $stackId: it went past its last cue and is stopping over its release time"
+            } else {
+                "Advanced stack $stackId ${directionStr.lowercase()} to cue '${result.cueName}' (${result.fxCount} FX)"
+            },
             result = buildJsonObject {
                 put("stackId", result.stackId)
                 put("cueId", result.cueId)
                 put("cueName", result.cueName)
                 put("fxCount", result.fxCount)
+                put("released", result.released)
             }.toString()
         )
     }
@@ -1870,15 +1926,20 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "GO on stack $stackId — " +
-                (if (wasActive) "fired" else "started at") +
-                " cue '${result.cueName}' (${result.fxCount} FX)",
+            description = if (result.released) {
+                "GO on stack $stackId — released stack $stackId: it went past its last cue and is stopping over its release time"
+            } else {
+                "GO on stack $stackId — " +
+                    (if (wasActive) "fired" else "started at") +
+                    " cue '${result.cueName}' (${result.fxCount} FX)"
+            },
             result = buildJsonObject {
                 put("stackId", result.stackId)
                 put("cueId", result.cueId)
                 put("cueName", result.cueName)
                 put("fxCount", result.fxCount)
                 put("started", !wasActive)
+                put("released", result.released)
             }.toString()
         )
     }
@@ -1889,7 +1950,7 @@ class AiTools(private val state: State) {
 
         val project = state.projectManager.currentProject
         var refusal: String? = null
-        var priorities = emptyMap<Int, Int>()
+        var priorities: StackEntryPositions = emptyMap()
         val added = transaction(state.database) {
             val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id }
                 ?: run { refusal = "Cue $cueId is not in the current project"; return@transaction null }
@@ -1897,7 +1958,7 @@ class AiTools(private val state: State) {
             // A new entry: a cue in another stack is shared, never moved (cue model plan D1).
             val entry = placeCueInStack(placement.stack, cue, cueNumber = placement.number, position = placement.position)
             // The positions after it moved, and a live cue's priority is its position.
-            priorities = stackEntryPriorities(placement.stack)
+            priorities = stackEntryPositions(placement.stack)
             cue.name to buildJsonObject { putEntry(entry) }
         } ?: return errorResult(refusal ?: "Failed to add cue $cueId to stack $stackId")
         announceEntriesPlaced(state, stackId, priorities)

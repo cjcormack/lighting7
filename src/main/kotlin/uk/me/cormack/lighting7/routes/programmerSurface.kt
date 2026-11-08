@@ -8,7 +8,8 @@ import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.buildCueApplyData
 import uk.me.cormack.lighting7.fx.CueApplyData
-import uk.me.cormack.lighting7.fx.stackEntryPriorities
+import uk.me.cormack.lighting7.fx.stackEntryPositions
+import uk.me.cormack.lighting7.fx.StackEntryPositions
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.CueStackType
@@ -118,7 +119,7 @@ internal fun performProgrammerRecord(
     data class Written(val outcome: CueWriteOutcome, val details: CueDetails, val entry: DaoCueStackEntry?)
 
     // A CREATE at a position shifts the entries after it, and a live cue's priority is its position.
-    var priorities = emptyMap<Int, Int>()
+    var priorities: StackEntryPositions = emptyMap()
     // A write into a cue keeps the entry it was included from, when it was (the indicator's number).
     val includedEntryId = state.show.programmerStore.lastIncludedTarget?.takeIf { it.cueId == cueId }?.entryId
     var refusal: EntryNumberRefusal? = null
@@ -150,7 +151,7 @@ internal fun performProgrammerRecord(
                 cueType = cueType,
                 registry = state.show.fxRegistry,
             )
-            if (stack != null) priorities = stackEntryPriorities(stack)
+            if (stack != null) priorities = stackEntryPositions(stack)
             val cue = DaoCue.findById(outcome.cueId)!!
             // After the cue exists, so what it would track is read at its own place in the list.
             val withScenery = outcome.withScenery(writeHeldSceneryIntoCue(cue, held, mode))

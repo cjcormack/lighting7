@@ -484,14 +484,28 @@ class Show(
                 }
             }
 
+            // Each stack's rank first, which the GOs keep rather than counting as an operator's (D5).
+            cueStackManager.holds.ranks.restore(carry.stackRanks.filterKeys { stackId -> carry.liveEntries.any { it.first == stackId } })
             for ((stackId, entryId) in carry.liveEntries) {
-                runCatching { cueStackManager.activateEntry(state, stackId, entryId, fireEvents = false, setTempo = false) }
+                runCatching { cueStackManager.activateEntry(state, stackId, entryId, fireEvents = false, setTempo = false, operator = false) }
                     .onFailure { logger.warn("Reload could not bring back entry {} on stack {}: {}", entryId, stackId, it.message) }
+            }
+            // A stack that could not come back keeps no rank.
+            for (stackId in carry.stackRanks.keys) {
+                if (!cueStackManager.isStackActive(stackId)) cueStackManager.applyRankChanges(cueStackManager.holds.ranks.remove(stackId))
             }
             // After the GOs, which consume a stack's standby. An entry the reload removed is refused.
             for ((stackId, entryId) in carry.standbys) {
                 runCatching { cueStackManager.runState.setStandby(state, stackId, entryId) }
                     .onFailure { logger.info("Reload could not re-arm entry {} on stack {}: {}", entryId, stackId, it.message) }
+            }
+            // And what a Release at the end left with nothing on deck, a stack the reload removed excepted.
+            for (stackId in carry.releasedAtEnd) {
+                if (cueStackManager.isStackActive(stackId) || cueStackManager.runState.getStandbyEntryId(stackId) != null) continue
+                val exists = transaction(state.database) { DaoCueStack.findById(stackId) != null }
+                if (!exists) continue
+                cueStackManager.runState.markReleasedAtEnd(stackId)
+                cueStackManager.runState.publishRunState(state, stackId)
             }
             // The loose holds, after the stacks and in press order, so the newest is on top again.
             for (cueId in carry.looseCues) {

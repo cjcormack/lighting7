@@ -79,6 +79,7 @@ export function ProjectCues() {
   const narrowed = useMemo(() => filterBeforeShow(library, view), [library, view])
   const shown = useMemo(() => cuesShown(library, view), [library, view])
   const counts = useMemo(() => showCounts(narrowed), [narrowed])
+  // Every stack, busk stacks included (busk-stack plan D4): the table lists cues of every stack.
   const runnable = useMemo(() => (stacks ?? []).filter((s) => s.type === 'STACK'), [stacks])
   const onlyCue = view.cue != null ? library.find((c) => c.id === view.cue) : undefined
 

@@ -76,6 +76,15 @@ class CueStackManager(
 
     private val activeStacks = ConcurrentHashMap<Int, ActiveStackState>()
 
+    /**
+     * Orders rank changes against each other (busk-stack plan P3): a GO taking its place against a
+     * release's end giving one up ([starting] are the stacks a GO is bringing on), and every restamp
+     * of what the moved stacks have on stage ([applyRankChanges]), which reads the places as they
+     * stand inside it so the last restamp is always of the latest ranks.
+     */
+    private val rankLock = Any()
+    private val starting = HashSet<Int>()
+
     /** The live-stack table as the run-state half reads it — a snapshot per stack. */
     private val liveStacks = object : LiveStacks {
         override fun liveStack(stackId: Int): LiveStack? = activeStacks[stackId]?.let {
@@ -111,16 +120,26 @@ class CueStackManager(
         }
 
     /** Layer 4 crossfade envelopes. Owns its own per-stack table — see [CueCrossfadeDriver]. */
-    private val crossfades = CueCrossfadeDriver(fxEngine)
+    private val crossfades = CueCrossfadeDriver(fxEngine).also { driver ->
+        // A stopped stack keeps its rank while its release fades (busk-stack plan §3 "Priority").
+        driver.onReleaseEnded = { stackId ->
+            // Not while a GO is bringing the stack back: that GO has just taken its place.
+            val moved = synchronized(rankLock) {
+                if (activeStacks.containsKey(stackId) || stackId in starting) null else holds.ranks.remove(stackId)
+            }
+            moved?.let(::applyRankChanges)
+        }
+    }
 
     /** What holds each cue live — stacks and loose presses alike. See [CueHolds]. */
     val holds: CueHolds = CueHolds(fxEngine, crossfades, projectId, holdsSink, onHoldsChanged, fxAligner)
+        .also { fxEngine.layerResolver.stackAt = it.ranks::stackAt }
 
     /**
      * Each stack's FX amount (effects plan D10): a runtime weight on the effects its cues run,
      * 100 % at load. Per show, so a project switch drops it; a reload carries it (`ShowCarry`).
      */
-    val fxAmounts: StackFxAmounts = StackFxAmounts().also { fxEngine.stackFxAmounts = it }
+    val fxAmounts: StackFxAmounts = StackFxAmounts(holds.ranks).also { fxEngine.stackFxAmounts = it }
 
     /**
      * Set [stackId]'s FX amount, 0–1, and answer it as held. Every change re-sends provenance —
@@ -160,17 +179,23 @@ class CueStackManager(
     /** [stackId] is deleted: its FX amount and its uuid's resolution go with it. */
     fun forgetStack(stackId: Int) {
         fxAmounts.forget(stackId)
+        runState.clearReleasedAtEnd(stackId)
         stackIdsByUuid.values.removeIf { it == stackId }
     }
 
     enum class AdvanceDirection { FORWARD, BACKWARD }
 
+    /**
+     * What a GO did. [released] when it went past the last cue entry of a stack set to Release
+     * (busk-stack plan D3), stopping it: [entryId] and [cueId] are then where it stood.
+     */
     data class ActivateResult(
         val stackId: Int,
         val entryId: Int,
         val cueId: Int,
         val cueName: String,
         val fxCount: Int,
+        val released: Boolean = false,
     )
 
     /**
@@ -189,6 +214,10 @@ class CueStackManager(
      * When both entries name the same cue (D7) nothing on stage moves, and the follow timer is the
      * incoming entry's. [fireEvents] false (GO BACK, a reload) fires no events (D15). [setTempo]
      * false (a reload) sets none of the cue's speed masters, which every other GO sets (S16, D20).
+     *
+     * [operator] false — a follow, a reload's re-GO — keeps the stack's rank in its band; every other
+     * GO is an operator's, and takes the top of it (busk-stack plan D5). Refused with
+     * [CueStackLimitException] when the band is full.
      */
     fun activateEntry(
         state: State,
@@ -197,14 +226,18 @@ class CueStackManager(
         scope: CoroutineScope = GlobalScope,
         fireEvents: Boolean = true,
         setTempo: Boolean = true,
+        operator: Boolean = true,
     ): ActivateResult {
         val started = System.nanoTime()
         return Tracing.transaction(TraceSampling.OP_CUE_GO, "cue.go") { span ->
             span?.setData("cue.stack_id", stackId)
             span?.setData("cue.entry_id", entryId)
-            activate(state, stackId, entryId, scope, fireEvents, setTempo)
+            activate(state, stackId, entryId, scope, fireEvents, setTempo, operator)
         }.also { DeskMetrics.global.cueGo.record((System.nanoTime() - started) / 1_000_000.0) }
     }
+
+    /** What a GO reads of its stack beside the cue: its band, and whether it replaces the show. */
+    private data class StackGo(val band: StackRanks.Band, val replaces: Boolean)
 
     private fun activate(
         state: State,
@@ -213,8 +246,9 @@ class CueStackManager(
         scope: CoroutineScope,
         fireEvents: Boolean,
         setTempo: Boolean,
+        operator: Boolean,
     ): ActivateResult {
-        val (cueData, moveInDarkGo) = transaction(state.database) {
+        val (cueData, moveInDarkGo, stackGo) = transaction(state.database) {
             val stack = DaoCueStack.findById(stackId)
                 ?: throw IllegalArgumentException("Cue stack not found: $stackId")
             if (stack.type == CueStackType.SEPARATOR.name) {
@@ -229,12 +263,46 @@ class CueStackManager(
             // The one builder — see `buildCueApplyData`.
             val settings = stack.moveInDarkSettings
             val active = settings.on || anyCueMovesOnItsOwn(runState.orderedCueEntries(stackId).map { it.cueId })
-            buildCueGoData(cue, entry) to MoveInDarkService.Go(settings, cue.moveInDarkSettings, active)
+            Triple(
+                buildCueGoData(cue, entry),
+                MoveInDarkService.Go(settings, cue.moveInDarkSettings, active),
+                StackGo(StackRanks.bandOf(stack.inRunningOrder), stack.replacesShow),
+            )
         }
 
+        // Its place first, so a full band refuses the GO before anything moves.
+        val moved = synchronized(rankLock) {
+            (if (operator) holds.ranks.takeTop(stackId, stackGo.band) else holds.ranks.keep(stackId, stackGo.band))
+                .also { starting += stackId }
+        }
+        try {
+            return activatePlaced(state, stackId, entryId, scope, fireEvents, setTempo, cueData, moveInDarkGo, stackGo, moved)
+        } catch (e: Exception) {
+            // A GO that failed before the stack was live leaves it nowhere.
+            if (!activeStacks.containsKey(stackId) && !crossfades.isReleasing(stackId)) applyRankChanges(holds.ranks.remove(stackId))
+            throw e
+        } finally {
+            synchronized(rankLock) { starting -= stackId }
+        }
+    }
+
+    private fun activatePlaced(
+        state: State,
+        stackId: Int,
+        entryId: Int,
+        scope: CoroutineScope,
+        fireEvents: Boolean,
+        setTempo: Boolean,
+        cueData: CueApplyData,
+        moveInDarkGo: MoveInDarkService.Go,
+        stackGo: StackGo,
+        moved: Map<Int, StackRanks.Place>,
+    ): ActivateResult {
         // Cancel any in-progress crossfade for this stack — the driver drops the abandoned
         // outgoing cue's Layer 4 rows unless a hold has it again, so the new activation starts clean.
         crossfades.cancel(stackId, holds::isHeld, returning = cueData.cueId)
+        // Then every stack the GO moved, this one's live entry among them, composes at its new place.
+        applyRankChanges(moved)
         val existingState = activeStacks[stackId]
         existingState?.autoAdvanceJob?.cancel()
 
@@ -264,7 +332,7 @@ class CueStackManager(
             ?.activeCueId
 
         // Move in dark's contributor goes above the incoming cue before it arrives.
-        val goPriority = cueDerivedPriority(cueData)
+        val goPriority = stackPriority(holds.ranks.placeOf(stackId), cueData.sortOrder)
         moveInDark?.beforeGo(stackId, entryId, goPriority, moveInDarkGo)
         // The incoming entry's hold first, then the outgoing's: a GO between two entries of one cue
         // then never lets it go, and nothing on stage moves.
@@ -273,6 +341,7 @@ class CueStackManager(
             arrival = if (useCrossfade) CueHolds.Arrival.FADE_IN else CueHolds.Arrival.SNAP,
             scope = scope, fireEvents = fireEvents, stackTag = stackId,
             fadeMs = fadeDurationMs, curve = easingCurve, adoptFrom = leavingCueId,
+            replaces = stackGo.replaces,
         )
         // Tempo is state the cue re-asserts on every GO into it, held elsewhere or not (D20).
         if (setTempo) fxEngine.speedMasters.setCueTempos(cueData.cueLabel, cueData.goSpeedMasters)
@@ -307,6 +376,7 @@ class CueStackManager(
             fadeStartedAtMs = if (incomingFades || outgoingFades) System.currentTimeMillis() else null,
         )
         runState.consumeStandby(stackId)
+        runState.clearReleasedAtEnd(stackId)
         moveInDark?.afterGo(stackId, entryId, cueData.cueId, if (incomingFades || outgoingFades) fadeDurationMs else 0L, cueData.cueLabel)
 
         if (incomingFades || outgoingFades) {
@@ -350,7 +420,9 @@ class CueStackManager(
      * and the MIDI surface's GO fires the same entry the tablet has on deck.
      *
      * Only cue entries are candidates — markers are skipped. Respects the stack's loop setting. If
-     * at the end and not looping, stays on the current entry. BACKWARD fires no events (D15).
+     * at the end and not looping, stays on the current entry, or — FORWARD on a stack set to Release
+     * (busk-stack plan D3) — stops it as [stopStack] does, answering [ActivateResult.released]. BACKWARD
+     * fires no events (D15).
      *
      * @return The result of activating the next entry, or null if the stack has no cue entries
      */
@@ -359,11 +431,13 @@ class CueStackManager(
         stackId: Int,
         direction: AdvanceDirection,
         scope: CoroutineScope = GlobalScope,
+        /** False for a follow, which keeps the stack's rank ([activateEntry]). */
+        operator: Boolean = true,
     ): ActivateResult? {
         val currentState = activeStacks[stackId]
             ?: throw IllegalStateException("Stack $stackId is not active")
 
-        val next = transaction(state.database) {
+        val (target, release) = transaction(state.database) {
             val stack = DaoCueStack.findById(stackId)
                 ?: throw IllegalArgumentException("Cue stack not found: $stackId")
 
@@ -372,8 +446,8 @@ class CueStackManager(
 
             // FORWARD is the shared "next" rule — armed standby, else positional — so a GO
             // fires exactly the entry every session has on deck. At a boundary of a non-looping
-            // stack, stay on the current entry.
-            when (direction) {
+            // stack, stay on the current entry, or release a stack set to.
+            val found = when (direction) {
                 AdvanceDirection.FORWARD -> runState.nextFrom(
                     activeEntryId = currentState.activeEntryId,
                     stackId = stackId,
@@ -385,8 +459,23 @@ class CueStackManager(
                     ordered, currentState.activeEntryId, direction, stack.loop,
                     runState.detachedIndex(stackId, currentState.detachedAt),
                 )
-            } ?: CueEntryRef(currentState.activeEntryId, currentState.activeCueId)
+            }
+            found to (found == null && direction == AdvanceDirection.FORWARD && stack.releaseAtEnd)
         } ?: return null
+
+        if (release) {
+            val cueName = transaction(state.database) { DaoCue.findById(currentState.activeCueId)?.name ?: "Unknown" }
+            stop(state, stackId, scope, atEnd = true)
+            return ActivateResult(
+                stackId = stackId,
+                entryId = currentState.activeEntryId,
+                cueId = currentState.activeCueId,
+                cueName = cueName,
+                fxCount = 0,
+                released = true,
+            )
+        }
+        val next = target ?: CueEntryRef(currentState.activeEntryId, currentState.activeCueId)
 
         // Already on this entry — no-op
         if (next.entryId == currentState.activeEntryId) {
@@ -401,7 +490,7 @@ class CueStackManager(
             )
         }
 
-        return activateEntry(state, stackId, next.entryId, scope, fireEvents = direction == AdvanceDirection.FORWARD)
+        return activateEntry(state, stackId, next.entryId, scope, fireEvents = direction == AdvanceDirection.FORWARD, operator = operator)
     }
 
     /**
@@ -426,7 +515,7 @@ class CueStackManager(
      * button, and a second copy of "active ? advance : activate" is a show where they disagree.
      *
      * @return null only when the stack holds no cue entries — at the end of a non-looping stack
-     *   [advanceStack] stays on the live entry and returns it. Nothing here deactivates a stack.
+     *   [advanceStack] stays on the live entry and returns it, or releases a stack set to Release.
      * @throws IllegalArgumentException if a stopped stack has no cue entries to start at.
      */
     fun go(state: State, stackId: Int, scope: CoroutineScope = GlobalScope): ActivateResult? =
@@ -457,8 +546,9 @@ class CueStackManager(
     }
 
     /**
-     * Deactivate a stack — let its live entry's hold go and clean up state. The cue comes off only
-     * if no other hold keeps it live (D3).
+     * Deactivate a stack at once — let its live entry's hold go and clean up state. The cue comes off
+     * only if no other hold keeps it live (D3). A release in flight is cut short. The stop an operator
+     * makes is [stopStack]; this is a delete's, an undo's, and the show's advance and go-to.
      *
      * @return Number of effects removed
      */
@@ -468,10 +558,126 @@ class CueStackManager(
         // Cancelling also drops the mid-flight crossfade's outgoing assignments, if no hold has them.
         crossfades.cancel(stackId, holds::isHeld)
 
-        var removed = stackState?.let {
+        val removed = stackState?.let {
             holds.release(appState, it.activeCueId, CueHold.Stack(stackId, it.activeEntryId), CueHolds.Departure.SNAP).fxRemoved
         } ?: 0
-        removed += fxEngine.removeFxForCueStack(stackId)
+        applyRankChanges(holds.ranks.remove(stackId))
+        return removed + afterStop(appState, stackId)
+    }
+
+    /**
+     * Stop [stackId] as an operator does (busk-stack plan D6): it reads stopped at once, and the cues
+     * it had on stage — its live cue and, mid-crossfade, the cue that fade was taking out — fade from
+     * the weight they stood at to 0 over its release time, or stay at full where another hold keeps
+     * them. A stack already stopped and still releasing is left to finish. A release time of 0 is
+     * [deactivateStack]'s snap.
+     *
+     * @return Number of effects removed
+     */
+    fun stopStack(state: State, stackId: Int, scope: CoroutineScope = GlobalScope): Int = stop(state, stackId, scope, atEnd = false)
+
+    private fun stop(state: State, stackId: Int, scope: CoroutineScope, atEnd: Boolean): Int {
+        if (!activeStacks.containsKey(stackId)) {
+            return if (crossfades.isReleasing(stackId)) 0 else deactivateStack(stackId, state)
+        }
+        val releaseMs = transaction(state.database) { DaoCueStack.findById(stackId)?.releaseTime?.toMillis() } ?: 0L
+        if (atEnd) runState.markReleasedAtEnd(stackId)
+        if (releaseMs <= 0) return deactivateStack(stackId, state)
+        val stackState = activeStacks.remove(stackId) ?: return 0
+        // A follow releasing the stack runs in this job, past its last suspension: cancelling it is harmless.
+        stackState.autoAdvanceJob?.cancel()
+        val inFlight = crossfades.detach(stackId)
+        val curve = EasingCurve.LINEAR
+        val cueLayer = fxEngine.cueLayer
+
+        val fromWeights = HashMap<Int, Double>()
+        val liveCueId = stackState.activeCueId
+        val liveFrom = cueLayer.fadeWeightOf(liveCueId)
+        val released = holds.release(
+            state, liveCueId, CueHold.Stack(stackId, stackState.activeEntryId), CueHolds.Departure.RELEASE,
+            fadeMs = releaseMs, curve = curve,
+        )
+        // An effects-only cue is held in the release too, though it has no rows to ramp: its effects
+        // shrink over the same time, and the stack must keep its rank until they have.
+        if (released.last) {
+            if (released.fadingRows || released.fadingFx > 0) fromWeights[liveCueId] = liveFrom
+        } else {
+            pinAtFull(liveCueId)
+        }
+        // What the GO fade was taking out keeps going out from where it stands, its leaving FX re-ramped
+        // to the release time so rows and FX go together; a hold that has it again keeps it at full.
+        inFlight?.outgoingCueId?.let { cueId ->
+            when {
+                holds.isHeld(cueId) -> pinAtFull(cueId)
+                cueLayer.hasAssignments(cueId) || fxEngine.leavingCueFx(cueId).isNotEmpty() ->
+                    fromWeights[cueId] = cueLayer.fadeWeightOf(cueId)
+            }
+            if (!holds.isHeld(cueId)) {
+                fxEngine.fadeOutFx(fxEngine.leavingCueFx(cueId), releaseMs, curve)
+            }
+        }
+        // The stack keeps its rank while its release fades, and gives it up when the release ends.
+        if (fromWeights.isNotEmpty()) {
+            crossfades.startRelease(stackId, fromWeights, releaseMs, curve, scope)
+        } else {
+            applyRankChanges(holds.ranks.remove(stackId))
+        }
+        return released.fxRemoved + afterStop(state, stackId)
+    }
+
+    /**
+     * [stackId] has joined the running order ([inRunningOrder]) or left it: while it runs or releases
+     * it takes the top of its new band (busk-stack plan P3). A full band leaves it where it is, logged.
+     */
+    fun onBandChanged(stackId: Int, inRunningOrder: Boolean) {
+        val place = holds.ranks.placeOf(stackId) ?: return
+        val band = StackRanks.bandOf(inRunningOrder)
+        if (place.band == band) return
+        try {
+            applyRankChanges(holds.ranks.takeTop(stackId, band))
+        } catch (e: CueStackLimitException) {
+            logger.warn("stack {}: {}", stackId, e.message)
+        }
+    }
+
+    /**
+     * The stacks in [moved] compose at their new places (busk-stack plan P3): their holds, then what a
+     * crossfade or a release of theirs still has fading — rows and leaving effects alike, at the same
+     * entry position in the new rank — so a fading cue never lands in a rank another stack now holds;
+     * then Move in dark's contributors.
+     */
+    internal fun applyRankChanges(changed: Map<Int, StackRanks.Place>) {
+        if (changed.isEmpty()) return
+        synchronized(rankLock) { restampAtPlaces(changed.keys) }
+    }
+
+    /** [applyRankChanges]'s body, at each stack's place now, under [rankLock]. A stack with none has gone. */
+    private fun restampAtPlaces(stackIds: Set<Int>) {
+        val moved = stackIds.mapNotNull { id -> holds.ranks.placeOf(id)?.let { id to it } }.toMap()
+        if (moved.isEmpty()) return
+        holds.restampStacks(moved)
+        val fading = HashMap<Int, Int>()
+        for ((stackId, place) in moved) {
+            for (cueId in crossfades.fadingCuesOf(stackId)) {
+                if (holds.isHeld(cueId)) continue
+                val priority = fxEngine.cueLayer.publishedPriorityOf(cueId)
+                    ?: fxEngine.leavingCueFx(cueId).firstOrNull()?.priority
+                    ?: continue
+                fading[cueId] = rebasedPriority(priority, place)
+            }
+        }
+        fxEngine.repriorityCues(fading)
+        moveInDark?.onStacksMoved(moved)
+    }
+
+    private fun pinAtFull(cueId: Int) {
+        fxEngine.cueLayer.updateFadeWeights(mapOf(cueId to 1.0))
+        fxEngine.settleFx(fxEngine.cueFx(cueId))
+    }
+
+    /** What every stop does once the stack's own cues are let go: its cue-less FX, standby, scenery and the arm. */
+    private fun afterStop(appState: State, stackId: Int): Int {
+        val removed = fxEngine.removeFxForCueStack(stackId)
         moveInDark?.onStackStopped(stackId)
         // A stopped stack has nothing on deck: the standby went with it. Published after the
         // teardown so the frame describes the stack as it now is.
@@ -561,7 +767,7 @@ class CueStackManager(
         activeStacks[stackId]?.autoAdvanceJob = scope.launch {
             delay(delayMs)
             try {
-                advanceStack(state, stackId, AdvanceDirection.FORWARD, scope)
+                advanceStack(state, stackId, AdvanceDirection.FORWARD, scope, operator = false)
             } catch (e: Exception) {
                 // Stack may have been deactivated or cue deleted
                 logger.warn("stack {}: auto-advance failed — {}", stackId, e.message)
@@ -578,6 +784,9 @@ class CueStackManager(
      * Check if a stack is active.
      */
     fun isStackActive(stackId: Int): Boolean = activeStacks.containsKey(stackId)
+
+    /** Whether [stackId] is stopped with its release still fading ([stopStack]). */
+    fun isReleasing(stackId: Int): Boolean = !isStackActive(stackId) && crossfades.isReleasing(stackId)
 
     // ─── Private helpers ─────────────────────────────────────────────────
 

@@ -166,7 +166,7 @@ class ProjectRoundTripTest {
             if (!path.endsWith(".json")) continue
             for (name in old) assertTrue(name !in text, "$path says $name")
         }
-        assertEquals(FormatVersionJson(formatVersion = 49, minReader = 49), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+        assertEquals(FormatVersionJson(formatVersion = 51, minReader = 51), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
     }
 
     /**
@@ -266,6 +266,42 @@ class ProjectRoundTripTest {
         assertTrue(
             valueDocs.none { it.contains("\"fx\"") },
             "a value palette must not carry the fx key at all",
+        )
+    }
+
+    /**
+     * A busk stack (busk-stack plan D1, D3, D6; formatVersion 50) travels with its run settings, and an
+     * archive's stack naming none reads as one in the running order, staying at its end, at 2 s.
+     */
+    @Test
+    fun `a busk stack's run settings export and import`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        val stacks = Files.walk(exportDirA.resolve("cueStacks")).use { stream ->
+            stream.toList().filter { Files.isRegularFile(it) && it.toString().endsWith(".json") }
+                .map { canonicalDecode(uk.me.cormack.lighting7.sync.dto.CueStackJson.serializer(), Files.readString(it)) }
+        }
+        val song = stacks.single { it.name == "song-1" }
+        assertEquals(false, song.inRunningOrder)
+        assertEquals(true, song.releaseAtEnd)
+        assertEquals(3000, song.releaseTimeMs)
+        assertEquals("REPLACES", song.overShow)
+        val show = stacks.single { it.name == "show-1" }
+        assertEquals(true, show.inRunningOrder)
+        assertEquals(false, show.releaseAtEnd)
+        assertEquals(2000, show.releaseTimeMs)
+        assertEquals("ADDS", show.overShow)
+
+        val format = canonicalDecode(
+            uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
+            Files.readString(exportDirA.resolve("formatVersion.json")),
+        )
+        assertTrue(format.minReader >= 51, "a v50 reader, which would run a replacing stack as one that adds, refuses it")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 51)
+        assertEquals(
+            uk.me.cormack.lighting7.sync.dto.CueStackJson(uuid = "x", name = "Old"),
+            canonicalDecode(uk.me.cormack.lighting7.sync.dto.CueStackJson.serializer(), """{"uuid":"x","name":"Old"}"""),
+            "an older archive's stack reads with the defaults",
         )
     }
 

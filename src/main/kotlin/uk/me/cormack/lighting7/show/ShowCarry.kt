@@ -29,8 +29,15 @@ class ShowCarry internal constructor(
     val liveEntries: List<Pair<Int, Int>>,
     /** Each armed standby, stack → entry, to arm again after the GOs (which consume it). */
     val standbys: Map<Int, Int>,
+    /** The stacks a Release at the end stopped, which have nothing on deck until their next start (busk-stack plan D3). */
+    val releasedAtEnd: Set<Int>,
     /** Each stack's FX amount below full (effects plan D10), set before the GOs so their effects arrive weighed. */
     val stackFxAmounts: Map<Int, Double>,
+    /**
+     * Each live stack's band and rank (busk-stack plan D5), restored before the GOs so the stacks
+     * compose in the order the operator last GO'd them, whatever order the GOs run in.
+     */
+    val stackRanks: Map<Int, uk.me.cormack.lighting7.fx.StackRanks.Place>,
     /** The loosely held cues, oldest press first, to take again in that order (cue model plan §3.4). */
     val looseCues: List<Int>,
     /** The programmer itself — values, layers, sideband, Blind — handed over whole. */
@@ -61,7 +68,10 @@ class ShowCarry internal constructor(
                 show.cueStackManager.getActiveEntryId(stackId)?.let { stackId to it }
             },
             standbys = show.cueStackManager.runState.armedStandbys(),
+            releasedAtEnd = show.cueStackManager.runState.releasedAtEndStacks(),
             stackFxAmounts = show.cueStackManager.fxAmounts.snapshot(),
+            stackRanks = show.cueStackManager.holds.ranks.snapshot()
+                .filterKeys { show.cueStackManager.isStackActive(it) },
             looseCues = show.cueStackManager.holds.looseCueIdsInPressOrder(),
             programmerStore = show.programmerStore,
             locateManager = show.locateManager,

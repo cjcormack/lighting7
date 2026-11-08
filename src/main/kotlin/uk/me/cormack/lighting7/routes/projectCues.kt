@@ -20,7 +20,8 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.fx.stackEntryPriorities
+import uk.me.cormack.lighting7.fx.stackEntryPositions
+
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 import java.time.Duration
@@ -91,7 +92,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 return@withCurrentProject call.respondCueMoveInDarkInvalid(it)
             }
             // An insert shifts the positions after it, and a live cue's priority is its position.
-            var priorities = emptyMap<Int, Int>()
+            var priorities: StackEntryPositions = emptyMap()
             var refusal: EntryNumberRefusal? = null
             var placed = NewEntryNumberPlan.Place(null, newCue.sortOrder)
             val result = transaction(state.database) {
@@ -136,7 +137,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                         autoAdvance = newCue.autoAdvance,
                         autoAdvanceDelay = newCue.autoAdvanceDelayMs.asDuration(),
                     )
-                    priorities = stackEntryPriorities(stack)
+                    priorities = stackEntryPositions(stack)
                 }
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures, references = state.show.paletteReferences) to null
             }
@@ -418,7 +419,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             { p -> "Cannot duplicate cues in project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val request = call.receive<DuplicateCueRequest>()
-            var priorities = emptyMap<Int, Int>()
+            var priorities: StackEntryPositions = emptyMap()
             var notFound = false
             val result = transaction(state.database) {
                 val source = DaoCue.findById(resource.cueId)?.takeIf { it.project.id == project.id }
@@ -443,7 +444,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                         autoAdvanceDelay = from?.autoAdvanceDelay,
                     )
                 }
-                if (stack != null) priorities = stackEntryPriorities(stack)
+                if (stack != null) priorities = stackEntryPositions(stack)
                 DuplicateCueResponse(
                     cueId = copy.id.value,
                     name = copy.name,
@@ -478,11 +479,11 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             { p -> "Cannot copy cues into project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val request = call.receive<CopyCuesFromRequest>()
-            var priorities = emptyMap<Int, Int>()
+            var priorities: StackEntryPositions = emptyMap()
             val outcome = transaction(state.database) {
                 copyCuesFrom(state, project, request).also { outcome ->
                     if (outcome is CopyCuesOutcome.Copied && !request.dryRun) outcome.response.stackId
-                        ?.let { priorities = stackEntryPriorities(DaoCueStack[it]) }
+                        ?.let { priorities = stackEntryPositions(DaoCueStack[it]) }
                     if (outcome !is CopyCuesOutcome.Copied || request.dryRun) rollback()
                 }
             }

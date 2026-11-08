@@ -59,8 +59,8 @@ class BuildCueAssignmentsForCueTest {
         assertEquals(false, a.targetIsGroup)
         val v = assertIs<CueAssignmentResolver.AttributeValue.Slider>(a.value)
         assertEquals(180u.toUByte(), v.value)
-        // Priority = cueStackId*1M + sortOrder*1K + 1 = 3_002_001
-        assertEquals(3_002_001, a.priority)
+        // No stack running: the top of the show's band, rank 1, then the entry's position.
+        assertEquals(1_002_001, a.priority)
     }
 
     @Test

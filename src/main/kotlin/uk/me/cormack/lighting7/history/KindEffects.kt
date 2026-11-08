@@ -5,7 +5,8 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.show.DbFixtureLoader
-import uk.me.cormack.lighting7.fx.stackEntryPriorities
+import uk.me.cormack.lighting7.fx.stackEntryPositions
+import uk.me.cormack.lighting7.fx.StackEntryPositions
 import uk.me.cormack.lighting7.models.DaoFxDefinition
 import uk.me.cormack.lighting7.models.DaoFxDefinitions
 import uk.me.cormack.lighting7.models.HideKind
@@ -87,7 +88,7 @@ internal object KindEffects {
         val rigKeys = touched(*RecordFolders.RIG.toTypedArray())
         val reach = rigKeys.associateWith { rigReach(it, before[it], after[it]) }
         val rebuilt = RigReach.REBUILD in reach.values
-        class Rows(val cueIds: Map<UUID, Int>, val stacks: List<Pair<Int, Map<Int, Int>>>, val patchKeys: Set<String>)
+        class Rows(val cueIds: Map<UUID, Int>, val stacks: List<Pair<Int, StackEntryPositions>>, val patchKeys: Set<String>)
         val rows = transaction(state.database) {
             // The units a patch or override the undo moved stands for, by key, whether it put them back or took them away.
             val overridden = touched(RecordFolders.SHOW_OVERRIDES).flatMap(::images).mapNotNullTo(HashSet()) { it.uuidField("recordUuid") }
@@ -96,7 +97,7 @@ internal object KindEffects {
                     DaoCue.find { DaoCues.uuid eq uuid }.firstOrNull { it.project.id.value == projectId }?.let { uuid to it.id.value }
                 }.toMap(),
                 stacks = stackUuids.mapNotNull { uuid -> DaoCueStack.find { DaoCueStacks.uuid eq uuid }.firstOrNull { it.project.id.value == projectId } }
-                    .map { it.id.value to (if (current) stackEntryPriorities(it) else emptyMap()) },
+                    .map { it.id.value to (if (current) stackEntryPositions(it) else emptyMap()) },
                 patchKeys = touched(RecordFolders.FIXTURE_PATCHES).flatMap(::images).mapNotNullTo(HashSet()) { it.stringField("key") } +
                     (if (overridden.isEmpty()) emptySet() else RigScope.of(DaoProject[projectId]).patches().filter { it.uuid in overridden }.map { it.key }),
             )

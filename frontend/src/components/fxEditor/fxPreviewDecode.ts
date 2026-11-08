@@ -23,7 +23,7 @@ export interface DecodedFxOutput {
   /** An index into the answer's `fx`. */
   fx: number
   output: DecodedSeries
-  heldBackReason: 'STOMP' | 'PROGRAMMER' | 'BLIND' | null
+  heldBackReason: 'STOMP' | 'PROGRAMMER' | 'BLIND' | 'REPLACED' | null
 }
 
 export interface DecodedAttributeRow {

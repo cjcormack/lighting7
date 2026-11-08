@@ -228,3 +228,6 @@ nothing stored); a Look on or off takes one, as a busk press does. There is no u
 (`api/oscWsApi.ts` keeps the latest frame, since the snapshot arrives on connect); an admin also sees
 *Enable*, the port, the interface and the senders with their *Replies* box, from `GET /install/osc`
 (`store/osc.ts`). The status names each transport listening: *Listening on UDP and TCP 8415*.
+*Enable* and *Disable* save the stored document with only the switch flipped, so a half-typed draft
+never goes live; the draft is kept through them, each field following the stored document only where
+it has not been edited, and *Save* sends it.

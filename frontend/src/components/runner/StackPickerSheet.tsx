@@ -40,6 +40,7 @@ export function StackPickerSheet({
             </div>
           ) : (
             stacks.map((stack) => {
+              // Every stack is listed, busk stacks included (busk-stack plan D4); only a separator is not one.
               if (stack.type === 'SEPARATOR') {
                 return (
                   <div

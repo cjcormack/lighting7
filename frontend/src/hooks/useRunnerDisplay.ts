@@ -18,7 +18,7 @@ import type { ShowBarState } from './useShowBarProps'
  * that hook's docblock exists to end. The caller holds one bar-props instance per route and hands
  * it in.
  *
- * Memoised on the eight inputs and not on `transport`, which is a fresh object literal every render:
+ * Memoised on the ten inputs and not on `transport`, which is a fresh object literal every render:
  * a host re-rendering per fade frame would otherwise hand `RunMobile` a new object 60×/s.
  */
 export function useRunnerDisplay({
@@ -27,10 +27,10 @@ export function useRunnerDisplay({
   standbyCue,
   nextStack,
 }: Pick<ShowBarState, 'transport' | 'activeCue' | 'standbyCue' | 'nextStack'>): RunnerDisplayState {
-  const { activeCueId, standbyCueId, activeEntryId, standbyEntryId, completedCueIds } = transport
+  const { activeCueId, standbyCueId, activeEntryId, standbyEntryId, completedCueIds, nothingOnDeck, goReleases } = transport
   return useMemo(
-    () => ({ activeCue, standbyCue, nextStack, activeCueId, standbyCueId, activeEntryId, standbyEntryId, completedCueIds }),
-    [activeCue, standbyCue, nextStack, activeCueId, standbyCueId, activeEntryId, standbyEntryId, completedCueIds],
+    () => ({ activeCue, standbyCue, nextStack, activeCueId, standbyCueId, activeEntryId, standbyEntryId, completedCueIds, nothingOnDeck, goReleases }),
+    [activeCue, standbyCue, nextStack, activeCueId, standbyCueId, activeEntryId, standbyEntryId, completedCueIds, nothingOnDeck, goReleases],
   )
 }
 

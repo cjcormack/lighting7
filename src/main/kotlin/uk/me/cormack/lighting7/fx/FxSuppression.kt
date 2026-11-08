@@ -45,6 +45,10 @@ object FxSuppression {
      * Why [effect] does not paint `(fixtureKey, attribute)`, or null when it does: [isSuppressed]'s
      * two reasons and [BlindHold], asked in [KeyStackLayer.HeldBackReason]'s order, so the reason never
      * disagrees with the answer the compose pass acts on. Read by the property-stack read and the sampler.
+     *
+     * Last, [KeyStackLayer.HeldBackReason.REPLACED] while a replacing stack above leaves it less than
+     * full ([replacedWeight], busk-stack plan D8) — unlike the others a weight, not a switch: the effect
+     * paints at that share, and none at 0.
      */
     fun heldBackReason(
         held: Map<String, Set<String>>,
@@ -53,10 +57,12 @@ object FxSuppression {
         attribute: String,
         effect: FxInstance,
         isLayerStomped: (FxInstance, String, String) -> Boolean,
+        replacedWeight: Double = 1.0,
     ): KeyStackLayer.HeldBackReason? = when {
         isLayerStomped(effect, fixtureKey, attribute) -> KeyStackLayer.HeldBackReason.STOMP
         heldBackByProgrammer(held, fixtureKey, attribute, effect.priority) -> KeyStackLayer.HeldBackReason.PROGRAMMER
         BlindHold.holds(blind, effect) -> KeyStackLayer.HeldBackReason.BLIND
+        replacedWeight < 1.0 -> KeyStackLayer.HeldBackReason.REPLACED
         else -> null
     }
 
