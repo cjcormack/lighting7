@@ -262,7 +262,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 50`, `minReader = 50`. Rules for future
+Current writer emits `formatVersion = 51`, `minReader = 51`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -449,6 +449,18 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 51 — Over the show
+
+A busk stack's *Over the show* (busk-stack plan D7; `docs/lighting-composition-model.md` §"Replacing
+stacks"): `CueStackJson` gains `overShow`, `ADDS | REPLACES` (default `ADDS`).
+`SUPPORTED_FORMAT_VERSION = 51`, `MIN_SUPPORTED_FORMAT_VERSION` stays 5, and **`minReader` moves to 51**
+with the writer: a v50 reader would run a replacing stack as one that adds and push it back so. An
+older archive's stack adds. Imported as stored, but for Replaces on a stack in the running order, or a
+value the desk does not know, which read as Adds, so a stored stack always satisfies the write
+boundary. `RichProjectFixture`'s busk stack is on Replaces. A project with no replacing stack exports
+byte-for-byte as at v50 (only `formatVersion.json` says 51). The stacks' ranks are runtime and never
+synced.
 
 ### Version 50 — Busk stacks
 

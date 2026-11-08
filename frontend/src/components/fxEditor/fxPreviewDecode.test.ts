@@ -59,12 +59,23 @@ describe('decoding the preview', () => {
             },
           ],
         },
+        {
+          family: 'COLOUR',
+          attributes: [
+            {
+              attribute: 'uv',
+              kind: 'SLIDER',
+              rows: [attributeRow(0, levelSeries([5]), { fx: [{ fx: 0, output: levelSeries([6]), heldBackReason: 'REPLACED' }] })],
+            },
+          ],
+        },
         { family: 'SOMETHING', attributes: [] },
       ],
     })
     const decoded = decodePreview(answer)
+    expect(decoded.lanes[1].attributes[0].byRow.get(0)!.fx[0]).toMatchObject({ heldBackReason: 'REPLACED' })
     expect(decoded.samples).toBe(4)
-    expect(decoded.lanes.map((l) => l.family)).toEqual(['INTENSITY', null])
+    expect(decoded.lanes.map((l) => l.family)).toEqual(['INTENSITY', 'COLOUR', null])
     const dimmer = decoded.lanes[0].attributes[0]
     expect(dimmer.byRow.has(0)).toBe(false)
     const second = dimmer.byRow.get(1)!

@@ -7,7 +7,7 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 import { lightingApi } from '@/api/lightingApi'
 import type { KeyStackAnswer, KeyStackLayer } from '@/api/programmerWsApi'
 import { FixtureSheetContext, type FixtureSheetContextValue } from './sheetContext'
-import { describeStackLayer, formatAge, LayerStack } from './LayerStack'
+import { describeStackLayer, formatAge, heldByYourValue, LayerStack } from './LayerStack'
 
 const cueLabel = (id: number) => (id === 12 ? 'Q12' : undefined)
 
@@ -48,6 +48,10 @@ describe('describeStackLayer', () => {
     expect(describeStackLayer(layer({ kind: 'FX', cueId: 12, heldBack: true, heldBackReason: 'STOMP' }), cueLabel).detail).toContain(
       'a layer above stomps it',
     )
+    // A replacing busk stack's hold is its own, and Clear yours is not offered over it.
+    const replaced = layer({ kind: 'FX', cueId: 12, heldBack: true, heldBackReason: 'REPLACED' })
+    expect(describeStackLayer(replaced, cueLabel).detail).toContain('a replacing stack holds it; it resumes in phase as that stack fades')
+    expect(heldByYourValue(replaced)).toBe(false)
     // An older desk sends no reason: what it held back, your value held back.
     expect(describeStackLayer(layer({ kind: 'FX', cueId: 12, heldBack: true }), cueLabel).detail).toContain('your value holds it back')
     expect(describeStackLayer(layer({ heldBack: false }), cueLabel).detail).toBe('programmer FX')

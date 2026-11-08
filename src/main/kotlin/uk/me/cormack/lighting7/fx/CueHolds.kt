@@ -49,9 +49,11 @@ sealed interface CueHold {
  *   (stack-timeline plan D7, D8).
  * - A cue brought on again while its fade-out is still running keeps its fading instances and takes
  *   them back up from where they stand rather than respawning them.
- * - A cue's priority is its **highest** hold's. A stack hold is `stackBand + entry position`
- *   ([cueDerivedPriority]); a loose hold is [LOOSE_BAND] `+ seq`, above every stack, newest on top
- *   (D10).
+ * - A cue's priority is its **highest** hold's. A stack hold is its stack's band and rank, then
+ *   its entry's position ([stackPriority], [ranks], busk-stack plan D5); a loose hold is [LOOSE_BAND]
+ *   `+ seq`, above every stack, newest on top (D10).
+ * - A cue **replaces** while any of its holds is a stack on *Replaces* (busk-stack plan D7), whatever
+ *   its top hold: its rows carry a replace group ([LiveCue.replaceGroup]) the resolver folds them by.
  *
  * - A held cue is **edited since GO** ([markEdited], show-cue-editing plan §3.5) when a write
  *   changes what *Update stage* sends of it, or a Look or palette it layers moves its effects
@@ -127,7 +129,15 @@ class CueHolds internal constructor(
      * at, [stackId] — the stack of its highest hold, null when that is loose (provenance's "which
      * stack") — and whether it is [edited] since it came on.
      */
-    data class LiveCue(val cueId: Int, val priority: Int, val holds: List<CueHold>, val stackId: Int?, val edited: Boolean = false) {
+    data class LiveCue(
+        val cueId: Int,
+        val priority: Int,
+        val holds: List<CueHold>,
+        val stackId: Int?,
+        val edited: Boolean = false,
+        /** The group its rows replace in ([replaceGroupOf]), null while none of its holds replaces. */
+        val replaceGroup: Int? = null,
+    ) {
         val looseHeld: Boolean get() = holds.any { it is CueHold.Loose }
     }
 
@@ -138,10 +148,20 @@ class CueHolds internal constructor(
         }
     }
 
+    /** What one hold asks for: its priority, and whether its stack replaces the show (D7). */
+    private data class Stamp(val priority: Int, val replaces: Boolean = false)
+
     private class Live {
-        /** Each hold and the priority it asks for, in the order taken. */
-        val holds = LinkedHashMap<CueHold, Int>()
+        /** Each hold and what it asks for, in the order taken. */
+        val holds = LinkedHashMap<CueHold, Stamp>()
     }
+
+    /**
+     * Where each running stack composes (busk-stack plan D5, P3): its band and its rank by latest GO,
+     * kept while its release fades. [CueStackManager] moves them; a stack hold's priority is read off
+     * them ([stackPriority]), and a leaving effect's stack ([weighingStackOf]).
+     */
+    val ranks = StackRanks()
 
     private val lock = Any()
     private val live = HashMap<Int, Live>()
@@ -270,10 +290,12 @@ class CueHolds internal constructor(
         fadeMs: Long = 0,
         curve: EasingCurve = EasingCurve.LINEAR,
         adoptFrom: Int? = null,
+        /** Whether [hold]'s stack is a busk stack on *Replaces* (busk-stack plan D7). */
+        replaces: Boolean = false,
     ): Acquired {
-        val (first, priority) = synchronized(lock) { registerLocked(data.cueId, hold, holdPriority) }
+        val (first, stamp) = synchronized(lock) { registerLocked(data.cueId, hold, Stamp(holdPriority, replaces)) }
         val fade = if (arrival == Arrival.FADE_IN) Fade(fadeMs, curve, crossfade = true) else Fade.SNAP
-        return afterRegister(state, data, hold, first, priority, fade, scope, fireEvents, stackTag, adoptFrom)
+        return afterRegister(state, data, hold, first, stamp, fade, scope, fireEvents, stackTag, adoptFrom)
     }
 
     /**
@@ -296,16 +318,33 @@ class CueHolds internal constructor(
         }
     }
 
-    /** Add [hold] to [cueId]'s holds under [lock]: whether it is the first, and the cue's priority now. */
-    private fun registerLocked(cueId: Int, hold: CueHold, holdPriority: Int): Pair<Boolean, Int> {
+    /** Add [hold] to [cueId]'s holds under [lock]: whether it is the first, and the cue's stamp now. */
+    private fun registerLocked(cueId: Int, hold: CueHold, stamp: Stamp): Pair<Boolean, CueStamp> {
         val cue = live.getOrPut(cueId) { Live() }
         val first = cue.holds.isEmpty()
         // Coming on lands the cue as stored, so whatever was edited is on stage now.
         if (first) editedSinceGo.remove(cueId)
-        cue.holds[hold] = holdPriority
+        cue.holds[hold] = stamp
         publishLocked()
-        return first to cue.holds.values.max()
+        return first to stampOf(cueId, cue)
     }
+
+    /**
+     * What [cueId]'s rows and effects compose at: its highest hold's priority, and its replace group —
+     * the stack of that hold when it replaces, else the cue's own group while any other hold does.
+     */
+    private fun stampOf(cueId: Int, cue: Live): CueStamp {
+        val top = cue.holds.maxBy { it.value.priority }
+        val group = when {
+            cue.holds.values.none { it.replaces } -> null
+            top.value.replaces && top.key is CueHold.Stack -> (top.key as CueHold.Stack).stackId
+            else -> ownReplaceGroup(cueId)
+        }
+        return CueStamp(top.value.priority, group)
+    }
+
+    /** [cueId]'s stamp now, or null when nothing holds it. */
+    private fun currentStamp(cueId: Int): CueStamp? = synchronized(lock) { live[cueId]?.let { stampOf(cueId, it) } }
 
     /** [acquire]'s engine half, once [hold] is registered — outside [lock], per the class KDoc. */
     private fun afterRegister(
@@ -313,7 +352,7 @@ class CueHolds internal constructor(
         data: CueApplyData,
         hold: CueHold,
         first: Boolean,
-        priority: Int,
+        stamp: CueStamp,
         fade: Fade,
         scope: CoroutineScope,
         fireEvents: Boolean,
@@ -321,11 +360,14 @@ class CueHolds internal constructor(
         adoptFrom: Int?,
     ): Acquired {
         val cueId = data.cueId
+        val priority = stamp.priority
         try {
             if (!first) {
-                fxEngine.repriorityCues(mapOf(cueId to priority))
+                fxEngine.restampCues(mapOf(cueId to stamp))
                 return Acquired(first = false, fxCount = 0, hasRows = fxEngine.cueLayer.hasAssignments(cueId))
             }
+            // Before its rows are published, so they arrive in their group.
+            fxEngine.cueLayer.setReplaceGroup(cueId, stamp.replaceGroup)
             // A cue a crossfade elsewhere is still taking down is on again: that fade must stop
             // touching it, or it would pin it back to 0 and drop its rows at its end, and cut its
             // effects off if it were cancelled. [bringOn] takes those effects back.
@@ -346,7 +388,7 @@ class CueHolds internal constructor(
                 throw e
             }
             // A hold taken while this one was spawning may have raised the priority it asked for.
-            priorityOf(cueId)?.takeIf { it != priority }?.let { fxEngine.repriorityCues(mapOf(cueId to it)) }
+            currentStamp(cueId)?.takeIf { it != stamp }?.let { fxEngine.restampCues(mapOf(cueId to it)) }
             // Its events fire as it comes on (D15): on the first hold, whatever path took it, and only
             // then — a GO into a cue another hold already keeps live fires nothing.
             if (fireEvents) Tracing.span("cue.events") { state.effectsService.onCueGo(cueId, data.cueLabel, data.goEvents) }
@@ -376,11 +418,11 @@ class CueHolds internal constructor(
             if (cue.holds.remove(hold) == null) return Released.NOT_HELD
             if (cue.holds.isEmpty()) forgetLocked(cueId)
             publishLocked()
-            cue.holds.values.maxOrNull()
+            if (cue.holds.isEmpty()) null else stampOf(cueId, cue)
         }
         try {
             if (remaining != null) {
-                fxEngine.repriorityCues(mapOf(cueId to remaining))
+                fxEngine.restampCues(mapOf(cueId to remaining))
                 return Released(last = false, fxRemoved = 0, fadingRows = false)
             }
             return takeOff(
@@ -416,20 +458,20 @@ class CueHolds internal constructor(
             val previous = cue?.holds?.keys?.filterIsInstance<CueHold.Loose>()?.firstOrNull()
             if (cue != null && previous != null) {
                 cue.holds.remove(previous)
-                cue.holds[hold] = loosePriority(seq)
+                cue.holds[hold] = Stamp(loosePriority(seq))
                 publishLocked()
                 null
             } else {
-                registerLocked(cueId, hold, loosePriority(seq))
+                registerLocked(cueId, hold, Stamp(loosePriority(seq)))
             }
         }
         val acquired = if (registered == null) {
-            priorityOf(cueId)?.let { fxEngine.repriorityCues(mapOf(cueId to it)) }
+            currentStamp(cueId)?.let { fxEngine.restampCues(mapOf(cueId to it)) }
             onChanged()
             Acquired(first = false, fxCount = 0, hasRows = fxEngine.cueLayer.hasAssignments(cueId))
         } else {
-            val (first, priority) = registered
-            afterRegister(state, data, hold, first, priority, Fade.SNAP, scope, fireEvents, stackTag = null, adoptFrom = null)
+            val (first, stamp) = registered
+            afterRegister(state, data, hold, first, stamp, Fade.SNAP, scope, fireEvents, stackTag = null, adoptFrom = null)
         }
         state.sceneryService.onLooseHeld(cueId)
         return acquired
@@ -478,38 +520,58 @@ class CueHolds internal constructor(
         }
     }
 
-    /** Told of every [restampEntries] first: Move in dark's contributor follows its stack's live entry. */
-    @Volatile internal var onEntriesRestamped: (entryPriorities: Map<Int, Int>) -> Unit = {}
+    /** Told of every [restampEntries] first, `stackId → entryId → priority`: Move in dark's contributor follows its stack's live entry. */
+    @Volatile internal var onEntriesRestamped: (entryPriorities: Map<Int, Map<Int, Int>>) -> Unit = {}
 
     /**
-     * Restamp the stack holds on the entries in [entryPriorities] (`entryId → stackBand + position`),
-     * after a write shifted positions — a reorder, an add, a sort, a delete or insert mid-list, a
-     * marker. A live cue's priority is still its highest hold's, so a loose hold above keeps it there.
+     * Restamp the stack holds on the entries in [positions] (`stackId → entryId → position`), after a
+     * write shifted positions — a reorder, an add, a sort, a delete or insert mid-list, a marker — at
+     * each stack's rank. A live cue's priority is still its highest hold's, so a loose hold above keeps
+     * it there.
      *
-     * A hold is restamped only by a priority in its own stack's band: an entry moved to another stack
-     * keeps its id, and the stack it left goes on holding it at that stack's priority until its next
-     * GO, whatever the stack it joined does meanwhile.
+     * A hold is restamped only by its own stack's positions: an entry moved to another stack keeps its
+     * id, and the stack it left goes on holding it at that stack's priority until its next GO, whatever
+     * the stack it joined does meanwhile. A stack with no place runs nothing, so has nothing to restamp.
      */
-    fun restampEntries(entryPriorities: Map<Int, Int>) {
-        if (entryPriorities.isEmpty()) return
-        onEntriesRestamped(entryPriorities)
+    fun restampEntries(positions: StackEntryPositions) {
+        if (positions.isEmpty()) return
+        val priorities = positions.mapNotNull { (stackId, entries) ->
+            ranks.placeOf(stackId)?.let { place -> stackId to entries.mapValues { stackPriority(place, it.value) } }
+        }.toMap()
+        if (priorities.isEmpty()) return
+        onEntriesRestamped(priorities)
+        restampHolds { hold, stamp -> priorities[hold.stackId]?.get(hold.entryId)?.let { stamp.copy(priority = it) } }
+    }
+
+    /**
+     * Restamp every hold of the stacks in [moved] at their new place (busk-stack plan P3): the same
+     * entry position in the new rank. What a moved stack still has fading, which no hold keeps, is
+     * the caller's ([CueStackManager]).
+     */
+    internal fun restampStacks(moved: Map<Int, StackRanks.Place>) {
+        if (moved.isEmpty()) return
+        restampHolds { hold, stamp -> moved[hold.stackId]?.let { stamp.copy(priority = rebasedPriority(stamp.priority, it)) } }
+    }
+
+    /** Give each stack hold [restamp]'s new stamp where it answers one, then the engine every cue that moved. */
+    private fun restampHolds(restamp: (CueHold.Stack, Stamp) -> Stamp?) {
         val changed = synchronized(lock) {
-            val out = HashMap<Int, Int>()
+            val out = HashMap<Int, CueStamp>()
             for ((cueId, cue) in live) {
+                val before = stampOf(cueId, cue)
                 var touched = false
-                for (hold in cue.holds.keys.toList()) {
+                for ((hold, stamp) in cue.holds.entries.toList()) {
                     if (hold !is CueHold.Stack) continue
-                    val priority = entryPriorities[hold.entryId] ?: continue
-                    if (stackOfDerivedPriority(priority) != hold.stackId) continue
-                    if (cue.holds.put(hold, priority) != priority) touched = true
+                    val next = restamp(hold, stamp) ?: continue
+                    if (cue.holds.put(hold, next) != next) touched = true
                 }
-                if (touched) out[cueId] = cue.holds.values.max()
+                if (touched) stampOf(cueId, cue).takeIf { it != before }?.let { out[cueId] = it }
             }
             if (out.isNotEmpty()) publishLocked()
             out
         }
         if (changed.isNotEmpty()) {
-            fxEngine.repriorityCues(changed)
+            fxEngine.restampCues(changed)
             onChanged()
         }
     }
@@ -567,7 +629,7 @@ class CueHolds internal constructor(
         adopted: MutableList<Adoption>,
     ): Acquired {
         val cueId = data.cueId
-        val priority = cueDerivedPriority(data)
+        val priority = cueDerivedPriority(data, ranks)
         warnDeadAssignments(state, data)
         val (immediateAdHoc, timedAdHoc) = data.adHocFx.partition { it.delayMs == null && it.intervalMs == null }
         val cooked = Tracing.span("cue.compose") {
@@ -576,7 +638,7 @@ class CueHolds internal constructor(
                 cueId = cueId,
                 priority = priority,
                 layers = data.layers,
-                localRows = buildCueAssignmentsForCue(state.show.fixtures, data, state.show.paletteReferences),
+                localRows = buildCueAssignmentsForCue(state.show.fixtures, data, state.show.paletteReferences, ranks),
                 resolveLook = state.show.lookRegistry::snapshot,
                 resolvePalette = state.show.paletteRegistry::snapshot,
             )
@@ -923,13 +985,14 @@ class CueHolds internal constructor(
     /** Rebuild [view] and the frame from [live]. Under [lock]. */
     private fun publishLocked() {
         view = live.mapValues { (cueId, cue) ->
-            val top = cue.holds.maxByOrNull { it.value }
+            val top = cue.holds.maxByOrNull { it.value.priority }
             LiveCue(
                 cueId = cueId,
-                priority = top?.value ?: 0,
+                priority = top?.value?.priority ?: 0,
                 holds = cue.holds.keys.toList(),
                 stackId = (top?.key as? CueHold.Stack)?.stackId,
                 edited = cueId in editedSinceGo,
+                replaceGroup = if (cue.holds.isEmpty()) null else stampOf(cueId, cue).replaceGroup,
             )
         }
         if (closed) return
@@ -940,9 +1003,9 @@ class CueHolds internal constructor(
 
     companion object {
         /**
-         * The loose band (D10): above every stack's `stackId * 1_000_000 + …` while stack ids stay
-         * under 2,000, and [LOOSE_SPAN] below the programmer's effect band
-         * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]), which stays above everything a cue asserts.
+         * The loose band (D10): above both stack bands' ranks ([StackRanks]), and [LOOSE_SPAN] below
+         * the programmer's effect band ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]), which stays above
+         * everything a cue asserts.
          */
         const val LOOSE_BAND = 2_000_000_000
 
@@ -965,6 +1028,19 @@ class CueHolds internal constructor(
         )
     }
 }
+
+/**
+ * What a held cue's rows and effects compose at ([CueHolds]): its [priority], and the [replaceGroup]
+ * its rows replace in — null while none of its holds is a stack on *Replaces* (busk-stack plan D7).
+ */
+data class CueStamp(val priority: Int, val replaceGroup: Int? = null)
+
+/**
+ * A cue's own replace group: one replacing hold under a higher hold that does not replace (a loose
+ * press on a replacing stack's cue) keeps the cue replacing on its own, at its own priority. Negative,
+ * so it never names a stack.
+ */
+internal fun ownReplaceGroup(cueId: Int): Int = -cueId
 
 /** An ad-hoc cue effect as the spawner takes it. */
 internal fun CueAdHocFxDto.toLookFxSpec() = LookFxSpec(

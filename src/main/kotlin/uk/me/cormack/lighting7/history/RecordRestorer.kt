@@ -92,6 +92,8 @@ internal class RecordRestorer(private val state: State) {
         val origin = WriteOrigin(caller, window, kind = kind)
         var applied: Applied? = null
         var playheadCleared = false
+        // Each restored stack's running-order setting, which moves a live one to that band's top (D5).
+        val bands = HashMap<Int, Boolean>()
         val outcome = try {
             WriteOrigin.with(origin) {
                 transaction(state.database) {
@@ -128,7 +130,7 @@ internal class RecordRestorer(private val state: State) {
                     newClash(project, ready.targets, clashesBefore)?.let { throw BlockedException(it) }
                     verify(projectId, ready.targets)?.let { throw BlockedException(it) }
                     // Nothing below can refuse the undo, so a stack is stopped only once it surely goes.
-                    playheadCleared = stopLeavingStacks(project, ready.targets, current)
+                    playheadCleared = stopLeavingStacks(project, ready.targets, current, bands)
                     val stageChanged = stageBefore.filter { (cueId, content) -> DaoCue.findById(cueId)?.stageContent() != content }.keys
                     applied = Applied(ready.targets, before, removal, stageChanged)
                     Outcome.Done(ready.entries)
@@ -146,6 +148,9 @@ internal class RecordRestorer(private val state: State) {
         val done = applied
         // Every window follows the playhead from `showChanged`, which the restore's own effects do not send.
         if (outcome is Outcome.Done && playheadCleared && current) state.show.fixtures.showChanged(projectId, null, null)
+        if (outcome is Outcome.Done && current) {
+            for ((stackId, inRunningOrder) in bands) state.show.cueStackManager.onBandChanged(stackId, inRunningOrder)
+        }
         if (outcome is Outcome.Done && done != null) {
             // Its commit marked them unless it wrote nothing: records already where the entries put them.
             state.history.mark(projectId, outcome.entries.map { it.id }, undone = kind == WriteOrigin.Kind.UNDO)
@@ -274,10 +279,16 @@ internal class RecordRestorer(private val state: State) {
     /**
      * A stack the undo takes away is stopped, on the live project, and is no longer the project's
      * playhead on any — as a stack delete does. One it leaves out of the running order (busk-stack plan
-     * D4) is no longer the playhead either, and runs on. Inside the transaction, once the restore cannot
-     * refuse.
+     * D4) is no longer the playhead either, and runs on. Every stack the undo keeps has its setting put in
+     * [bands], for a running one to take its band's top once the undo is done. Inside the transaction,
+     * once the restore cannot refuse.
      */
-    private fun stopLeavingStacks(project: DaoProject, targets: Map<RecordKey, RecordImage?>, current: Boolean): Boolean {
+    private fun stopLeavingStacks(
+        project: DaoProject,
+        targets: Map<RecordKey, RecordImage?>,
+        current: Boolean,
+        bands: MutableMap<Int, Boolean>,
+    ): Boolean {
         val manager = state.show.cueStackManager
         val before = project.activeStackId
         for ((key, image) in targets.filter { it.key.tableName == RecordFolders.CUE_STACKS }) {
@@ -288,8 +299,10 @@ internal class RecordRestorer(private val state: State) {
                     manager.forgetStack(id)
                 }
                 if (project.activeStackId == id) project.activeStackId = null
-            } else if (project.activeStackId == id && !canonicalDecode(CueStackJson.serializer(), image.json).inRunningOrder) {
-                project.activeStackId = null
+            } else {
+                val inRunningOrder = canonicalDecode(CueStackJson.serializer(), image.json).inRunningOrder
+                bands[id] = inRunningOrder
+                if (project.activeStackId == id && !inRunningOrder) project.activeStackId = null
             }
         }
         return before != null && project.activeStackId == null

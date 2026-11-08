@@ -484,9 +484,15 @@ class Show(
                 }
             }
 
+            // Each stack's rank first, which the GOs keep rather than counting as an operator's (D5).
+            cueStackManager.holds.ranks.restore(carry.stackRanks.filterKeys { stackId -> carry.liveEntries.any { it.first == stackId } })
             for ((stackId, entryId) in carry.liveEntries) {
-                runCatching { cueStackManager.activateEntry(state, stackId, entryId, fireEvents = false, setTempo = false) }
+                runCatching { cueStackManager.activateEntry(state, stackId, entryId, fireEvents = false, setTempo = false, operator = false) }
                     .onFailure { logger.warn("Reload could not bring back entry {} on stack {}: {}", entryId, stackId, it.message) }
+            }
+            // A stack that could not come back keeps no rank.
+            for (stackId in carry.stackRanks.keys) {
+                if (!cueStackManager.isStackActive(stackId)) cueStackManager.applyRankChanges(cueStackManager.holds.ranks.remove(stackId))
             }
             // After the GOs, which consume a stack's standby. An entry the reload removed is refused.
             for ((stackId, entryId) in carry.standbys) {

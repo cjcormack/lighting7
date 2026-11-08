@@ -18,7 +18,7 @@ import { useSetStackSceneryMutation } from '@/store/scenery'
 import { useCueStackMoveInDarkQuery } from '@/store/cueStacks'
 import { MOVE_IN_DARK_OFF, NEW_STACK_MOVE_IN_DARK, stackDraftOf, stackDraftResult, type StackMoveInDarkDraft } from '@/lib/moveInDark'
 import { MoveInDarkStackBlock } from './MoveInDarkStackBlock'
-import type { CueStack, CueStackInput } from '@/api/cueStacksApi'
+import type { CueStack, CueStackInput, StackOverShow } from '@/api/cueStacksApi'
 import type { SceneryChange } from '@/api/sceneryApi'
 
 const EMPTY_SCENERY: SceneryChange[] = []
@@ -30,6 +30,12 @@ const AT_END_OPTIONS: { value: AtEnd; label: string; hint: string }[] = [
   { value: 'STAY', label: 'Stay', hint: 'GO on the last cue does nothing' },
   { value: 'LOOP', label: 'Loop', hint: 'Wrap from the last cue to the first' },
   { value: 'RELEASE', label: 'Release', hint: 'One more GO, or a follow, lets the stack go' },
+]
+
+/** *Over the show* (busk-stack plan D7), a busk stack's alone. */
+const OVER_SHOW_OPTIONS: { value: StackOverShow; label: string; hint: string }[] = [
+  { value: 'ADDS', label: 'Adds', hint: 'Its cues compose with the show’s: a chase lifts heads over the base and never darkens them' },
+  { value: 'REPLACES', label: 'Replaces', hint: 'Every attribute its cue sets wins, dimmers included; the FX under them wait' },
 ]
 
 const DEFAULT_RELEASE_MS = 2000
@@ -99,6 +105,7 @@ export function CueStackForm({
   const [inRunningOrder, setInRunningOrder] = useState(true)
   const [atEnd, setAtEnd] = useState<AtEnd>('STAY')
   const [releaseTime, setReleaseTime] = useState(String(DEFAULT_RELEASE_MS / 1000))
+  const [overShow, setOverShow] = useState<StackOverShow>('ADDS')
   const [setStackScenery] = useSetStackSceneryMutation()
   const runnable = stack == null || stack.type === 'STACK'
   // What the block opened on, so a Save that left it alone writes nothing, and one that left a time
@@ -125,6 +132,7 @@ export function CueStackForm({
       setInRunningOrder(stack?.inRunningOrder ?? true)
       setAtEnd(atEndOf(stack))
       setReleaseTime(String((stack?.releaseTimeMs ?? DEFAULT_RELEASE_MS) / 1000))
+      setOverShow(stack?.overShow ?? 'ADDS')
       // A new stack starts on (Q2); one from a desk that sends no setting reads off.
       const opened = stackDraftOf(stack == null ? NEW_STACK_MOVE_IN_DARK : (stack.moveInDark ?? MOVE_IN_DARK_OFF))
       setDarkOpened(opened)
@@ -151,6 +159,8 @@ export function CueStackForm({
       input.inRunningOrder = inRunningOrder
       input.releaseAtEnd = atEnd === 'RELEASE'
       input.releaseTimeMs = releaseMs ?? DEFAULT_RELEASE_MS
+      // Replaces is a busk stack's alone; back in the running order a stack adds.
+      input.overShow = inRunningOrder ? 'ADDS' : overShow
     }
     if (runnable && (stack == null || darkTouched)) {
       if (darkResult.value != null) {
@@ -221,6 +231,26 @@ export function CueStackForm({
                 </div>
                 <Switch id="stack-running-order" checked={inRunningOrder} onChange={changeRunningOrder} />
               </div>
+
+              {!inRunningOrder && (
+                <div className="space-y-1.5">
+                  <Label id="stack-over-show">Over the show</Label>
+                  <ToggleGroup
+                    type="single"
+                    aria-labelledby="stack-over-show"
+                    value={overShow}
+                    onValueChange={(next) => next && setOverShow(next as StackOverShow)}
+                    className="w-full justify-start"
+                  >
+                    {OVER_SHOW_OPTIONS.map((o) => (
+                      <ToggleGroupItem key={o.value} value={o.value} title={o.hint} className="flex-1">
+                        {o.label}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                  <p className="text-xs text-muted-foreground">{OVER_SHOW_OPTIONS.find((o) => o.value === overShow)?.hint}</p>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label id="stack-at-end">After the last cue</Label>

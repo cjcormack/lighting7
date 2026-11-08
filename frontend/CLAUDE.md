@@ -720,8 +720,10 @@ Release folds to its glyph and the scope line drops the fade.
 - **The stack** (D5): the chip opens `LayerStack` through `EditorSurface` — `programmer.keyStack`
   asked on open and **again whenever the key's provenance moves** while open, every layer top first,
   the one on stage ticked, held-back layers struck through and said out loud — *why* from the desk's
-  `heldBackReason`: your value, a stomp, or Blind (*held · Blind*, show-cue-editing plan D7); an
-  older desk's unreasoned hold reads as your value. *Clear yours — let it run* is offered only over a
+  `heldBackReason`: your value, a stomp, Blind (*held · Blind*, show-cue-editing plan D7), or a
+  replacing busk stack above it (*held · replaced*, lighting7 busk-stack plan D8: a weight, so it
+  still paints at what that stack leaves, and resumes in phase as it fades); an older desk's
+  unreasoned hold reads as your value. *Clear yours — let it run* is offered only over a
   hold your value makes (`heldByYourValue`). The client never works out what is underneath.
 - **Clearing** (D6): a row's × is drawn only while the programmer holds the row by an owner
   `clearEntry` releases (a slot only a pressed layer holds is not the operator's to clear), and sends
@@ -5837,7 +5839,9 @@ drives carries a violet chip — the wave and the Speed (`lensDivision`: `×8`, 
 desk names no FX on a key whose every painter it skipped, so a running, weighted FX under a
 key provenance gives to a cue is stomped there — `lensHeldReason` checks the weight's other factors
 first (paused, spent, leaving, amount 0, envelope 0, its stack at FX amount 0), so none of those is ever
-called a stomp. A click opens `FxEditorPopover` on that FX, its split edit for the cell's batch;
+called a stomp. A replacing busk stack fully in reads the same way there, so the lens words it as a
+stomp: `LENS_REASON_WORDS` has `REPLACED`'s *a replacing stack holds it back*, but nothing on this side
+can tell the two apart. A click opens `FxEditorPopover` on that FX, its split edit for the cell's batch;
 with several, a menu names them first. Things that will bite:
 
 - **One index, read per cell, never a subscription per row.** `fixtures-list/cellFx.ts`'s

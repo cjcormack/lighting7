@@ -55,6 +55,8 @@ internal data class CueApplyData(
     val stomp: Boolean = false,
     val cueStackId: Int? = null,
     val sortOrder: Int = 0,
+    /** Whether [cueStackId] is in the running order: the band an unstamped build composes in (busk-stack plan D5). */
+    val stackInRunningOrder: Boolean = true,
     /**
      * The cue's events (stage-view plan session 9), for the GO paths only — [buildCueGoData] fills
      * them, every other builder leaves them empty, so a republish or a preview can never fire one.
@@ -133,11 +135,12 @@ internal data class EntryPlacement(
     val position: Int,
     val autoAdvance: Boolean,
     val autoAdvanceDelayMs: Long?,
+    val inRunningOrder: Boolean = true,
 )
 
 /**
  * [entry]'s placement. Its position is its index in the stack's list, markers counted — the slot a
- * cue's `sort_order` used to be — so [stackEntryPriorities] and a GO derive one priority.
+ * cue's `sort_order` used to be — so [stackEntryPositions] and a GO derive one position.
  */
 internal fun entryPlacement(entry: DaoCueStackEntry): EntryPlacement =
     entryPlacement(entry, entriesOfStack(entry.stack.id).indexOfFirst { it.id == entry.id }.coerceAtLeast(0))
@@ -147,6 +150,7 @@ private fun entryPlacement(entry: DaoCueStackEntry, position: Int) = EntryPlacem
     position = position,
     autoAdvance = entry.autoAdvance,
     autoAdvanceDelayMs = entry.autoAdvanceDelay?.toMillis(),
+    inRunningOrder = entry.stack.inRunningOrder,
 )
 
 /**
@@ -190,6 +194,7 @@ private fun DaoCue.toCueApplyData(placement: EntryPlacement?): CueApplyData = Cu
     stomp = stomp,
     cueStackId = placement?.stackId,
     sortOrder = placement?.position ?: 0,
+    stackInRunningOrder = placement?.inRunningOrder ?: true,
 )
 
 /**
@@ -220,35 +225,40 @@ internal fun DaoCueLayer.toCookLayer(): CookLayer? = CookLayer(
 
 /**
  * The priority [cueData] composes at: the one its holds give it ([CueApplyData.livePriority]) when a
- * hold has stamped it, else its placement's. `+1` keeps manual effects (priority 0) strictly below;
- * the magnitude gaps leave room for per-effect fine-tuning without renumbering.
+ * hold has stamped it, else the one its GO would take ([goPriority]). `+1` keeps manual effects
+ * (priority 0) strictly below; the magnitude gaps leave room for per-effect fine-tuning without
+ * renumbering.
  */
-internal fun cueDerivedPriority(cueData: CueApplyData): Int =
-    cueData.livePriority ?: cueDerivedPriority(cueData.cueStackId, cueData.sortOrder)
+internal fun cueDerivedPriority(cueData: CueApplyData, ranks: StackRanks?): Int =
+    cueData.livePriority ?: goPriority(ranks, cueData.cueStackId, cueData.stackInRunningOrder, cueData.sortOrder)
 
 /**
- * A stack hold's priority: the stack's band plus its entry's position, markers counted — what
- * [CueHolds.restampEntries] recomputes after a stack's order changes.
+ * The priority a GO onto [position] of [stackId] would take (busk-stack plan §3 "Priority"): its band
+ * from [inRunningOrder], at the stack's current rank while it runs there, else the top of the band. A
+ * cue with no stack composes at its position alone, below every stack.
  */
-internal fun cueDerivedPriority(cueStackId: Int?, sortOrder: Int): Int =
-    (cueStackId ?: 0) * STACK_PRIORITY_BAND + sortOrder * 1_000 + 1
-
-/** The width of one stack's priority band: [cueDerivedPriority] puts stack `n` at `n × this`. */
-internal const val STACK_PRIORITY_BAND = 1_000_000
-
-/** The stack whose band [priority], a [cueDerivedPriority], lies in. */
-internal fun stackOfDerivedPriority(priority: Int): Int = priority / STACK_PRIORITY_BAND
+internal fun goPriority(ranks: StackRanks?, stackId: Int?, inRunningOrder: Boolean, position: Int): Int {
+    if (stackId == null) return stackPriority(null, position)
+    val band = StackRanks.bandOf(inRunningOrder)
+    val place = ranks?.placeOf(stackId)?.takeIf { it.band == band } ?: ranks?.nextPlace(band) ?: StackRanks.Place(band, 1)
+    return stackPriority(place, position)
+}
 
 /**
- * `entryId → cueDerivedPriority` for every cue entry in [stack] at its current position. Hand the
- * result to [CueHolds.restampEntries] after changing the order, so a cue a stack holds on stage
- * composes in the new order without being re-applied — at its highest hold's priority, which a
- * loose hold may keep above it.
+ * Each stack's cue entries by position, markers counted — what [CueHolds.restampEntries] stamps a
+ * held entry's priority from after the stack's order changes: `stackId → entryId → position`. Hand
+ * the result over after changing the order, so a cue a stack holds on stage composes in the new order
+ * without being re-applied — at its highest hold's priority, which a loose hold may keep above it.
  */
-internal fun stackEntryPriorities(stack: DaoCueStack): Map<Int, Int> =
-    entriesOf(stack).withIndex()
-        .filter { (_, entry) -> entry.cueId != null }
-        .associate { (position, entry) -> entry.id.value to cueDerivedPriority(stack.id.value, position) }
+internal typealias StackEntryPositions = Map<Int, Map<Int, Int>>
+
+/** [stack]'s [StackEntryPositions]. */
+internal fun stackEntryPositions(stack: DaoCueStack): StackEntryPositions =
+    mapOf(
+        stack.id.value to entriesOf(stack).withIndex()
+            .filter { (_, entry) -> entry.cueId != null }
+            .associate { (position, entry) -> entry.id.value to position },
+    )
 
 /**
  * The **cue-level** (cross-cue) stomp overlap: every `(target, property)` this cue holds, from both
@@ -394,9 +404,11 @@ internal fun buildCueAssignmentsForCue(
     cueData: CueApplyData,
     /** How a `pal:` row resolves per head (palette-references plan D2); null skips reference rows. */
     references: PaletteReferences? = null,
+    /** What an unstamped stack build ranks against ([cueDerivedPriority]). */
+    ranks: StackRanks? = null,
 ): List<CueAssignmentResolver.Assignment> {
     if (cueData.attributeAssignments.isEmpty()) return emptyList()
-    val priority = cueDerivedPriority(cueData)
+    val priority = cueDerivedPriority(cueData, ranks)
     val out = ArrayList<CueAssignmentResolver.Assignment>(cueData.attributeAssignments.size * 2)
 
     for (assignment in cueData.attributeAssignments) {
@@ -579,11 +591,12 @@ internal fun buildCombinedCueLayerCook(
         ?: state.show.cueStackManager.holds.priorityOf(cueId)
         ?: state.show.fxEngine.cueLayer.publishedPriorityOf(cueId)
     val data = live?.let { applyData.copy(livePriority = it) } ?: applyData
-    val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, data, state.show.paletteReferences)
+    val ranks = state.show.cueStackManager.holds.ranks
+    val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, data, state.show.paletteReferences, ranks)
     return CueComposer.cookAll(
         fixtures = state.show.fixtures,
         cueId = cueId,
-        priority = cueDerivedPriority(data),
+        priority = cueDerivedPriority(data, ranks),
         layers = data.layers,
         localRows = cueOwn,
         resolveLook = state.show.lookRegistry::snapshot,

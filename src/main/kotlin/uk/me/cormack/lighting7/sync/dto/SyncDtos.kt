@@ -34,6 +34,9 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v51: Over the show (busk-stack plan D7). `CueStackJson` gains `overShow`, `ADDS | REPLACES`. The
+    // writer and `minReader` move to **51**: a v50 reader would run a replacing stack as one that adds
+    // and push it back so. See `docs/sync-engineering.md` §"Version 51 — Over the show".
     // v50: busk stacks (busk-stack plan D1, D3, D6). `CueStackJson` gains `inRunningOrder`,
     // `releaseAtEnd` and `releaseTimeMs`. The writer and `minReader` move to **50**: a v49 reader would
     // read a busk stack as one in the running order and push it back so. See
@@ -382,9 +385,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 50,
+    val formatVersion: Int = 51,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 50,
+    val minReader: Int = 51,
 )
 
 /**
@@ -1025,6 +1028,8 @@ data class CueStackJson(
     val inRunningOrder: Boolean = true,
     val releaseAtEnd: Boolean = false,
     val releaseTimeMs: Long = 2000,
+    /** v51: *Over the show* (D7), `ADDS | REPLACES`; a stack without it adds. */
+    val overShow: String = "ADDS",
 )
 
 /**

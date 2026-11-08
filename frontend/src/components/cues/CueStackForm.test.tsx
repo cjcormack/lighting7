@@ -34,7 +34,7 @@ const STACK: CueStack = {
 }
 
 /** The run settings a stack in the running order, staying at its end, saves as. */
-const RUN = { inRunningOrder: true, releaseAtEnd: false, releaseTimeMs: 2000 }
+const RUN = { inRunningOrder: true, releaseAtEnd: false, releaseTimeMs: 2000, overShow: 'ADDS' }
 
 const onSave = vi.fn(() => Promise.resolve())
 const onOpenChange = vi.fn()
@@ -200,5 +200,26 @@ describe('CueStackForm · the running order and Release', () => {
     fireEvent.click(save())
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     expect(lastSave()).toMatchObject({ releaseTimeMs: 500 })
+  })
+
+  it('Over the show is a busk stack\'s, and Replaces saves on one', async () => {
+    draw(STACK)
+    expect(screen.queryByRole('radio', { name: 'Replaces' })).toBeNull()
+    fireEvent.click(screen.getByRole('switch', { name: 'In the running order' }))
+    expect(screen.getByRole('radio', { name: 'Adds' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(screen.getByRole('radio', { name: 'Replaces' }))
+    fireEvent.click(save())
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(lastSave()).toMatchObject({ inRunningOrder: false, overShow: 'REPLACES' })
+  })
+
+  it('a replacing busk stack put back into the running order saves as one that adds', async () => {
+    draw({ ...STACK, inRunningOrder: false, releaseAtEnd: true, overShow: 'REPLACES' })
+    expect(screen.getByRole('radio', { name: 'Replaces' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(screen.getByRole('switch', { name: 'In the running order' }))
+    expect(screen.queryByRole('radio', { name: 'Replaces' })).toBeNull()
+    fireEvent.click(save())
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(lastSave()).toMatchObject({ inRunningOrder: true, overShow: 'ADDS' })
   })
 })

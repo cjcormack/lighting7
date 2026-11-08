@@ -40,6 +40,11 @@ class CueAssignmentLayer internal constructor(
     // `docs/plans/completed/cue-authoring-unification-plan.md`.
     private val cueFadeWeights = HashMap<Int, Double>()
 
+    // cueId → the replace group its rows fold in (busk-stack plan D7), set by [CueHolds] through
+    // [setReplaceGroup] and [repriorityAssignments] and stamped onto every row the cue publishes. Kept
+    // after its rows go: a cue's rows fade out still replacing, and its next hold sets it afresh.
+    private val cueReplaceGroups = HashMap<Int, Int>()
+
     /**
      * Which stack a cue's published rows belong to, for CUE-sourced provenance and
      * `underlyingSources` (`FU-PROG-PROVENANCE-STACKID`). Since a cue can be live in several places
@@ -104,7 +109,7 @@ class CueAssignmentLayer internal constructor(
                 if (removed) republishAssignments()
                 return@locked
             }
-            cueAssignments[cueId] = assignments
+            cueAssignments[cueId] = grouped(cueId, assignments)
             setCueStompLocked(cueId, stompSuppression)
             val clamped = weight.coerceIn(0.0, 1.0)
             if (clamped >= 1.0) {
@@ -161,7 +166,7 @@ class CueAssignmentLayer internal constructor(
                     // as far as CueStackManager is concerned, and it owns that lifecycle.
                     if (cueStompSuppression.remove(cueId) != null) stompChanged = true
                 } else {
-                    cueAssignments[cueId] = rows
+                    cueAssignments[cueId] = grouped(cueId, rows)
                     val stomp = stompSuppression[cueId] ?: emptyMap()
                     if (setCueStompEntryLocked(cueId, stomp)) stompChanged = true
                 }
@@ -206,7 +211,7 @@ class CueAssignmentLayer internal constructor(
                 val weight = seedWeight()?.takeIf { it < 1.0 }
                 if (weight != null) cueFadeWeights[cueId] = weight.coerceAtLeast(0.0) else cueFadeWeights.remove(cueId)
             }
-            cueAssignments[cueId] = assignments
+            cueAssignments[cueId] = grouped(cueId, assignments)
             setCueStompEntryLocked(cueId, stompSuppression)
         }
         if (stompChanged) rebuildStompFlatLocked()
@@ -231,6 +236,21 @@ class CueAssignmentLayer internal constructor(
         }
         cueFadeWeights.remove(id)
         republishAssignments(restage = fade)
+    }
+
+    /**
+     * [cueId]'s replace group from now on (busk-stack plan D7): null composes its rows by each key's
+     * rule. Its rows already published are left alone — [CueHolds] sets this just before it publishes
+     * them, and moves a live cue's group with [repriorityAssignments].
+     */
+    internal fun setReplaceGroup(cueId: Int, group: Int?) = publisher.locked {
+        if (group == null) cueReplaceGroups.remove(cueId) else cueReplaceGroups[cueId] = group
+    }
+
+    /** [rows] carrying [cueId]'s replace group. Under the publish lock. */
+    private fun grouped(cueId: Int, rows: List<CueAssignmentResolver.Assignment>): List<CueAssignmentResolver.Assignment> {
+        val group = cueReplaceGroups[cueId]
+        return if (rows.all { it.replaceGroup == group }) rows else rows.map { it.copy(replaceGroup = group) }
     }
 
     /** [cueId]'s crossfade weight, 1.0 once its fade is over (or it has none). */
@@ -320,6 +340,7 @@ class CueAssignmentLayer internal constructor(
                 cueStompSuppression.clear()
                 rebuildStompFlatLocked()
             }
+            cueReplaceGroups.clear()
             if (cueAssignments.isEmpty() && cueFadeWeights.isEmpty()) return@locked
             cueAssignments.clear()
             cueFadeWeights.clear()
@@ -465,17 +486,26 @@ class CueAssignmentLayer internal constructor(
      * is a val, so the rows are rebuilt by copy. Leaves [cueFadeWeights] alone so a repriority
      * mid-crossfade doesn't disturb the fade. Returns the number of rows changed.
      */
-    fun repriorityAssignments(priorities: Map<Int, Int>): Int {
+    fun repriorityAssignments(
+        priorities: Map<Int, Int>,
+        /** `cueId → replace group`, set beside the priority ([setReplaceGroup]); null leaves every group alone. */
+        replaceGroups: Map<Int, Int?>? = null,
+    ): Int {
         var changed = 0
         publisher.locked {
             var cueLayerChanged = false
             for ((cueId, target) in priorities) {
-                val rows = cueAssignments[cueId] ?: continue
-                if (rows.all { it.priority == target }) continue
-                cueAssignments[cueId] = rows.map {
-                    if (it.priority == target) it else it.copy(priority = target)
+                if (replaceGroups != null && cueId in replaceGroups) {
+                    val group = replaceGroups[cueId]
+                    if (group == null) cueReplaceGroups.remove(cueId) else cueReplaceGroups[cueId] = group
                 }
-                changed += rows.count { it.priority != target }
+                val group = cueReplaceGroups[cueId]
+                val rows = cueAssignments[cueId] ?: continue
+                if (rows.all { it.priority == target && it.replaceGroup == group }) continue
+                cueAssignments[cueId] = rows.map {
+                    if (it.priority == target && it.replaceGroup == group) it else it.copy(priority = target, replaceGroup = group)
+                }
+                changed += rows.count { it.priority != target || it.replaceGroup != group }
                 cueLayerChanged = true
             }
             if (cueLayerChanged) republishAssignments()

@@ -148,7 +148,7 @@ The engine maintains, per (target, attribute), the identity of the winning contr
 
 ### Reading one attribute's stack
 
-Provenance names a winner; `programmer.keyStack` (W1, `ProvenanceService.keyStack`) names everything under it, top first, for one (target, attribute) — a group target answering per member. **Park** with its channels; the **programmer-band FX**; each **programmer slot**, owner by owner, with its value and age (a layer slot naming its layer, a sideband slot naming its channel); the **other FX**, each with `heldBack`; the **cue contributor** — value, cue, stack and Look layer from `underlyingSources` and the one Tier 4 snapshot the read takes, so a cue apply mid-read cannot pair one cue's value with another's attribution; and the **base**, `LayerResolver.baselineFor`. Where a stack's **Move in dark** wins the key — a dark head held ahead of the cue that lights it (move-in-dark plan D11) — its row, *Move in dark · for Q12*, stands where the cue contributor would, with the stack, the entry and cue it is for and their label (`MoveInDarkService.holdingOf`), and the cue row under it is what the cues alone compose (`CueAssignmentLayer.cuesOnly`), never on stage, so the stack names the move rather than blaming the live cue for the head's position. Every entry says whether it is on stage, walking the output order: park, FX by priority, the programmer, the cue, the base, with an on-stage full-weight Override FX, a programmer value, a cue value or a full park covering what lies below — an FX weighted to nothing (a 0 % amount, spent runs) is not on stage, and one under full amount is on stage beside what it mixes with (effects plan P3). `heldBack` is `FxSuppression`'s answer against the engine's snapshot and `BlindHold`'s against one read of blind — the tick's own — so Blind empties the programmer's half exactly as it does on the rig and holds the band instead; `heldBackReason` (`STOMP | PROGRAMMER | BLIND`) says which held it. An FX painting every channel of the key under a sibling key is on the stack too, as provenance credits it. It is a request answered to the asking socket, never broadcast: a stack is open on one sheet, and that sheet re-asks when provenance moves.
+Provenance names a winner; `programmer.keyStack` (W1, `ProvenanceService.keyStack`) names everything under it, top first, for one (target, attribute) — a group target answering per member. **Park** with its channels; the **programmer-band FX**; each **programmer slot**, owner by owner, with its value and age (a layer slot naming its layer, a sideband slot naming its channel); the **other FX**, each with `heldBack`; the **cue contributor** — value, cue, stack and Look layer from `underlyingSources` and the one Tier 4 snapshot the read takes, so a cue apply mid-read cannot pair one cue's value with another's attribution; and the **base**, `LayerResolver.baselineFor`. Where a stack's **Move in dark** wins the key — a dark head held ahead of the cue that lights it (move-in-dark plan D11) — its row, *Move in dark · for Q12*, stands where the cue contributor would, with the stack, the entry and cue it is for and their label (`MoveInDarkService.holdingOf`), and the cue row under it is what the cues alone compose (`CueAssignmentLayer.cuesOnly`), never on stage, so the stack names the move rather than blaming the live cue for the head's position. Every entry says whether it is on stage, walking the output order: park, FX by priority, the programmer, the cue, the base, with an on-stage full-weight Override FX, a programmer value, a cue value or a full park covering what lies below — an FX weighted to nothing (a 0 % amount, spent runs) is not on stage, and one under full amount is on stage beside what it mixes with (effects plan P3). `heldBack` is `FxSuppression`'s answer against the engine's snapshot and `BlindHold`'s against one read of blind — the tick's own — so Blind empties the programmer's half exactly as it does on the rig and holds the band instead; `heldBackReason` (`STOMP | PROGRAMMER | BLIND | REPLACED`) says which held it — `REPLACED` a replacing stack's weight (§"Replacing stacks"), under which the FX still paints at what is left. An FX painting every channel of the key under a sibling key is on the stack too, as provenance credits it. It is a request answered to the asking socket, never broadcast: a stack is open on one sheet, and that sheet re-asks when provenance moves.
 
 ### Record / Include / Update
 
@@ -400,7 +400,7 @@ For each (fixture, attribute) pair:
 1. Collect all active cues contributing an assignment to this pair. A group-level cue assignment expands to its members. A fixture-level assignment wins over a group-level assignment for the same attribute (**specificity rule**).
 2. Read the attribute's composition rule (category default, or per-attribute override).
 3. Apply the rule:
-   - `LTP`: take the assignment from the highest-priority contributor, where priority is cue-stack position for stacked cues and activation time for standalone cues.
+   - `LTP`: take the assignment from the highest-priority contributor, where priority is the stack's band and rank by latest GO, then the entry's position (§"Holds and the loose band"), and press order for loose cues.
    - `HTP`: take the `max` of all contributors' values, each scaled by its cue's current fade weight (see Crossfade below).
 4. Convert the resolved attribute value to channel values using the fixture's patch. Colour as hex, dimmer as 0–255 or 0–1, settings as enum string, pan/tilt as the native unit.
 
@@ -456,15 +456,68 @@ highest hold's:
 
 | Hold | Priority | Ordering |
 | --- | --- | --- |
-| a stack's entry | `stackId × 1 000 000 + position × 1 000 + 1` | later stacks above earlier, later entries above earlier |
+| a show stack's entry (in the running order) | `rank × 1 000 000 + position × 1 000 + 1` | the stack GO'd last above the rest, later entries above earlier |
+| a busk stack's entry | `1 000 000 000 + rank × 1 000 000 + position × 1 000 + 1` | above every show stack; again the latest GO on top |
 | a loose press | `LOOSE_BAND + seq` (`2 000 000 000 +`) | above every stack; the newest press on top (D10) |
 | the programmer's own FX | `PROGRAMMER_FX_PRIORITY_BASE` and up | above every cue, loose or not |
+
+**Latest GO wins, in two bands** (busk-stack plan D5, P3; `fx/StackRanks.kt`). A stack's `rank` is its
+place among its band's running stacks by latest operator GO, 1 the oldest, kept dense: an operator's
+start, GO, GO TO, BACK or pad press takes the top of the band, and the stacks above where it was close
+up. A **follow keeps the stack where it is**, so a looping chase never climbs over the operator's
+latest GO; so does a reload's re-GO, which restores the carried ranks first (`ShowCarry.stackRanks`).
+A stack leaving its band — stopped, or moved into or out of the running order, which takes the top of
+the other band — renumbers the rest. A **stopping stack keeps its rank until its release fade ends**,
+so its fading rows never share a rank with a live stack's, and `CueHolds.ranks` reads a priority back
+to its stack (`StackRanks.stackAt`) for the FX amount of a leaving effect. Every rank change restamps
+the moved stacks' live holds *and* what their crossfades and releases still have fading — rows and
+leaving effects at the same entry position in the new rank — and their Move in dark contributors.
+Ranks run 1–999 in each band, so both stay below `LOOSE_BAND`; a 1 000th live stack in one band is
+refused at its start, 409 `CUE_STACK_LIMIT`. A cue with no stack composes at its position alone,
+below every stack, and a build no hold has stamped (the Next-GO preview, Include, Update's keys)
+composes at the rank its GO would take (`goPriority`).
 
 So a busk cue pad pressed over a running stack wins every LTP attribute its cue asserts (HTP
 intensity still takes the highest level), the stack composes underneath it unchanged, and letting the
 press go hands the attribute back with nothing re-fired. Two presses rank newest first; pressing an
 older one again makes it the newest. Priority decides only LTP: for a dimmer, both cues' levels fold
 by `max` whatever their bands.
+
+### Replacing stacks
+
+A busk stack on **Replaces** (busk-stack plan D7, `cue_stacks.over_show`) makes its cues the **floor**
+of every key they set — HTP categories included, so Carabossy's 0 takes a front wash at 80 % to 0,
+which highest-takes-precedence never could. A cue replaces while any of its holds is a stack on
+Replaces, whatever its top hold, so a loose press on her cue keeps it replacing; its rows carry a
+**replace group** (`Assignment.replaceGroup`, stamped by `CueAssignmentLayer` from `CueHolds`'
+`CueStamp`): the stack of its top hold when that replaces, else the cue's own. The setting lands at the
+stack's next GO, and a released cue keeps its group while its rows fade.
+
+For each key the resolver folds upward in priority order (`CueAssignmentResolver.composeReplaced`):
+
+1. The floor starts as the non-replacing contributors below the lowest replacing group, composed by
+   the key's own rule.
+2. For each replacing group: its rows — a crossfade's or a release's two among them — compose among
+   themselves by the key's rule at their weights scaled to sum to one, into *R*; the group's weight
+   is *W* = min(1, Σw); the floor is blended toward *R* by *W* (as an LTP crossfade blends). The floor,
+   at weight 1 since it already holds that fade, then composes by the key's rule with the
+   non-replacing contributors above the group and below the next one.
+3. What is above the highest group — a loose press, a busk stack GO'd later — composes over the last
+   floor the same way.
+
+A group with nothing under it composes as its rows would alone. A group's position is the lowest
+priority its rows hold on the key; a contributor at or above it is above it, so its stack's own Move
+in dark contributor stays on top. Adds is today's composition, in the busk band.
+
+**The FX under it are held back, never removed** (D8). On a replaced key every FX below a group, but
+the programmer band's and the group's own (its cues', and anything in its stack's rank — a leaving
+cue's), is weighed by ∏(1 − *W*) over the groups that hold it back: fully at *W* = 1, handing back
+as the stack fades, phase kept throughout. The weight is a factor after the blend beside
+`amount × envelope × stackAmount` (`FxEngine.underReplacing`, at the four apply sites), read by the
+sampler and provenance too, and the key stack names it `heldBackReason: REPLACED` while it is below 1
+— a weight, unlike the other reasons, so the effect still paints at what is left. The composed snapshot
+publishes every replaced key's groups beside its values (`CueLayerSnapshot.replaced`), empty while
+no stack replaces, which is what the hot path reads first.
 
 ### A bundled emitter's own row beats the colour's copy
 
@@ -1780,6 +1833,21 @@ Setup: cue 42 is on stage with `dimmer = 200` on fixture F. The operator busks F
 2. The cue keeps recomposing underneath at 200; nothing visible changes while the entry holds.
 3. `programmer.clearEntry { fadeMs: 1000 }` — the attribute ramps 60 → 200 over one second via the `DmxController` ramp (no FX covers it), landing exactly on the cue value.
 4. Had a running FX covered `F.dimmer`, the publish would skip it and the next tick would snap the attribute back to FX-over-cue output — fades never fight the 50 Hz tick.
+
+### Example 5a — a replacing stack over the show
+
+Setup: Act 1's Q14 holds the front wash `dimmer = 204` and a movers' chase. The operator presses
+Carabossy, a busk stack on Replaces with a 3 s release time, whose Q1 sets the wash to 0.
+
+- The wash's dimmer has a replacing group: the floor below it is Q14's 204, Carabossy's *R* is 0 at
+  *W* = 1, so the wash goes to 0 — not `max(204, 0)`.
+- The chase sits below her group on the movers' dimmers she sets, so it is weighed by 1 − 1 = 0: held
+  back, still running.
+- A GO on Act 1 meanwhile lands under her on every key she sets, and shows at once on the rest.
+- Released, her rows fade from *W* = 1 to 0 over 3 s: the wash goes 0 → 102 at half way → 204, with no
+  jump, and the chase grows back in phase by the same weight.
+
+Had Carabossy been on **Adds**, the wash would have stayed at 204 (HTP) and the chase run over it.
 
 ### Example 6 — blind busking
 

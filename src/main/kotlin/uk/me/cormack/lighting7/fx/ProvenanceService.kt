@@ -168,8 +168,10 @@ data class KeyStackLayer(
      * [STOMP] above it, the programmer's value on the key ([PROGRAMMER] — never a band effect), or
      * Blind holding the programmer band ([BLIND], show-cue-editing plan D7). A stomp is named over
      * Blind because it outlasts it: a stomped band effect is still held when Blind goes off.
+     * [REPLACED] is a replacing stack above it on the key (busk-stack plan D8), holding it back by
+     * that stack's fade weight: it paints at what is left, and resumes in phase as the stack fades.
      */
-    enum class HeldBackReason { STOMP, PROGRAMMER, BLIND }
+    enum class HeldBackReason { STOMP, PROGRAMMER, BLIND, REPLACED }
 
     enum class Kind {
         PARK,
@@ -591,12 +593,14 @@ class ProvenanceService internal constructor(
      * the same key be reported instead, which is the honest answer when one exists.
      *
      * An effect weighted to nothing — a 0 % size, or a programmer layer's spent N-shot (effects plan
-     * D2, D9) — is skipped for the same reason, as [keyStack] reports it not on stage.
+     * D2, D9), or one a replacing stack fully in holds back on a key (busk-stack plan D8) — is skipped
+     * for the same reason, as [keyStack] reports it not on stage.
      */
     private fun highestPriorityFxByKey(
         include: (FxInstance) -> Boolean = { true },
     ): Map<Pair<String, String>, FxInstance> {
         val fxByKey = HashMap<Pair<String, String>, FxInstance>()
+        val cueLayer = layerResolver.current
         for (effect in activeFx()) {
             if (!effect.isRunning) continue
             if (effect.spent || fxWeight(effect) <= 0.0) continue
@@ -604,6 +608,7 @@ class ProvenanceService internal constructor(
             val attribute = effect.target.attribute
             for (fixtureKey in coverageKeys(effect)) {
                 if (isLayerStomped(effect, fixtureKey, attribute)) continue
+                if (layerResolver.replacedWeight(cueLayer, fixtureKey, attribute, effect.priority, effect.cueId) <= 0.0) continue
                 val k = fixtureKey to attribute
                 val current = fxByKey[k]
                 if (current == null || fxOrder.compare(effect, current) > 0) {
@@ -811,10 +816,12 @@ class ProvenanceService internal constructor(
             // puts nothing on stage, and one under full weight is a mix with what is underneath, so
             // only a full-weight OVERRIDE covers the layers below it. A setting has no mix: it is on
             // stage, and covers, from half weight up, as its target writes it ([weighDiscrete]).
-            val weight = if (effect.spent) 0.0 else fxWeight(effect)
+            val weight = if (effect.spent) 0.0 else fxWeight(effect) * replacedWeightOf(read, effect, fixtureKey, attribute, paintings)
             val discrete = effect.target is SettingTarget
             val paints = if (discrete) weighDiscrete(weight) else weight > 0.0
-            val on = !covered && effect.isRunning && heldBack[effect] == null && paints
+            // A replacing stack holds an effect back by a weight, which [weight] already carries.
+            val reason = heldBack[effect]
+            val on = !covered && effect.isRunning && (reason == null || reason == KeyStackLayer.HeldBackReason.REPLACED) && paints
             fxOnStage[effect] = on
             if (on && effect.blendMode == BlendMode.OVERRIDE && (discrete || weight >= 1.0)) covered = true
         }
@@ -927,7 +934,14 @@ class ProvenanceService internal constructor(
     private fun heldBackReason(read: KeyStackRead, painting: Painting): KeyStackLayer.HeldBackReason? =
         FxSuppression.heldBackReason(
             read.held, read.blind, painting.fixtureKey, painting.attribute, painting.effect, isLayerStomped,
+            layerResolver.replacedWeight(read.cueLayer, painting.fixtureKey, painting.attribute, painting.effect.priority, painting.effect.cueId),
         )
+
+    /** What the replacing stacks leave [effect] on the key it paints for this read ([paintings]' own). */
+    private fun replacedWeightOf(read: KeyStackRead, effect: FxInstance, fixtureKey: String, attribute: String, paintings: List<Painting>): Double {
+        val painting = paintings.firstOrNull { it.effect === effect }
+        return layerResolver.replacedWeight(read.cueLayer, painting?.fixtureKey ?: fixtureKey, painting?.attribute ?: attribute, effect.priority, effect.cueId)
+    }
 
     /** An [FxOutput] in the literal grammar of [target]'s property. */
     private fun FxOutput.asAttributeValueFor(target: FxTarget): CueAssignmentResolver.AttributeValue = when (this) {

@@ -284,17 +284,29 @@ class MoveInDarkService internal constructor(
     }
 
     /**
-     * Entries were restamped (`CueHolds.restampEntries`, `entryId → priority`) after the order of a
-     * stack's list changed: a contributor whose live entry moved within its stack follows it. A live
-     * entry moved to another stack is still held in this one until its next GO, so its contributor stays.
+     * Entries were restamped (`CueHolds.restampEntries`, `stackId → entryId → priority`) after the
+     * order of a stack's list changed: a contributor whose live entry moved within its stack follows
+     * it. A live entry moved to another stack is still held in this one until its next GO, so its
+     * contributor stays.
      */
-    fun onEntriesRestamped(entryPriorities: Map<Int, Int>) = synchronized(lock) {
+    fun onEntriesRestamped(entryPriorities: Map<Int, Map<Int, Int>>) = synchronized(lock) {
         for (run in stacks.values) {
-            val priority = entryPriorities[run.liveEntryId] ?: continue
-            if (stackOfDerivedPriority(priority) != run.stackId) continue
+            val priority = entryPriorities[run.stackId]?.get(run.liveEntryId) ?: continue
             run.livePriority = priority
             // Still above a GO back's outgoing cue, which no restamp moves, until its fade is over.
             restamp(run, if (clock() < run.settleAt) maxOf(run.priority, priority) else priority)
+        }
+    }
+
+    /**
+     * The stacks in [moved] compose at new places (busk-stack plan P3): each one's contributor goes to
+     * the same place within its stack's new rank, so it stays in the stack's band and above its cue.
+     */
+    fun onStacksMoved(moved: Map<Int, StackRanks.Place>) = synchronized(lock) {
+        for (run in stacks.values) {
+            val place = moved[run.stackId] ?: continue
+            run.livePriority = rebasedPriority(run.livePriority, place)
+            restamp(run, rebasedPriority(run.priority, place))
         }
     }
 

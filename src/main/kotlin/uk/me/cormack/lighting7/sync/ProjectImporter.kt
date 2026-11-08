@@ -20,6 +20,7 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.models.FixtureColours
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.CueStackRelease
+import uk.me.cormack.lighting7.models.CueStackOverShow
 import uk.me.cormack.lighting7.models.CueMoveInDarkMode
 import uk.me.cormack.lighting7.models.CueMoveInDarkSettings
 import uk.me.cormack.lighting7.models.MoveInDarkSettings
@@ -394,6 +395,11 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // end, with a 2 s release. Imported as stored, but for Release beside Loop (Loop wins) and a release
 // time outside 0–60 s (clamped).
 //
+// v51 gave a stack *Over the show* — `overShow`, `ADDS | REPLACES` (busk-stack plan D7). SUPPORTED moved
+// because a v50 reader would run a replacing stack as one that adds; MIN stays at 5, since an older
+// archive's stacks add. Imported as stored, but for Replaces on a stack in the running order, or a value
+// the desk does not know, which read as Adds.
+//
 // **These two constants are the real gate.** `FormatVersionJson.minReader` is *written* but never
 // read by the importer — `loadAndValidateArchive` compares against these — so bumping the DTO
 // alone leaves the gate wide open.
@@ -401,7 +407,7 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 50
+internal const val SUPPORTED_FORMAT_VERSION = 51
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -1879,6 +1885,8 @@ class ProjectImporter(private val state: State) {
                 // Loop wins over Release, so a stored stack always satisfies the write boundary.
                 releaseAtEnd = s.releaseAtEnd && !s.loop
                 releaseTime = java.time.Duration.ofMillis(s.releaseTimeMs.coerceIn(0, CueStackRelease.MAX_TIME_MS))
+                // Replaces is a busk stack's alone, as at the write boundary.
+                overShow = CueStackOverShow.parse(s.overShow)?.takeIf { !s.inRunningOrder } ?: CueStackOverShow.ADDS
             }
             importScenery(s.scenery, elementMap, "Cue stack ${s.uuid}") { element, change ->
                 DaoCueStackSceneryRow.new {
