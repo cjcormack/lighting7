@@ -76,7 +76,13 @@ internal data class ProgrammerRecordRequest(
     val name: String? = null,
     val cueNumber: String? = null,
     val sortOrder: Int? = null,
-    /** Where a CREATE's [cueNumber] reading out of order at [sortOrder] puts the cue; absent is `HERE`. */
+    /**
+     * CREATE's place as the entry of [cueStackId] the new cue goes directly after, resolved inside
+     * Record's transaction so a list that moved since the sheet opened cannot misplace it. Never
+     * beside [sortOrder].
+     */
+    val afterEntryId: Int? = null,
+    /** Where a CREATE's [cueNumber] reading out of order at its place puts the cue; absent is `HERE`. */
     val placement: CueNumberPlacement? = null,
     val cueType: String = "STANDARD",
     /**
@@ -157,7 +163,7 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
 
     // Ahead of `withCurrentProject`, where this check has always run: a malformed request should
     // report itself rather than the project mismatch. `performProgrammerRecord` re-runs it.
-    recordShapeProblem(mode, request.cueStackId, request.cueId)?.let {
+    recordShapeProblem(mode, request.cueStackId, request.cueId, request.sortOrder, request.afterEntryId)?.let {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
     }
 
@@ -178,6 +184,7 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
                 name = request.name,
                 cueNumber = request.cueNumber,
                 sortOrder = request.sortOrder,
+                afterEntryId = request.afterEntryId,
                 targets = request.targets,
                 scenery = request.scenery,
                 tempo = request.tempo,

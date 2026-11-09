@@ -80,6 +80,7 @@ import {
   useIncludeSelectionRequest,
 } from '../../store/includeSelection'
 import { useListExpansion, type KnownRig } from '../../lib/listExpansion'
+import { foldLandingKeys, useLandingOpenings } from './landing'
 import { anyClosed, applyExpandAll, heldOpen, shownExpandable, type ExpandLevel } from './expandAll'
 import { ExpandAllButton } from './ExpandAllButton'
 import {
@@ -352,10 +353,10 @@ export function FixturesListContainer({
         : { groups: new Set(maybeGroups.map((g) => g.name)), fixtures: new Set(maybeFixtures.map((f) => f.key)) },
     [rigIsRoutes, maybeFixtures, maybeGroups],
   )
-  const { expandedGroups, expandedFixtures, setExpandedGroups, setExpandedFixtures } = useListExpansion(
-    projectId,
-    selectionScope,
-    knownRig,
+  const storedExpansion = useListExpansion(projectId, selectionScope, knownRig)
+  const { expandedGroups, expandedFixtures, setExpandedGroups, setExpandedFixtures, openForLanding } = useLandingOpenings(
+    storedExpansion,
+    `${projectId}:${selectionScope}`,
   )
   const [scrollToRowId, setScrollToRowId] = useState<RowId | null>(null)
   const [infoFixtureKey, setInfoFixtureKey] = useState<string | null>(null)
@@ -690,13 +691,20 @@ export function FixturesListContainer({
     (level: ExpandLevel, open: boolean) => {
       const { rows: shownRows, selectedRowIds: selected, expandedGroups: groupsOpen, expandedFixtures: fixturesOpen } =
         expandAllInputs.current
+      const shown = shownExpandable(shownRows)
       const next = applyExpandAll(
         { groups: groupsOpen, fixtures: fixturesOpen },
-        shownExpandable(shownRows),
+        shown,
         heldOpen(shownRows, selected),
         level,
         open,
       )
+      // An expand stores what it covers, a landing's openings among them.
+      if (open) {
+        if (level !== 'fixtures') setExpandedGroups(() => next.groups, shown.groups)
+        if (level !== 'groups') setExpandedFixtures(() => next.fixtures, shown.fixtures)
+        return
+      }
       if (next.groups !== groupsOpen) setExpandedGroups(() => next.groups)
       if (next.fixtures !== fixturesOpen) setExpandedFixtures(() => next.fixtures)
     },
@@ -1093,31 +1101,31 @@ export function FixturesListContainer({
     },
     [cellSelection.cells, rowById, selectCells],
   )
-  // Select targets as rows on the commit after opening what they are folded under — a cell's
-  // fixture, and in the grouped view the group a fixture is listed under (the Include request's
-  // rule) — once those rows exist. A set none of whose rows is shown, a filter hiding them all,
-  // leaves the selection be rather than emptying it.
+  // Select targets as rows on the commit after opening, for this landing only, what they are folded
+  // under — a fixture only some of whose heads came in, and in the grouped view the group a fixture
+  // is listed under (the Include request's rule) — once those rows exist. All of a fixture's heads
+  // select the fixture (`foldLandingKeys`). A set none of whose rows is shown, a filter hiding them
+  // all, leaves the selection be rather than emptying it.
   const [landing, setLanding] = useState<readonly CueTarget[] | null>(null)
   const landTargets = useCallback(
     (targets: readonly CueTarget[]) => {
-      const openFixtures = new Set<string>()
+      const folded = foldLandingKeys(
+        targets.filter((target) => target.type === 'fixture').map((target) => target.key),
+        fixtures,
+      )
       const openGroups = new Set<string>()
-      for (const target of targets) {
-        if (target.type !== 'fixture') continue
-        const fixture = fixtures.find((f) => f.key === target.key)
-        const parent = fixture ?? fixtures.find((f) => (f.elements ?? []).some((e) => e.key === target.key))
-        if (parent == null) continue
-        if (fixture == null) openFixtures.add(parent.key)
-        const group = grouped ? parent.groups.find((name) => groups.some((g) => g.name === name)) : undefined
+      for (const key of folded.keys) {
+        const parent = folded.fixtureOf.get(key)
+        const group = parent != null && grouped ? parent.groups.find((name) => groups.some((g) => g.name === name)) : undefined
         if (group != null) openGroups.add(group)
       }
-      const opened = (prev: ReadonlySet<string>, keys: ReadonlySet<string>) =>
-        [...keys].every((key) => prev.has(key)) ? prev : new Set([...prev, ...keys])
-      if (openFixtures.size > 0) setExpandedFixtures((prev) => opened(prev, openFixtures))
-      if (openGroups.size > 0) setExpandedGroups((prev) => opened(prev, openGroups))
-      setLanding(targets)
+      openForLanding({ groups: openGroups, fixtures: folded.open })
+      setLanding([
+        ...targets.filter((target) => target.type !== 'fixture'),
+        ...folded.keys.map((key): CueTarget => ({ type: 'fixture', key })),
+      ])
     },
-    [fixtures, groups, grouped, setExpandedFixtures, setExpandedGroups],
+    [fixtures, groups, grouped, openForLanding],
   )
   useEffect(() => {
     if (landing == null) return
@@ -1306,7 +1314,7 @@ export function FixturesListContainer({
   // `DeepLinkSelect`, which holds the router subscription so this container need not.
   const landDeepLink = useCallback(
     (rowId: RowId, expandGroup: string | null) => {
-      if (expandGroup != null) setExpandedGroups((prev) => new Set(prev).add(expandGroup))
+      if (expandGroup != null) setExpandedGroups((prev) => new Set(prev).add(expandGroup), [expandGroup])
       setFilter('')
       setOnlyLit(false)
       selectRow(rowId, 'replace')
@@ -1335,10 +1343,21 @@ export function FixturesListContainer({
     },
     [],
   )
+  // The Include landing's rows, selected on the commit after the effect below opens what they sit
+  // under and clears the filter: the selection keeps only rows that are shown.
+  const [includeLanding, setIncludeLanding] = useState<readonly RowId[] | null>(null)
+  useEffect(() => {
+    if (includeLanding == null) return
+    setIncludeLanding(null)
+    setRows(includeLanding)
+  }, [includeLanding, setRows])
   useEffect(() => {
     if (includeNonce === 0 || pendingSpendRef.current?.nonce === includeNonce) return
     if (!includeSelectionLandable(includeSelection, projectId, includeMount)) return
     const { fixtureKeys, groupKeys } = includeSelection
+    // All of a fixture's heads select the fixture; some open it, for this landing only (D14).
+    const folded = foldLandingKeys(fixtureKeys, fixtures)
+    const openGroups = new Set<string>()
     // Prefer the group row when the sheet is in rollup mode and the whole group came in —
     // that is the shape the operator was working in, and it keeps the row count readable.
     const wanted: RowId[] = []
@@ -1355,21 +1374,19 @@ export function FixturesListContainer({
       if (parent == null) return fixtureRowId(fixture.key)
       // Skip members already covered by a selected group row.
       if (groupSet.has(parent)) return null
-      setExpandedGroups((prev) => (prev.has(parent) ? prev : new Set(prev).add(parent)))
+      openGroups.add(parent)
       return memberRowId(parent, fixture.key)
     }
-    for (const key of fixtureKeys) {
-      const fixture = fixtures.find((f) => f.key === key)
-      if (fixture) {
+    for (const key of folded.keys) {
+      const fixture = folded.fixtureOf.get(key)
+      if (fixture == null) continue
+      if (fixture.key === key) {
         const id = fixtureRowFor(fixture)
         if (id != null) wanted.push(id)
         continue
       }
       // A cell's key: its row under its fixture's, opened.
-      const parent = fixtures.find((f) => (f.elements ?? []).some((e) => e.key === key))
-      if (parent == null) continue
-      const parentRow = fixtureRowFor(parent) ?? fixtureRowId(parent.key)
-      setExpandedFixtures((prev) => (prev.has(parent.key) ? prev : new Set(prev).add(parent.key)))
+      const parentRow = fixtureRowFor(fixture) ?? fixtureRowId(fixture.key)
       wanted.push(elementRowId(parentRow, key))
     }
     // Nothing resolved — the fixtures may still be loading, so leave the nonce unapplied and
@@ -1384,14 +1401,15 @@ export function FixturesListContainer({
         if (pendingSpendRef.current?.nonce === nonce) pendingSpendRef.current = null
       }, 0),
     }
+    openForLanding({ groups: openGroups, fixtures: folded.open })
     // A filter would hide most of what we just selected, and the operator did not ask for it.
     setFilter('')
     setOnlyLit(false)
-    setRows(wanted)
+    setIncludeLanding(wanted)
     setScrollToRowId(wanted[0])
     // A re-run lands nothing twice: the nonce is spent, or on its way out. RigGate's follow can
-    // move `projectId` and the expansion setters under a mounted grid, so they are deps too.
-  }, [includeNonce, fixtures, groups, grouped, includeSelection, projectId, includeMount, setRows, setOnlyLit, setExpandedGroups, setExpandedFixtures])
+    // move `projectId` and the landing's openings under a mounted grid, so they are deps too.
+  }, [includeNonce, fixtures, groups, grouped, includeSelection, projectId, includeMount, setOnlyLit, openForLanding])
 
   // View-level shortcuts: Escape clears, ⌘/Ctrl+A selects all visible rows,
   // ↑/↓ move the selection (Shift extends the range from the anchor), and →/← open and close the

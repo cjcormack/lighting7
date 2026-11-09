@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.routes
 import uk.me.cormack.lighting7.models.LayerSource
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -1088,6 +1089,77 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         assertNull(onOwn.speedMasterUuid)
     }
 
+    @Test
+    fun `afterEntryId lands a new cue directly after that entry, numbered from its place`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val stackId = createStack(client, "Act 1")
+        for (name in listOf("A", "B", "C")) {
+            setProgrammer("hex-1", "dimmer", "100")
+            client.record(ProgrammerRecordRequest(projectId = projectId.toString(), cueStackId = stackId, name = name))
+        }
+        val afterA = client.stackRows(stackId).single { it.name == "A" }.entryId
+
+        setProgrammer("hex-1", "dimmer", "150")
+        val response = client.record(
+            ProgrammerRecordRequest(projectId = projectId.toString(), cueStackId = stackId, name = "new", afterEntryId = afterA),
+        )
+
+        assertEquals(HttpStatusCode.Created, response.status)
+        val rows = client.stackRows(stackId)
+        assertEquals(listOf("A", "new", "B", "C"), rows.map { it.name })
+        assertEquals(listOf("1", "2", "3", "4"), rows.map { it.cueNumber })
+    }
+
+    @Test
+    fun `afterEntryId naming another stack's entry is 400, and beside sortOrder is 400`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val act1 = createStack(client, "Act 1")
+        val act2 = createStack(client, "Act 2")
+        setProgrammer("hex-1", "dimmer", "100")
+        client.record(ProgrammerRecordRequest(projectId = projectId.toString(), cueStackId = act2, name = "elsewhere"))
+        val foreign = client.stackRows(act2).single().entryId
+
+        val wrongStack = client.record(
+            ProgrammerRecordRequest(projectId = projectId.toString(), cueStackId = act1, name = "x", afterEntryId = foreign),
+        )
+        assertEquals(HttpStatusCode.BadRequest, wrongStack.status)
+        assertEquals("Cue stack entry not found", wrongStack.body<ErrorResponse>().error)
+        val loose = client.record(
+            ProgrammerRecordRequest(projectId = projectId.toString(), name = "x", afterEntryId = foreign),
+        )
+        assertEquals(HttpStatusCode.BadRequest, loose.status)
+        val both = client.record(
+            ProgrammerRecordRequest(projectId = projectId.toString(), cueStackId = act2, name = "x", afterEntryId = foreign, sortOrder = 0),
+        )
+        assertEquals(HttpStatusCode.BadRequest, both.status)
+
+        assertEquals(emptyList<String>(), client.stackRows(act1).map { it.name }, "nothing was written")
+        assertEquals(listOf("elsewhere"), client.stackRows(act2).map { it.name })
+    }
+
+    @Test
+    fun `afterEntryId outside CREATE is 400`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val stackId = createStack(client, "Act 1")
+        setProgrammer("hex-1", "dimmer", "100")
+        client.record(ProgrammerRecordRequest(projectId = projectId.toString(), cueStackId = stackId, name = "A"))
+        val row = client.stackRows(stackId).single()
+
+        for (mode in listOf("MERGE", "UPDATE_EXISTING", "REMOVE")) {
+            val response = client.record(
+                ProgrammerRecordRequest(projectId = projectId.toString(), mode = mode, cueId = row.id, afterEntryId = row.entryId),
+            )
+            assertEquals(HttpStatusCode.BadRequest, response.status, mode)
+            assertEquals("afterEntryId places a new cue; only CREATE takes it", response.body<ErrorResponse>().error)
+        }
+    }
+
     /** A Look whose one group row lands on hex-1 and hex-2, as a layer source. */
     private suspend fun warmLook(client: HttpClient): LayerSource {
         LocateTestSupport.seedGroup(state, projectId, "front-wash", "hex-1", "hex-2")
@@ -1111,6 +1183,9 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             contentType(ContentType.Application.Json)
             setBody(request)
         }
+
+    private suspend fun HttpClient.stackRows(stackId: Int): List<CueStackCueEntry> =
+        get("/api/rest/projects/$projectId/cue-stacks/$stackId").body<CueStackDetails>().cues
 
     private suspend fun createStack(client: HttpClient, name: String): Int =
         ProgrammerRouteTestSupport.createStack(client, projectId, name)

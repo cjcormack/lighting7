@@ -189,6 +189,11 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   const includedStack =
     includedEntry?.stack ??
     (target?.kind === 'CUE' && target.cueStackId != null ? stacks?.find((s) => s.id === target.cueStackId) : undefined)
+  // *A new cue after …* places after the include's own entry only (D17), never a row guessed by cue.
+  const afterEntryId =
+    target?.kind === 'CUE' && target.entryId != null && includedEntry?.row.entryId === target.entryId
+      ? target.entryId
+      : undefined
 
   // ⌘K's *Programmer* group (programmer-toolbar plan D13): this row's verbs, each run as its control
   // runs it, and each missing from ⌘K while its control would be disabled.
@@ -407,11 +412,9 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
                 disabled={!canRecord}
                 icon={<Plus className="size-3.5" />}
                 title={`A new cue after ${includedCue?.number ?? includedCue?.name ?? 'this one'}`}
-                // NOT "becomes Q4.5": the server assigns the number, and `lib/cueNumber.ts` has
-                // no between-two-numbers arithmetic. Predicting one the server then ignores is
-                // worse than not predicting.
-                sub={`${includedStack.name} · appended`}
-                onSelect={() => sheets.openRecord({ defaultCueStackId: includedStack.id })}
+                // NOT "becomes Q4.5": the desk numbers it from its place.
+                sub={`${includedStack.name} · ${afterEntryId != null ? `directly after ${includedCue?.number ?? includedCue?.name ?? 'it'}` : 'appended'}`}
+                onSelect={() => sheets.openRecord({ defaultCueStackId: includedStack.id, afterEntryId })}
               />
             )}
             <MenuItem

@@ -404,8 +404,8 @@ run `./gradlew compileTestKotlin` and the touched packages' tests where they tou
 |---|---|---|---|---|---|
 | 1 | OSC sender ranges and the address list | merged | `claude/magical-ritchie-84882h` | [#410](https://github.com/cjcormack/lighting7/pull/410) | `7296801` |
 | 2 | Auto numbers from position | merged | `claude/gallant-meitner-7xk6a8` | [#411](https://github.com/cjcormack/lighting7/pull/411) | `210c26d` |
-| 3 | The Show view follows the show | in review | `claude/zen-dirac-kc1wi2` | | |
-| 4 | Include, and Record's cue list and placement | planned | | | |
+| 3 | The Show view follows the show | in review | `claude/zen-dirac-kc1wi2` | [#413](https://github.com/cjcormack/lighting7/pull/413) | `5a7f5cc` |
+| 4 | Include, and Record's cue list and placement | in review | `claude/sharp-lamport-6erbz0` | | |
 | 5 | One colour editor for FX | planned | | | |
 | 6 | Path's Size | planned | | | |
 | 7 | Move in dark's instant rows | planned | | | |
@@ -578,6 +578,31 @@ D14–D17.
 - Docs: frontend `CLAUDE.md`'s Record paragraph (*A row names every place…*) and the Include
   landing; `docs/cues-engineering.md` if it lists Record's fields.
 - Local: `compileTestKotlin`, `--tests 'uk.me.cormack.lighting7.routes.*'`, `check:quick`.
+- *As built*: `landing.ts` holds `useLandingOpenings` beside `foldLandingKeys`: the landing's openings
+  laid over the stored set while the list stays mounted, each landing replacing the last's; the
+  container's chevrons, Expand all and Collapse all go through its setters, so a row they close is
+  closed whichever opened it, a row they open is stored, and a landing's row they leave open stays the
+  landing's — unless the gesture means to open it (Expand all, a ⌥-click level expand, a deep link's
+  group), which stores it. `foldLandingKeys` also answers each key's fixture (`fixtureOf`), which both
+  landings read. `landTargets` is the heads chip's landing (*Odd*, *Select by colour*), so it folds too.
+  The Include landing now selects on the commit after its openings, as `landTargets` does: the row door
+  keeps only rows that are shown, so an Include of some heads opened the fixture and selected nothing
+  (and a member row in a closed group likewise), which predates this session. The
+  picker's rows became `cuePickerSections` (one per divider) with `filterCuePickerSections`, and a
+  row's places are sorted into the same order (`showOrderStacks`, which `cuesInShowOrder` shares);
+  `preselectedRecordCue` is D16's rule, held apart from the cue picked so it is offered on Merge alone
+  and never carried into Replace or Remove, filled in when the summary, the playhead or the stack list
+  arrives after the open, and the picker brings a picked row into view once. *Put it at the end* is a
+  checkbox, the sheet's idiom (the kit has no switch), and *After Q13 in Act 1* is drawn while the
+  entry's stack is the choice rather than dropped for good. The menu keeps the bare number the source
+  strip shows (*A new cue after 13*, *Act 1 · directly after 13*), and passes the include's entry only
+  when the stack list holds it, saying *· appended* otherwise (never a row guessed by cue); the sheet's
+  line takes the picker's `Q`. `afterEntryId` is resolved in `routes/programmerSurface.kt`
+  (`performProgrammerRecord`'s transaction), not `programmerRecord.kt`; `recordShapeProblem`, which the
+  AI surface shares (its `record_cue` sends neither), refuses it beside `sortOrder` and outside CREATE;
+  a bad entry is 400 where the core's other in-transaction failures stay 404. `cuePickerRows.test.ts`'s
+  by-name cases and `RecordSheet.test.tsx`'s picker order now pin show order; `RecordSceneryRow.test.tsx`
+  and `RecordTempoRow.test.tsx` mock the two hooks the sheet now reads.
 
 ### Session 5 — One colour editor for FX
 

@@ -62,8 +62,16 @@ internal sealed interface RecordCoreResult {
  * always had — ahead of `withCurrentProject`, so a malformed request reports itself rather than
  * the project mismatch. The core calls it too, which is what the AI surface relies on.
  */
-internal fun recordShapeProblem(mode: RecordMode, cueStackId: Int?, cueId: Int?): String? = when {
+internal fun recordShapeProblem(
+    mode: RecordMode,
+    cueStackId: Int?,
+    cueId: Int?,
+    sortOrder: Int? = null,
+    afterEntryId: Int? = null,
+): String? = when {
     mode != RecordMode.CREATE && cueId == null -> "${mode.name} requires cueId"
+    mode != RecordMode.CREATE && afterEntryId != null -> "afterEntryId places a new cue; only CREATE takes it"
+    sortOrder != null && afterEntryId != null -> "Name sortOrder or afterEntryId, not both"
     else -> null
 }
 
@@ -87,6 +95,8 @@ internal fun performProgrammerRecord(
     name: String?,
     cueNumber: String?,
     sortOrder: Int?,
+    /** A CREATE's place as the entry of [cueStackId] it goes directly after; never beside [sortOrder]. */
+    afterEntryId: Int? = null,
     targets: List<CueTargetDto>?,
     /**
      * Record the programmer's held scenery too (scenery-programmer plan D7) — whatever the [mask],
@@ -98,7 +108,7 @@ internal fun performProgrammerRecord(
     /** Where a new cue's [cueNumber] reading out of order at [sortOrder] puts it. */
     placement: CueNumberPlacement = CueNumberPlacement.HERE,
 ): RecordCoreResult {
-    recordShapeProblem(mode, cueStackId, cueId)?.let { return RecordCoreResult.Failure(it) }
+    recordShapeProblem(mode, cueStackId, cueId, sortOrder, afterEntryId)?.let { return RecordCoreResult.Failure(it) }
     // A marker is a labelled entry, not a cue (cue model plan D12): nothing can be recorded into
     // one, so a request for one is refused rather than making a cue of it.
     if (cueType == CueType.MARKER) {
@@ -123,6 +133,7 @@ internal fun performProgrammerRecord(
     // A write into a cue keeps the entry it was included from, when it was (the indicator's number).
     val includedEntryId = state.show.programmerStore.lastIncludedTarget?.takeIf { it.cueId == cueId }?.entryId
     var refusal: EntryNumberRefusal? = null
+    var badPlace: String? = null
     val (written, error) = transaction(state.database) {
         if (mode == RecordMode.CREATE) {
             // No stack makes a loose cue (cue model plan §3.5).
@@ -136,9 +147,17 @@ internal fun performProgrammerRecord(
                 }
                 stack
             }
+            val position = if (afterEntryId == null) sortOrder else {
+                val at = stack?.let { entriesOf(it).indexOfFirst { e -> e.id.value == afterEntryId } } ?: -1
+                if (at < 0) {
+                    badPlace = "Cue stack entry not found"
+                    return@transaction null to badPlace
+                }
+                at + 1
+            }
             // Before anything is written: a refusal is a normal return, which commits.
             val placed = stack?.let {
-                when (val plan = planNewEntryNumber(it, cueNumber, sortOrder, placement)) {
+                when (val plan = planNewEntryNumber(it, cueNumber, position, placement)) {
                     is NewEntryNumberPlan.Refused -> { refusal = plan.refusal; return@transaction null to plan.refusal.message }
                     is NewEntryNumberPlan.Place -> plan
                 }
@@ -147,7 +166,7 @@ internal fun performProgrammerRecord(
                 project, stack, recording,
                 name = name?.takeIf { it.isNotBlank() } ?: defaultRecordedCueName(project, stack),
                 cueNumber = placed?.number,
-                sortOrder = placed?.position ?: sortOrder,
+                sortOrder = placed?.position ?: position,
                 cueType = cueType,
                 registry = state.show.fxRegistry,
             )
@@ -173,6 +192,7 @@ internal fun performProgrammerRecord(
     }
 
     refusal?.let { return RecordCoreResult.NumberRefused(it) }
+    badPlace?.let { return RecordCoreResult.Failure(it) }
     if (written == null) return RecordCoreResult.Failure(error ?: "Cue not found", notFound = true)
 
     val republished = republishCueIfLive(state, written.outcome.cueId)
