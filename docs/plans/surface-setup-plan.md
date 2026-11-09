@@ -278,9 +278,9 @@ and its row marked *in review* with its branch. A session's PR is titled
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The binding and its migration | in review | `claude/hopeful-hamilton-eancf5` | [#407](https://github.com/cjcormack/lighting7/pull/407) | bd866bb |
-| 2 | Feedback | in review | `claude/happy-heisenberg-vh2hqw` | | |
-| 3 | The served picture, and editors A and C | planned | | | |
+| 1 | The binding and its migration | merged | `claude/hopeful-hamilton-eancf5` | [#407](https://github.com/cjcormack/lighting7/pull/407) | bd866bb |
+| 2 | Feedback | merged | `claude/happy-heisenberg-vh2hqw` | [#409](https://github.com/cjcormack/lighting7/pull/409) | 1c407f7 |
+| 3 | The served picture, and editors A and C | in review | `claude/beautiful-heisenberg-fvjsu7` | | |
 | 4 | New functions | planned | | | |
 | 5 | Jobs | planned | | | |
 | 6 | Assign from the thing | planned | | | |
@@ -484,6 +484,46 @@ session 2, and the screens keep today's shape until session 3.
   (the wire, identify); `docs/glossary.md`; `FU-MANUAL-SURFACE-SETUP-S3`.
 - **Local:** `./gradlew test` for the `midi`, `routes` and `plugins` packages, and the full
   `npm run check` (several test files deleted and the sheet kit changed).
+
+**As built** (where the code led away from the text above):
+
+- **The map's part** carries `does`, `on` and `how` as §3 names them, and beside them the catalogue
+  `entry` it is (so a client never matches a binding to an entry), the row's `bank` (null for both),
+  the `stripId` of a part a strip derives, its `takeoverPolicy` and a `shows` sentence — editor A's line
+  and editor C's column, written on the desk like the label. There is no `params` (they are on `does`)
+  and no `beats` until session 5. Strip slots are parts too, so the sheet edits a strip. A strip's
+  encoder is labelled at the encoder page of the first attached device of the type, since the page is a
+  device's and the map a type's. Only the current project is mapped: the Surfaces tab is on the rig only.
+- **The catalogue is entries, not functions**: a grand master with a level and a tempo with a BPM are
+  entries of their own (`grandMasterLevel`, `tempoSet`), since the parameter makes a button of each.
+  `SurfaceCatalogue.entryOf` is the one answer to which entry a stored binding is.
+- **Learn is gone, not renamed**: `surfaceIdentify.*` captures and the editor binds the captured part
+  through the slot write, so `surfaceLearn.commit`, `learntPart` and Learn's own collector went. The
+  router asks `SurfaceIdentify.offer` before it dispatches, and swallows the rest of the captured gesture
+  on that control until it is still for 750 ms, so a fader moved to identify it does not write as it
+  settles.
+- **`surfaceBank.set` is gone** (D13): nothing in the app switches a layer, so the frame went with the
+  last sender. The `expand` route went too: *Make this control its own* is a slot write of the derived
+  binding on the viewed layer.
+- **The bridge went with the screens**: `/surface-bindings` takes `binding` only and no row answers
+  `target`; `SurfaceGrammar.legacyTarget` and `LegacyRefs`' reverse ids went with it. `lib/colourAxis.ts`
+  and `components/surfaces/targetColour.ts` went too, since nothing read them once the map named the
+  colour.
+- **Fill in order** is a `records` plan on `SpreadPanel`, its trigger word *Fill*, and the sheet does the
+  fill (`planFill`), naming each row it skipped; the kit's `SheetColumn.accepts` has a `refused` beside it
+  that names the rows a commit dropped.
+- **`CueUses.bindings`** names a binding by its control in the map's words: *X-Touch Compact · Button 36 ·
+  Layer A* (`SurfaceLabels.controlName`), with no layer word on a profile that has none.
+- **The map has a no-layer entry**, `""`, beside each layer: a device starts on no layer after a restart,
+  where only the rows on both layers fire, and the tab views the device's own layer, or that one, with a
+  *No layer* chip and a line saying so while the desk is on none. Only the types in use are built
+  (attached, bound in the project, or built before), and a speed master's rename rebuilds the labels.
+- **Identify passes a fader's touch and a fader at 0 through**: swallowing the touch-up left a fader
+  touched after a capture, and a fader at 0 is at rest, which Learn skipped too. The wait carries
+  `remainingMs`, counted down on the browser's clock as `effects.armed`'s is.
+- **A control a strip derives has no *On* of its own** in the sheet: its subject is the strip's, so the
+  cell reads it out and *Fill* skips it. *Remove* says which rows it takes off — *both layers*, or a
+  layer only.
 
 ### Session 4 — New functions
 

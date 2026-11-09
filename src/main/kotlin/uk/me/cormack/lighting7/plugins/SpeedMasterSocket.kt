@@ -122,7 +122,7 @@ data class SpeedMasterChangedOutMessage(
 
 /**
  * A tempo write was refused — the narrow failure ack (docs/websocket-engineering.md §"Reply
- * shape", option 2, the `surfaceLearn.error` precedent). Unicast to the writer, followed by the
+ * shape", option 2, the `fxError` precedent). Unicast to the writer, followed by the
  * usual full-state reply so a stale client snaps back to the truth it disagreed with.
  * [code] is `SPEED_MASTER_FOLLOWER` (the master follows master 1 — unlink it in the sheet),
  * `SPEED_MASTER_UNKNOWN` (well-formed uuid naming no master — the write was dropped, not

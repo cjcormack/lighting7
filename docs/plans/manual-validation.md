@@ -16,6 +16,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-SURFACE-SETUP-S1`](#fu-manual-surface-setup-s1) | an upgraded show's bindings all still work; a pan encoder beats a running Circle; a strip encoder's push does nothing; a flash on a capped head lands at its percentage; the blinder takes a colour move; QLab's OSC cues unchanged; a layer B binding fires | Surface setup session 1, 2026-11-09 |
+| [`FU-MANUAL-SURFACE-SETUP-S3`](#fu-manual-surface-setup-s3) | touching a bound GO selects it in the editor without firing it; viewing Layer B leaves the desk on Layer A; a strip control made its own; the mapping table on a phone, with *Fill in order* | Surface setup session 3, 2026-11-09 |
 | [`FU-MANUAL-SURFACE-SETUP-S2`](#fu-manual-surface-setup-s2) | a motor fader holds still under a Local FX; Blind shows and keeps the staged value; a held flash leaves the faders alone; the jump rule on a fast flick; the X-Touch adopts a ring value and darkens on `ringOffValue`; a push LED re-asserted on release; two X-Touches keep their own layers | Surface setup session 2, 2026-11-09 |
 | [`FU-MANUAL-RESTORE-S3`](#fu-manual-restore-s3) | a cue deleted last week comes back from the History panel with its place in its stack and the Look it layered, nothing else moves, and ⌘Z takes it back | Snapshot restore S3, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S4`](#fu-manual-busk-stack-s4) | a bound `PressPad` on a stack pad lights while its stack runs and goes dark when it stops; `CueStackStop` and OSC's `/stop` fade over the release time | Busk stack session 4, 2026-11-08 |
@@ -245,6 +246,33 @@ allowlist:
    each does what it did.
 7. **Layer B.** Switch the device to Layer B with its own button and press a button bound on layer B
    only: it fires. The profile maps Layer A's MIDI only, so if it does not, note what the device sends.
+
+---
+
+## `FU-MANUAL-SURFACE-SETUP-S3`
+
+**What it proves**: *The served picture, and editors A and C* (surface-setup plan session 3) — a touch on
+the desk names its control without firing it, viewing a layer switches nothing, and every binding is set
+from one form in either editor, the picture and the table drawing what the desk serves.
+
+**Why it is here**: the tests drive the router with synthetic MIDI and a jsdom page; only the X-Touch
+shows that identify mode really swallows the press, and only a phone shows the table at its width.
+
+**Test**, on the dev desk with the X-Touch Compact attached, a stack *Act 1* bound to GO on button 36,
+and a group on strip 1:
+
+1. **Identify.** Open Settings › Surfaces, click *Touch a control on the desk* and press button 36: the
+   inspector opens on Button 36 showing *GO · Act 1*, and Act 1 does **not** GO. Press it again: it GOes.
+   Click *Touch a control on the desk* and leave it 30 s: the banner goes.
+2. **Layers.** Click *Layer B* in the header: the picture shows Layer B's bindings, the live state goes
+   faint, and the X-Touch stays on Layer A. Press the X-Touch's own layer key: the dot moves to B.
+3. **Editor A.** Click fader 1: it says *From strip 1*. Press *Make this control its own*: the fader keeps
+   its label, now on the viewed layer only, and the strip's other controls still follow the strip. Give
+   an encoder's push *Locate* on *The selection*: it shows *Writes to Local* and *Lit while the selection
+   is located*.
+4. **Editor C.** Open the *Table* view, select On over strips 1–4 and *Fill* with *Groups, in order*:
+   four groups land in order, and a row that cannot take a group is named in the toast.
+5. **Phone.** On a phone the page is the table alone, and a Does cell opens the same form.
 
 ---
 

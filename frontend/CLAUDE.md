@@ -219,8 +219,8 @@ A new picker that reaches for the raw hook will offer the hazer's power dimmer �
 the raw `useFixtureListQuery` / `usePatchListQuery` imports outside an allowlist of key-resolving
 files in `eslint.config.js`; joining it is a claim reviewed there. (Enumerating
 `useFixtureLookup().fixtures` is not covered: it is raw for the lookups it feeds.) A picker that
-edits an existing reference keeps the one it already names, labelled, as `BindingTargetPicker`
-does; the Groups views count and list members through `useVisibleGroupMembers`. The empty busk
+edits an existing reference keeps the one it already names, labelled, as the surface binding form's
+attribute select does; the Groups views count and list members through `useVisibleGroupMembers`. The empty busk
 rig's fallback (`effectiveRig`) drops it too, mirroring the desk's `BuskRigOrder`. Backend side:
 lighting7 `docs/fixtures-engineering.md` §"Infrastructure fixtures".
 
@@ -517,8 +517,8 @@ Book cards), the session-8
 scenery editor's shape — a whole-list save per gesture, its draft held over a refetch. The Stage view
 throws **confetti** on every fire (`stage3d/StageConfetti.tsx` over the pure `confetti.ts`): one
 instanced mesh pooled per canvas, unlit, invalidating each frame only while a flake flies — see
-`docs/stage-vis-engineering.md` §"Confetti". The MIDI `fireTrigger` target is mirrored in
-`lib/surfaceDrop.ts` and the binding picker; the Cloud tab's Remote access section carries *Allow arming and firing*.
+`docs/stage-vis-engineering.md` §"Confetti". A surface binds it as the catalogue's *Fire*
+function, on a fixture; the Cloud tab's Remote access section carries *Allow arming and firing*.
 
 **Fixture commands — resets and lamp control** (fixture-optics session 7; lighting7
 `docs/fixtures-engineering.md` §"@FixtureCommand") take the trigger's shape: a
@@ -2847,17 +2847,11 @@ so under a `ContextMenuTrigger` one finger would arm two hold detectors — whic
 hold still added a layer, put the layer on at 500ms and popped the menu at 700ms. `PopoverAnchor`
 registers no handlers at all.
 
-**MIDI has three doors of its own** — `pickUpPad(padUuid)`, `handPlaceInBank(bankUuid)` and
-`handDrop`, all BUTTON, mirrored in `lib/surfaceDrop.ts` as §The MIDI surface view requires. There is
-no `handPlaceInSlot` and no layer-stack place: neither a cue slot nor the programmer's stack has a
-uuid a binding could carry. `handPlaceInBank` brought a new health variant, **`missingBank`** — a
-*busk* bank, never the device profile's `unknownBank`, which shares only the word — and closing that
-arm in `healthDescriptor.ts` was one of two gaps the backend's review found here. The other was
-`describeTarget`'s missing `default`: `noImplicitReturns` is off, so an unknown discriminator
-returned `undefined` and drew a **blank** label rather than falling through, which reads as a bug in
-the panel. Its three siblings already answered properly. The library offers `handPlaceInBank` as one
-chip per **bank** and `handDrop` on the Desk row; `pickUpPad` is in the picker only, because a
-`Pick up` chip would sit beside the `pressPad` chip for the same pad under the same name.
+**MIDI has three doors of its own** — the surface functions *Pick up* (a pad), *Place* (a busk bank)
+and *Let go*, all buttons, offered from the catalogue. There is no place into a cue slot and no
+layer-stack place: neither has a uuid a binding could carry. *Place* brought a health variant,
+**`missingBank`** — a *busk* bank, never the device profile's `unknownBank`, which shares only the
+word.
 
 **A record can also be *dragged* between two screens of one browser, and that gesture ends in the
 hand rather than going around it.** Drag a library row off the right (or left) edge of one
@@ -2968,62 +2962,23 @@ snapshot, for `dragOverlayRegistry`'s stated reason.
 ### The MIDI surface view
 
 `/projects/:id/settings/surfaces` draws the attached desk as **a picture built from profile data**
-(`ControlSurfaceType.layout`), labels every control by re-deriving the backend's own resolution
-rules, and — under *Edit bindings* — lets a library be dragged onto it: **a row lands on a strip, a
-chip lands on one control**. Read
-[`docs/midi-surface-engineering.md`](docs/midi-surface-engineering.md) before touching it; the plan
-is `../docs/plans/completed/midi-surface-plan.md` and the layout authority
-`../docs/plans/completed/midi-surface-design/`.
+(`ControlSurfaceType.layout`) with an inspector per control (editor A), or the same bindings as a
+mapping sheet (editor C), the only view below tablet width (surface-setup plan session 3). Read
+[`docs/midi-surface-engineering.md`](docs/midi-surface-engineering.md) before touching it; the plan is
+`../docs/plans/surface-setup-plan.md`.
 
-The four things that bite, in one line each. **`lib/surfaceResolve.ts` is a mirror of
-`ControlSurfaceBindingService.resolve` and `deriveStripTarget`** and its failure is silent — a
-precedence read backwards paints a plausible label for a control the desk drives differently.
-**Droppables sit on the grid-cell wrapper, never inside the memoized `ControlCell`**, or a hover
-costs the whole panel at 20 Hz. **A drop patches the control's *own row at the exact bank* or
-creates** — `index.byControl.get(id)?.get(activeBank)`, never `resolveControl`, which would answer a
-strip's row or a global one and move a binding the operator was not pointing at. And **the
-eligibility dim mirrors a backend rule rather than standing alone**: since session 4,
-`ControlSurfaceBindingService.refuseWrongKind` refuses a `fireCue` on a fader at the write boundary
-whichever door it comes through, and `controlKinds` / `targetControlKind` in `lib/surfaceDrop.ts`
-are the client copy of the server's `Spec.inputs` against `inputFor(part)`, an encoder's button
-function placed on its push.
+The things that bite, in one line each. **The desk is the only resolver** (P5): what every control
+part does — its label with records by name, its colour, where it writes, what it shows, its health —
+is the desk's `surfaceMap.state`, and the functions a form offers are `GET /surface-functions`; this
+side keeps no copy of the resolve order, the kind tables or the label rules. **Every write is the slot
+write** (`PUT` / `DELETE …/surface-bindings/slot`), and the map comes back on the socket. **Viewing
+*Layer A* or *Layer B* switches nothing** (D13): the chips view, the desk's own key switches. **A touch
+on the desk is captured without firing** (D14): `useIdentify` and the desk's `surfaceIdentify.*`.
+**`SheetColumn.accepts`** is how the sheet's *On* skips, and names, rows that cannot take a subject.
 
-**A label under a control carries its target's colour** as a 3px band (§Fixture colours):
-`components/surfaces/targetColour.ts` names the fixture or group a binding drives — an attribute, a
-flash, a select, a strip, a trigger — and `ControlCell` resolves it beside the label, from the route's
-`useTargetColours`, whose identity holds across frames, so the memo still skips.
-
-**A colour on a continuous control is one of four HSV axes** — hue (the default, and the only one
-a pre-axis row can mean), a fine hue trim, saturation, brightness — carried as an optional
-`colourAxis` on the four attribute targets and on the encoder bank; the bundled emitters (white,
-amber, UV) are offered as faders of their own, expanded off the colour descriptor's channels in
-`hooks/useTargetAttributes.ts`. `lib/colourAxis.ts` mirrors `midi/ColourAxis.kt` and owns the
-null-is-hue rule; nothing on this side resolves an axis. The library is sectioned by kind with
-**Desk first**, and a row's chips are grouped by family with a hairline — see the two sections at
-the end of `docs/midi-surface-engineering.md`.
-
-**Five more since session 7 of the busk-further plan (D14)**: `buskFocusSet` and `buskSheetToggle`
-address a desk window by its **registry name**, `selectionNext` / `selectionPrev` / `selectionCells`
-reach `DeskSelection.subselect` — see `docs/midi-surface-engineering.md` §"Windows and the
-sub-selection".
-
-**And the fan** (venue-visit plan S12): `selectionFan {axis: 'PAN' | 'TILT' | 'ACROSS' | 'DEPTH'}`, a
-continuous target the picker offers as *Selection — fan* with an *Axis* select, the library's Desk
-row as *Fan pan*, *Fan tilt*, *Fan across* and *Fan depth*, and `describeTarget` as *Sel · fan pan*.
-`ACROSS` and `DEPTH` fan across the stage, a tenth of a metre a step. The desk holds the fan's anchor and feeds the
-ring the amount, so nothing on this side computes one — see `docs/midi-surface-engineering.md`
-§"The selection fan".
-
-A button can also press a **record**: `applyLook` puts the Look on whole, `pressPalette`
-onto the desk selection, `pressPad` through the pad's whole bank plan, plus the three busk-page
-targets. Four things follow on this side. Their library rows are **not** `TargetRowItem`s — that
-component exists to mount `useTargetAttributes` per target — so they are built in `SurfaceLibrary`'s
-`rows` memo from `actionChip`. The **kind row stays at six**: a palette files under *Looks*, a busk
-page under *Desk*, and *Next page* / *Prev page* sit on the Desk row once, because a chip repeated
-per page reads as page-specific. Every Look gets an *Apply* chip, since a Look lands whole whatever
-is selected. And `describeTarget` **will not
-resolve a uuid to a name** — `components/surfaces/recordOptions.ts` is the one owner of that, shared
-by the picker and the inspector, the same split `useSpeedMasterDisplay` makes for a speed master.
+`BindingForm` asks Does · On · How for any catalogue entry; `SurfaceInspector` mounts one per part;
+`SurfaceSheet` mounts it in its *Does* cell. The fixtures pinned by lighting7's `SurfaceCatalogueTest`
+(`src/test/resources/surfaces/`) are read by every surface test through `surfaceFixtures.ts`.
 
 **One desk, one selection, server-owned** (`store/selection.ts`), and three surfaces move it: the
 busk target band, the programmer's fixture list, and a select button on the desk itself. The list
@@ -5941,7 +5896,8 @@ who owns a value, and a red name must not look like a red value.
   *target* — a tile, a binding — read `hooks/useTargetColours`, the colour index widened to every
   head's element key (its fixture's colour) and every group's name (its own), identity stable until
   a colour moves; `lib/targetColours.ts`'s `targetColour` reads it. A group tile, a group's surface
-  label and a group chip are the **group's** colour, never a member's (D9). A real scribble strip is
+  label and a group chip are the **group's** colour, never a member's (D9); a surface label's colour is
+the desk's, named on its map. A real scribble strip is
   `FU-SURFACE-SCRIBBLE-COLOUR`.
 - **The Stage view's housings by colour** (D12) are a view option, *Bodies · Plain | By colour*,
   below.
@@ -6535,8 +6491,8 @@ master leaves it.
 - **It is per project and machine-local**: the desk keeps each project's level across a switch and
   a restart, and never syncs it. The MIDI `grandMasterToggle` takes it to 0 and back; the
   `blackout` target is unchanged.
-- **The surfaces picker offers `grandMasterFader`** as a continuous target (`lib/surfaceDrop.ts`,
-  the binding picker, a *GM fader* chip on the library's Desk row).
+- **A surface binds it** as the catalogue's *Grand master* (a fader, or a button that takes it to 0
+  and back) or *Grand master to a level*.
 
 ### A stack's FX amount
 
@@ -6552,9 +6508,8 @@ strip — drawn below full, and at full only while an FX runs whose cue this sta
 (`cueHolds.state`'s `stackId`, the cue's highest hold's stack, read only at full). A runtime gesture, so it works while the show is
 locked, as GO does; it greys only offline, and a press inside it never drills the row. It writes
 through `useLiveFader` (`components/editor/`), the grand master fader's drag-and-settle lifted out
-so the two cannot differ. A project switch starts every stack at full and a reload keeps it. The MIDI
-`stackFxAmount` target is mirrored in `lib/surfaceDrop.ts`, the binding picker (*Cue stack — FX
-amount*) and an *FX amount* chip on each stack's library row.
+so the two cannot differ. A project switch starts every stack at full and a reload keeps it. A surface
+binds it as the catalogue's *FX amount*, on a stack.
 
 ### Move in dark
 

@@ -1,84 +1,72 @@
 import { restApi } from "./restApi"
 import { lightingApi } from "../api/lightingApi"
 import { store } from "./index"
-import { bindingsForScreens } from "../api/surfacesApi"
 import type {
+  CatalogueEntry,
+  ControlPart,
   ControlSurfaceBinding,
   ControlSurfaceType,
-  CreateSurfaceBindingRequest,
-  UpdateSurfaceBindingRequest,
-  SurfaceDeviceInfo,
+  EncoderBankSelection,
+  IdentifyCapture,
   PickupChange,
   ScalerState,
+  SurfaceBinding,
   SurfaceControlStates,
-  EncoderBankSelection,
+  SurfaceDeviceInfo,
+  SurfaceMapFrame,
+  TakeoverPolicy,
 } from "../api/surfacesApi"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 export type {
-  ControlSurfaceBinding,
-  ControlSurfaceType,
-  CreateSurfaceBindingRequest,
-  UpdateSurfaceBindingRequest,
-  SurfaceDeviceInfo,
-  PickupChange,
-  ScalerState,
-  BindingTarget,
-  FixtureAttributeTarget,
-  GroupAttributeTarget,
-  CueStackGoTarget,
-  CueStackBackTarget,
-  CueStackPauseTarget,
-  CueStackGoToTarget,
-  CueStackStandbyTarget,
-  CueStackStopTarget,
-  FireCueTarget,
-  LooseCueSetTarget,
-  LookSetTarget,
-  FlashTarget,
-  BlackoutTarget,
-  BlackoutSetTarget,
-  GrandMasterToggleTarget,
-  GrandMasterLevelTarget,
-  SetBankTarget,
-  SpeedMasterBpmTarget,
-  SpeedMasterTapTarget,
-  SpeedMasterSetBpmTarget,
-  SelectionAttributeTarget,
-  SelectionFanTarget,
-  FanAxis,
-  SelectTargetTarget,
-  SelectMode,
-  ClearSelectionTarget,
-  LocateSelectionTarget,
-  StripTarget,
-  EncoderBankSetTarget,
-  ColourAxis,
-  EncoderBankSelection,
-  UnknownTarget,
-  ControlDescriptor,
-  FaderControl,
-  EncoderControl,
-  ButtonControl,
   BankButtonControl,
   BankDefinition,
-  StripDefinition,
+  BindingHealth,
+  ButtonControl,
+  CatalogueEntry,
+  CatalogueParam,
+  ColourAxis,
+  ControlDescriptor,
+  ControlKind,
+  ControlPart,
+  ControlState,
+  ControlSurfaceBinding,
+  ControlSurfaceType,
+  EncoderBankSelection,
+  EncoderControl,
+  FaderControl,
+  FanAxis,
+  How,
+  IdentifyCapture,
   LayoutCell,
   LayoutRegion,
-  SurfaceLayout,
-  SurfaceControlStates,
-  ControlState,
   LedState,
-  RingState,
-  TakeoverPolicy,
-  LearnEvent,
-  BindingHealth,
-  ControlPart,
-  How,
+  PartSource,
+  PickupChange,
   RecordKind,
-  SurfaceSubject,
-  SurfaceDoes,
+  ResolvedPart,
+  RingState,
+  ScalerState,
+  StripDefinition,
+  SubjectKind,
   SurfaceBinding,
+  SurfaceControlStates,
+  SurfaceDeviceInfo,
+  SurfaceDoes,
+  SurfaceLayout,
+  SurfaceMapFrame,
+  SurfaceSubject,
+  TakeoverPolicy,
+  WritesTo,
 } from "../api/surfacesApi"
+
+/** One control part on one layer: what the slot write and its clear name. `layer` null is both. */
+export interface SurfaceSlot {
+  deviceTypeKey: string
+  controlId: string
+  part: ControlPart
+  layer: string | null
+}
 
 // The cue list counts each cue's `FireCue` bindings (`usedBy`), so a binding change refreshes it too.
 lightingApi.surfaces.subscribeBindingsChanged((event) => {
@@ -100,6 +88,7 @@ const NO_BANKS: Record<string, string> = {}
 const NO_PICKUPS: PickupStates = {}
 const NO_CONTROLS: SurfaceControlStates = {}
 const NO_ENCODER_BANKS: Record<string, EncoderBankSelection> = {}
+const NO_MAPS: Readonly<Record<string, SurfaceMapFrame>> = {}
 /** What the scaler is before its first frame: nothing blacked out, grand master live. */
 const SCALER_AT_REST: ScalerState = { blackoutEnabled: false, grandMasterEnabled: true }
 
@@ -135,60 +124,32 @@ export const surfacesApi = restApi.injectEndpoints({
       providesTags: ['ControlSurfaceType'],
     }),
 
-    // All bindings for a project.
+    // All bindings for a project: the home card's count and the fixture sheet's badges.
     surfaceBindings: build.query<ControlSurfaceBinding[], number>({
       query: (projectId) => `projects/${projectId}/surface-bindings`,
-      transformResponse: (bindings: ControlSurfaceBinding[]) => bindingsForScreens(bindings),
       providesTags: (_result, _error, projectId) => [
         { type: 'SurfaceBinding', id: projectId },
       ],
     }),
 
-    createSurfaceBinding: build.mutation<
-      ControlSurfaceBinding,
-      { projectId: number } & CreateSurfaceBindingRequest
-    >({
-      query: ({ projectId, ...body }) => ({
-        url: `projects/${projectId}/surface-bindings`,
-        method: 'POST',
-        body,
-      }),
-      invalidatesTags: (_result, _error, { projectId }) => [
-        { type: 'SurfaceBinding', id: projectId },
-        { type: 'CueList', id: projectId },
-      ],
-    }),
-
-    updateSurfaceBinding: build.mutation<
-      ControlSurfaceBinding,
-      { projectId: number; bindingId: number } & UpdateSurfaceBindingRequest
-    >({
-      query: ({ projectId, bindingId, ...body }) => ({
-        url: `projects/${projectId}/surface-bindings/${bindingId}`,
-        method: 'PATCH',
-        body,
-      }),
-      invalidatesTags: (_result, _error, { projectId }) => [
-        { type: 'SurfaceBinding', id: projectId },
-        { type: 'CueList', id: projectId },
-      ],
+    /** The function catalogue (D15): static per build, so fetched once. */
+    surfaceFunctions: build.query<CatalogueEntry[], void>({
+      query: () => 'surface-functions',
+      keepUnusedDataFor: 3600,
     }),
 
     /**
-     * *Fader only…* — replace a strip row with the four single rows it was deriving, in one
-     * transaction. The derivation happens server-side, at the encoder bank the device is on right
-     * now, so the four bindings the operator ends up with are the four they could see a moment
-     * ago; doing it here would be a second copy of `deriveStripTarget` that could disagree with
-     * the desk about what the encoder was doing.
+     * The editors' one write: whatever the slot holds becomes [binding]. The map comes back on the
+     * socket, so nothing here patches a cache.
      */
-    expandSurfaceBinding: build.mutation<
-      ControlSurfaceBinding[],
-      { projectId: number; bindingId: number; displayKey?: string }
+    writeSurfaceSlot: build.mutation<
+      ControlSurfaceBinding,
+      { projectId: number; slot: SurfaceSlot; binding: SurfaceBinding; takeoverPolicy?: TakeoverPolicy | null }
     >({
-      query: ({ projectId, bindingId, displayKey }) => ({
-        url: `projects/${projectId}/surface-bindings/${bindingId}/expand`,
-        method: 'POST',
-        params: displayKey ? { displayKey } : undefined,
+      query: ({ projectId, slot, binding, takeoverPolicy }) => ({
+        url: `projects/${projectId}/surface-bindings/slot`,
+        method: 'PUT',
+        body: { ...slot, binding, takeoverPolicy: takeoverPolicy ?? null },
       }),
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'SurfaceBinding', id: projectId },
@@ -196,18 +157,29 @@ export const surfacesApi = restApi.injectEndpoints({
       ],
     }),
 
-    deleteSurfaceBinding: build.mutation<
-      void,
-      { projectId: number; bindingId: number }
-    >({
-      query: ({ projectId, bindingId }) => ({
-        url: `projects/${projectId}/surface-bindings/${bindingId}`,
+    clearSurfaceSlot: build.mutation<void, { projectId: number; slot: SurfaceSlot }>({
+      query: ({ projectId, slot }) => ({
+        url: `projects/${projectId}/surface-bindings/slot`,
         method: 'DELETE',
+        body: slot,
       }),
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'SurfaceBinding', id: projectId },
         { type: 'CueList', id: projectId },
       ],
+    }),
+
+    /** Every device type's served map for the current project, keyed by type. */
+    surfaceMaps: build.query<Readonly<Record<string, SurfaceMapFrame>>, void>({
+      queryFn: () => ({ data: lightingApi.surfaces.getMaps() ?? NO_MAPS }),
+      async onCacheEntryAdded(_, { cacheDataLoaded, updateCachedData, cacheEntryRemoved }) {
+        await cacheDataLoaded
+        const subscription = lightingApi.surfaces.subscribeMaps((maps) => {
+          updateCachedData(() => maps)
+        })
+        await cacheEntryRemoved
+        subscription.unsubscribe()
+      },
     }),
 
     // The six WS-driven live states below are cache entries rather than `useState` +
@@ -322,10 +294,10 @@ export const surfacesApi = restApi.injectEndpoints({
 export const {
   useControlSurfaceTypeListQuery,
   useSurfaceBindingsQuery,
-  useCreateSurfaceBindingMutation,
-  useUpdateSurfaceBindingMutation,
-  useExpandSurfaceBindingMutation,
-  useDeleteSurfaceBindingMutation,
+  useSurfaceFunctionsQuery,
+  useWriteSurfaceSlotMutation,
+  useClearSurfaceSlotMutation,
+  useSurfaceMapsQuery,
   useSurfaceDevicesQuery,
   useSurfaceBanksQuery,
   useSurfacePickupsQuery,
@@ -371,4 +343,70 @@ export function useEncoderBanks(): Record<string, EncoderBankSelection> {
 export function useScalerState(): ScalerState {
   const { data } = useSurfaceScalerQuery()
   return data ?? SCALER_AT_REST
+}
+
+/** The current project's served map for one device type, or null before its first frame. */
+export function useSurfaceMap(deviceTypeKey: string | null | undefined): SurfaceMapFrame | null {
+  const { data } = useSurfaceMapsQuery()
+  return deviceTypeKey == null ? null : (data?.[deviceTypeKey] ?? null)
+}
+
+/** This window's wait for a touch on the desk (D14). */
+export interface IdentifyWait {
+  waiting: boolean
+  /** When the wait ends on its own, in this browser's clock. */
+  endsAt: number | null
+  /** How the last wait ended without a touch: `timeout`, `cancelled`, or `offline` when the socket was down. */
+  ended: string | null
+}
+
+/**
+ * Identify mode for this window: [begin] asks the desk for the next touch, which arrives through
+ * [onCapture] and is never dispatched. One wait at a time; unmounting ends it.
+ */
+export function useIdentify(onCapture: (capture: IdentifyCapture) => void): {
+  wait: IdentifyWait
+  begin: (deviceTypeKey?: string | null) => void
+  cancel: () => void
+} {
+  const [wait, setWait] = useState<IdentifyWait>({ waiting: false, endsAt: null, ended: null })
+  const session = useRef<string | null>(null)
+  const captureRef = useRef(onCapture)
+  useEffect(() => {
+    captureRef.current = onCapture
+  }, [onCapture])
+
+  useEffect(() => {
+    const subscription = lightingApi.surfaces.subscribeIdentify((event) => {
+      if (event.type === 'state') {
+        if (event.waiting) {
+          session.current = event.sessionId
+          const remaining = event.remainingMs
+          setWait({ waiting: true, endsAt: remaining == null ? null : Date.now() + remaining, ended: null })
+        } else if (event.sessionId === session.current) {
+          session.current = null
+          setWait({ waiting: false, endsAt: null, ended: event.reason ?? null })
+        }
+        return
+      }
+      if (event.sessionId !== session.current) return
+      session.current = null
+      setWait({ waiting: false, endsAt: null, ended: null })
+      captureRef.current(event)
+    })
+    return () => {
+      subscription.unsubscribe()
+      if (session.current != null) lightingApi.surfaces.cancelIdentify(session.current)
+    }
+  }, [])
+
+  const begin = useCallback((deviceTypeKey?: string | null) => {
+    if (!lightingApi.surfaces.beginIdentify(deviceTypeKey)) {
+      setWait({ waiting: false, endsAt: null, ended: 'offline' })
+    }
+  }, [])
+  const cancel = useCallback(() => {
+    if (session.current != null) lightingApi.surfaces.cancelIdentify(session.current)
+  }, [])
+  return useMemo(() => ({ wait, begin, cancel }), [wait, begin, cancel])
 }

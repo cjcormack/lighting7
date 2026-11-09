@@ -4,65 +4,37 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.midi.BindingRefused
-import uk.me.cormack.lighting7.midi.Binding
 import uk.me.cormack.lighting7.midi.ControlPart
-import uk.me.cormack.lighting7.midi.LegacyRefs
-import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
-import uk.me.cormack.lighting7.midi.learntPart
-import uk.me.cormack.lighting7.routes.BindingRead
-import uk.me.cormack.lighting7.routes.readBinding
-import kotlinx.serialization.json.JsonObject
 import uk.me.cormack.lighting7.midi.ColourAxis
 import uk.me.cormack.lighting7.midi.ControlState
 import uk.me.cormack.lighting7.midi.EncoderBankSelection
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.DeviceMatcher
 import uk.me.cormack.lighting7.midi.MidiDeviceHandle
-import uk.me.cormack.lighting7.midi.MidiLearnSessionManager
+import uk.me.cormack.lighting7.midi.ResolvedPart
 import uk.me.cormack.lighting7.midi.SoftTakeoverStateMachine
-import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
-import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.midi.SurfaceIdentify
+import uk.me.cormack.lighting7.midi.SurfaceMapFrame
 
 // ─── Inbound ────────────────────────────────────────────────────────────
 
 @Serializable
 sealed class SurfaceInMessage : InMessage()
 
+/** Wait for a touch on the desk (D14): the next press or move on [deviceTypeKey]'s devices, or any, is captured and not dispatched. */
 @Serializable
-@SerialName("surfaceLearn.begin")
-data class SurfaceLearnBeginInMessage(
-    val projectId: Int,
-    val deviceTypeKey: String? = null,
-) : SurfaceInMessage()
+@SerialName("surfaceIdentify.begin")
+data class SurfaceIdentifyBeginInMessage(val deviceTypeKey: String? = null) : SurfaceInMessage()
 
 @Serializable
-@SerialName("surfaceLearn.cancel")
-data class SurfaceLearnCancelInMessage(val sessionId: String) : SurfaceInMessage()
-
-/** Bind the captured control part: [binding], or [target] in the old union's words (the bridge `routes/projectSurfaceBindings.kt` describes). */
-@Serializable
-@SerialName("surfaceLearn.commit")
-data class SurfaceLearnCommitInMessage(
-    val sessionId: String,
-    val bank: String? = null,
-    val binding: Binding? = null,
-    val target: JsonObject? = null,
-    val takeoverPolicy: String? = null,
-) : SurfaceInMessage()
-
-@Serializable
-@SerialName("surfaceBank.set")
-data class SurfaceBankSetInMessage(
-    /** The attached device to switch (surface-setup plan D16). */
-    val displayKey: String,
-    val bank: String?,
-) : SurfaceInMessage()
+@SerialName("surfaceIdentify.cancel")
+data class SurfaceIdentifyCancelInMessage(val sessionId: String) : SurfaceInMessage()
 
 @Serializable
 @SerialName("surfaceBank.state")
@@ -103,51 +75,47 @@ data object SurfaceDevicesStateInMessage : SurfaceInMessage()
 @Serializable
 sealed class SurfaceOutMessage : OutMessage()
 
+/**
+ * This window's identify wait, the banner it draws: [waiting] with its deadline while it waits, and
+ * once more when it ends without a capture ([reason] `cancelled` or `timeout`). Unicast.
+ */
 @Serializable
-@SerialName("surfaceLearn.started")
-data class SurfaceLearnStartedOutMessage(
+@SerialName("surfaceIdentify.state")
+data class SurfaceIdentifyStateOutMessage(
     val sessionId: String,
-    val projectId: Int,
-    val deviceTypeKey: String?,
-    val deadlineMs: Long,
+    val waiting: Boolean,
+    val deviceTypeKey: String? = null,
+    val deadlineMs: Long? = null,
+    /** How long the wait has left at send, which a client counts down on its own clock. */
+    val remainingMs: Long? = null,
+    val reason: String? = null,
 ) : SurfaceOutMessage()
 
+/** The control part the touch named, to the window that waited for it only. */
 @Serializable
-@SerialName("surfaceLearn.captured")
-data class SurfaceLearnCapturedOutMessage(
+@SerialName("surfaceIdentify.captured")
+data class SurfaceIdentifyCapturedOutMessage(
     val sessionId: String,
+    val deviceTypeKey: String,
+    val displayKey: String,
+    val controlId: String,
+    val part: ControlPart,
+) : SurfaceOutMessage()
+
+/**
+ * One device type's served picture (D15): every control part on every layer, resolved, labelled and
+ * judged by the desk. `StateFlow`-backed, so the subscription is the snapshot; a frame is sent again
+ * only when it changed.
+ */
+@Serializable
+@SerialName("surfaceMap.state")
+data class SurfaceMapStateOutMessage(
     val projectId: Int,
     val deviceTypeKey: String,
-    val controlId: String,
-    val part: ControlPart = ControlPart.MAIN,
-) : SurfaceOutMessage()
-
-@Serializable
-@SerialName("surfaceLearn.committed")
-data class SurfaceLearnCommittedOutMessage(
-    val sessionId: String,
-    val bindingId: Int,
-    val projectId: Int,
-) : SurfaceOutMessage()
-
-@Serializable
-@SerialName("surfaceLearn.cancelled")
-data class SurfaceLearnCancelledOutMessage(
-    val sessionId: String,
-    val reason: String,
-) : SurfaceOutMessage()
-
-@Serializable
-@SerialName("surfaceLearn.error")
-data class SurfaceLearnErrorOutMessage(
-    val sessionId: String?,
-    val message: String,
-    // Mirrors `routes/projectSurfaceBindings.kt`'s `refusalResponse`: MIDI Learn's commit reaches
-    // `ControlSurfaceBindingService.create` directly, with no route validation of its own, so a
-    // [uk.me.cormack.lighting7.midi.BindingRefused]'s machine-readable code has to be forwarded
-    // here too, or a client branching on it never sees it from this door.
-    val code: String? = null,
-) : SurfaceOutMessage()
+    val layers: Map<String, Map<String, ResolvedPart>>,
+) : SurfaceOutMessage() {
+    constructor(frame: SurfaceMapFrame) : this(frame.projectId, frame.deviceTypeKey, frame.layers)
+}
 
 @Serializable
 enum class BindingChangeType {
@@ -266,36 +234,23 @@ data class SurfaceControlsChangedOutMessage(
 suspend fun handleSurface(scope: SocketScope, message: SurfaceInMessage) {
     val state = scope.state
     when (message) {
-        is SurfaceLearnBeginInMessage -> {
-            val session = state.midiLearnSessionManager.begin(
-                projectId = message.projectId,
-                filter = MidiLearnSessionManager.LearnFilter(deviceTypeKey = message.deviceTypeKey),
-            )
-            scope.ownedLearnSessions += session.sessionId
-            scope.send(SurfaceLearnStartedOutMessage(
-                sessionId = session.sessionId,
-                projectId = session.projectId,
-                deviceTypeKey = session.filter.deviceTypeKey,
-                deadlineMs = session.deadlineMs,
+        is SurfaceIdentifyBeginInMessage -> {
+            // One wait per window: a second begin replaces the first.
+            scope.ownedIdentifySessions.toList().forEach { state.surfaceIdentify.cancel(it) }
+            scope.ownedIdentifySessions.clear()
+            val session = state.surfaceIdentify.begin(message.deviceTypeKey)
+            scope.ownedIdentifySessions += session.sessionId
+            scope.send(SurfaceIdentifyStateOutMessage(
+                session.sessionId, waiting = true, session.deviceTypeKey, session.deadlineMs,
+                remainingMs = state.surfaceIdentify.remainingMs(session),
             ))
         }
-        is SurfaceLearnCancelInMessage -> {
-            val cancelled = state.midiLearnSessionManager.cancel(message.sessionId)
-            scope.ownedLearnSessions.remove(message.sessionId)
-            scope.send(if (cancelled != null) {
-                SurfaceLearnCancelledOutMessage(message.sessionId, reason = "cancelled")
-            } else {
-                SurfaceLearnErrorOutMessage(message.sessionId, "Session not found or not cancellable")
-            })
-        }
-        is SurfaceLearnCommitInMessage -> {
-            val reply = handleSurfaceLearnCommit(state, message)
-            if (reply is SurfaceLearnCommittedOutMessage) {
-                scope.ownedLearnSessions.remove(message.sessionId)
+        is SurfaceIdentifyCancelInMessage -> {
+            scope.ownedIdentifySessions.remove(message.sessionId)
+            if (state.surfaceIdentify.cancel(message.sessionId)) {
+                scope.send(SurfaceIdentifyStateOutMessage(message.sessionId, waiting = false, reason = "cancelled"))
             }
-            scope.send(reply)
         }
-        is SurfaceBankSetInMessage -> state.activeBankState.setBank(message.displayKey, message.bank)
         is SurfaceBankStateInMessage ->
             scope.send(SurfaceBankStateOutMessage(state.activeBankState.active.value))
         is SurfaceEncoderBankSetInMessage ->
@@ -338,32 +293,30 @@ fun setupSurfaceSubscriptions(scope: SocketScope) {
     // subscription is snapshot and broadcast both.
     scope.subscribe(state.encoderBankState.selections) { scope.send(SurfaceEncoderBankStateOutMessage(it)) }
 
-    // Learn-event broadcasts are filtered to sessions this connection started, so two
-    // `/surfaces` tabs don't see phantom captures from each other's sessions.
-    scope.subscribe(state.midiLearnSessionManager.events.filter { it.sessionId in scope.ownedLearnSessions }) { event ->
+    // A capture goes to the window that waited for it, and to no other.
+    scope.subscribe(state.surfaceIdentify.events.filter { it.sessionId in scope.ownedIdentifySessions }) { event ->
+        scope.ownedIdentifySessions.remove(event.sessionId)
         when (event) {
-            is MidiLearnSessionManager.SessionEvent.Captured -> {
-                val captured = event.session.captured ?: return@subscribe
-                scope.send(SurfaceLearnCapturedOutMessage(
-                    sessionId = event.sessionId,
-                    projectId = event.session.projectId,
-                    deviceTypeKey = captured.deviceTypeKey,
-                    controlId = captured.controlId,
-                    part = captured.part,
-                ))
-            }
-            is MidiLearnSessionManager.SessionEvent.TimedOut -> {
-                scope.ownedLearnSessions.remove(event.sessionId)
-                scope.send(SurfaceLearnCancelledOutMessage(
-                    sessionId = event.sessionId,
-                    reason = "timeout",
-                ))
-            }
-            is MidiLearnSessionManager.SessionEvent.Cancelled ->
-                scope.ownedLearnSessions.remove(event.sessionId)
-            is MidiLearnSessionManager.SessionEvent.Committed ->
-                scope.ownedLearnSessions.remove(event.sessionId)
-            is MidiLearnSessionManager.SessionEvent.Started -> Unit
+            is SurfaceIdentify.Event.Captured -> scope.send(SurfaceIdentifyCapturedOutMessage(
+                sessionId = event.sessionId,
+                deviceTypeKey = event.capture.deviceTypeKey,
+                displayKey = event.capture.displayKey,
+                controlId = event.capture.controlId,
+                part = event.capture.part,
+            ))
+            is SurfaceIdentify.Event.Ended ->
+                scope.send(SurfaceIdentifyStateOutMessage(event.sessionId, waiting = false, reason = event.reason))
+        }
+    }
+
+    // The map is a StateFlow, so the first emission is the connect snapshot; after it only a frame
+    // that changed is sent, since one change moves one device type's map at most.
+    val sentMaps = HashMap<String, SurfaceMapFrame>()
+    scope.subscribe(state.surfaceMapService.maps.filterNotNull()) { maps ->
+        for ((typeKey, frame) in maps.frames) {
+            if (sentMaps[typeKey] == frame) continue
+            sentMaps[typeKey] = frame
+            scope.send(SurfaceMapStateOutMessage(frame))
         }
     }
 
@@ -468,56 +421,4 @@ private fun buildSurfaceDevicesStateMessage(
         )
     }
     return SurfaceDevicesStateOutMessage(devices = infos)
-}
-
-private fun handleSurfaceLearnCommit(state: State, message: SurfaceLearnCommitInMessage): SurfaceOutMessage {
-    val session = state.midiLearnSessionManager.get(message.sessionId)
-        ?: return SurfaceLearnErrorOutMessage(message.sessionId, "Session not found")
-    val captured = session.captured
-        ?: return SurfaceLearnErrorOutMessage(message.sessionId, "Session not yet captured")
-
-    val takeover = message.takeoverPolicy?.let(BindingTakeoverPolicy::parseOrNull)
-    if (message.takeoverPolicy != null && takeover == null) {
-        return SurfaceLearnErrorOutMessage(
-            message.sessionId,
-            "Unknown takeoverPolicy: ${message.takeoverPolicy}",
-        )
-    }
-
-    val refs = LegacyRefs.of(state.database, session.projectId)
-    val written = when (val read = readBinding(message.binding, message.target, captured.deviceTypeKey, captured.controlId, refs)) {
-        is BindingRead.Read -> read.binding
-        is BindingRead.Bad -> return SurfaceLearnErrorOutMessage(message.sessionId, read.message)
-        BindingRead.Absent -> return SurfaceLearnErrorOutMessage(message.sessionId, "A binding is required")
-    }
-
-    return try {
-        val binding = state.controlSurfaceBindingService.create(
-            projectId = session.projectId,
-            deviceTypeKey = captured.deviceTypeKey,
-            controlId = captured.controlId,
-            bank = message.bank,
-            binding = written,
-            takeoverPolicy = takeover,
-            part = learntPart(
-                ControlSurfaceRegistry.typeFor(captured.deviceTypeKey)?.control(captured.controlId),
-                captured.part,
-                written.does,
-            ),
-        )
-        state.midiLearnSessionManager.commit(message.sessionId)
-        SurfaceLearnCommittedOutMessage(
-            sessionId = message.sessionId,
-            bindingId = binding.id,
-            projectId = session.projectId,
-        )
-    } catch (e: IllegalStateException) {
-        SurfaceLearnErrorOutMessage(message.sessionId, e.message ?: "Binding slot already taken")
-    } catch (e: IllegalArgumentException) {
-        SurfaceLearnErrorOutMessage(
-            message.sessionId,
-            e.message ?: "Invalid binding",
-            code = (e as? BindingRefused)?.code,
-        )
-    }
 }

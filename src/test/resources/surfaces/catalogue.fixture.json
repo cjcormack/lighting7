@@ -1,0 +1,995 @@
+[
+    {
+        "id": "level",
+        "does": "level",
+        "label": "Level",
+        "group": "Fixtures",
+        "help": "One attribute of the heads it is on, from a fader or an encoder.",
+        "inputs": [
+            "CONTINUOUS"
+        ],
+        "subjects": [
+            "SELECTION",
+            "GROUP",
+            "FIXTURE"
+        ],
+        "hows": [],
+        "defaultHow": null,
+        "writesTo": "LOCAL",
+        "params": [
+            {
+                "key": "attribute",
+                "label": "Attribute",
+                "kind": "ATTRIBUTE",
+                "required": true,
+                "default": "dimmer"
+            },
+            {
+                "key": "axis",
+                "label": "Colour axis",
+                "kind": "CHOICE",
+                "options": [
+                    {
+                        "value": "hue",
+                        "label": "Hue"
+                    },
+                    {
+                        "value": "hueFine",
+                        "label": "Hue fine"
+                    },
+                    {
+                        "value": "saturation",
+                        "label": "Saturation"
+                    },
+                    {
+                        "value": "brightness",
+                        "label": "Brightness"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "flash",
+        "does": "flash",
+        "label": "Flash",
+        "group": "Fixtures",
+        "help": "While held, an attribute at a share of each head's range; let go, it goes back.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "GROUP",
+            "FIXTURE"
+        ],
+        "hows": [
+            "WHILE_HELD"
+        ],
+        "defaultHow": "WHILE_HELD",
+        "writesTo": "LOCAL",
+        "params": [
+            {
+                "key": "attribute",
+                "label": "Attribute",
+                "kind": "ATTRIBUTE",
+                "required": true,
+                "default": "dimmer"
+            },
+            {
+                "key": "percent",
+                "label": "Level",
+                "kind": "NUMBER",
+                "default": 100,
+                "min": 0.0,
+                "max": 100.0
+            }
+        ]
+    },
+    {
+        "id": "select",
+        "does": "select",
+        "label": "Select",
+        "group": "Fixtures",
+        "help": "Put a group or fixture into the desk selection, or replace the selection with it.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "GROUP",
+            "FIXTURE"
+        ],
+        "hows": [
+            "TOGGLE",
+            "TOGGLE_HOLD_REPLACES",
+            "REPLACE"
+        ],
+        "defaultHow": "TOGGLE_HOLD_REPLACES",
+        "writesTo": "DESK",
+        "params": []
+    },
+    {
+        "id": "locate",
+        "does": "locate",
+        "label": "Locate",
+        "group": "Fixtures",
+        "help": "Locate the selection, or release it when it is all located.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "SELECTION"
+        ],
+        "hows": [
+            "TOGGLE"
+        ],
+        "defaultHow": "TOGGLE",
+        "writesTo": "LOCAL",
+        "params": []
+    },
+    {
+        "id": "fan",
+        "does": "fan",
+        "label": "Fan",
+        "group": "Fixtures",
+        "help": "Spread the selection's positions about their centre.",
+        "inputs": [
+            "CONTINUOUS"
+        ],
+        "subjects": [
+            "SELECTION"
+        ],
+        "hows": [],
+        "defaultHow": null,
+        "writesTo": "LOCAL",
+        "params": [
+            {
+                "key": "axis",
+                "label": "Axis",
+                "kind": "CHOICE",
+                "required": true,
+                "default": "PAN",
+                "options": [
+                    {
+                        "value": "PAN",
+                        "label": "Pan"
+                    },
+                    {
+                        "value": "TILT",
+                        "label": "Tilt"
+                    },
+                    {
+                        "value": "ACROSS",
+                        "label": "Across the stage"
+                    },
+                    {
+                        "value": "DEPTH",
+                        "label": "Up and down the stage"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "fxSpeed",
+        "does": "fxSpeed",
+        "label": "FX speed",
+        "group": "Fixtures",
+        "help": "The speed of the Local FX on the selection's heads.",
+        "inputs": [
+            "CONTINUOUS"
+        ],
+        "subjects": [
+            "SELECTION"
+        ],
+        "hows": [],
+        "defaultHow": null,
+        "writesTo": "LOCAL",
+        "params": []
+    },
+    {
+        "id": "palette",
+        "does": "palette",
+        "label": "Palette",
+        "group": "Fixtures",
+        "help": "Press a palette onto the selection.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "SELECTION"
+        ],
+        "hows": [
+            "TOGGLE"
+        ],
+        "defaultHow": "TOGGLE",
+        "writesTo": "LOCAL",
+        "params": [
+            {
+                "key": "palette",
+                "label": "Palette",
+                "kind": "RECORD",
+                "required": true,
+                "record": "PALETTE"
+            }
+        ]
+    },
+    {
+        "id": "fire",
+        "does": "fire",
+        "label": "Fire",
+        "group": "Fixtures",
+        "help": "Fire one tube of a one-shot fixture. Needs the desk armed.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "FIXTURE"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "PLAYBACK",
+        "params": [
+            {
+                "key": "trigger",
+                "label": "Trigger",
+                "kind": "TEXT",
+                "required": true
+            }
+        ]
+    },
+    {
+        "id": "go",
+        "does": "go",
+        "label": "GO",
+        "group": "Playback",
+        "help": "GO on a cue stack.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "STACK"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "PLAYBACK",
+        "params": []
+    },
+    {
+        "id": "back",
+        "does": "back",
+        "label": "Back",
+        "group": "Playback",
+        "help": "GO BACK on a cue stack.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "STACK"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "PLAYBACK",
+        "params": []
+    },
+    {
+        "id": "pause",
+        "does": "pause",
+        "label": "Pause",
+        "group": "Playback",
+        "help": "Cancel a stack's running follow.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "STACK"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "PLAYBACK",
+        "params": []
+    },
+    {
+        "id": "stop",
+        "does": "stop",
+        "label": "Stop",
+        "group": "Playback",
+        "help": "Stop a stack over its release time.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "STACK"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "PLAYBACK",
+        "params": []
+    },
+    {
+        "id": "goTo",
+        "does": "goTo",
+        "label": "Go to",
+        "group": "Playback",
+        "help": "GO TO one cue, starting its stack if stopped.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "ENTRY"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "PLAYBACK",
+        "params": []
+    },
+    {
+        "id": "standby",
+        "does": "standby",
+        "label": "Standby",
+        "group": "Playback",
+        "help": "Arm one cue as its stack's next GO.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "ENTRY"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "PLAYBACK",
+        "params": []
+    },
+    {
+        "id": "fxAmount",
+        "does": "fxAmount",
+        "label": "FX amount",
+        "group": "Playback",
+        "help": "A stack's FX amount, 0–100 %.",
+        "inputs": [
+            "CONTINUOUS"
+        ],
+        "subjects": [
+            "STACK"
+        ],
+        "hows": [],
+        "defaultHow": null,
+        "writesTo": "PLAYBACK",
+        "params": []
+    },
+    {
+        "id": "cue",
+        "does": "cue",
+        "label": "Cue",
+        "group": "Playback",
+        "help": "Hold a cue loose, above every stack, or let it go.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "CUE"
+        ],
+        "hows": [
+            "TOGGLE",
+            "ON",
+            "OFF"
+        ],
+        "defaultHow": "TOGGLE",
+        "writesTo": "PLAYBACK",
+        "params": []
+    },
+    {
+        "id": "look",
+        "does": "look",
+        "label": "Look",
+        "group": "Playback",
+        "help": "Put a Look on whole, or take it off.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "LOOK"
+        ],
+        "hows": [
+            "TOGGLE",
+            "ON",
+            "OFF"
+        ],
+        "defaultHow": "TOGGLE",
+        "writesTo": "LOCAL",
+        "params": []
+    },
+    {
+        "id": "pad",
+        "does": "pad",
+        "label": "Pad",
+        "group": "Busk",
+        "help": "Press a busk pad, through its bank.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "PAD"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "LOCAL",
+        "params": []
+    },
+    {
+        "id": "pickUp",
+        "does": "pickUp",
+        "label": "Pick up",
+        "group": "Busk",
+        "help": "Put a pad's record into the desk's hand.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "PAD"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "DESK",
+        "params": []
+    },
+    {
+        "id": "place",
+        "does": "place",
+        "label": "Place",
+        "group": "Busk",
+        "help": "Place what the hand holds on a busk bank.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "BANK"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "DESK",
+        "params": []
+    },
+    {
+        "id": "drop",
+        "does": "drop",
+        "label": "Let go",
+        "group": "Busk",
+        "help": "Let go of what the hand holds.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "DESK",
+        "params": []
+    },
+    {
+        "id": "buskPage",
+        "does": "buskPage",
+        "label": "Busk page",
+        "group": "Busk",
+        "help": "Show one busk page, or step through them.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE",
+            "PAGE"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "DESK",
+        "params": [
+            {
+                "key": "step",
+                "label": "Step",
+                "kind": "CHOICE",
+                "options": [
+                    {
+                        "value": 1,
+                        "label": "Next"
+                    },
+                    {
+                        "value": -1,
+                        "label": "Previous"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "blackout",
+        "does": "blackout",
+        "label": "Blackout",
+        "group": "Masters",
+        "help": "The desk's blackout.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE"
+        ],
+        "hows": [
+            "TOGGLE",
+            "ON",
+            "OFF"
+        ],
+        "defaultHow": "TOGGLE",
+        "writesTo": "MASTER",
+        "params": []
+    },
+    {
+        "id": "grandMaster",
+        "does": "grandMaster",
+        "label": "Grand master",
+        "group": "Masters",
+        "help": "The grand master from a fader, or a button that takes it to 0 and back.",
+        "inputs": [
+            "CONTINUOUS",
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE"
+        ],
+        "hows": [
+            "TOGGLE"
+        ],
+        "defaultHow": "TOGGLE",
+        "writesTo": "MASTER",
+        "params": []
+    },
+    {
+        "id": "grandMasterLevel",
+        "does": "grandMaster",
+        "label": "Grand master to a level",
+        "group": "Masters",
+        "help": "A button that sets the grand master to a level.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "MASTER",
+        "params": [
+            {
+                "key": "level",
+                "label": "Level",
+                "kind": "NUMBER",
+                "required": true,
+                "default": 100.0,
+                "min": 0.0,
+                "max": 100.0
+            }
+        ]
+    },
+    {
+        "id": "tempo",
+        "does": "tempo",
+        "label": "Tempo",
+        "group": "Tempo",
+        "help": "A speed master's tempo from a fader or an encoder, across a window.",
+        "inputs": [
+            "CONTINUOUS"
+        ],
+        "subjects": [
+            "NONE",
+            "MASTER"
+        ],
+        "hows": [],
+        "defaultHow": null,
+        "writesTo": "TEMPO",
+        "params": [
+            {
+                "key": "minBpm",
+                "label": "From BPM",
+                "kind": "NUMBER",
+                "default": 60.0,
+                "min": 20.0,
+                "max": 300.0
+            },
+            {
+                "key": "maxBpm",
+                "label": "To BPM",
+                "kind": "NUMBER",
+                "default": 180.0,
+                "min": 20.0,
+                "max": 300.0
+            }
+        ]
+    },
+    {
+        "id": "tempoSet",
+        "does": "tempo",
+        "label": "Tempo to a BPM",
+        "group": "Tempo",
+        "help": "A button that sets a speed master's tempo.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE",
+            "MASTER"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "TEMPO",
+        "params": [
+            {
+                "key": "bpm",
+                "label": "BPM",
+                "kind": "NUMBER",
+                "required": true,
+                "default": 120.0,
+                "min": 20.0,
+                "max": 300.0
+            }
+        ]
+    },
+    {
+        "id": "tap",
+        "does": "tap",
+        "label": "Tap",
+        "group": "Tempo",
+        "help": "Tap a speed master's tempo.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE",
+            "MASTER"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "TEMPO",
+        "params": []
+    },
+    {
+        "id": "tempoScale",
+        "does": "tempoScale",
+        "label": "Halve or double",
+        "group": "Tempo",
+        "help": "Halve or double a speed master's tempo.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE",
+            "MASTER"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "TEMPO",
+        "params": [
+            {
+                "key": "factor",
+                "label": "Factor",
+                "kind": "CHOICE",
+                "required": true,
+                "default": 2.0,
+                "options": [
+                    {
+                        "value": 0.5,
+                        "label": "×½"
+                    },
+                    {
+                        "value": 2.0,
+                        "label": "×2"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "layer",
+        "does": "layer",
+        "label": "Switch layer",
+        "group": "Desk",
+        "help": "Switch the layer of the device the button is on.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "DESK",
+        "params": [
+            {
+                "key": "layer",
+                "label": "Layer",
+                "kind": "LAYER",
+                "required": true
+            }
+        ]
+    },
+    {
+        "id": "encoderPage",
+        "does": "encoderPage",
+        "label": "Encoder page",
+        "group": "Desk",
+        "help": "Point the device's strip encoders at an attribute.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "DESK",
+        "params": [
+            {
+                "key": "attribute",
+                "label": "Attribute",
+                "kind": "ATTRIBUTE",
+                "required": true,
+                "default": "dimmer"
+            },
+            {
+                "key": "axis",
+                "label": "Colour axis",
+                "kind": "CHOICE",
+                "options": [
+                    {
+                        "value": "hue",
+                        "label": "Hue"
+                    },
+                    {
+                        "value": "hueFine",
+                        "label": "Hue fine"
+                    },
+                    {
+                        "value": "saturation",
+                        "label": "Saturation"
+                    },
+                    {
+                        "value": "brightness",
+                        "label": "Brightness"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "undo",
+        "does": "undo",
+        "label": "Undo",
+        "group": "Desk",
+        "help": "Undo, redo, or the programmer's own undo.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "DESK",
+        "params": [
+            {
+                "key": "kind",
+                "label": "Which",
+                "kind": "CHOICE",
+                "default": "UNDO",
+                "options": [
+                    {
+                        "value": "UNDO",
+                        "label": "Undo"
+                    },
+                    {
+                        "value": "REDO",
+                        "label": "Redo"
+                    },
+                    {
+                        "value": "PROGRAMMER",
+                        "label": "Programmer undo"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "selection",
+        "does": "selection",
+        "label": "Selection",
+        "group": "Desk",
+        "help": "Empty the selection, or step through the rig.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "DESK",
+        "params": [
+            {
+                "key": "step",
+                "label": "Step",
+                "kind": "CHOICE",
+                "required": true,
+                "default": "CLEAR",
+                "options": [
+                    {
+                        "value": "CLEAR",
+                        "label": "Clear"
+                    },
+                    {
+                        "value": "NEXT",
+                        "label": "Next"
+                    },
+                    {
+                        "value": "PREV",
+                        "label": "Previous"
+                    },
+                    {
+                        "value": "ALL",
+                        "label": "All"
+                    },
+                    {
+                        "value": "ODD",
+                        "label": "Odd"
+                    },
+                    {
+                        "value": "EVEN",
+                        "label": "Even"
+                    },
+                    {
+                        "value": "FIRST_HALF",
+                        "label": "First half"
+                    },
+                    {
+                        "value": "SECOND_HALF",
+                        "label": "Second half"
+                    },
+                    {
+                        "value": "INVERT",
+                        "label": "Invert"
+                    },
+                    {
+                        "value": "MASTERS",
+                        "label": "Masters"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "windowFocus",
+        "does": "windowFocus",
+        "label": "Busk focus",
+        "group": "Desk",
+        "help": "Set the busk focus of every window with a name.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "DESK",
+        "params": [
+            {
+                "key": "window",
+                "label": "Window",
+                "kind": "TEXT",
+                "required": true
+            },
+            {
+                "key": "focus",
+                "label": "Focus",
+                "kind": "CHOICE",
+                "required": true,
+                "default": "split",
+                "options": [
+                    {
+                        "value": "split",
+                        "label": "Split"
+                    },
+                    {
+                        "value": "pads",
+                        "label": "Pads"
+                    },
+                    {
+                        "value": "rig",
+                        "label": "Rig"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "windowSheet",
+        "does": "windowSheet",
+        "label": "Busk sheet",
+        "group": "Desk",
+        "help": "Fold or open the busk side sheet of every window with a name.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "DESK",
+        "params": [
+            {
+                "key": "window",
+                "label": "Window",
+                "kind": "TEXT",
+                "required": true
+            }
+        ]
+    },
+    {
+        "id": "strip",
+        "does": "strip",
+        "label": "Channel strip",
+        "group": "Strips",
+        "help": "A group or fixture on a whole strip: level, select, the encoder page and flash.",
+        "inputs": [],
+        "strip": true,
+        "subjects": [
+            "GROUP",
+            "FIXTURE"
+        ],
+        "hows": [],
+        "defaultHow": null,
+        "writesTo": "LOCAL",
+        "params": []
+    }
+]

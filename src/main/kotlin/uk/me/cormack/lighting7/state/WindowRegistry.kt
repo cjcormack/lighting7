@@ -24,7 +24,7 @@ import kotlinx.serialization.Serializable
  * the wrong reason.
  *
  * **Keyed by socket, not by [Window.windowId].** A row lives exactly as long as its connection
- * ([announce] on the way in, [remove] in the connection's `finally`, beside `ownedLearnSessions`),
+ * ([announce] on the way in, [remove] in the connection's `finally`, beside `ownedIdentifySessions`),
  * which is what makes a closed window disappear without a heartbeat. A duplicated tab copies its
  * `sessionStorage` and so announces the *same* `windowId` on a second socket: that is two rows,
  * deliberately (D9) — they are two windows, the sheet shows two, and each is addressable on its

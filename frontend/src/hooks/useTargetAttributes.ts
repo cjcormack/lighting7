@@ -21,10 +21,9 @@ import type { GroupAttributeDescriptor } from '@/api/groupsApi'
  *
  * `continuous` mirrors `AttributeChannelResolver`: it writes a **slider** (one channel, scaled into
  * the property's own range) and a **colour** (one of four HSV axes — hue, a fine hue trim,
- * saturation, brightness — moved on the head's current colour; `lib/colourAxis.ts` names them and
- * the library offers a chip per axis), refuses a **setting** by name, and has no arm for a
- * **position** pair. So a position or setting chip on a fader would be a control that silently
- * does nothing, and the library does not offer one.
+ * saturation, brightness — moved on the head's current colour), refuses a **setting** by name, and
+ * has no arm for a **position** pair. So a position or setting on a fader would be a control that
+ * silently does nothing, and the binding form does not offer one.
  *
  * **A colour descriptor expands to the colour plus its bundled emitters.** The fixture descriptor
  * list omits a `bundleWithColour` slider — `white`, `amber`, `uv` — and folds its channel into the
@@ -114,6 +113,11 @@ function compareAttributeOrder(a: AvailableAttribute, b: AvailableAttribute): nu
   const nb = rb < 0 ? CATEGORY_RANK.length : rb
   if (na !== nb) return na - nb
   return a.displayName.localeCompare(b.displayName)
+}
+
+/** A list of attribute descriptors as the binding surfaces see them, in display order. */
+export function availableAttributesOf(descriptors: readonly AnyAttributeDescriptor[]): AvailableAttribute[] {
+  return descriptors.flatMap(expand).sort(compareAttributeOrder)
 }
 
 /** What a binding surface asks a target for. `{ type, key }` — the shared target shape. */

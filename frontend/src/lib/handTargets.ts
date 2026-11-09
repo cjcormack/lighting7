@@ -94,8 +94,7 @@ export function handRefusalReason(
 /**
  * Every target a held record could land on, in the order the four surfaces read top to bottom.
  *
- * **Derived through a `Record`, not written as a bare array**, and for `BindingTargetPicker`'s
- * reason: an array literal type-checks while *missing* a union member, so a fifth target kind could
+ * **Derived through a `Record`, not written as a bare array**: an array literal type-checks while *missing* a union member, so a fifth target kind could
  * ship with `canHandLand` correctly updated — that switch has no `default`, so it is a compile error
  * — and this list silently one short, leaving every consumer that iterates it never offering the new
  * kind, with nothing to catch it. A missing key in the record below is a compile error.

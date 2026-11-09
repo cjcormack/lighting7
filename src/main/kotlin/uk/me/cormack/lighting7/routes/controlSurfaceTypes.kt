@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.midi.BankDefinition
 import uk.me.cormack.lighting7.midi.ButtonDescriptor
 import uk.me.cormack.lighting7.midi.ControlDescriptor
 import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
+import uk.me.cormack.lighting7.midi.SurfaceCatalogue
 import uk.me.cormack.lighting7.midi.EncoderDescriptor
 import uk.me.cormack.lighting7.midi.FaderDescriptor
 import uk.me.cormack.lighting7.midi.StripDescriptor
@@ -187,5 +188,18 @@ internal fun Route.routeApiRestControlSurfaceTypes(state: State) {
                 layout = info.layout?.toDto(),
             )
         })
+    }
+}
+
+@Resource("/surface-functions")
+class SurfaceFunctionsResource
+
+/**
+ * `GET /api/rest/surface-functions` — the function catalogue (surface-setup plan D15): every function
+ * an editor offers, from the specs, with its words and parameters. Static per build.
+ */
+internal fun Route.routeApiRestSurfaceFunctions() {
+    get<SurfaceFunctionsResource> {
+        call.respond(SurfaceCatalogue.entries)
     }
 }

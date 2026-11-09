@@ -127,25 +127,28 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 | `DeviceMatcher.kt` | Matches attached `MidiDeviceHandle`s against registered profiles by `portPattern`; emits `DeviceAttached` / `DeviceDetached` / `UnmatchedDeviceConnected` on a `SharedFlow<SurfaceEvent>`. |
 | `devices/XTouchCompactStandard.kt` | Behringer X-Touch Compact (Standard mode) — 9 motor faders, 16 encoders, 39 buttons, A/B bank buttons. Reference device. |
 
-### Binding and Learn
+### Binding, the map and identify
 
 | File | Purpose |
 |---|---|
 | `Binding.kt` | The binding (surface-setup plan D1): `Binding(does, on, how)` — a function, its subject (`Subject`: none, the selection, a group, a fixture or element key, a job slot, or a record by uuid — `RecordKind` stack, entry, cue, Look, palette, pad, bank, page, master) and a `How` (Toggle, While held, On, Off, Toggle-hold-replaces, Replace) — at a slot with a `ControlPart` (`MAIN`, or an encoder's `PUSH`). `Spec` (where it writes, the subjects, inputs and Hows it takes, its default How), `Op`, `Acted`, `BindingJson` (`classDiscriminator = "type"`, defaults omitted), `decodeBinding` (an unreadable payload is `Does.Unknown`, kept byte for byte), `inputFor` and `inferPart`. Persisted as text in `DaoControlSurfaceBindings.targetPayload`. |
 | `SurfaceFunctions.kt` | One `Does` per function (P3): its parameters, its `spec` and its `act`, so the service's refusals, dispatch and health read one definition. `Unknown` is the tolerant decode's placeholder, never written by a client. |
-| `SurfaceGrammar.kt` | The one translate from a binding stored before the grammar (P4), shared by database step 15, the archive reader (`LegacyNames.record`) and the REST/WS bridge for the screens session 3 replaces, and the reverse, `legacyTarget`. See §"Before the grammar". |
+| `SurfaceGrammar.kt` | The one translate from a binding stored before the grammar (P4), shared by database step 15 and the archive reader (`LegacyNames.record`). See §"Before the grammar". |
+| `SurfaceCatalogue.kt` | The function catalogue (D15): one entry per function an editor offers — two for a grand master and a tempo, whose level or BPM makes a button of each — with its words, its parameters and their options, and the inputs, subjects and Hows its spec admits. `entryOf` is the one answer to which entry a stored binding is. Served as `GET /surface-functions`. |
+| `SurfaceLabels.kt` | `SurfaceNames` (every record, group and fixture by its name, with colours, read once per map) and the labels and *Shows* sentences the editors draw: *GO · Act 1*, *The motor shows what Local holds for Front wash's dimmer…*. `controlName` names a control part for a list of where something is bound (`CueUses`). |
+| `SurfaceMap.kt` | The served picture (D15): `SurfaceMaps.build` resolves every control part of a device type on every layer through the service's `resolve`, strip slots included, and describes each as a `ResolvedPart`; `SurfaceMapService` keeps the current project's frames in a `StateFlow`, rebuilt off the input path on any binding, encoder-page, health, record-name or project change. |
+| `SurfaceIdentify.kt` | Identify mode (D14): a window's wait for a touch. The router offers every input to it before dispatch; the next press, fader move or encoder turn is captured with its part and dropped, and the rest of that gesture on the same control with it until the control is still for 750 ms. 30 s without a touch ends the wait. |
 | `ControlSurfaceBindingService.kt` | Binding CRUD + in-memory resolver cache keyed by `(projectId, deviceTypeKey, controlId, part, bank)`; exact-bank wins over global. Decodes **per row**: an undecodable payload becomes `Does.Unknown` (health `unknownTarget`, re-written verbatim) rather than failing the project. Refuses what a function's spec does not admit (§"Bind-time refusals"). Emits `BindingChange` events; broadcast via `surfaceBank.bindingsChanged`. |
 | `Heads.kt` | `Heads.of(subject, attribute)`: the heads a write reaches — a fixture or element key, a group's members (elements included) tagged with `sourceGroup`, each selected target so; a cell beside its parent dropped, and a fixture whose attribute lives only on its cells standing for those cells (`PaletteFanOut.headsFor`). The level write, the flash, the colour-axis refusal and the feedback read all expand through it. |
 | `SelectionFxSpeed.kt` | The FX speed controls' gesture over the desk selection's Local FX (fx-speed plan D13): which Local FX paint a selected head, the lead FX, an encoder's detents and a fader's position written as whole-tick cycles through `applyFxUpdate`, and `shown` / `leadSpeed` — the `FxSpeedRing` half the feedback publisher reads. The arithmetic is `fx/FxSpeed.kt`, pinned to the editor's by `fxSpeed.fixture.json`. |
 | `SelectionFan.kt` | The fan encoders' gesture over the desk selection (venue-visit plan S12): the anchor (each head's start, the rig order read once), the amount per axis, a turn read as a move from the value the ring was last shown, a new gesture's pickup at the centre, and `shown` / `amountFor` — the `FanRing` half the feedback publisher reads. |
-| `MidiLearnSessionManager.kt` | 30-second Learn sessions; captures the first matching physical input as a control **part** (`ControlInputIndex.capture`), holds it until the originating client commits or cancels. Scoped to the originating client via `ownedLearnSessions` so two `/surfaces` tabs don't cross-capture. |
 
 ### Inbound routing
 
 | File | Purpose |
 |---|---|
 | `SurfaceInputRouter.kt` | Per-device `CoroutineName("SurfaceRouter-$displayKey")` collector. Pipeline: `profile.inputs.match → soft-takeover gate → binding resolve (with the part) → SurfaceDispatch`. |
-| `ControlInputIndex.kt` | One profile's inbound MIDI indexed once: which control part each control change, note and program change addresses (a move, a press or release of a part, a touch, a layer button). The router routes by it and Learn captures by it. |
+| `ControlInputIndex.kt` | One profile's inbound MIDI indexed once: which control part each control change, note and program change addresses (a move, a press or release of a part, a touch, a layer button). The router routes by it, and identify mode reads its answer before dispatch. |
 | `SurfaceDispatch.kt` | The one dispatch, `dispatch(binding, input, origin)`: turns the binding's `How` into an `Op` and keeps the holds — a While held press's release, a Toggle-hold-replaces press's pending replace — keyed by control part (`HoldKey`), in `SurfaceHolds`. The router and OSC share it. |
 | `SurfaceActions.kt` | Port interface between the functions and the show services, records named by uuid. Production: `DefaultSurfaceActions` resolves `state.show.*` on every call so project switches route cleanly, reads `state.deskSelection` for the selection, expands a level or flash write through `Heads.of`, and resolves a cue / stack uuid to the current project's row before calling `CueStackManager`. Tests: `RecordingSurfaceActions`. |
 | `AttributeChannelResolver.kt` | `object` owning what a continuous control **means** on an attribute, in both directions — the write (`toAttributeValue`, a 7-bit value → the programmer's `AttributeValue`) and the read (`describeAttributeRead` + `readHead`, the head's composed value for its key — `LayerResolver.localOver`, §"The readback" — → a 7-bit feedback position). Sliders scale through their own `min..max`. **Colour is one of four HSV axes** (`ColourAxis`), **hue unless the binding says otherwise**: every axis writes a whole colour built from the head's composed one, moving only its own component, and reads that component back. *Hue* keeps the head's saturation and value, the saturation floored at `MIN_SATURATION` (a quarter) so a turn on a white is visible; the ring reads the head's hue, and a head under `HUE_READ_MIN_SATURATION` — black, grey, a warm white — reads as no value rather than lighting for a colour the rig is not showing. *Hue fine* is a centred trim of ±½ coarse step — 64 leaves the head on its step, and the coarse read (which rounds) is unmoved by any fine position; the read is the offset within the step and is **circular**, because the offset is taken from the *nearest* coarse step and at the ends of the trim channel rounding decides which step that is — so a head written at 0 reads back as 0 or as 127 for one colour, and read linearly those are the whole travel apart and a group at 0 would darken its own ring. What circularity cannot fix is the value a single head reports: a motor fader let go at the very bottom can be driven to the top on touch-off — the same colour, the other spelling — which is the trim's one documented flip, confined to its extremes. It sits at the centre *within the head's tolerance* (11 at full chroma, where a written step lands a hair off it). *Saturation* is `v/127` at the head's hue and value — 0 is a white at the head's level, after which the hue and fine rings darken and the next hue turn lifts it back to the floor. *Brightness* is HSV value at the head's hue and saturation; 0 is black, and since the programmer stores RGB the hue and saturation go with it — bind the dimmer on a head that has one. A black or unread head starts from red (hue, fine, saturation) or grey (brightness). Every colour-axis write **carries the composed value's white, amber and UV** rather than zeroing them: those emitters are faders of their own now (`white` / `amber` / `uv` dispatch as sliders by name), and a hue turn that zeroed the white set beside it would be a control fighting its neighbour. A slider asked for an axis answers null in both directions, so a mixed selection reaches the heads it can and the feedback fold skips the same ones (the publisher's `LevelReader`). A read carries a tolerance from its **chroma** (not its value: a bright pastel holds hue as coarsely as a dim saturated head), and `commonValue` requires **every pair** of heads to agree, since a tolerance test is not transitive and anchoring on the first head would make the answer depend on enumeration order. The two directions live in one file so a ring can never claim a position a move would not reproduce; the old rule (one value fanned to R/G/B, red read back) is `FU-MIDI-SELECTION-COLOUR-RED-ONLY` / `FU-MIDI-ENCODER-HUE`. A flash on a colour is still grey at the binding's max — a flash is a level. Settings return null (enum bindings are button-only — Open Question 7). For attribute-value → channel resolution elsewhere (preset toggles, locate, programmer publishes), see `fx/AttributeChannelWriter` which accepts full-range `CueAssignmentResolver.AttributeValue` variants and handles Colour + Position without MIDI-7bit scaling. |
@@ -275,7 +278,7 @@ A profile may also declare **strips** (see [Strips](#strips)) and a **layout**: 
 
 - `DeviceAttached(handle, profile)` — device matched a registered `@ControlSurfaceType`
 - `DeviceDetached(displayKey)` — device unplugged
-- `UnmatchedDeviceConnected(handle)` — device with no matching profile; MIDI Learn can still bind it via its generic CC / note scheme
+- `UnmatchedDeviceConnected(handle)` — device with no matching profile; nothing binds to it until a profile matches
 
 Every inbound `Connected` event yields exactly one `SurfaceEvent` — the matcher is the single arbiter of "is this device one we know about?".
 
@@ -317,9 +320,9 @@ Direct before strip at **both** levels is the load-bearing part: a bank-agnostic
 
 A strip hit is answered as the strip's row with the control's id and the derived binding, so the four derived bindings share the strip row's `id`, `takeoverPolicy` and `health`. Health is deliberately **not** re-evaluated per derived target: an encoder whose bank attribute no selected head declares reads unbound and drops its turn, which is a property of the selection rather than a dead binding.
 
-`Does.Strip` is stored but never dispatched, and the rest of the strip code takes that as given — a raw `Strip` reaching dispatch is a control that silently does nothing, and health cannot catch it because a `Strip`'s health only judges its group. So the slot rule is enforced **in `ControlSurfaceBindingService`**, beside `refuseUnknown`, on `create` / `update` / `replace`: that is the one door every write goes through, including MIDI Learn's commit, which has no route validation of its own. `POST` / `PATCH /surface-bindings` run their own copy first only so the frontend gets a coded 400 to branch on — `BINDING_STRIP_NEEDS_STRIP` for a strip binding on a control id, `BINDING_CONTROL_NOT_STRIP` for anything else on a strip id.
+`Does.Strip` is stored but never dispatched, and the rest of the strip code takes that as given — a raw `Strip` reaching dispatch is a control that silently does nothing, and health cannot catch it because a `Strip`'s health only judges its group. So the slot rule is enforced **in `ControlSurfaceBindingService`**, beside `refuseUnknown`, on `create` / `update` / `replace`: that is the one door every write goes through. `POST` / `PATCH` and the slot `PUT` on `/surface-bindings` run their own copy first only so the frontend gets a coded 400 to branch on — `BINDING_STRIP_NEEDS_STRIP` for a strip binding on a control id, `BINDING_CONTROL_NOT_STRIP` for anything else on a strip id.
 
-`POST .../{bindingId}/expand` turns a strip row into the four single rows it was deriving (the inspector's *Fader only…*) in one transaction via `ControlSurfaceBindingService.replace`.
+*Make this control its own* (editor A) writes the binding a strip control derives at the control's own slot on the viewed layer, through the slot write; the strip keeps the rest of its controls. The map names a derived part `from: STRIP`, its `stripId` beside it.
 
 ## Encoder bank
 
@@ -406,8 +409,7 @@ item for when duplicate names ever matter.
 **Health** is the subject's — a fixture or group (with the attribute a level or flash writes on some
 head `Heads.of` reaches, elements included, each judged as cue authoring judges a cell), a fixture's
 trigger, a record by uuid — then the function's own parameters
-(`BindingHealthEvaluator`). `MissingStack` and `MissingCue` name the uuid; their ids are 0, kept for
-the screens session 3 replaces.
+(`BindingHealthEvaluator`). `MissingStack` and `MissingCue` name the uuid; their ids are 0.
 
 ### Before the grammar
 
@@ -419,7 +421,7 @@ function, subject and How, an on/off form as its toggle with a How of On or Off,
 a percentage, a cue or stack named by int alone as its uuid where the caller can resolve it, and an
 **encoder holding a button variant as its push** (`partFor`). What it cannot translate — an int that
 resolves to nothing, a type this build never knew — answers null and the row keeps its bytes, reading
-as `unknown`. Three callers share it:
+as `unknown`. Two callers share it:
 
 - **Database step 15** (`state/SurfaceGrammarMigration.kt`, `PRAGMA user_version` 15) translates every
   row, its ints resolved in its own project, and drops `uq_surface_binding_slot`: the reconciliation
@@ -428,17 +430,11 @@ as `unknown`. Three callers share it:
   translate.
 - **The archive reader**, `LegacyNames.record("controlSurfaceBindings")`, after the older renames, for
   an archive below `formatVersion` 53; an archive's ints are another desk's, so none resolve.
-- **The bridge** at `/surface-bindings` and `surfaceLearn.commit`: a write may carry `target`, the old
-  union the current screens still build (with ints), translated with the project's ints, and every row
-  answers `target` and `targetType` in the old words (`legacyTarget`) beside `binding` and `part`. The
-  screens show a control's main part, else its push (`bindingsForScreens`). Session 3 deletes the bridge
-  with those screens.
 
 ### Bind-time refusals
 
 Six rules live on `ControlSurfaceBindingService` rather than in the REST routes, because the
-service is the one door every write comes through — MIDI Learn's commit reaches `create` directly,
-with no route validation of its own:
+service is the one door every write comes through:
 
 | Rule | Refuses | Code |
 |---|---|---|
@@ -457,8 +453,8 @@ plus `hand.drop` and needs no binding at all (D12); see
 
 `refuseWrongKind` closes `FU-MIDI-BIND-CONTROL-KIND` from the function's spec: what a part feeds is
 `inputFor(part)` and what a function takes is its `Spec.inputs`. **Strip slots are skipped**: a strip id
-names no descriptor, and its binding reaches a control by derivation rather than dispatch.
-`lib/surfaceDrop.ts` in the frontend mirrors the old tables for the drag library until session 3.
+names no descriptor, and its binding reaches a control by derivation rather than dispatch. The
+frontend keeps no copy: its form offers only the catalogue entries whose inputs include the part's.
 
 The coded rules carry their code out through `BindingRefused(message, code)`, an
 `IllegalArgumentException` every existing caller already maps to a 400. Session 2 got a coded
@@ -474,16 +470,52 @@ resolution without 7-bit MIDI scaling. The surface-input path above keeps using
 emit the same `AttributeChannelResolver.ChannelWrite` shape, so downstream consumers
 don't need to distinguish.
 
-### MIDI Learn
+### The served picture (D15)
 
-`MidiLearnSessionManager` implements 30-second capture sessions:
+The editors draw what the desk resolves; the browser keeps no copy of the resolve order, the kind
+tables or the label rules (P5). Three things serve it:
 
-1. Client calls `beginLearn(sessionId, targetContext)` — server subscribes to every attached device's `input` flow.
-2. First matching physical input — a fader moved off rest, an encoder turned, a button or an encoder's push pressed — is captured as a control part through the profile's `ControlInputIndex.capture` (an encoder's push is its `PUSH`); the session transitions to `Captured`, and `surfaceLearn.captured` carries the part. The commit binds that part when the function takes its input, else the part it does take (`learntPart`): the screens pick the target first, so a GO learnt by turning an encoder sits on its push, and a level learnt by pressing it on its turn.
-3. Client commits (persisting a binding) or cancels.
-4. Idle sessions expire after 30 s.
+- **`surfaceMap.state`** — one frame per device type, `{projectId, deviceTypeKey, layers}`: each layer
+  the profile declares, and `""`, no layer — what fires on a device on none (the rows on both layers),
+  as after a restart, and a profile with no layers' only entry — → `"controlId:PART"` → a `ResolvedPart`. A part says where its
+  binding comes from (`DIRECT`, `STRIP` with its `stripId`, or `NONE`), the row's `bindingId` and the
+  layer it is stored on (`bank`, null for both), the binding's `does`, `on` and `how`, its catalogue
+  `entry`, its `takeoverPolicy`, its `label` (records by name), `subjectLabel`, the colour of the group
+  or fixture it drives, `writesTo`, the `shows` sentence, and its `health` with `healthText`. Strip slots
+  are parts too (`"strip-1:MAIN"`), so the mapping sheet can edit a strip. A strip's encoder is labelled
+  at the encoder page of the first attached device of the type — the page is a device's (D16), the map a
+  type's. Only the current project is mapped, and only the types in use: attached now, holding a
+  binding in the project, or already built (so a type that drops out still gets the frame that empties
+  it). The frame is sent again only when it changed; a speed master's rename rebuilds it, as a
+  record's does.
+- **`GET /api/rest/surface-functions`** — `SurfaceCatalogue.entries`, static per build.
+- **The slot write** — `PUT /projects/{id}/surface-bindings/slot` `{deviceTypeKey, controlId, part,
+  layer, binding, takeoverPolicy?}` makes whatever the slot holds this binding (the row kept, rewritten in
+  place), and `DELETE …/slot` `{deviceTypeKey, controlId, part, layer}` clears it (404 when empty). Every
+  §"Bind-time refusals" rule applies. A slot write states the whole slot, so an absent `takeoverPolicy`
+  is the control's default.
 
-Capture events are scoped to the originating WS connection via `ownedLearnSessions` so two `/surfaces` tabs don't cross-capture.
+`src/test/resources/surfaces/catalogue.fixture.json` and `map.fixture.json` pin both answers;
+`SurfaceCatalogueTest` writes and checks them (`REGENERATE_SURFACE_FIXTURES=1` after a deliberate
+change), and the frontend's surface tests read them.
+
+### Identify mode (D14)
+
+`surfaceIdentify.begin {deviceTypeKey?}` makes the window wait for a touch: the desk answers
+`surfaceIdentify.state {sessionId, waiting: true, deadlineMs, remainingMs}`, the banner, which counts
+`remainingMs` down on the browser's own clock. The next press, fader move
+or encoder turn on any attached device of that type (any, with none named) is captured by
+`SurfaceIdentify.offer`, which `SurfaceInputRouter.route` asks **before** it dispatches, so a bound GO
+touched to identify it does not fire. The rest of the gesture on that control — its release, the fader
+still moving — is swallowed too, until the control has been still for 750 ms. A fader's touch is never
+captured or swallowed, so its touch-up still reaches the feedback; nor is a fader move at 0, a fader at
+rest. The capture reaches the
+window that waited (`surfaceIdentify.captured {sessionId, deviceTypeKey, displayKey, controlId, part}`)
+and no other: the socket keeps the sessions it began (`ownedIdentifySessions`), cancels them on close,
+and replaces its wait on a second `begin`. A wait not answered in 30 s ends with `surfaceIdentify.state
+{waiting: false, reason: "timeout"}`; `surfaceIdentify.cancel` with `reason: "cancelled"`. A layer key is
+not captured. Learn, its capture beside dispatch and its commit, went with the old screens: an editor
+binds the captured part through the slot write.
 
 ## Inbound routing (SurfaceInputRouter)
 
@@ -813,7 +845,6 @@ From `State.kt`:
 | Message | Payload |
 |---|---|
 | `surfaceDevices.state` | *(request current device list)* |
-| `surfaceBank.set` | `{ displayKey, bank }` — the device to switch |
 | `surfaceBank.state` | *(request active banks)* |
 | `surfaceEncoderBank.set` | `{ displayKey, attribute, colourAxis? }` — the device, the axis absent for hue |
 | `surfaceEncoderBank.state` | *(request encoder banks)* |
@@ -822,9 +853,8 @@ From `State.kt`:
 | `surfaceScaler.state` | *(request scaler state)* |
 | `grandMaster.set` | `{ level }` — the grand master's level, 0–100 (`GrandMasterSocket.kt`) |
 | `stackFxAmount.set` | `{ stackId, amount }` — a cue stack's FX amount, 0–1 (`StackFxAmountSocket.kt`) |
-| `surfaceLearn.begin` | `{ sessionId, targetContext }` |
-| `surfaceLearn.cancel` | `{ sessionId }` |
-| `surfaceLearn.commit` | `{ sessionId, bank?, binding? \| target?, takeoverPolicy? }` |
+| `surfaceIdentify.begin` | `{ deviceTypeKey? }` — wait for a touch, captured without firing (§"Identify mode") |
+| `surfaceIdentify.cancel` | `{ sessionId }` |
 | `selection.set` / `.toggle` / `.setFamilies` / `.clear` | `{ targets }` / `{ target }` / `{ families? }` / — (`SelectionSocket.kt`) |
 | `busk.setPage` | `{ pageId }` — the showing busk page (`BuskSocket.kt`) |
 
@@ -841,7 +871,8 @@ From `State.kt`:
 | `stackFxAmount.state` | `{ projectId, stacks: [{ stackId, amount }] }` — every stack below full; connect snapshot + broadcast (`StackFxAmountSocket.kt`) |
 | `surfacePickup.changed` | `{ displayKey, controlId, state, target }` |
 | `surfaceBank.bindingsChanged` | Broadcast on every binding mutation |
-| `surfaceLearn.captured` | Captured `ResolvedInput`; per-connection filtered via `ownedLearnSessions` |
+| `surfaceIdentify.state` / `.captured` | The window's wait and its capture, to that window only |
+| `surfaceMap.state` | `{ projectId, deviceTypeKey, layers }` — the served picture, a frame per device type, sent when it changed |
 | `surfaceControls.state` / `.changed` | `{ displayKey, controls: {controlId: ControlState} }` — whole device / conflated delta |
 | `selection.state` | `{ targets }` — connect snapshot + broadcast (`SelectionSocket.kt`) |
 | `busk.pageState` | `{ pageId }` — connect snapshot + broadcast; `null` means the desk has not been pointed at a page (`BuskSocket.kt`). Shares only a namespace with the `busk.layoutChanged` broadcast, which is about *documents* |
@@ -855,7 +886,8 @@ From `State.kt`:
 | `POST /api/rest/projects/{projectId}/surface-bindings` | Create binding |
 | `PATCH /api/rest/projects/{projectId}/surface-bindings/{id}` | Update (uses `FieldUpdate<T>` sentinel for nullable fields). Shape-validated against the row it *becomes*, the same check `POST` runs |
 | `DELETE /api/rest/projects/{projectId}/surface-bindings/{id}` | Delete |
-| `POST /api/rest/projects/{projectId}/surface-bindings/{id}/expand` | Replace a strip binding with the individual bindings it was deriving (*Fader only…*), in one transaction |
+| `PUT` / `DELETE /api/rest/projects/{projectId}/surface-bindings/slot` | The editors' one write: a control part on a layer, named in the body (§"The served picture") |
+| `GET /api/rest/surface-functions` | The function catalogue |
 
 ## Known limitations
 

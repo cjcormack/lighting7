@@ -24,6 +24,7 @@ import uk.me.cormack.lighting7.state.WindowRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFails
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -323,13 +324,9 @@ class SocketMessageWireFormatTest {
     // ─── Surface domain ─────────────────────────────────────────────────────
 
     @Test
-    fun `surface domain — SurfaceBankSetInMessage routes via SurfaceInMessage`() {
-        val raw = """{"type":"surfaceBank.set","displayKey":"akai-mini","bank":"A"}"""
-        val decoded = json.decodeFromString<InMessage>(raw)
-        assertIs<SurfaceInMessage>(decoded)
-        val leaf = assertIs<SurfaceBankSetInMessage>(decoded)
-        assertEquals("akai-mini", leaf.displayKey)
-        assertEquals("A", leaf.bank)
+    fun `surface domain — the app has no frame that switches a device's layer`() {
+        // Viewing a layer switches nothing; a layer moves by a binding or the device's own key.
+        assertFails { json.decodeFromString<InMessage>("""{"type":"surfaceBank.set","displayKey":"akai-mini","bank":"A"}""") }
     }
 
     @Test
@@ -379,40 +376,41 @@ class SocketMessageWireFormatTest {
     }
 
     @Test
-    fun `surface domain — SurfaceLearnCommitInMessage decodes a nested binding`() {
-        val raw = """{
-            "type":"surfaceLearn.commit",
-            "sessionId":"s-1",
-            "bank":"A",
-            "binding":{"does":{"type":"level","attribute":"dimmer"},"on":{"type":"fixture","key":"hex-1"}}
-        }"""
-        val decoded = json.decodeFromString<InMessage>(raw)
-        assertIs<SurfaceInMessage>(decoded)
-        val leaf = assertIs<SurfaceLearnCommitInMessage>(decoded)
-        assertEquals(Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")), leaf.binding)
-        assertEquals(null, leaf.target)
-    }
-
-    @Test
-    fun `surface domain — SurfaceLearnCommitInMessage still decodes the old union's target`() {
-        val raw = """{
-            "type":"surfaceLearn.commit",
-            "sessionId":"s-1",
-            "target":{"type":"fixtureAttribute","fixtureKey":"hex-1","attribute":"dimmer"}
-        }"""
-        val leaf = assertIs<SurfaceLearnCommitInMessage>(json.decodeFromString<InMessage>(raw))
-        assertEquals(null, leaf.binding)
-        assertEquals("fixtureAttribute", leaf.target?.get("type")?.jsonPrimitive?.content)
-        assertEquals("hex-1", leaf.target?.get("fixtureKey")?.jsonPrimitive?.content)
-    }
-
-    @Test
-    fun `surface domain — SurfaceLearnCapturedOutMessage carries the captured part`() {
-        val out = SurfaceLearnCapturedOutMessage("s-1", 7, "x-touch-compact", "enc-1", ControlPart.PUSH)
-        val encoded = json.encodeToString<OutMessage>(out)
-        assertTrue(encoded.contains(""""type":"surfaceLearn.captured""""), encoded)
+    fun `surface domain — surfaceIdentify begin, state and captured cross the wire`() {
+        val begin = assertIs<SurfaceIdentifyBeginInMessage>(
+            json.decodeFromString<InMessage>("""{"type":"surfaceIdentify.begin","deviceTypeKey":"x-touch-compact-standard"}"""),
+        )
+        assertEquals("x-touch-compact-standard", begin.deviceTypeKey)
+        assertEquals(
+            "s-1",
+            assertIs<SurfaceIdentifyCancelInMessage>(json.decodeFromString<InMessage>("""{"type":"surfaceIdentify.cancel","sessionId":"s-1"}""")).sessionId,
+        )
+        val captured = SurfaceIdentifyCapturedOutMessage("s-1", "x-touch-compact", "x-touch-1", "enc-1", ControlPart.PUSH)
+        val encoded = json.encodeToString<OutMessage>(captured)
+        assertTrue(encoded.contains(""""type":"surfaceIdentify.captured""""), encoded)
         assertTrue(encoded.contains(""""part":"PUSH""""), encoded)
-        assertEquals(out, assertIs<SurfaceLearnCapturedOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+        assertEquals(captured, assertIs<SurfaceIdentifyCapturedOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+        val waiting = json.encodeToString<OutMessage>(SurfaceIdentifyStateOutMessage("s-1", waiting = true, deadlineMs = 5, remainingMs = 30_000))
+        assertTrue(waiting.contains(""""type":"surfaceIdentify.state""""), waiting)
+        assertTrue(waiting.contains(""""waiting":true"""), waiting)
+        assertTrue(waiting.contains(""""remainingMs":30000"""), waiting)
+    }
+
+    @Test
+    fun `surface domain — surfaceMap state carries each part's function as its own type`() {
+        val part = uk.me.cormack.lighting7.midi.ResolvedPart(
+            from = uk.me.cormack.lighting7.midi.PartSource.DIRECT,
+            bindingId = 3,
+            does = Does.Level("dimmer"),
+            on = Subject.Group("front"),
+            entry = "level",
+            label = "Dimmer · front",
+        )
+        val encoded = json.encodeToString<OutMessage>(SurfaceMapStateOutMessage(7, "x-touch-compact", mapOf("A" to mapOf("fader-1:MAIN" to part))))
+        assertTrue(encoded.contains(""""type":"surfaceMap.state""""), encoded)
+        assertTrue(encoded.contains(""""does":{"type":"level","attribute":"dimmer"}"""), encoded)
+        assertTrue(encoded.contains(""""on":{"type":"group","key":"front"}"""), encoded)
+        assertTrue(encoded.contains(""""from":"DIRECT""""), encoded)
     }
 
     @Test

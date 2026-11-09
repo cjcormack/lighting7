@@ -25,7 +25,7 @@ spelling that never dies.
 ### Naming
 
 Message names are **dotted namespaces**: `family.verb` — `speedMasters.state`,
-`programmer.clearAll`, `surfaceLearn.begin`, `surfaceBank.bindingsChanged`. The family names the
+`programmer.clearAll`, `surfaceIdentify.begin`, `surfaceBank.bindingsChanged`. The family names the
 client cache or subsystem the frame belongs to; it does **not** name the server component that
 emits it (`speedMasters.listChanged` is fired from `BroadcastSocket.kt`'s fixtures listener, and
 that is fine).
@@ -116,7 +116,7 @@ codebase today:
 2. **Narrow ack or delta.** `removeFx` answers `fxChanged(REMOVED, id)`; `programmer.setBlind`
    answers `programmer.blindState`.
 3. **No reply at all** — the mutation lands and the family's change stream carries it back, to
-   this client along with every other. `surfaceBank.set`, `surfaceScaler.setBlackout`,
+   this client along with every other. `surfaceEncoderBank.set`, `surfaceScaler.setBlackout`,
    `parkChannel` and `updateChannel` all work this way.
 
 **For new operations, pick (3).** Everything this socket controls is shared desk state, so a
@@ -128,7 +128,7 @@ the broadcast payload, not in a second private message.
 
 (1) remains right where a write is a *retune* of something the client is holding a live model of
 and the whole family is small — the speed-master bank is four rows. (2) is right for a failure
-reply, where there is no state change to broadcast; see the `surfaceLearn.error` family.
+reply, where there is no state change to broadcast; see `fxError`.
 
 ## Connection
 
@@ -274,7 +274,7 @@ Broadcast, Cloud sync, Effects, History, Locate, Machine, Move in dark, Rig safe
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
 
-## Client → Server (64)
+## Client → Server (62)
 
 Every inbound frame is `{ "type": "<name>", …fields }`. Fields with a default are optional.
 
@@ -696,10 +696,8 @@ broadcast because the programmer is shared desk state.
 
 | Message | Fields | Reply |
 |---|---|---|
-| `surfaceLearn.begin` | `projectId: Int`, `deviceTypeKey?` | `surfaceLearn.started` |
-| `surfaceLearn.cancel` | `sessionId: String` | `surfaceLearn.cancelled` \| `surfaceLearn.error` |
-| `surfaceLearn.commit` | `sessionId`, `bank?`, `binding?: Binding` or `target?` (the screens' old shape, translated), `takeoverPolicy?` | `surfaceLearn.committed` \| `surfaceLearn.error` |
-| `surfaceBank.set` | `displayKey: String`, `bank: String?` — the attached device to switch (D16: each device keeps its own layer) | none — `surfaceBank.changed`/`.state` broadcast |
+| `surfaceIdentify.begin` | `deviceTypeKey?` — wait for a touch on the desk, captured without firing (surface-setup plan D14); a second begin replaces the window's wait | `surfaceIdentify.state` |
+| `surfaceIdentify.cancel` | `sessionId: String` | `surfaceIdentify.state` (`reason: cancelled`) when it was waiting |
 | `surfaceBank.state` | — | `surfaceBank.state` |
 | `surfaceEncoderBank.set` | `displayKey: String`, `attribute: String`, `colourAxis?` — the attached device whose strip encoders move | none — `surfaceEncoderBank.state` broadcast |
 | `surfaceScaler.state` | — | `surfaceScaler.state` |
@@ -707,11 +705,12 @@ broadcast because the programmer is shared desk state.
 | `surfaceScaler.setGrandMaster` | `enabled: Boolean` | none — `surfaceScaler.state` follows. `false` takes the grand master to 0, `true` back to its last level above 0 |
 | `surfaceDevices.state` | — | `surfaceDevices.state` |
 
-Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds the inbound event
-broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
-session this connection started.
+Identify waits are **connection-owned**: `SocketScope.ownedIdentifySessions` bounds the capture to
+the window that waited, and teardown cancels its wait. No frame switches a device's layer: viewing a
+layer in the app switches nothing (D13), so the desk changes layer on its own key or a *Switch layer*
+binding.
 
-## Server → Client (108)
+## Server → Client (106)
 
 ### Boot — `BootSocket.kt`
 
@@ -1313,11 +1312,9 @@ refetch.
 
 | Message | Payload | Cast |
 |---|---|---|
-| `surfaceLearn.started` | `sessionId`, `projectId`, `deviceTypeKey?`, `deadlineMs` | Unicast reply |
-| `surfaceLearn.captured` | `sessionId`, `projectId`, `deviceTypeKey`, `controlId`, `part` (`MAIN` \| `PUSH`) | Owning connection only |
-| `surfaceLearn.committed` | `sessionId`, `bindingId`, `projectId` | Unicast reply |
-| `surfaceLearn.cancelled` | `sessionId`, `reason` (`cancelled` \| `timeout`) | Owning connection only |
-| `surfaceLearn.error` | `sessionId?`, `message` | Unicast reply |
+| `surfaceIdentify.state` | `sessionId`, `waiting`, `deviceTypeKey?`, `deadlineMs?`, `remainingMs?` (the time left at send, counted down on the client's own clock as `effects.armed`'s is), `reason?` (`cancelled` \| `timeout`) — the banner, and how a wait ended without a touch | Owning connection only |
+| `surfaceIdentify.captured` | `sessionId`, `deviceTypeKey`, `displayKey`, `controlId`, `part` (`MAIN` \| `PUSH`) | Owning connection only |
+| `surfaceMap.state` | `projectId`, `deviceTypeKey`, `layers: {layer: {"controlId:PART": ResolvedPart}}` — every control part's resolved binding on every layer, labelled and judged by the desk (surface-setup plan D15); see `midi-control-surface-engineering.md` §"The served picture" | Connect snapshot (one per device type) + a frame per type that changed (a `StateFlow`) |
 | `surfaceBank.bindingsChanged` | `projectId`, `changeType: added\|updated\|removed\|reloaded`, `bindingId?` | Broadcast |
 | `surfaceBank.state` | `activeBanks: {displayKey: bank}` (null values elided), per attached device | Connect snapshot + broadcast |
 | `surfaceBank.changed` | `displayKey`, `deviceTypeKey?` (null once the device has detached), `previousBank?`, `newBank?` | Broadcast delta |
@@ -1470,7 +1467,7 @@ subnet 0); frames for other subnets are dropped at the listener.
 ## Thread safety
 
 - `connections`: `Collections.synchronizedSet`.
-- `SocketScope.pendingBeatRequests` / `ownedLearnSessions`: synchronized sets, mutated from both
+- `SocketScope.pendingBeatRequests` / `ownedIdentifySessions`: synchronized sets, mutated from both
   the frame loop and subscription collectors.
 - `FixturesChangeListener` callbacks are **non-suspending and may arrive on the DMX transmission
   thread**; `BroadcastSocket.fire` bridges them with `session.launch { scope.send(…) }`, which is

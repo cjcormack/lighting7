@@ -68,10 +68,10 @@ class SocketScope(
     val pendingBeatRequests: MutableSet<UUID?> = Collections.synchronizedSet(HashSet())
 
     /**
-     * Surface-learn sessions originated by this connection. Bounds incoming Learn-event
-     * broadcasts so two `/surfaces` tabs don't see each other's captures.
+     * Identify sessions this connection began, so a capture reaches only the window that asked
+     * for it, and a closed window's wait ends with it.
      */
-    val ownedLearnSessions: MutableSet<String> = Collections.synchronizedSet(LinkedHashSet())
+    val ownedIdentifySessions: MutableSet<String> = Collections.synchronizedSet(LinkedHashSet())
 
     /**
      * The window this connection announced, or null until it does — what a `selection.*` write is

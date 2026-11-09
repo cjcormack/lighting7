@@ -232,7 +232,18 @@ export interface DurationSpreadPlan extends SpreadPlanBase {
   apply: (ms: number[]) => void
 }
 
-export type SpreadPlan = IntentSpreadPlan | RawSpreadPlan | AddressSpreadPlan | DurationSpreadPlan
+/**
+ * *Fill in order*: records in their own order, one to a cell down the selection — a mapping sheet's
+ * groups onto eight strips. The host does the fill, since only it knows which rows take which record.
+ */
+export interface RecordsSpreadPlan extends SpreadPlanBase {
+  kind: 'records'
+  /** What can be filled, in the order offered: *Groups, in order*, *The selection*. */
+  lists: readonly { key: string; label: string }[]
+  apply: (listKey: string) => void
+}
+
+export type SpreadPlan = IntentSpreadPlan | RawSpreadPlan | AddressSpreadPlan | DurationSpreadPlan | RecordsSpreadPlan
 
 export interface SpreadForm {
   family: AttributeFamily
@@ -304,6 +315,8 @@ interface SpreadPanelProps {
    * without one. A host with no colour plan passes nothing and never draws the branch.
    */
   colourEditor?: ComponentType<ColourEditorProps>
+  /** Popover: the trigger's word and the popover's title — *Fill* on a sheet whose plans are records. */
+  triggerWord?: string
 }
 
 const EMPTY_SELECTION_TOAST = 'spread-panel-empty-selection'
@@ -450,6 +463,7 @@ export function SpreadPanel({
   className,
   wordClass = WORD_CLASS,
   colourEditor: ColourEndpointEditor,
+  triggerWord = 'Fan',
 }: SpreadPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [column, setColumn] = useState<string | null>(null)
@@ -877,6 +891,8 @@ export function SpreadPanel({
   const [step, setStep] = useState('')
   const [fromDuration, setFromDuration] = useState('1s')
   const [toDuration, setToDuration] = useState('4s')
+  const [fillList, setFillList] = useState<string | null>(null)
+  const recordsList = activePlan?.kind === 'records' ? (activePlan.lists.find((l) => l.key === fillList) ?? activePlan.lists[0]) : null
 
   // The address arm's landing, computed as it is typed so the line can name a collision before
   // Apply — the rule every desk surveyed makes visible, and the one the server cannot be relied on
@@ -924,7 +940,9 @@ export function SpreadPanel({
       ? plannedCount >= 2 && addressWalk?.channels != null && addressWalk.error == null
       : activePlan?.kind === 'duration'
         ? plannedCount >= 2 && durationWalk?.ms != null
-        : activePlan != null && (host === 'docked' || chosenHasTwo)
+        : activePlan?.kind === 'records'
+          ? plannedCount >= 1 && recordsList != null
+          : activePlan != null && (host === 'docked' || chosenHasTwo)
 
   const apply = useCallback(() => {
     const plan = activePlanRef.current
@@ -945,8 +963,11 @@ export function SpreadPanel({
       case 'duration':
         if (durationWalk?.ms) plan.apply(durationWalk.ms)
         return
+      case 'records':
+        if (recordsList) plan.apply(recordsList.key)
+        return
     }
-  }, [sendFor, reset, flush, addressWalk, durationWalk])
+  }, [sendFor, reset, flush, addressWalk, durationWalk, recordsList])
 
   const showsLive = activePlan?.kind === 'intent' || activePlan?.kind === 'raw'
 
@@ -1382,6 +1403,27 @@ export function SpreadPanel({
         </>
       )}
 
+      {activePlan?.kind === 'records' && (
+        <>
+          <div className="flex flex-col gap-1">
+            <EditorLabel>Fill with</EditorLabel>
+            <select
+              aria-label="Fill with"
+              className="h-7 rounded-md border bg-background px-1 text-xs"
+              value={recordsList?.key ?? ''}
+              onChange={(e) => setFillList(e.target.value)}
+            >
+              {activePlan.lists.map((list) => (
+                <option key={list.key} value={list.key}>
+                  {list.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-[10px] text-muted-foreground">One to a cell, in order. A cell that can’t take one is skipped, and named.</p>
+        </>
+      )}
+
       {activePlan?.kind === 'duration' && (
         <>
           <div className="flex items-end gap-2">
@@ -1478,7 +1520,7 @@ export function SpreadPanel({
         setIsOpen(open)
         if (!open) resetFan()
       }}
-      title="Fan"
+      title={triggerWord}
       contentClassName="w-[336px]"
       align="end"
       onOpenAutoFocus={onOpenAutoFocus}
@@ -1497,11 +1539,11 @@ export function SpreadPanel({
               : undefined
           }
           title={title}
-          aria-label="Fan"
+          aria-label={triggerWord}
         >
           <Waves className="size-3.5" />
           {/* The same fold as Set and Clear beside it — one rule for the three verbs. */}
-          <span className={wordClass}>Fan</span>
+          <span className={wordClass}>{triggerWord}</span>
         </Button>
       }
     >

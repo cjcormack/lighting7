@@ -3,8 +3,8 @@ package uk.me.cormack.lighting7.midi
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Minimal [MidiAccessSource] that backs tests of [MidiDeviceRegistry], [DeviceMatcher], and
- * [MidiLearnSessionManager]. Call sites mutate [inputs] / [outputs] between `tick()` calls
+ * Minimal [MidiAccessSource] that backs tests of [MidiDeviceRegistry], [DeviceMatcher] and the
+ * input router. Call sites mutate [inputs] / [outputs] between `tick()` calls
  * to simulate hot-plug events; no real backend is ever opened.
  *
  * [openInput] returns a no-op [MidiInputSource] and [openOutput] a no-op [MidiSendTarget],
