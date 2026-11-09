@@ -126,7 +126,7 @@ dependencies {
     // Errors, logs and traces to Sentry — docs/observability-engineering.md. No Sentry Gradle
     // plugin: it auto-adds integrations and touches the build
     // (docs/plans/completed/sentry-plan.md D2).
-    implementation(platform("io.sentry:sentry-bom:8.62.0"))
+    implementation(platform("io.sentry:sentry-bom:8.63.0"))
     implementation("io.sentry:sentry")
     implementation("io.sentry:sentry-logback")
     implementation("io.sentry:sentry-kotlin-extensions")
@@ -174,14 +174,14 @@ dependencies {
 
     // mDNS (Bonjour) advertisement so iPad / LAN clients reach the backend at
     // `lighting7-<hostname>.local:8413` without entering an IP. See MdnsService.kt.
-    implementation("org.jmdns:jmdns:3.6.4")
+    implementation("org.jmdns:jmdns:3.6.5")
 
     // JGit for the cloud-sync per-project working tree (phase 3 of plans/cloud-sync.md).
     // Previously pinned to 6.10.0 on the grounds that 7.x carried a larger transitive
     // footprint for jlink runtimes. That turned out not to be true: 7.7.1 resolves the same
     // three transitives as 6.10.0 (JavaEWAH, slf4j-api, commons-codec), with only
     // commons-codec moving 1.17.0 -> 1.22.0. Pin lifted.
-    implementation("org.eclipse.jgit:org.eclipse.jgit:7.8.0.202609011348-r")
+    implementation("org.eclipse.jgit:org.eclipse.jgit:7.8.1.202611041320-r")
 
     // Cross-platform OS-keychain access for storing GitHub PATs (cloud-sync phase 4).
     // Wraps macOS Security framework, libsecret, and Windows Credential Manager via JNA.
