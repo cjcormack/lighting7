@@ -1,5 +1,11 @@
 package uk.me.cormack.lighting7.state
 
+import uk.me.cormack.lighting7.midi.Binding
+import uk.me.cormack.lighting7.midi.ColourAxis
+import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.Subject
+import uk.me.cormack.lighting7.midi.encodePayload
+
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.After
 import org.junit.Before
@@ -99,22 +105,18 @@ class AttributeNamesMigrationTest {
         setUserVersion(TERMINOLOGY_RENAMED_USER_VERSION)
 
         val reopened = startDesk()
-        assertEquals(BUSK_PAD_STACK_USER_VERSION, userVersion(), "steps 7 to 14 follow")
+        assertEquals(SURFACE_GRAMMAR_USER_VERSION, userVersion(), "steps 7 to 15 follow")
         assertEquals(1, backups().size, "the database is backed up before anything moves")
         transaction(reopened.database) {
             val bindings = DaoControlSurfaceBinding.all().associate { it.controlId to (it.targetType to it.targetPayload) }
-            assertEquals("fixtureAttribute" to """{"type":"fixtureAttribute","fixtureKey":"hex-1","attribute":"dimmer"}""", bindings["fader-1"])
-            assertEquals(
-                "groupAttribute" to """{"type":"groupAttribute","groupName":"wash","attribute":"rgbColour","colourAxis":"saturation"}""",
-                bindings["fader-2"],
-            )
-            assertEquals("selectionAttribute" to """{"type":"selectionAttribute","attribute":"pan"}""", bindings["enc-1"])
-            assertEquals("encoderBankSet" to """{"type":"encoderBankSet","attribute":"tilt"}""", bindings["button-1"])
-            assertEquals(
-                "flash" to """{"type":"flash","target":{"type":"groupAttribute","groupName":"wash","attribute":"dimmer"},"max":200}""",
-                bindings["button-2"],
-            )
-            assertEquals("blackout" to """{"type":"blackout"}""", bindings["button-3"])
+            // Step 6 renames, and step 15 then puts each in the grammar.
+            fun stored(binding: Binding) = binding.functionId to binding.encodePayload()
+            assertEquals(stored(Binding(Does.Level("dimmer"), Subject.Fixture("hex-1"))), bindings["fader-1"])
+            assertEquals(stored(Binding(Does.Level("rgbColour", ColourAxis.SATURATION), Subject.Group("wash"))), bindings["fader-2"])
+            assertEquals(stored(Binding(Does.Level("pan"), Subject.Selection)), bindings["enc-1"])
+            assertEquals(stored(Binding(Does.EncoderPage("tilt"))), bindings["button-1"])
+            assertEquals(stored(Binding(Does.Flash("dimmer", percent = 78), Subject.Group("wash"))), bindings["button-2"])
+            assertEquals(stored(Binding(Does.Blackout)), bindings["button-3"])
             // Step 8 then makes the Circle a Path, its centres kept as step 6 named them.
             assertEquals(
                 mapOf("shape" to "CIRCLE", "panCentre" to "100", "tiltCentre" to "140", "panSize" to "30", "tiltSize" to "64"),
@@ -159,14 +161,14 @@ class AttributeNamesMigrationTest {
         stopDesk()
         setUserVersion(TERMINOLOGY_RENAMED_USER_VERSION)
         startDesk()
-        assertEquals(BUSK_PAD_STACK_USER_VERSION, userVersion(), "steps 7 to 14 follow")
+        assertEquals(SURFACE_GRAMMAR_USER_VERSION, userVersion(), "steps 7 to 15 follow")
         assertEquals(emptyList(), backups())
     }
 
     @Test
     fun `a fresh database is born past step 6`() {
         startDesk()
-        assertEquals(BUSK_PAD_STACK_USER_VERSION, userVersion(), "steps 7 to 14 follow")
+        assertEquals(SURFACE_GRAMMAR_USER_VERSION, userVersion(), "steps 7 to 15 follow")
         assertEquals(emptyList(), backups())
     }
 }

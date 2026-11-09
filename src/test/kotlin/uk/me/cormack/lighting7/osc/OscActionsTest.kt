@@ -55,7 +55,7 @@ class OscActionsTest : RouteIntegrationTest() {
     private fun handler() = OscHandler(
         database = state.database,
         currentProjectId = { projectId },
-        dispatch = SurfaceDispatch(DefaultSurfaceActions(state), state.activeBankState, state.encoderBankState, state.flashStateTracker),
+        dispatch = SurfaceDispatch(DefaultSurfaceActions(state), state.activeBankState, state.encoderBankState),
     )
 
     private fun OscHandler.send(address: String, vararg args: OscArg): OscHandled =

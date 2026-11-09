@@ -1,7 +1,7 @@
 package uk.me.cormack.lighting7.midi
 
 /**
- * What one dispatched [BindingTarget] did. A MIDI press has no reply channel, so the router only
+ * What one dispatched [Binding] did. A MIDI press has no reply channel, so the router only
  * logs what is not [Done]; an OSC message's outcome is its row in the address log
  * (`docs/osc-engineering.md` §"The log").
  */
@@ -21,8 +21,11 @@ sealed interface ActionOutcome {
     companion object {
         val DONE: ActionOutcome = Done()
 
-        /** A continuous target pressed as a button, or the reverse. */
+        /** A continuous function pressed as a button, or the reverse. */
         const val WRONG_KIND = "WRONG_KIND"
+
+        /** A function handed a subject its spec does not admit — a row written by hand or by a newer desk. */
+        const val WRONG_SUBJECT = "WRONG_SUBJECT"
 
         /** A stack target naming a marker, or a cue entry that is not in the stack. */
         const val NOT_A_CUE = "NOT_A_CUE"

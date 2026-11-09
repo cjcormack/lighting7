@@ -116,7 +116,15 @@ class AttributeChannelResolverTest {
 
     @Test
     fun `a flash on a colour is a level, not a hue`() {
-        assertEquals(Color(200, 200, 200), colourValue(AttributeChannelResolver.flashAttributeValue(hex(), "rgbColour", 200u)))
+        assertEquals(Color(204, 204, 204), colourValue(AttributeChannelResolver.flashAttributeValue(hex(), "rgbColour", 80)))
+    }
+
+    @Test
+    fun `a flash is a percentage of the head's own range`() {
+        assertEquals(255u.toUByte(), sliderValue(AttributeChannelResolver.flashAttributeValue(hex(), "dimmer", 100)))
+        assertEquals(200u.toUByte(), sliderValue(AttributeChannelResolver.flashAttributeValue(hex(maxDimmerLevel = 200u), "dimmer", 100)))
+        assertEquals(100u.toUByte(), sliderValue(AttributeChannelResolver.flashAttributeValue(hex(maxDimmerLevel = 200u), "dimmer", 50)))
+        assertNull(AttributeChannelResolver.flashAttributeValue(hex(), "mode", 100), "a setting takes no flash")
     }
 
     // --- Colour: the read ---
@@ -479,7 +487,7 @@ class AttributeChannelResolverTest {
         ).value
         assertEquals(0u.toUByte(), unreadValue.white, "an emitter that cannot be read is 0")
         val flash = assertIs<CueAssignmentResolver.AttributeValue.Colour>(
-            AttributeChannelResolver.flashAttributeValue(hex(), "rgbColour", 200u),
+            AttributeChannelResolver.flashAttributeValue(hex(), "rgbColour", 80),
         ).value
         assertEquals(0u.toUByte(), flash.white, "a flash is a level: W/A/UV 0")
     }

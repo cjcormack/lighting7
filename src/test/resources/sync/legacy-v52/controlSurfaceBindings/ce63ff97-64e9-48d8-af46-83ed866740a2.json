@@ -1,0 +1,8 @@
+{
+  "controlId": "enc-2",
+  "deviceTypeKey": "x-touch-compact-standard",
+  "sortOrder": 40,
+  "targetPayload": "{\"type\":\"cueStackGo\",\"stackId\":1,\"stackUuid\":\"debbe51d-4996-44c7-978c-e2853790f759\"}",
+  "targetType": "cueStackGo",
+  "uuid": "ce63ff97-64e9-48d8-af46-83ed866740a2"
+}

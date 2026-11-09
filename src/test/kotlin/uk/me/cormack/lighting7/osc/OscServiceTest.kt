@@ -14,7 +14,6 @@ import org.junit.rules.Timeout
 import uk.me.cormack.lighting7.history.HistorySource
 import uk.me.cormack.lighting7.midi.ActiveBankState
 import uk.me.cormack.lighting7.midi.EncoderBankState
-import uk.me.cormack.lighting7.midi.FlashStateTracker
 import uk.me.cormack.lighting7.midi.SurfaceDispatch
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
@@ -65,7 +64,7 @@ class OscServiceTest {
         val handler = OscHandler(
             database = state.database,
             currentProjectId = { projectId },
-            dispatch = SurfaceDispatch(actions, ActiveBankState(), EncoderBankState(), FlashStateTracker()),
+            dispatch = SurfaceDispatch(actions, ActiveBankState(), EncoderBankState()),
         )
         service = OscService(state.database, handler, metrics)
         service.start()
@@ -116,7 +115,7 @@ class OscServiceTest {
     @Test
     fun `the stored settings are read before the service starts, and applied when it does`() {
         service.update(OscSettingsRequest(enabled = false, port = 9100, senders = listOf(OscSenderRequest(name = "QLab", address = "10.0.0.5"))))
-        val handler = OscHandler(state.database, { projectId }, SurfaceDispatch(actions, ActiveBankState(), EncoderBankState(), FlashStateTracker()))
+        val handler = OscHandler(state.database, { projectId }, SurfaceDispatch(actions, ActiveBankState(), EncoderBankState()))
         val notStarted = OscService(state.database, handler, DeskMetrics())
         try {
             assertEquals(listOf("QLab"), notStarted.settings().senders.map { it.name })
@@ -140,8 +139,8 @@ class OscServiceTest {
         assertEquals("GO Act 1", row.detail)
         assertEquals(1, logged.received)
 
-        val stack = transaction(state.database) { DaoCueStack.all().single().let { it.id.value to it.uuid.toString() } }
-        assertEquals(listOf<RecordedCall>(RecordedCall.CueStackGo(stack.first, stack.second)), actions.calls.toList())
+        val stack = transaction(state.database) { DaoCueStack.all().single().uuid }
+        assertEquals(listOf<RecordedCall>(RecordedCall.CueStackGo(stack)), actions.calls.toList())
         val source = actions.answerOrigins.single()?.source
         assertNotNull(source)
         assertEquals(HistorySource.Kind.OSC, source.kind)

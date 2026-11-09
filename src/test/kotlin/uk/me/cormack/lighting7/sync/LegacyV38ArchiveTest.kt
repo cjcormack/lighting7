@@ -4,8 +4,14 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
-import uk.me.cormack.lighting7.midi.BindingTarget
-import uk.me.cormack.lighting7.midi.BindingTargetJson
+import uk.me.cormack.lighting7.midi.Binding
+import uk.me.cormack.lighting7.midi.ColourAxis
+import uk.me.cormack.lighting7.midi.ControlPart
+import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.How
+import uk.me.cormack.lighting7.midi.RecordKind
+import uk.me.cormack.lighting7.midi.Subject
+import uk.me.cormack.lighting7.midi.decodeBinding
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoLookFxEntity
 import uk.me.cormack.lighting7.state.State
@@ -19,9 +25,9 @@ import uk.me.cormack.lighting7.testsupport.secondsAsOwnTempo
 import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.UUID
 import kotlin.io.path.name
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -69,13 +75,29 @@ class LegacyV38ArchiveTest {
             for (binding in bindings.values) {
                 assertTrue("Property" !in binding.targetType && "propertyName" !in binding.targetPayload, binding.targetPayload)
             }
-            val fader = BindingTargetJson.decodeFromString<BindingTarget>(bindings.getValue("fader-3").targetPayload)
-            assertEquals("rgbColour", assertIs<BindingTarget.GroupAttribute>(fader).attribute)
-            val flash = assertIs<BindingTarget.Flash>(BindingTargetJson.decodeFromString<BindingTarget>(bindings.getValue("button-13").targetPayload))
-            assertEquals("dimmer", assertIs<BindingTarget.FixtureAttribute>(flash.target).attribute)
-            assertEquals("selectionAttribute", bindings.getValue("enc-1").targetType)
-            val encoder = BindingTargetJson.decodeFromString<BindingTarget>(bindings.getValue("button-6").targetPayload)
-            assertEquals("pan", assertIs<BindingTarget.EncoderBankSet>(encoder).attribute)
+            fun bound(controlId: String) = bindings.getValue(controlId).let { decodeBinding(it.targetPayload, it.targetType) }
+            assertEquals(
+                Binding(Does.Level("rgbColour", ColourAxis.SATURATION), Subject.Group("front-wash")),
+                bound("fader-3"),
+            )
+            assertEquals(Binding(Does.Flash("dimmer", 78), Subject.Fixture("hex-1")), bound("button-13"))
+            assertEquals("flash", bindings.getValue("button-13").targetType)
+            assertEquals(Binding(Does.Level("pan"), Subject.Selection), bound("enc-1"))
+            assertEquals("level", bindings.getValue("enc-1").targetType)
+            assertEquals(Binding(Does.EncoderPage("pan")), bound("button-6"))
+            assertEquals(
+                Binding(Does.FxAmount, Subject.Record(RecordKind.STACK, UUID.fromString("92488a42-4f6c-44c4-b04c-6a7acc87484e"))),
+                bound("fader-2"),
+            )
+            assertEquals(
+                Binding(Does.Cue, Subject.Record(RecordKind.CUE, UUID.fromString("bcb533ea-6191-44b3-9b6e-0b9d2d92c220"))),
+                bound("button-5"),
+            )
+            assertEquals(
+                Binding(Does.Select, Subject.Group("front-wash"), How.REPLACE),
+                bound("button-2"),
+            )
+            assertTrue(bindings.values.all { it.part == ControlPart.MAIN.name }, "no encoder holds a button variant")
 
             // Its Circle's centres take their new spelling, and the importer then stores it as Path.
             val circle = DaoLookFxEntity.all().single { it.look.project.id.value == imported && it.fxType == "Path" }

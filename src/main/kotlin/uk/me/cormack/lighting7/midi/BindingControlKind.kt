@@ -1,116 +1,29 @@
 package uk.me.cormack.lighting7.midi
 
 /**
- * Which half of [SurfaceInputRouter]'s dispatch a control reaches, and which half a target needs.
- *
- * The pair of functions below is the whole of `FU-MIDI-BIND-CONTROL-KIND`'s vocabulary, and both are
- * read off the router rather than guessed from a descriptor's name — the two surprises are in
- * [dispatchableKinds]. `lib/surfaceDrop.ts` in `lighting-react` mirrors this exactly, and since
- * `ControlSurfaceBindingService.refuseWrongKind` the client copy is the mirror rather than the only
- * copy: before that, `canLand` and the dim it drives were the entire guard, covering one drag
- * gesture in one UI while MIDI Learn, a hand-rolled REST call and a script all reached the same
- * service unchecked.
+ * Which half of the dispatch a control part feeds, and which a function takes ([Spec.inputs]): a
+ * fader's or an encoder's turn is continuous, a button's press and an encoder's push are buttons
+ * ([inputFor]).
  */
 enum class ControlKind { CONTINUOUS, BUTTON }
 
 /**
- * What the desk will actually dispatch on this control, from the profile alone.
- *
- * - An **encoder with a push note reaches both halves** — its CC is a `Continuous` and its note a
- *   `ButtonPress`, on one control id. So an encoder legitimately takes a cue target as well as a
- *   property one, and the X-Touch declares a push on all sixteen.
- * - A **bank button takes nothing at all**. `route` answers `ResolvedInput.BankButton` and switches
- *   the bank *before* resolving a binding, so a row on one can never fire. Empty is the honest
- *   answer, and it is what makes the refusal say so rather than naming a kind.
- */
-fun dispatchableKinds(descriptor: ControlDescriptor): Set<ControlKind> = when (descriptor) {
-    is FaderDescriptor -> setOf(ControlKind.CONTINUOUS)
-    is EncoderDescriptor ->
-        if (descriptor.pushNote != null) setOf(ControlKind.CONTINUOUS, ControlKind.BUTTON)
-        else setOf(ControlKind.CONTINUOUS)
-    is ButtonDescriptor -> setOf(ControlKind.BUTTON)
-    is BankButtonDescriptor -> emptySet()
-}
-
-/**
- * Which half of the dispatch a target belongs to, or null for one that is not dispatched at all.
- *
- * [BindingTarget.Strip] addresses a strip id and is resolved to a control's own target by
- * derivation; [BindingTarget.Unknown] is never accepted from a request. Both are refused by name
- * elsewhere ([ControlSurfaceBindingService] `refuseWrongSlot` / `refuseUnknown`), so answering null
- * here keeps one rule per refusal instead of two saying overlapping things.
- */
-fun targetControlKind(target: BindingTarget): ControlKind? = when (target) {
-    is BindingTarget.FixtureAttribute,
-    is BindingTarget.GroupAttribute,
-    is BindingTarget.SelectionAttribute,
-    is BindingTarget.SelectionFan,
-    is BindingTarget.SpeedMasterBpm,
-    BindingTarget.GrandMasterFader,
-    is BindingTarget.StackFxAmount,
-    BindingTarget.FxSpeed,
-        -> ControlKind.CONTINUOUS
-
-    is BindingTarget.Flash,
-    is BindingTarget.CueStackGo,
-    is BindingTarget.CueStackBack,
-    is BindingTarget.CueStackPause,
-    is BindingTarget.CueStackGoTo,
-    is BindingTarget.CueStackStandby,
-    is BindingTarget.CueStackStop,
-    is BindingTarget.FireCue,
-    is BindingTarget.LooseCueSet,
-    is BindingTarget.FireTrigger,
-    is BindingTarget.SelectTarget,
-    BindingTarget.ClearSelection,
-    BindingTarget.LocateSelection,
-    is BindingTarget.EncoderBankSet,
-    BindingTarget.Blackout,
-    is BindingTarget.BlackoutSet,
-    BindingTarget.GrandMasterToggle,
-    is BindingTarget.GrandMasterLevel,
-    is BindingTarget.SpeedMasterSetBpm,
-    is BindingTarget.SetBank,
-    is BindingTarget.SpeedMasterTap,
-    is BindingTarget.SpeedMasterScale,
-    is BindingTarget.ApplyLook,
-    is BindingTarget.LookSet,
-    is BindingTarget.PressPalette,
-    is BindingTarget.PressPad,
-    is BindingTarget.PickUpPad,
-    is BindingTarget.HandPlaceInBank,
-    BindingTarget.HandDrop,
-    BindingTarget.Undo,
-    BindingTarget.Redo,
-    BindingTarget.ProgrammerUndo,
-    BindingTarget.BuskPageNext,
-    BindingTarget.BuskPagePrev,
-    is BindingTarget.BuskPageSet,
-    is BindingTarget.BuskFocusSet,
-    is BindingTarget.BuskSheetToggle,
-    BindingTarget.SelectionNext,
-    BindingTarget.SelectionPrev,
-    is BindingTarget.SelectionCells,
-        -> ControlKind.BUTTON
-
-    is BindingTarget.Strip,
-    is BindingTarget.Unknown,
-        -> null
-}
-
-/**
  * A binding write the service refused, carrying the machine-readable [code] the client branches on.
  *
- * An [IllegalArgumentException] so every existing caller — both REST routes and MIDI Learn's commit
- * — already maps it to a 400 without change; the routes additionally read [code] where they build
- * their [uk.me.cormack.lighting7.routes.ErrorResponse]. This exists so a rule can live on the
- * service *and* answer a coded 400: session 2 had to duplicate the strip rules into the routes to
- * get both, and four more rules would have meant four more copies.
+ * An [IllegalArgumentException] so every caller — both REST routes and MIDI Learn's commit — maps it
+ * to a 400; the routes additionally read [code] where they build their
+ * [uk.me.cormack.lighting7.routes.ErrorResponse].
  */
 class BindingRefused(message: String, val code: String) : IllegalArgumentException(message)
 
-/** A binding whose target the control's half of the dispatch can never reach. */
+/** A function the control part's input can never reach. */
 const val CODE_BINDING_WRONG_CONTROL_KIND = "BINDING_WRONG_CONTROL_KIND"
 
 /** A [ColourAxis] on a property that is not colour-typed, which has no such axis to drive. */
 const val CODE_BINDING_AXIS_NEEDS_COLOUR = "BINDING_AXIS_NEEDS_COLOUR"
+
+/** A subject the function's spec does not take — a fan on one fixture, a GO on a cue. */
+const val CODE_BINDING_WRONG_SUBJECT = "BINDING_WRONG_SUBJECT"
+
+/** A [How] the function's spec does not take — a fader While held, a GO as a Toggle. */
+const val CODE_BINDING_WRONG_HOW = "BINDING_WRONG_HOW"

@@ -1,0 +1,44 @@
+{
+  "fx": [
+    {
+      "attribute": "position",
+      "blendMode": "OVERRIDE",
+      "cycle": 4.0,
+      "family": "position",
+      "fxType": "Path",
+      "order": "NORMAL",
+      "parameters": {
+        "panCentre": "100",
+        "panSize": "30",
+        "shape": "CIRCLE",
+        "tiltCentre": "140"
+      },
+      "targetKey": "hex-2",
+      "targetType": "fixture",
+      "uuid": "68f8fc58-341d-4b24-8f85-170cbd816475"
+    },
+    {
+      "attribute": "position",
+      "blendMode": "OVERRIDE",
+      "cycle": 2.0,
+      "direction": "BOUNCE",
+      "family": "position",
+      "fxType": "Path",
+      "order": "NORMAL",
+      "parameters": {
+        "curve": "QUAD_IN",
+        "endPan": "230",
+        "endTilt": "90",
+        "shape": "LINE",
+        "startPan": "20",
+        "startTilt": "40"
+      },
+      "sortOrder": 1,
+      "targetKey": "hex-2",
+      "targetType": "fixture",
+      "uuid": "314048c4-a108-40d2-a076-2ced4a554c7a"
+    }
+  ],
+  "name": "Swirl",
+  "uuid": "13a43a76-2a3a-4bd2-afc1-3349492f0e91"
+}

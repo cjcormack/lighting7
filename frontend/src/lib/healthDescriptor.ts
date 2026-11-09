@@ -20,10 +20,11 @@ export function describeHealth(health: BindingHealth | undefined): string | null
     // Three reference cases for the old `ref:` value grammar stood here; all retired with it
     // (looks-and-layers session 4): a row cannot hold a reference, so a reference that resolves to
     // nothing is not a state to describe. The `missingPalette` below is a binding's, and unrelated.
+    // A binding names its stack or cue by uuid, so there is no number to show.
     case "missingStack":
-      return `Cue stack #${health.stackId} no longer exists`
+      return "The cue stack this binding names no longer exists"
     case "missingCue":
-      return `Cue #${health.cueId} no longer exists`
+      return "The cue this binding names no longer exists"
     case "unknownBank":
       return `Bank '${health.bankId}' is not defined on device '${health.deviceTypeKey}'`
     case "missingSpeedMaster":

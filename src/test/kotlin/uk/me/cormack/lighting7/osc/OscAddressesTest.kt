@@ -14,7 +14,15 @@ import io.ktor.server.testing.testApplication
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
-import uk.me.cormack.lighting7.midi.BindingTarget
+import uk.me.cormack.lighting7.history.HistorySource
+import uk.me.cormack.lighting7.midi.ActionOutcome
+import uk.me.cormack.lighting7.midi.ActiveBankState
+import uk.me.cormack.lighting7.midi.Binding
+import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.EncoderBankState
+import uk.me.cormack.lighting7.midi.RecordKind
+import uk.me.cormack.lighting7.midi.Subject
+import uk.me.cormack.lighting7.midi.SurfaceDispatch
 import uk.me.cormack.lighting7.models.DaoBuskPad
 import uk.me.cormack.lighting7.models.DaoBuskPage
 import uk.me.cormack.lighting7.models.DaoCue
@@ -35,24 +43,49 @@ import uk.me.cormack.lighting7.routes.CueStackDetails
 import uk.me.cormack.lighting7.routes.LookDetails
 import uk.me.cormack.lighting7.routes.NewCue
 import uk.me.cormack.lighting7.routes.NewCueStack
+import uk.me.cormack.lighting7.testsupport.RecordedCall
+import uk.me.cormack.lighting7.testsupport.RecordingSurfaceActions
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 /**
- * [OscAddresses] over a real project (OSC plan D3, P2): every session-1 row reaches its target,
- * names are slugs matched case-insensitively, a slug two records share is ambiguous, a separator is
- * never a stack, a cue number matches by value, and a deleted record is simply not found.
+ * [OscAddresses] over a real project (OSC plan D3, P2): every address, resolved and dispatched as
+ * the handler does, makes the call it names; names are slugs matched case-insensitively, a slug two
+ * records share is ambiguous, a separator is never a stack, a cue number matches by value, and a
+ * deleted record is simply not found.
  */
 class OscAddressesTest : RouteIntegrationTest() {
+
+    private val actions = RecordingSurfaceActions()
+    private val dispatch = SurfaceDispatch(actions, ActiveBankState(), EncoderBankState())
+    private val origin = SurfaceDispatch.Origin(OscHandler.DEVICE_TYPE, HistorySource.osc(1, "QLab"))
 
     private fun resolve(address: String, vararg args: OscArg): OscResolution =
         transaction(state.database) { OscAddresses.resolve(address, args.toList(), DbOscLookup(projectId)) }
 
     private fun press(address: String): OscResolution.Press = assertIs<OscResolution.Press>(resolve(address), address)
+
+    /** [address] sent with [args], resolved and dispatched as [OscHandler] does: every call it made. */
+    private fun send(address: String, args: List<OscArg>): List<RecordedCall> {
+        actions.calls.clear()
+        val outcome = when (val resolution = resolve(address, *args.toTypedArray())) {
+            is OscResolution.Press -> dispatch.dispatch(resolution.binding, SurfaceDispatch.Input.Press, origin)
+            is OscResolution.Level -> dispatch.dispatch(resolution.binding, SurfaceDispatch.Input.Set(resolution.value), origin)
+            else -> fail("$address $args reached nothing: $resolution")
+        }
+        assertIs<ActionOutcome.Done>(outcome, "$address $args")
+        return actions.calls.toList()
+    }
+
+    /** One address with the arguments QLab sends, and the one call it makes. */
+    private class Row(val address: String, val call: RecordedCall, vararg sent: OscArg) {
+        val args = sent.toList()
+    }
 
     private suspend fun HttpClient.stack(name: String, type: String? = null): Int {
         val resp = post("/api/rest/projects/$projectId/cue-stacks") {
@@ -112,15 +145,18 @@ class OscAddressesTest : RouteIntegrationTest() {
         return resp.body()
     }
 
-    private fun stackUuid(id: Int) = transaction(state.database) { DaoCueStack[id].uuid.toString() }
-    private fun cueUuid(id: Int) = transaction(state.database) { DaoCue[id].uuid.toString() }
-    private fun lookUuid(id: Int) = transaction(state.database) { DaoLook[id].uuid.toString() }
+    private fun stackUuid(id: Int) = transaction(state.database) { DaoCueStack[id].uuid }
+    private fun cueUuid(id: Int) = transaction(state.database) { DaoCue[id].uuid }
+    private fun lookUuid(id: Int) = transaction(state.database) { DaoLook[id].uuid }
     private fun entryUuid(cueId: Int) = transaction(state.database) {
-        DaoCueStackEntry.find { DaoCueStackEntries.cue eq cueId }.single().uuid.toString()
+        DaoCueStackEntry.find { DaoCueStackEntries.cue eq cueId }.single().uuid
+    }
+    private fun masterUuid(index: Int) = transaction(state.database) {
+        DbOscLookup(projectId).masters().single { it.index == index }.uuid
     }
 
     @Test
-    fun `every session-1 row reaches its target, naming the record`() = testApplication {
+    fun `every address makes the call it names, with the arguments sent`() = testApplication {
         mountTestApp(state)
         val http = jsonClient()
         val act2 = http.stack("Act 2")
@@ -130,49 +166,62 @@ class OscAddressesTest : RouteIntegrationTest() {
         val loose = http.cue("Thunder")
         val page = http.page("Storm", haze, other, loose)
         val s = stackUuid(act2)
+        val entry = entryUuid(storm)
+        val thunder = cueUuid(loose)
+        val h = lookUuid(haze)
+        val pads = page.rows.flatMap { it.columns }.flatMap { it.banks }.flatMap { it.pads }
+        val padUuids = transaction(state.database) { pads.map { DaoBuskPad[it.id].uuid } }
+        val pageUuid = transaction(state.database) { DaoBuskPage[page.id].uuid }
+        val m1 = masterUuid(1)
+        val m2 = masterUuid(2)
 
-        val goTo = press("/lighting7/stack/act-2/cue/31/go")
-        assertEquals(BindingTarget.CueStackGoTo(s, entryUuid(storm)), goTo.target)
-        assertEquals("GO TO 31 Storm builds in Act 2", goTo.reached)
-        assertEquals(BindingTarget.CueStackStandby(s, entryUuid(storm)), press("/lighting7/stack/act-2/cue/31/standby").target)
-        assertEquals(BindingTarget.CueStackGo(act2, s), press("/lighting7/stack/act-2/go").target)
-        assertEquals(BindingTarget.CueStackBack(act2, s), press("/lighting7/stack/act-2/back").target)
-        assertEquals(BindingTarget.CueStackPause(act2, s), press("/lighting7/stack/act-2/pause").target)
-        assertEquals(BindingTarget.CueStackStop(s), press("/lighting7/stack/act-2/stop").target)
+        val table = listOf(
+            Row("/lighting7/stack/act-2/cue/31/go", RecordedCall.CueStackGoTo(entry)),
+            Row("/lighting7/stack/act-2/cue/31/standby", RecordedCall.CueStackStandby(entry)),
+            Row("/lighting7/stack/act-2/go", RecordedCall.CueStackGo(s)),
+            Row("/lighting7/stack/act-2/back", RecordedCall.CueStackBack(s)),
+            Row("/lighting7/stack/act-2/pause", RecordedCall.CueStackPause(s)),
+            Row("/lighting7/stack/act-2/stop", RecordedCall.CueStackStop(s)),
+            Row("/lighting7/stack/act-2/fx-amount", RecordedCall.SetStackFxAmount(s, 0.25), OscArg.Float32(0.25f)),
+            // QLab sends a whole number as `i` (D9).
+            Row("/lighting7/stack/act-2/fx-amount", RecordedCall.SetStackFxAmount(s, 1.0), OscArg.Int32(1)),
+            Row("/lighting7/cue/thunder/on", RecordedCall.LooseCueSet(thunder, true)),
+            Row("/lighting7/cue/thunder/off", RecordedCall.LooseCueSet(thunder, false)),
+            Row("/lighting7/cue/thunder/press", RecordedCall.FireCue(thunder)),
+            Row("/lighting7/look/haze-fill/on", RecordedCall.LookSet(h, true)),
+            Row("/lighting7/look/haze-fill/off", RecordedCall.LookSet(h, false)),
+            Row("/lighting7/look/haze-fill/press", RecordedCall.ApplyLook(h)),
+            Row("/lighting7/busk/storm/1/2/press", RecordedCall.PressPad(padUuids[1])),
+            // Banks count down a column, then across: C is the third.
+            Row("/lighting7/busk/storm/3/1/press", RecordedCall.PressPad(padUuids[2])),
+            Row("/lighting7/busk/storm/show", RecordedCall.BuskPageSet(pageUuid)),
+            Row("/lighting7/blackout", RecordedCall.ToggleBlackout),
+            Row("/lighting7/blackout", RecordedCall.SetBlackout(true), OscArg.Int32(1)),
+            Row("/lighting7/blackout", RecordedCall.SetBlackout(true), OscArg.Bool(true)),
+            Row("/lighting7/blackout", RecordedCall.SetBlackout(false), OscArg.Float32(0f)),
+            // A level taken whole as a percentage, clamped to 0–1 (D10).
+            Row("/lighting7/grandmaster", RecordedCall.SetGrandMasterLevel(50.0), OscArg.Float32(0.5f)),
+            Row("/lighting7/grandmaster", RecordedCall.SetGrandMasterLevel(100.0), OscArg.Float32(2f)),
+            Row("/lighting7/tempo/2", RecordedCall.SetSpeedMasterBpm(m2, 128.0), OscArg.Int32(128)),
+            Row("/lighting7/tempo/1", RecordedCall.SetSpeedMasterBpm(m1, 96.5), OscArg.Float32(96.5f)),
+            Row("/lighting7/tempo/2/tap", RecordedCall.TapSpeedMaster(m2)),
+        )
+        for (row in table) {
+            assertEquals(listOf(row.call), send(row.address, row.args), "${row.address} ${row.args}")
+        }
+        assertEquals(
+            OscAddresses.entries.map { OscAddresses.PREFIX + it.pattern }.toSet(),
+            table.mapNotNull { OscAddresses.patternOf(it.address) }.toSet(),
+            "every row of the address table is in the behaviour table",
+        )
 
-        val level = assertIs<OscResolution.Level>(resolve("/lighting7/stack/act-2/fx-amount", OscArg.Float32(0.25f)))
-        assertEquals(BindingTarget.StackFxAmount(act2, s), level.target)
-        assertEquals(0.25, level.value)
-        // QLab sends a whole number as `i` (D9).
-        assertEquals(1.0, assertIs<OscResolution.Level>(resolve("/lighting7/stack/act-2/fx-amount", OscArg.Int32(1))).value)
+        assertEquals("GO TO 31 Storm builds in Act 2", press("/lighting7/stack/act-2/cue/31/go").reached)
+        assertEquals("Press Rain (pad 2 of A on Storm)", press("/lighting7/busk/storm/1/2/press").reached)
         assertIs<OscResolution.Bad>(resolve("/lighting7/stack/act-2/fx-amount"))
         assertIs<OscResolution.Bad>(resolve("/lighting7/stack/act-2/fx-amount", OscArg.Str("half")))
-
-        val thunder = cueUuid(loose)
-        assertEquals(BindingTarget.LooseCueSet(thunder, on = true), press("/lighting7/cue/thunder/on").target)
-        assertEquals(BindingTarget.LooseCueSet(thunder, on = false), press("/lighting7/cue/thunder/off").target)
-        assertEquals(BindingTarget.FireCue(loose, thunder), press("/lighting7/cue/thunder/press").target)
-
-        val h = lookUuid(haze)
-        assertEquals(BindingTarget.LookSet(h, on = true), press("/lighting7/look/haze-fill/on").target)
-        assertEquals(BindingTarget.LookSet(h, on = false), press("/lighting7/look/haze-fill/off").target)
-        assertEquals(BindingTarget.ApplyLook(h), press("/lighting7/look/haze-fill/press").target)
-
-        val pads = page.rows.flatMap { it.columns }.flatMap { it.banks }.flatMap { it.pads }
-        val padUuids = transaction(state.database) { pads.map { DaoBuskPad[it.id].uuid.toString() } }
-        val second = press("/lighting7/busk/storm/1/2/press")
-        assertEquals(BindingTarget.PressPad(padUuids[1]), second.target)
-        assertEquals("Press Rain (pad 2 of A on Storm)", second.reached)
-        // Banks count down a column, then across: C is the third.
-        assertEquals(BindingTarget.PressPad(padUuids[2]), press("/lighting7/busk/storm/3/1/press").target)
         assertTrue("no pad 1" in assertIs<OscResolution.NotFound>(resolve("/lighting7/busk/storm/2/1/press")).message)
         assertTrue("no bank 4" in assertIs<OscResolution.NotFound>(resolve("/lighting7/busk/storm/4/1/press")).message)
         assertIs<OscResolution.Bad>(resolve("/lighting7/busk/storm/one/1/press"))
-        val pageUuid = transaction(state.database) { DaoBuskPage[page.id].uuid.toString() }
-        assertEquals(BindingTarget.BuskPageSet(pageUuid), press("/lighting7/busk/storm/show").target)
-
-        // Every session-1 row of the table was exercised above.
-        assertEquals(15, OscAddresses.entries.count { it.session == 1 })
     }
 
     @Test
@@ -198,7 +247,7 @@ class OscAddressesTest : RouteIntegrationTest() {
         val http = jsonClient()
         val act = http.stack("Act 1")
         http.stack("Act 1", type = "SEPARATOR")
-        assertEquals(BindingTarget.CueStackGo(act, stackUuid(act)), press("/lighting7/stack/act-1/go").target)
+        assertEquals(Binding(Does.Go, Subject.Record(RecordKind.STACK, stackUuid(act))), press("/lighting7/stack/act-1/go").binding)
     }
 
     @Test
@@ -217,9 +266,9 @@ class OscAddressesTest : RouteIntegrationTest() {
         val http = jsonClient()
         val act = http.stack("Act 1")
         val q = http.cue("Half", act, "12.5")
-        val expected = BindingTarget.CueStackGoTo(stackUuid(act), entryUuid(q))
-        assertEquals(expected, press("/lighting7/stack/act-1/cue/12.5/go").target)
-        assertEquals(expected, press("/lighting7/stack/act-1/cue/12.50/go").target)
+        val expected = Binding(Does.GoTo, Subject.Record(RecordKind.ENTRY, entryUuid(q)))
+        assertEquals(expected, press("/lighting7/stack/act-1/cue/12.5/go").binding)
+        assertEquals(expected, press("/lighting7/stack/act-1/cue/12.50/go").binding)
         assertEquals("No cue 13 in Act 1", assertIs<OscResolution.NotFound>(resolve("/lighting7/stack/act-1/cue/13/go")).message)
         assertIs<OscResolution.Bad>(resolve("/lighting7/stack/act-1/cue/12a/go"))
     }

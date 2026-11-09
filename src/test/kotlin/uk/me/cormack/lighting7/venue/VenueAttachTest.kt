@@ -32,8 +32,11 @@ import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
-import uk.me.cormack.lighting7.midi.BindingTarget
-import uk.me.cormack.lighting7.midi.BindingTargetJson
+import uk.me.cormack.lighting7.midi.Binding
+import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.Subject
+import uk.me.cormack.lighting7.midi.decodeBinding
+import uk.me.cormack.lighting7.midi.encodePayload
 import uk.me.cormack.lighting7.models.ALL_TABLES
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
@@ -296,8 +299,8 @@ class VenueAttachTest : RouteIntegrationTest() {
             DaoPaletteRow.new { this.palette = palette; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; attribute = "dimmer"; value = "pct:50"; sortOrder = 0 }
             DaoCueLayer.new { cue = DaoCue.find { DaoCues.project eq h.showId }.first(); this.palette = palette; targets = listOf(CueTargetDto("fixture", "panto-spot")) }
             DaoControlSurfaceBinding.new {
-                project = show; deviceTypeKey = "xtouch-mini"; controlId = "fader-8"; targetType = "fixtureAttribute"
-                targetPayload = BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.FixtureAttribute("panto-spot", "dimmer"))
+                project = show; deviceTypeKey = "xtouch-mini"; controlId = "fader-8"; targetType = "level"
+                targetPayload = Binding(Does.Level("dimmer"), Subject.Fixture("panto-spot")).encodePayload()
             }
         }
         publish(h.venueId, "a house spot on 0:9")
@@ -380,8 +383,8 @@ class VenueAttachTest : RouteIntegrationTest() {
             val palette = DaoPalette.new { project = show; name = "hex-3 focus" }
             val paletteRow = DaoPaletteRow.new { this.palette = palette; targetType = "fixture"; targetKey = "hex-3b"; attribute = "dimmer"; value = "90"; sortOrder = 0 }
             val binding = DaoControlSurfaceBinding.new {
-                project = show; deviceTypeKey = "xtouch-mini"; controlId = "fader-3"; targetType = "fixtureAttribute"
-                targetPayload = BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.FixtureAttribute("hex-3b", "dimmer"))
+                project = show; deviceTypeKey = "xtouch-mini"; controlId = "fader-3"; targetType = "level"
+                targetPayload = Binding(Does.Level("dimmer"), Subject.Fixture("hex-3b")).encodePayload()
             }
             DaoScript.new { project = show; name = "Hex chase"; script = """fixture<Fixture>("hex-3b")""" }
             listOf(assignment.id.value, effect.id.value, lookRow.id.value, paletteRow.id.value, binding.id.value)
@@ -411,7 +414,10 @@ class VenueAttachTest : RouteIntegrationTest() {
             )
             assertEquals("hex-3", DaoLookRow[lookRow].targetKey)
             assertEquals("hex-3", DaoPaletteRow[paletteRow].targetKey)
-            assertEquals(BindingTarget.FixtureAttribute("hex-3", "dimmer"), BindingTargetJson.decodeFromString<BindingTarget>(DaoControlSurfaceBinding[binding].targetPayload))
+            assertEquals(
+                Binding(Does.Level("dimmer"), Subject.Fixture("hex-3")),
+                DaoControlSurfaceBinding[binding].let { decodeBinding(it.targetPayload, it.targetType) },
+            )
             assertEquals(0, DaoFixturePatch.find { (DaoFixturePatches.project eq h.showId) and (DaoFixturePatches.key eq "hex-3b") }.count(), "the show's row is the venue's now")
         }
     }

@@ -26,6 +26,9 @@ import org.junit.Test
 import uk.me.cormack.lighting7.ai.AiTools
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.CommandNotStorableException
+import uk.me.cormack.lighting7.midi.Binding
+import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.Subject
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
@@ -301,13 +304,11 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
         val programmer = ProgrammerHandler.set(state, TargetRef.Fixture("mac"), "reset", "208", 0)
         assertTrue(programmer is ProgrammerErrorOutMessage && "fixture command" in programmer.message, "$programmer")
 
-        for (target in listOf(
-            uk.me.cormack.lighting7.midi.BindingTarget.FixtureAttribute("vary", "reset"),
-            uk.me.cormack.lighting7.midi.BindingTarget.SelectionAttribute("lampOff"),
-        )) {
+        for ((on, attribute) in listOf(Subject.Fixture("vary") to "reset", Subject.Selection to "lampOff")) {
             val refused = assertFailsWith<uk.me.cormack.lighting7.midi.BindingRefused> {
                 state.controlSurfaceBindingService.create(
-                    projectId = projectId, deviceTypeKey = "x-touch-compact-standard", controlId = "fader-1", bank = null, target = target,
+                    projectId = projectId, deviceTypeKey = "x-touch-compact-standard", controlId = "fader-1", bank = null,
+                    binding = Binding(Does.Level(attribute), on),
                 )
             }
             assertEquals(CommandNotStorableException.CODE, refused.code)

@@ -3,7 +3,11 @@ package uk.me.cormack.lighting7.osc
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
-import uk.me.cormack.lighting7.midi.BindingTarget
+import uk.me.cormack.lighting7.midi.Binding
+import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.How
+import uk.me.cormack.lighting7.midi.RecordKind
+import uk.me.cormack.lighting7.midi.Subject
 import uk.me.cormack.lighting7.models.DaoBuskBank
 import uk.me.cormack.lighting7.models.DaoBuskBanks
 import uk.me.cormack.lighting7.models.DaoBuskColumn
@@ -29,7 +33,7 @@ import java.util.UUID
 
 /**
  * The fixed OSC address set (OSC plan D1, P2): every address the desk answers to under
- * [PREFIX], what it takes and does, and the [BindingTarget] it resolves to. One table, which the
+ * [PREFIX], what it takes and does, and the [Binding] it resolves to. One table, which the
  * resolver, the address listing and the tests all read, so §3 of the plan and the code cannot drift.
  *
  * `{stack}`, `{cue}`, `{look}` and `{page}` are slugs ([slugOf]), matched against the lower-cased
@@ -73,77 +77,77 @@ object OscAddresses {
 
     val entries: List<Entry> = listOf(
         Entry("/stack/{stack}/cue/{n}/go", Args.NONE,
-            "GO TO cue n, starting the stack if it is stopped; nothing if n is already live", "CueStackGoTo", 1) { c, _, l ->
+            "GO TO cue n, starting the stack if it is stopped; nothing if n is already live", "goTo", 1) { c, _, l ->
             l.entry(c["stack"], c["n"]) { stack, entry ->
-                OscResolution.Press(BindingTarget.CueStackGoTo(stack.uuid.toString(), entry.uuid.toString()), "GO TO ${entry.label} in ${stack.name}", entry.ref())
+                OscResolution.Press(Binding(Does.GoTo, Subject.Record(RecordKind.ENTRY, entry.uuid)), "GO TO ${entry.label} in ${stack.name}", entry.ref())
             }
         },
-        Entry("/stack/{stack}/cue/{n}/standby", Args.NONE, "Put cue n on standby", "CueStackStandby", 1) { c, _, l ->
+        Entry("/stack/{stack}/cue/{n}/standby", Args.NONE, "Put cue n on standby", "standby", 1) { c, _, l ->
             l.entry(c["stack"], c["n"]) { stack, entry ->
-                OscResolution.Press(BindingTarget.CueStackStandby(stack.uuid.toString(), entry.uuid.toString()), "Standby ${entry.label} in ${stack.name}", entry.ref())
+                OscResolution.Press(Binding(Does.Standby, Subject.Record(RecordKind.ENTRY, entry.uuid)), "Standby ${entry.label} in ${stack.name}", entry.ref())
             }
         },
-        Entry("/stack/{stack}/go", Args.NONE, "GO", "CueStackGo", 1) { c, _, l ->
-            l.stack(c["stack"]) { OscResolution.Press(BindingTarget.CueStackGo(it.id, it.uuid.toString()), "GO ${it.name}", it.ref(OscRecordKind.STACK)) }
+        Entry("/stack/{stack}/go", Args.NONE, "GO", "go", 1) { c, _, l ->
+            l.stack(c["stack"]) { OscResolution.Press(Binding(Does.Go, it.stackSubject()), "GO ${it.name}", it.ref(OscRecordKind.STACK)) }
         },
-        Entry("/stack/{stack}/back", Args.NONE, "GO BACK", "CueStackBack", 1) { c, _, l ->
-            l.stack(c["stack"]) { OscResolution.Press(BindingTarget.CueStackBack(it.id, it.uuid.toString()), "GO BACK ${it.name}", it.ref(OscRecordKind.STACK)) }
+        Entry("/stack/{stack}/back", Args.NONE, "GO BACK", "back", 1) { c, _, l ->
+            l.stack(c["stack"]) { OscResolution.Press(Binding(Does.Back, it.stackSubject()), "GO BACK ${it.name}", it.ref(OscRecordKind.STACK)) }
         },
-        Entry("/stack/{stack}/pause", Args.NONE, "Cancel the live entry's auto-advance timer", "CueStackPause", 1) { c, _, l ->
-            l.stack(c["stack"]) { OscResolution.Press(BindingTarget.CueStackPause(it.id, it.uuid.toString()), "Pause ${it.name}'s follow", it.ref(OscRecordKind.STACK)) }
+        Entry("/stack/{stack}/pause", Args.NONE, "Cancel the live entry's auto-advance timer", "pause", 1) { c, _, l ->
+            l.stack(c["stack"]) { OscResolution.Press(Binding(Does.Pause, it.stackSubject()), "Pause ${it.name}'s follow", it.ref(OscRecordKind.STACK)) }
         },
-        Entry("/stack/{stack}/stop", Args.NONE, "Stop the stack over its release time, which drops the arm as any stop does", "CueStackStop", 1) { c, _, l ->
-            l.stack(c["stack"]) { OscResolution.Press(BindingTarget.CueStackStop(it.uuid.toString()), "Stop ${it.name}", it.ref(OscRecordKind.STACK)) }
+        Entry("/stack/{stack}/stop", Args.NONE, "Stop the stack over its release time, which drops the arm as any stop does", "stop", 1) { c, _, l ->
+            l.stack(c["stack"]) { OscResolution.Press(Binding(Does.Stop, it.stackSubject()), "Stop ${it.name}", it.ref(OscRecordKind.STACK)) }
         },
-        Entry("/stack/{stack}/fx-amount", Args.LEVEL, "The stack's FX amount", "StackFxAmount", 1) { c, v, l ->
-            l.stack(c["stack"]) { OscResolution.Level(BindingTarget.StackFxAmount(it.id, it.uuid.toString()), v!!, "FX amount of ${it.name}", it.ref(OscRecordKind.STACK)) }
+        Entry("/stack/{stack}/fx-amount", Args.LEVEL, "The stack's FX amount", "fxAmount", 1) { c, v, l ->
+            l.stack(c["stack"]) { OscResolution.Level(Binding(Does.FxAmount, it.stackSubject()), v!!, "FX amount of ${it.name}", it.ref(OscRecordKind.STACK)) }
         },
-        Entry("/cue/{cue}/on", Args.NONE, "Take a loose hold; nothing if already held", "LooseCueSet", 1) { c, _, l ->
-            l.cue(c["cue"]) { OscResolution.Press(BindingTarget.LooseCueSet(it.uuid.toString(), on = true), "Cue ${it.name} on", it.ref(OscRecordKind.CUE)) }
+        Entry("/cue/{cue}/on", Args.NONE, "Take a loose hold; nothing if already held", "cue · On", 1) { c, _, l ->
+            l.cue(c["cue"]) { OscResolution.Press(Binding(Does.Cue, it.subject(RecordKind.CUE), How.ON), "Cue ${it.name} on", it.ref(OscRecordKind.CUE)) }
         },
-        Entry("/cue/{cue}/off", Args.NONE, "Let go of a loose hold; nothing if not held", "LooseCueSet", 1) { c, _, l ->
-            l.cue(c["cue"]) { OscResolution.Press(BindingTarget.LooseCueSet(it.uuid.toString(), on = false), "Cue ${it.name} off", it.ref(OscRecordKind.CUE)) }
+        Entry("/cue/{cue}/off", Args.NONE, "Let go of a loose hold; nothing if not held", "cue · Off", 1) { c, _, l ->
+            l.cue(c["cue"]) { OscResolution.Press(Binding(Does.Cue, it.subject(RecordKind.CUE), How.OFF), "Cue ${it.name} off", it.ref(OscRecordKind.CUE)) }
         },
-        Entry("/cue/{cue}/press", Args.NONE, "Toggle the loose hold", "FireCue", 1) { c, _, l ->
-            l.cue(c["cue"]) { OscResolution.Press(BindingTarget.FireCue(it.id, it.uuid.toString()), "Press cue ${it.name}", it.ref(OscRecordKind.CUE)) }
+        Entry("/cue/{cue}/press", Args.NONE, "Toggle the loose hold", "cue · Toggle", 1) { c, _, l ->
+            l.cue(c["cue"]) { OscResolution.Press(Binding(Does.Cue, it.subject(RecordKind.CUE), How.TOGGLE), "Press cue ${it.name}", it.ref(OscRecordKind.CUE)) }
         },
-        Entry("/look/{look}/on", Args.NONE, "The Look on whole; nothing if already on", "LookSet", 1) { c, _, l ->
-            l.look(c["look"]) { OscResolution.Press(BindingTarget.LookSet(it.uuid.toString(), on = true), "Look ${it.name} on", it.ref(OscRecordKind.LOOK)) }
+        Entry("/look/{look}/on", Args.NONE, "The Look on whole; nothing if already on", "look · On", 1) { c, _, l ->
+            l.look(c["look"]) { OscResolution.Press(Binding(Does.Look, it.subject(RecordKind.LOOK), How.ON), "Look ${it.name} on", it.ref(OscRecordKind.LOOK)) }
         },
-        Entry("/look/{look}/off", Args.NONE, "Every layer of the Look off; nothing if already off", "LookSet", 1) { c, _, l ->
-            l.look(c["look"]) { OscResolution.Press(BindingTarget.LookSet(it.uuid.toString(), on = false), "Look ${it.name} off", it.ref(OscRecordKind.LOOK)) }
+        Entry("/look/{look}/off", Args.NONE, "Every layer of the Look off; nothing if already off", "look · Off", 1) { c, _, l ->
+            l.look(c["look"]) { OscResolution.Press(Binding(Does.Look, it.subject(RecordKind.LOOK), How.OFF), "Look ${it.name} off", it.ref(OscRecordKind.LOOK)) }
         },
-        Entry("/look/{look}/press", Args.NONE, "Toggle the Look", "ApplyLook", 1) { c, _, l ->
-            l.look(c["look"]) { OscResolution.Press(BindingTarget.ApplyLook(it.uuid.toString()), "Press Look ${it.name}", it.ref(OscRecordKind.LOOK)) }
+        Entry("/look/{look}/press", Args.NONE, "Toggle the Look", "look · Toggle", 1) { c, _, l ->
+            l.look(c["look"]) { OscResolution.Press(Binding(Does.Look, it.subject(RecordKind.LOOK), How.TOGGLE), "Press Look ${it.name}", it.ref(OscRecordKind.LOOK)) }
         },
-        Entry("/busk/{page}/{bank}/{pad}/press", Args.NONE, "Press a pad, on the desk selection", "PressPad", 1) { c, _, l ->
+        Entry("/busk/{page}/{bank}/{pad}/press", Args.NONE, "Press a pad, on the desk selection", "pad", 1) { c, _, l ->
             l.pad(c["page"], c["bank"], c["pad"])
         },
-        Entry("/busk/{page}/show", Args.NONE, "Show that busk page", "BuskPageSet", 1) { c, _, l ->
-            l.page(c["page"]) { OscResolution.Press(BindingTarget.BuskPageSet(it.uuid.toString()), "Show busk page ${it.name}", it.ref(OscRecordKind.PAGE)) }
+        Entry("/busk/{page}/show", Args.NONE, "Show that busk page", "buskPage", 1) { c, _, l ->
+            l.page(c["page"]) { OscResolution.Press(Binding(Does.BuskPage(), it.subject(RecordKind.PAGE)), "Show busk page ${it.name}", it.ref(OscRecordKind.PAGE)) }
         },
-        Entry("/blackout", Args.FLAG_OPTIONAL, "Set blackout; toggle with no argument", "BlackoutSet · Blackout", 2) { _, v, _ ->
+        Entry("/blackout", Args.FLAG_OPTIONAL, "Set blackout; toggle with no argument", "blackout · On / Off / Toggle", 2) { _, v, _ ->
             when (v) {
-                null -> OscResolution.Press(BindingTarget.Blackout, "Toggle blackout")
-                0.0 -> OscResolution.Press(BindingTarget.BlackoutSet(on = false), "Blackout off")
-                else -> OscResolution.Press(BindingTarget.BlackoutSet(on = true), "Blackout on")
+                null -> OscResolution.Press(Binding(Does.Blackout, how = How.TOGGLE), "Toggle blackout")
+                0.0 -> OscResolution.Press(Binding(Does.Blackout, how = How.OFF), "Blackout off")
+                else -> OscResolution.Press(Binding(Does.Blackout, how = How.ON), "Blackout on")
             }
         },
-        Entry("/grandmaster", Args.LEVEL, "Grand master level", "GrandMasterLevel", 2) { _, v, _ ->
-            OscResolution.Press(BindingTarget.GrandMasterLevel(v!!.coerceIn(0.0, 1.0) * 100.0), "Grand master")
+        Entry("/grandmaster", Args.LEVEL, "Grand master level", "grandMaster", 2) { _, v, _ ->
+            OscResolution.Level(Binding(Does.GrandMaster()), v!!.coerceIn(0.0, 1.0) * 100.0, "Grand master")
         },
-        Entry("/tempo/{master}", Args.BPM, "Set a speed master's tempo (20–300)", "SpeedMasterSetBpm", 2) { c, v, l ->
+        Entry("/tempo/{master}", Args.BPM, "Set a speed master's tempo (20–300)", "tempo", 2) { c, v, l ->
             l.master(c["master"]) { master ->
                 val bpm = v!!
                 if (bpm < MasterClock.MIN_BPM || bpm > MasterClock.MAX_BPM) {
                     OscResolution.Bad("Tempo is from ${MasterClock.MIN_BPM.toInt()} to ${MasterClock.MAX_BPM.toInt()} BPM, not ${bpmText(bpm)}")
                 } else {
-                    OscResolution.Press(BindingTarget.SpeedMasterSetBpm(master.uuid.toString(), bpm), "Tempo of ${master.label}", master.ref())
+                    OscResolution.Level(Binding(Does.Tempo(), master.subject(RecordKind.MASTER)), bpm, "Tempo of ${master.label}", master.ref())
                 }
             }
         },
-        Entry("/tempo/{master}/tap", Args.NONE, "One tap", "SpeedMasterTap", 2) { c, _, l ->
-            l.master(c["master"]) { OscResolution.Press(BindingTarget.SpeedMasterTap(it.uuid.toString()), "Tap ${it.label}", it.ref()) }
+        Entry("/tempo/{master}/tap", Args.NONE, "One tap", "tap", 2) { c, _, l ->
+            l.master(c["master"]) { OscResolution.Press(Binding(Does.Tap, it.subject(RecordKind.MASTER)), "Tap ${it.label}", it.ref()) }
         },
     )
 
@@ -212,10 +216,10 @@ object OscAddresses {
                 }
                 when (val resolution = resolve(address, nominalArgs(entry), catalog)) {
                     is OscResolution.Press -> addresses += OscAddressDto(
-                        address, PREFIX + entry.pattern, entry.args.label, entry.does, resolution.reached, resolution.target, resolution.record,
+                        address, PREFIX + entry.pattern, entry.args.label, entry.does, resolution.reached, resolution.binding, resolution.record,
                     )
                     is OscResolution.Level -> addresses += OscAddressDto(
-                        address, PREFIX + entry.pattern, entry.args.label, entry.does, resolution.reached, resolution.target, resolution.record,
+                        address, PREFIX + entry.pattern, entry.args.label, entry.does, resolution.reached, resolution.binding, resolution.record,
                     )
                     is OscResolution.Ambiguous -> {
                         val prior = ambiguous[resolution.message]
@@ -333,11 +337,11 @@ private fun bpmText(bpm: Double): String =
 
 /** What a received address reaches, or why it reaches nothing. */
 sealed interface OscResolution {
-    /** A button target; [reached] names the record ("GO TO 31 Storm builds in Act 2"). */
-    data class Press(val target: BindingTarget, val reached: String, val record: OscRef? = null) : OscResolution
+    /** A press of [binding]; [reached] names the record ("GO TO 31 Storm builds in Act 2"). */
+    data class Press(val binding: Binding, val reached: String, val record: OscRef? = null) : OscResolution
 
-    /** A continuous target taken whole (D10). */
-    data class Level(val target: BindingTarget, val value: Double, val reached: String, val record: OscRef? = null) : OscResolution
+    /** [binding] given a value taken whole (D10): a percentage, an amount or a tempo. */
+    data class Level(val binding: Binding, val value: Double, val reached: String, val record: OscRef? = null) : OscResolution
 
     data class NotFound(val message: String) : OscResolution
 
@@ -384,6 +388,13 @@ data class OscMaster(val id: Int, val uuid: UUID, val index: Int, val name: Stri
 
 /** A busk bank and its pads, each named by what it presses. */
 data class OscBank(val name: String, val pads: List<OscRecord>)
+
+/** This record as a binding's subject of [kind]. */
+internal fun OscRecord.subject(kind: RecordKind): Subject = Subject.Record(kind, uuid)
+
+internal fun OscRecord.stackSubject(): Subject = subject(RecordKind.STACK)
+
+internal fun OscMaster.subject(kind: RecordKind): Subject = Subject.Record(kind, uuid)
 
 /**
  * What the resolver reads of the current project (D7). [DbOscLookup] is the desk's; it reads the
@@ -473,7 +484,7 @@ private fun OscLookup.pad(pageSlug: String, bank: String, pad: String): OscResol
         val thePad = theBank.pads.getOrNull(padIndex - 1)
             ?: return@page OscResolution.NotFound("Bank $bankIndex (${theBank.name}) of ${page.name} has ${theBank.pads.size} pads; no pad $padIndex")
         OscResolution.Press(
-            BindingTarget.PressPad(thePad.uuid.toString()),
+            Binding(Does.Pad, Subject.Record(RecordKind.PAD, thePad.uuid)),
             "Press ${thePad.name} (pad $padIndex of ${theBank.name} on ${page.name})",
             thePad.ref(OscRecordKind.PAD),
         )
@@ -548,7 +559,7 @@ data class OscAddressListDto(
 @Serializable
 data class OscPatternDto(val pattern: String, val args: String, val does: String, val target: String, val session: Int)
 
-/** One address: what it does, the record it reaches and the target it dispatches. */
+/** One address: what it does, the record it reaches and the binding it dispatches. */
 @Serializable
 data class OscAddressDto(
     val address: String,
@@ -556,7 +567,7 @@ data class OscAddressDto(
     val args: String,
     val does: String,
     val reaches: String,
-    val target: BindingTarget,
+    val binding: Binding,
     /** Null for an address that names no record (`/blackout`, `/grandmaster`). */
     val record: OscRef? = null,
 )

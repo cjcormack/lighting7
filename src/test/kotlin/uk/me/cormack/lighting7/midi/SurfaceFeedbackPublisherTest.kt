@@ -27,6 +27,7 @@ import uk.me.cormack.lighting7.fx.SpeedMasterSnapshot
 import uk.me.cormack.lighting7.fx.PaletteRegistry
 import uk.me.cormack.lighting7.fx.PaletteRowEntry
 import uk.me.cormack.lighting7.fx.PaletteSnapshot
+import uk.me.cormack.lighting7.history.HistorySource
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -51,7 +52,7 @@ import kotlin.test.assertTrue
 class SurfaceFeedbackPublisherTest {
 
     private val projectId = 7
-    private val stackUuid = "00000000-0000-4000-8000-000000000007"
+    private val stackUuid = UUID.fromString("00000000-0000-4000-8000-000000000007")
     private val deviceTypeKey = "x-touch-compact-standard"
 
     private val xTouchHandle = MidiDeviceHandle(
@@ -76,7 +77,7 @@ class SurfaceFeedbackPublisherTest {
 
     /**
      * Wires up: fixtures registry with one HexFixture + MockDmxController, a DeviceMatcher,
-     * binding service with seeded bindings, active-bank state, flash tracker, global scaler,
+     * binding service with seeded bindings, active-bank state, surface holds, global scaler,
      * and a recording MidiController. Returns everything the test needs to drive scenarios.
      */
     private inner class Harness(
@@ -85,7 +86,7 @@ class SurfaceFeedbackPublisherTest {
         // test whose subject is the composition of the two — delta suppression lives in
         // KtMidiController, so a fake that only records messages cannot show it being bypassed.
         midiControllerOverride: MidiController? = null,
-        /** What each busk pad presses, for a `PressPad` LED. */
+        /** What each busk pad presses, for a pad LED. */
         buskRefs: BuskRefs = BuskRefs.EMPTY,
     ) {
         val fixtures = Fixtures()
@@ -93,7 +94,7 @@ class SurfaceFeedbackPublisherTest {
         val bindingService = ControlSurfaceBindingService(FakeDatabase.instance)
         val bankState = ActiveBankState()
         val encoderBankState = EncoderBankState()
-        val flashTracker = FlashStateTracker()
+        val holds = SurfaceHolds()
         val scaler: GlobalScalerState
         val speedMasters = SpeedMasterBank()
         val stackFxAmounts = uk.me.cormack.lighting7.fx.StackFxAmounts()
@@ -158,14 +159,14 @@ class SurfaceFeedbackPublisherTest {
                 bindingService = bindingService,
                 bankState = bankState,
                 encoderBankState = encoderBankState,
-                flashTracker = flashTracker,
+                holds = holds,
                 projectIdProvider = { projectId },
                 fixturesProvider = { fixtures },
                 globalScalerStateProvider = { scaler },
                 speedMasterBankProvider = { speedMasters },
                 deskSelection = selection,
                 stackFxAmountsProvider = { stackFxAmounts },
-                stackIdResolver = { uuid -> if (uuid == stackUuid) 7 else null },
+                stackIdResolver = { uuid -> if (uuid == stackUuid.toString()) 7 else null },
                 selectionFan = fan,
                 fxSpeed = fxSpeed,
                 fxStateProvider = { fxStates },
@@ -191,19 +192,19 @@ class SurfaceFeedbackPublisherTest {
     private fun binding(
         id: Int,
         controlId: String,
-        target: BindingTarget,
+        binding: Binding,
         bank: String? = null,
         policy: BindingTakeoverPolicy? = BindingTakeoverPolicy.IMMEDIATE,
     ) = ControlSurfaceBindingService.ResolvedBinding(
         id = id, projectId = projectId, deviceTypeKey = deviceTypeKey,
-        controlId = controlId, bank = bank, target = target,
+        controlId = controlId, bank = bank, binding = binding,
         takeoverPolicy = policy, sortOrder = 0,
     )
 
     @Test
     fun `channel change drives motor fader feedback`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer")),
+            binding(1, "fader-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1"))),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -235,8 +236,8 @@ class SurfaceFeedbackPublisherTest {
         // to hex-1.dimmer. When the channel changes, BOTH controls must receive feedback —
         // motor CC for the fader, ring CC for the encoder.
         val h = Harness(listOf(
-            binding(1, "fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer")),
-            binding(2, "enc-1", BindingTarget.FixtureAttribute("hex-1", "dimmer")),
+            binding(1, "fader-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1"))),
+            binding(2, "enc-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1"))),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -274,13 +275,13 @@ class SurfaceFeedbackPublisherTest {
             // enc-1: turn CC and ring CC are both 10 on this profile.
             binding(
                 1, "enc-1",
-                BindingTarget.SpeedMasterBpm(masterUuid = null, minBpm = 60.0, maxBpm = 180.0),
+                Binding(Does.Tempo(minBpm = 60.0, maxBpm = 180.0)),
                 policy = BindingTakeoverPolicy.PICKUP,
             ),
         ))
         // Load the bank the way a real show does. This matters: `load()` replaces the
         // synthetic slot-0 entry, so master 1 stops reporting a null uuid — and a binding
-        // that stores null for master 1 then has to be resolved by index, not by uuid.
+        // that names no master (master 1) then has to be resolved by index, not by uuid.
         // Without this line the test passes even when that resolution is broken.
         h.speedMasters.load(
             listOf(
@@ -327,8 +328,8 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `a grand-master fader follows the level, spares a touched motor and arms takeover`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "fader-1", BindingTarget.GrandMasterFader),
-            binding(2, "enc-1", BindingTarget.GrandMasterFader, policy = BindingTakeoverPolicy.PICKUP),
+            binding(1, "fader-1", Binding(Does.GrandMaster())),
+            binding(2, "enc-1", Binding(Does.GrandMaster()), policy = BindingTakeoverPolicy.PICKUP),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -371,8 +372,8 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `a stack effect-size fader follows its stack's size and arms takeover`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "fader-1", BindingTarget.StackFxAmount(stackId = 99, stackUuid = stackUuid)),
-            binding(2, "enc-1", BindingTarget.StackFxAmount(stackId = 99, stackUuid = stackUuid), policy = BindingTakeoverPolicy.PICKUP),
+            binding(1, "fader-1", Binding(Does.FxAmount, Subject.Record(RecordKind.STACK, stackUuid))),
+            binding(2, "enc-1", Binding(Does.FxAmount, Subject.Record(RecordKind.STACK, stackUuid)), policy = BindingTakeoverPolicy.PICKUP),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -429,8 +430,8 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `an FX speed control shows the lead FX's Speed and arms takeover from it`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "fader-1", BindingTarget.FxSpeed),
-            binding(2, "enc-1", BindingTarget.FxSpeed, policy = BindingTakeoverPolicy.PICKUP),
+            binding(1, "fader-1", Binding(Does.FxSpeed, Subject.Selection)),
+            binding(2, "enc-1", Binding(Does.FxSpeed, Subject.Selection), policy = BindingTakeoverPolicy.PICKUP),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -485,7 +486,7 @@ class SurfaceFeedbackPublisherTest {
      */
     @Test
     fun `an FX speed fader's own echo keeps it engaged`() = runBlocking {
-        val h = Harness(listOf(binding(1, "fader-1", BindingTarget.FxSpeed, policy = BindingTakeoverPolicy.PICKUP)))
+        val h = Harness(listOf(binding(1, "fader-1", Binding(Does.FxSpeed, Subject.Selection), policy = BindingTakeoverPolicy.PICKUP)))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
             h.publisher.start(scope)
@@ -531,7 +532,7 @@ class SurfaceFeedbackPublisherTest {
     /** A fan control shows the fan's amount on its axis, 64 at no fan, re-fed on every move (venue-visit plan S12). */
     @Test
     fun `a fan control shows the amount on its axis, centred at no fan`() = runBlocking {
-        val h = Harness(listOf(binding(1, "fader-1", BindingTarget.SelectionFan(FanAxis.PAN))))
+        val h = Harness(listOf(binding(1, "fader-1", Binding(Does.Fan(FanAxis.PAN), Subject.Selection))))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
             h.publisher.start(scope)
@@ -563,7 +564,7 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `a tap binding never drives LED feedback`() = runBlocking {
         val h = Harness(listOf(
-            binding(10, "btn-1", BindingTarget.SpeedMasterTap(masterUuid = null)),
+            binding(10, "btn-1", Binding(Does.Tap)),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -587,7 +588,7 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `LED feedback fires on blackout toggle`() = runBlocking {
         val h = Harness(listOf(
-            binding(10, "btn-1", BindingTarget.Blackout),
+            binding(10, "btn-1", Binding(Does.Blackout)),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -619,7 +620,7 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `physical press and release on Blackout binding reasserts LED after release`() = runBlocking {
         val h = Harness(listOf(
-            binding(10, "btn-1", BindingTarget.Blackout),
+            binding(10, "btn-1", Binding(Does.Blackout)),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -639,7 +640,7 @@ class SurfaceFeedbackPublisherTest {
                 bindingService = h.bindingService,
                 bankState = h.bankState,
                 encoderBankState = h.encoderBankState,
-                flashTracker = h.flashTracker,
+                holds = h.holds,
                 projectIdProvider = { projectId },
                 actions = scalerActions,
                 feedbackHooks = h.publisher,
@@ -672,8 +673,13 @@ class SurfaceFeedbackPublisherTest {
 
     @Test
     fun `flash press drives LED on, release drives LED off`() = runBlocking {
-        val flash = BindingTarget.Flash(BindingTarget.FixtureAttribute("hex-1", "dimmer"))
+        val flash = Binding(Does.Flash("dimmer"), Subject.Fixture("hex-1"))
         val h = Harness(listOf(binding(42, "btn-1", flash)))
+        val dispatch = SurfaceDispatch(uk.me.cormack.lighting7.testsupport.RecordingSurfaceActions(), h.bankState, h.encoderBankState, h.holds)
+        val origin = SurfaceDispatch.Origin(
+            deviceTypeKey, HistorySource.surface("x-touch-compact"),
+            hold = SurfaceDispatch.HoldKey("x-touch-compact", "btn-1", ControlPart.MAIN), bindingId = 42,
+        )
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
             h.publisher.start(scope)
@@ -681,13 +687,13 @@ class SurfaceFeedbackPublisherTest {
             yield()
             h.recordingController.feedback.clear()
 
-            h.flashTracker.pressed(42)
+            dispatch.dispatch(flash, SurfaceDispatch.Input.Press, origin)
             yield()
             val on = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.NoteOnFeedback>()
             assertTrue(on.isNotEmpty())
             h.recordingController.feedback.clear()
 
-            h.flashTracker.clearPress(42)
+            dispatch.dispatch(flash, SurfaceDispatch.Input.Release, origin)
             yield()
             val off = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.NoteOffFeedback>()
             assertTrue(off.isNotEmpty())
@@ -700,7 +706,7 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `touch suppression skips motor writes while fader is held`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer")),
+            binding(1, "fader-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1"))),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -745,7 +751,7 @@ class SurfaceFeedbackPublisherTest {
     fun `policyFor inherits device class default for non-motor fader`() = runBlocking {
         // Use XTouchCompactStandard — all faders are motor, so class default is IMMEDIATE.
         val h = Harness(listOf(
-            binding(1, "fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer"), policy = null),
+            binding(1, "fader-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")), policy = null),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -762,7 +768,7 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `policyFor uses per-binding override when set`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer"), policy = BindingTakeoverPolicy.PICKUP),
+            binding(1, "fader-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")), policy = BindingTakeoverPolicy.PICKUP),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -779,8 +785,8 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `bank change triggers resync and fires LED feedback for new bank`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "btn-1", BindingTarget.Blackout, bank = "a"),
-            binding(2, "btn-1", BindingTarget.GrandMasterToggle, bank = "b"),
+            binding(1, "btn-1", Binding(Does.Blackout), bank = "a"),
+            binding(2, "btn-1", Binding(Does.GrandMaster()), bank = "b"),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -827,7 +833,7 @@ class SurfaceFeedbackPublisherTest {
             parentScope = GlobalScope,
         )
         val h = Harness(
-            listOf(binding(1, "fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer"))),
+            listOf(binding(1, "fader-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")))),
             midiControllerOverride = midi,
         )
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
@@ -865,7 +871,7 @@ class SurfaceFeedbackPublisherTest {
      */
     @Test
     fun `only a re-arming resync drops the whole delta cache`() = runBlocking {
-        val h = Harness(listOf(binding(1, "fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer"))))
+        val h = Harness(listOf(binding(1, "fader-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")))))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
             h.publisher.start(scope)
@@ -893,7 +899,7 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `detach clears touch and takeover state for that device`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer")),
+            binding(1, "fader-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1"))),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -915,7 +921,7 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `inbound fader accepted immediately for motor fader`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer"), policy = null),
+            binding(1, "fader-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")), policy = null),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -934,7 +940,7 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `inbound fader under PICKUP policy rejected until crossing`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer"), policy = BindingTakeoverPolicy.PICKUP),
+            binding(1, "fader-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")), policy = BindingTakeoverPolicy.PICKUP),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -970,7 +976,7 @@ class SurfaceFeedbackPublisherTest {
 
     @Test
     fun `a uniform selection feeds the common value and a mixed one darkens the ring`() = runBlocking {
-        val h = Harness(listOf(binding(1, "enc-1", BindingTarget.SelectionAttribute("dimmer"))))
+        val h = Harness(listOf(binding(1, "enc-1", Binding(Does.Level("dimmer"), Subject.Selection))))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
             h.controller.setValue(1, 200u, 0)
@@ -1011,7 +1017,7 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `a mixed selection disarms pickup and a uniform one arms it`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "fader-1", BindingTarget.SelectionAttribute("dimmer"), policy = BindingTakeoverPolicy.PICKUP),
+            binding(1, "fader-1", Binding(Does.Level("dimmer"), Subject.Selection), policy = BindingTakeoverPolicy.PICKUP),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -1041,7 +1047,7 @@ class SurfaceFeedbackPublisherTest {
 
     @Test
     fun `an empty selection reads as no value and a selection change re-feeds the control`() = runBlocking {
-        val h = Harness(listOf(binding(1, "enc-1", BindingTarget.SelectionAttribute("dimmer"))))
+        val h = Harness(listOf(binding(1, "enc-1", Binding(Does.Level("dimmer"), Subject.Selection))))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
             h.controller.setValue(1, 200u, 0)
@@ -1066,7 +1072,7 @@ class SurfaceFeedbackPublisherTest {
 
     @Test
     fun `a divergent fixed group binding reads mixed and drives no motor`() = runBlocking {
-        val h = Harness(listOf(binding(1, "fader-1", BindingTarget.GroupAttribute("front-wash", "dimmer"))))
+        val h = Harness(listOf(binding(1, "fader-1", Binding(Does.Level("dimmer"), Subject.Group("front-wash")))))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
             h.controller.setValue(1, 200u, 0)
@@ -1089,7 +1095,7 @@ class SurfaceFeedbackPublisherTest {
 
     @Test
     fun `an encoder-bank change moves a strip encoder onto the new attribute's channels`() = runBlocking {
-        val h = Harness(listOf(binding(1, "strip-1", BindingTarget.Strip(wash))))
+        val h = Harness(listOf(binding(1, "strip-1", Binding(Does.Strip, Subject.Group("front-wash")))))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
             h.publisher.start(scope)
@@ -1151,7 +1157,7 @@ class SurfaceFeedbackPublisherTest {
         // A non-motor control on PICKUP: the bank change re-arms it, because the meaning of the
         // control moved under the operator's hand even though they did not touch it.
         val h = Harness(listOf(
-            binding(1, "strip-1", BindingTarget.Strip(wash), policy = BindingTakeoverPolicy.PICKUP),
+            binding(1, "strip-1", Binding(Does.Strip, Subject.Group("front-wash")), policy = BindingTakeoverPolicy.PICKUP),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -1182,7 +1188,7 @@ class SurfaceFeedbackPublisherTest {
 
     @Test
     fun `an encoder-bank button lights while its attribute is the active bank`() = runBlocking {
-        val h = Harness(listOf(binding(1, "btn-1", BindingTarget.EncoderBankSet("uv"))))
+        val h = Harness(listOf(binding(1, "btn-1", Binding(Does.EncoderPage("uv")))))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
             h.publisher.start(scope)
@@ -1209,7 +1215,7 @@ class SurfaceFeedbackPublisherTest {
 
     @Test
     fun `a select button's LED follows selection membership, a group by its members`() = runBlocking {
-        val h = Harness(listOf(binding(1, "btn-1", BindingTarget.SelectTarget(wash))))
+        val h = Harness(listOf(binding(1, "btn-1", Binding(Does.Select, Subject.Group("front-wash")))))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
             h.publisher.start(scope)
@@ -1240,9 +1246,9 @@ class SurfaceFeedbackPublisherTest {
         val lookPadUuid = UUID.nameUUIDFromBytes("pad:Warm".toByteArray())
         val h = Harness(
             listOf(
-                binding(1, "btn-1", BindingTarget.ApplyLook(lookUuid.toString())),
-                binding(2, "btn-2", BindingTarget.PressPad(lookPadUuid.toString())),
-                binding(3, "btn-3", BindingTarget.PressPalette(paletteUuid.toString())),
+                binding(1, "btn-1", Binding(Does.Look, Subject.Record(RecordKind.LOOK, lookUuid))),
+                binding(2, "btn-2", Binding(Does.Pad, Subject.Record(RecordKind.PAD, lookPadUuid))),
+                binding(3, "btn-3", Binding(Does.Palette(paletteUuid), Subject.Selection)),
             ),
             buskRefs = BuskRefs(pads = mapOf(lookPadUuid to PadRef.Layer(lookUuid, isLook = true)), pageIds = emptyMap()),
         )
@@ -1292,7 +1298,7 @@ class SurfaceFeedbackPublisherTest {
         val songStack = 12
         val padUuid = UUID.nameUUIDFromBytes("pad:Song".toByteArray())
         val h = Harness(
-            listOf(binding(1, "btn-1", BindingTarget.PressPad(padUuid.toString()))),
+            listOf(binding(1, "btn-1", Binding(Does.Pad, Subject.Record(RecordKind.PAD, padUuid)))),
             buskRefs = BuskRefs(pads = mapOf(padUuid to PadRef.Stack(songStack)), pageIds = emptyMap()),
         )
         fun runState(activeCueId: Int?, releasedAtEnd: Boolean = false) = CueRunState(
@@ -1331,7 +1337,7 @@ class SurfaceFeedbackPublisherTest {
 
     @Test
     fun `attach seeds a snapshot of every control and touch is recorded without a motor write`() = runBlocking {
-        val h = Harness(listOf(binding(1, "fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer"))))
+        val h = Harness(listOf(binding(1, "fader-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")))))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         val snapshots = mutableListOf<ControlStateTracker.Snapshot>()
         val deltas = mutableListOf<ControlStateTracker.Delta>()
@@ -1378,8 +1384,8 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `a tempo-bound encoder keeps its value in the snapshot across a resync`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "enc-1", BindingTarget.SpeedMasterBpm(masterUuid = null, minBpm = 60.0, maxBpm = 180.0)),
-            binding(2, "btn-1", BindingTarget.SelectTarget(hex1)),
+            binding(1, "enc-1", Binding(Does.Tempo(minBpm = 60.0, maxBpm = 180.0))),
+            binding(2, "btn-1", Binding(Does.Select, Subject.Fixture("hex-1"))),
         ))
         h.speedMasters.load(
             listOf(
@@ -1418,7 +1424,7 @@ class SurfaceFeedbackPublisherTest {
 
     @Test
     fun `a colour-bound encoder reads one hue from all three channels, so red and yellow read mixed`() = runBlocking {
-        val h = Harness(listOf(binding(1, "enc-1", BindingTarget.SelectionAttribute("rgbColour"))))
+        val h = Harness(listOf(binding(1, "enc-1", Binding(Does.Level("rgbColour"), Subject.Selection))))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
             h.controller.paint(2, 0, 0, 255)
@@ -1470,7 +1476,7 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `a colour-bound PICKUP fader arms against the hue and disarms on a grey head`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "fader-1", BindingTarget.SelectionAttribute("rgbColour"), policy = BindingTakeoverPolicy.PICKUP),
+            binding(1, "fader-1", Binding(Does.Level("rgbColour"), Subject.Selection), policy = BindingTakeoverPolicy.PICKUP),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -1504,8 +1510,8 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `an encoder-bank button lights only when the attribute and the axis both match`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "btn-1", BindingTarget.EncoderBankSet("rgbColour", ColourAxis.SATURATION)),
-            binding(2, "btn-2", BindingTarget.EncoderBankSet("rgbColour")),
+            binding(1, "btn-1", Binding(Does.EncoderPage("rgbColour", ColourAxis.SATURATION))),
+            binding(2, "btn-2", Binding(Does.EncoderPage("rgbColour"))),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -1536,8 +1542,8 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `a saturation-bound encoder reads chroma and a brightness-bound one reads the level`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "enc-1", BindingTarget.FixtureAttribute("hex-1", "rgbColour", ColourAxis.SATURATION)),
-            binding(2, "enc-2", BindingTarget.FixtureAttribute("hex-1", "rgbColour", ColourAxis.BRIGHTNESS)),
+            binding(1, "enc-1", Binding(Does.Level("rgbColour", ColourAxis.SATURATION), Subject.Fixture("hex-1"))),
+            binding(2, "enc-2", Binding(Does.Level("rgbColour", ColourAxis.BRIGHTNESS), Subject.Fixture("hex-1"))),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -1576,7 +1582,7 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `an axis-only change of encoder bank rebuilds the index and re-arms pickup`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "strip-1", BindingTarget.Strip(wash), policy = BindingTakeoverPolicy.PICKUP),
+            binding(1, "strip-1", Binding(Does.Strip, Subject.Group("front-wash")), policy = BindingTakeoverPolicy.PICKUP),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {

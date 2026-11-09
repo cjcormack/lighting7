@@ -1,0 +1,110 @@
+{
+  "columns": [
+    {
+      "banks": [
+        {
+          "flow": "WRAP",
+          "name": "keys",
+          "pads": [
+            {
+              "paletteUuid": "1dc75e03-6c27-4de5-aeed-9693d2232d18",
+              "sortOrder": 0,
+              "uuid": "6393dafc-1d5c-4305-acfd-e79ad32f9866"
+            },
+            {
+              "lookUuid": "3b4f5f28-b507-4a75-ab62-7346ee95e00a",
+              "sortOrder": 1,
+              "uuid": "9a776913-5ba2-4b95-b1e4-dd5a8b88c99b"
+            },
+            {
+              "cueUuid": "2774f31c-e8c8-4001-a0fa-771b6d1915f4",
+              "sortOrder": 2,
+              "uuid": "913c007c-c3ce-4bed-b718-e48bd8e5a700"
+            }
+          ],
+          "solo": true,
+          "sortOrder": 0,
+          "uuid": "49bca3ee-f1af-46e0-8673-f96286e440c5"
+        }
+      ],
+      "row": 0,
+      "sortOrder": 0,
+      "uuid": "8a64fbd3-268c-4e0d-b582-a396d5aad237",
+      "width": 8
+    },
+    {
+      "banks": [
+        {
+          "flow": "COLUMN",
+          "name": "moves",
+          "pads": [
+            {
+              "paletteUuid": "fbc5552c-fd29-4501-acbb-a65af10d9258",
+              "sortOrder": 0,
+              "uuid": "258f7ef3-ec57-4f81-b719-c6b14e5038f0"
+            },
+            {
+              "cueUuid": "76d6e1c4-9b52-49f4-8b8a-8d72c7e7c367",
+              "sortOrder": 1,
+              "uuid": "d89d3ae8-4748-435b-b3e3-42cc989d5732"
+            },
+            {
+              "cueStackUuid": "c2118dba-024e-4aa8-b5f4-3e3ff64257c7",
+              "sortOrder": 2,
+              "uuid": "a558e1c3-7996-4b33-a3a6-c8b7bb766469"
+            }
+          ],
+          "solo": false,
+          "sortOrder": 0,
+          "uuid": "7e196bb0-6ab4-48e1-917f-6cd8d7121651"
+        },
+        {
+          "flow": "WRAP",
+          "name": "cues",
+          "solo": false,
+          "sortOrder": 1,
+          "uuid": "e73d265b-1f28-4873-a668-3ccc8cda83e7"
+        }
+      ],
+      "row": 0,
+      "sortOrder": 1,
+      "uuid": "25f62bad-67b9-4381-92fa-f97cdf1871ec",
+      "width": 4
+    },
+    {
+      "banks": [
+        {
+          "flow": "WRAP",
+          "name": "fx",
+          "pads": [
+            {
+              "paletteUuid": "8d1e9b18-b664-4d21-b89c-a81f8b2e6cc2",
+              "sortOrder": 0,
+              "uuid": "a178f840-cafd-4500-9d64-ac45478a0d9d"
+            },
+            {
+              "lookUuid": "de826da4-eddc-42f6-b103-0ba42e73e1c5",
+              "sortOrder": 1,
+              "uuid": "68f5fb18-c7f5-4b36-b85f-3549dbb0be86"
+            },
+            {
+              "paletteUuid": "1dc75e03-6c27-4de5-aeed-9693d2232d18",
+              "sortOrder": 2,
+              "uuid": "2c86b3ba-a2f6-443b-a170-e1574d5a786f"
+            }
+          ],
+          "solo": true,
+          "sortOrder": 0,
+          "uuid": "7869603c-4a62-40bc-8382-1aca2c6fde4e"
+        }
+      ],
+      "row": 1,
+      "sortOrder": 0,
+      "uuid": "8ef010d0-59f7-4c29-b167-7c0f1b336272",
+      "width": 12
+    }
+  ],
+  "name": "act-one",
+  "sortOrder": 2,
+  "uuid": "01b60c61-8210-48e8-908e-f718478190cd"
+}

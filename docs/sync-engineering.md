@@ -262,7 +262,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 52`, `minReader = 52`. Rules for future
+Current writer emits `formatVersion = 53`, `minReader = 53`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -449,6 +449,30 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 53 — The surface binding grammar
+
+Surface-setup plan session 1: a surface binding is a `Binding` — `{does, on, how}`, a function with its
+own parameters, the subject it acts on and how a button drives it (`docs/midi-control-surface-engineering.md`
+§"Binding model") — rather than a `BindingTarget`, and a record names cues, stacks and the rest by
+uuid only. `ControlSurfaceBindingJson.targetPayload` holds the `Binding` as `BindingJson` writes it and
+`targetType` its function's id; the record gains `part`, `MAIN` (omitted) or an encoder's `PUSH`, a
+binding of its own.
+
+`SUPPORTED_FORMAT_VERSION = 53`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**: `LegacyNames.record` puts an
+older archive's binding into the grammar through `SurfaceGrammar.row`, the translate database step 15
+shares (P4), after the older renames — an encoder holding a button variant as its push, a flash's raw
+max as a percentage, an on/off form as its toggle with a How. An archive's ints are another desk's, so a
+cue or stack named by int alone stays as it was and reads as unknown, kept byte for byte.
+**`minReader` moves to 53** with the writer (D18): a v52 reader would decode every binding as unknown and
+push it back so. `LegacyV52ArchiveTest` imports `src/test/resources/sync/legacy-v52/`, `RichProjectFixture`
+as main exported it at v52 with a GO added on an X-Touch encoder (frozen: never regenerate it), and
+re-exports it with only its bindings translated.
+
+A base `sync_state` taken at a commit before v53 is re-hashed from that commit's blob through
+`LegacyNames.record` (`RemoteSyncEngine.readSyncStateMeta`, now gated on
+`LegacyNames.SURFACE_GRAMMAR_FORMAT_VERSION`), so a binding nobody touched reads as unchanged rather than
+as a conflict (`PreV53BaseSyncTest`).
 
 ### Version 52 — Stack pads
 
@@ -695,8 +719,8 @@ new folder rather than a deletion and an addition.
 A record is **hashed in today's words** (`RecordHasher.recordHash`, the record put through
 `LegacyNames.record` first), so a v37 file and this desk's export of the same record hash alike. The
 hash `sync_state` holds for a commit made before v38 is of the old bytes, so the three-way diff
-re-hashes such a base from that commit's own blob (`RemoteSyncEngine.readSyncStateMeta`, which since
-v39 re-hashes a base from any commit before v39); without it
+re-hashes such a base from that commit's own blob (`RemoteSyncEngine.readSyncStateMeta`, which
+re-hashes a base from any commit before the newest renaming version, now v53); without it
 every record would read as changed here, and a peer's edit to one this desk never touched would be a
 conflict. `PreV38BaseSyncTest` is that case.
 
@@ -1423,6 +1447,9 @@ The writer's number moves because a v10 reader had neither tolerance: one new di
 its whole binding load (and, because `ensureLoaded` never marked the project loaded, retried the DB
 read on every MIDI event), so it must refuse the repo rather than import a project whose surface
 is dead.
+
+Since v53 (§"Version 53 — The surface binding grammar") a binding names its records by uuid alone,
+the int is gone, and a row this build cannot read is `Does.Unknown`, kept byte for byte as before.
 
 ### Version 10 — busk pages and Look slots
 

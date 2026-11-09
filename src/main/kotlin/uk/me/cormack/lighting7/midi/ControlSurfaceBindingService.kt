@@ -8,31 +8,29 @@ import uk.me.cormack.lighting7.fixture.CommandNotStorableException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.encodeToString
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import org.slf4j.LoggerFactory
-import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.AssignmentHealth
 import uk.me.cormack.lighting7.models.describeAssignmentHealth
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
-import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Persistence + in-memory resolver for control-surface bindings. Bindings are cached by
- * `(projectId, deviceTypeKey, controlId, bank)` and resolved by [resolve] on each inbound
+ * `(projectId, deviceTypeKey, controlId, part, bank)` and resolved by [resolve] on each inbound
  * MIDI event, so the hot path is served from memory rather than touching the DB per event.
+ *
+ * Every write comes through here — the routes and MIDI Learn's commit — so the refusals live here:
+ * a binding its function's [Spec] does not admit (the subject, the How, the control part's input) is
+ * refused by name, and dispatch takes what is stored as given.
  *
  * Lazy-loads the cache for a project on first access. Mutations write through to the DB
  * and update the cache atomically under a per-project lock.
@@ -63,7 +61,7 @@ class ControlSurfaceBindingService(
 
     /**
      * Resolved in-memory form of a persisted binding. [id] is the primary key; the
-     * remaining fields mirror the DB columns with [target] deserialized from JSON.
+     * remaining fields mirror the DB columns with [binding] decoded from JSON.
      * [health] is evaluated against the current project snapshot at cache install time
      * — see [BindingHealthEvaluator]. When no health provider is wired (tests,
      * pre-show init), [health] defaults to [AssignmentHealth.Ok].
@@ -74,10 +72,11 @@ class ControlSurfaceBindingService(
         val deviceTypeKey: String,
         val controlId: String,
         val bank: String?,
-        val target: BindingTarget,
+        val binding: Binding,
         val takeoverPolicy: BindingTakeoverPolicy?,
         val sortOrder: Int,
         val health: AssignmentHealth = AssignmentHealth.Ok,
+        val part: ControlPart = ControlPart.MAIN,
     )
 
     /** Emitted on any cache-mutating operation so UIs can react. */
@@ -91,7 +90,7 @@ class ControlSurfaceBindingService(
 
     /**
      * Per-project cache. `byId` is an insertion-ordered map used by list / get / CRUD paths.
-     * `byControl` is the hot-path index used by [resolve]: each `(deviceTypeKey, controlId)`
+     * `byControl` is the hot-path index used by [resolve]: each `(deviceTypeKey, controlId, part)`
      * lookup key maps to at most one bank-agnostic binding and one entry per bank, so the
      * inner map is tiny and resolution is O(1) plus a bank precedence check.
      *
@@ -103,7 +102,7 @@ class ControlSurfaceBindingService(
     }
 
     /** Lookup key for the hot-path resolver. Interned at boundary so string equality is hashmap-cheap. */
-    private data class ControlKey(val deviceTypeKey: String, val controlId: String)
+    private data class ControlKey(val deviceTypeKey: String, val controlId: String, val part: ControlPart)
 
     private val cache = ConcurrentHashMap<Int, ProjectCache>()
 
@@ -180,28 +179,29 @@ class ControlSurfaceBindingService(
     }
 
     /**
-     * Resolve an inbound event from `(deviceTypeKey, controlId)` on the given [activeBank] and
-     * [encoderBank]. This is the one resolution entry point — the input router, the
-     * feedback index and the takeover-policy lookup all come through here — so the strip arm
-     * below needs no second implementation anywhere.
+     * Resolve an inbound event on `(deviceTypeKey, controlId, part)` on the given [activeBank] and
+     * [encoderBank]. This is the one resolution entry point — the input router, the feedback index
+     * and the takeover-policy lookup all come through here — so the strip arm below needs no second
+     * implementation anywhere.
      *
-     * The order is **the control's own binding across both bank levels, then its strip's across
-     * both**:
+     * The order is **the control part's own binding across both bank levels, then its strip's
+     * across both**:
      *
-     *   1. the control's row for the exact bank,
-     *   2. the control's bank-agnostic row,
+     *   1. the part's row for the exact bank,
+     *   2. the part's bank-agnostic row,
      *   3. the row on the strip containing the control, for the exact bank,
      *   4. that strip's bank-agnostic row.
      *
      * Direct before strip at *both* levels is the load-bearing part: a bank-agnostic strip must
      * lose to an exact-bank binding on one of its controls, which is what makes "any control can
-     * still be bound on its own" true regardless of banks.
+     * still be bound on its own" true regardless of banks. A strip derives main parts only: an
+     * encoder's push on a strip is its own binding (D4).
      *
-     * A strip hit is answered as the strip's row with the control's id and the target that
-     * control behaves as ([deriveStripTarget]), so the four derived bindings share the strip
-     * row's id, takeover policy and health. Health is deliberately not re-evaluated per derived
-     * target: an encoder whose bank property no selected head declares reads unbound and drops
-     * its turn, which is a property of the selection rather than a dead binding.
+     * A strip hit is answered as the strip's row with the control's id and the binding that
+     * control behaves as ([deriveStripBinding]), so the derived bindings share the strip row's id,
+     * takeover policy and health. Health is deliberately not re-evaluated per derived binding: an
+     * encoder whose page's attribute no selected head declares reads unbound and drops its turn,
+     * which is a property of the selection rather than a dead binding.
      */
     fun resolve(
         projectId: Int,
@@ -209,83 +209,84 @@ class ControlSurfaceBindingService(
         controlId: String,
         activeBank: String?,
         encoderBank: EncoderBankSelection,
+        part: ControlPart = ControlPart.MAIN,
     ): ResolvedBinding? {
         ensureLoaded(projectId)
         val byControl = cache[projectId]?.byControl ?: return null
 
-        byControl[ControlKey(deviceTypeKey, controlId)]?.let { byBank ->
+        byControl[ControlKey(deviceTypeKey, controlId, part)]?.let { byBank ->
             byBank[activeBank]?.let { return it }
             byBank[null]?.let { return it }
         }
+        if (part != ControlPart.MAIN) return null
 
         val onStrip = stripIndexFor(deviceTypeKey).byControl[controlId] ?: return null
-        val stripByBank = byControl[ControlKey(deviceTypeKey, onStrip.strip.id)] ?: return null
+        val stripByBank = byControl[ControlKey(deviceTypeKey, onStrip.strip.id, ControlPart.MAIN)] ?: return null
         val stripBinding = stripByBank[activeBank] ?: stripByBank[null] ?: return null
 
         // Always the id of the control the event arrived on, even on the fallback below, so a
         // dead-binding warning names the fader the operator is pushing rather than its strip.
-        val stripTarget = stripBinding.target as? BindingTarget.Strip
-            ?: return stripBinding.copy(controlId = controlId)
+        if (stripBinding.binding.does !is Does.Strip) return stripBinding.copy(controlId = controlId)
 
         return stripBinding.copy(
             controlId = controlId,
-            target = deriveStripTarget(onStrip.role, stripTarget.target, encoderBank),
+            binding = deriveStripBinding(onStrip.role, stripBinding.binding.on, encoderBank),
         )
     }
 
     private fun ProjectCache.install(binding: ResolvedBinding) {
         byId[binding.id] = binding
         byControl
-            .getOrPut(ControlKey(binding.deviceTypeKey, binding.controlId)) { HashMap() }[binding.bank] = binding
+            .getOrPut(ControlKey(binding.deviceTypeKey, binding.controlId, binding.part)) { HashMap() }[binding.bank] = binding
     }
 
     private fun ProjectCache.uninstall(binding: ResolvedBinding) {
         byId.remove(binding.id)
-        val key = ControlKey(binding.deviceTypeKey, binding.controlId)
+        val key = ControlKey(binding.deviceTypeKey, binding.controlId, binding.part)
         val byBank = byControl[key] ?: return
         byBank.remove(binding.bank)
         if (byBank.isEmpty()) byControl.remove(key)
     }
 
     /**
-     * Create a binding. Throws [IllegalStateException] if a binding already exists at the
-     * same `(project, deviceTypeKey, controlId, bank)` slot.
+     * Create a binding. [part] null places it by [inferPart]. Throws [IllegalStateException] if a
+     * binding already exists at the same `(project, deviceTypeKey, controlId, part, bank)` slot.
      */
     fun create(
         projectId: Int,
         deviceTypeKey: String,
         controlId: String,
         bank: String?,
-        target: BindingTarget,
+        binding: Binding,
         takeoverPolicy: BindingTakeoverPolicy? = null,
         sortOrder: Int = 0,
+        part: ControlPart? = null,
     ): ResolvedBinding {
-        refuseUnknown(target)
-        refuseWrongSlot(deviceTypeKey, controlId, target)
-        refuseWrongKind(deviceTypeKey, controlId, target)
+        val placed = part ?: partFor(deviceTypeKey, controlId, binding)
+        refuse(deviceTypeKey, controlId, placed, binding)
         ensureLoaded(projectId)
         // Resolved once and reused for both the refusal check and the health tag below, rather
-        // than rebuilding the whole snapshot (stacks/cues/masters/looks/templates/pages) twice.
+        // than rebuilding the whole snapshot (stacks/cues/masters/looks/palettes/pages) twice.
         val healthContext = resolveHealthContext(projectId)
-        refuseAxisOnNonColour(healthContext, target)
-        refuseTriggerAttribute(healthContext, target)
+        refuseAxisOnNonColour(healthContext, binding)
+        refuseTriggerAttribute(healthContext, binding)
         val resolved = synchronized(lockFor(projectId)) {
             val existing = cache[projectId]?.byControl
-                ?.get(ControlKey(deviceTypeKey, controlId))
+                ?.get(ControlKey(deviceTypeKey, controlId, placed))
                 ?.get(bank)
             check(existing == null) {
-                "Binding already exists for $deviceTypeKey.$controlId (bank=$bank) in project $projectId"
+                "Binding already exists for $deviceTypeKey.$controlId ${placed.name} (bank=$bank) in project $projectId"
             }
             val raw = transaction(database) {
-                val stored = target.withUuids(projectId)
                 DaoControlSurfaceBinding.new {
                     this.project = DaoProject.findById(projectId)
                         ?: throw IllegalArgumentException("Project $projectId not found")
                     this.deviceTypeKey = deviceTypeKey
                     this.controlId = controlId
+                    this.part = placed.name
                     this.bank = bank
-                    this.targetType = stored.discriminator()
-                    this.targetPayload = stored.encodePayload()
+                    this.targetType = binding.functionId
+                    this.targetPayload = binding.encodePayload()
                     this.takeoverPolicy = takeoverPolicy?.name
                     this.sortOrder = sortOrder
                 }.toResolved()
@@ -302,24 +303,26 @@ class ControlSurfaceBindingService(
      * Partially update a binding. Nulls in the parameters mean "don't change"; to clear
      * [bank] or [takeoverPolicy] use [clearBank] / [clearTakeoverPolicy] separately — JVM
      * signatures can't distinguish "not provided" from "set to null" for nullable params.
+     * A new [binding] on a control with no [part] named keeps the row's part.
      */
     fun update(
         projectId: Int,
         bindingId: Int,
         deviceTypeKey: String? = null,
         controlId: String? = null,
-        target: BindingTarget? = null,
+        binding: Binding? = null,
         sortOrder: Int? = null,
         bankUpdate: FieldUpdate<String?> = FieldUpdate.NoChange,
         takeoverPolicyUpdate: FieldUpdate<BindingTakeoverPolicy?> = FieldUpdate.NoChange,
+        part: ControlPart? = null,
     ): ResolvedBinding? {
-        target?.let(::refuseUnknown)
+        binding?.let(::refuseUnknown)
         ensureLoaded(projectId)
         // Resolved once, before the lock, and reused for both the refusal check and the health
         // tag below — matching create()/replace() rather than holding the per-project lock across
         // the multi-query DB read this triggers.
         val healthContext = resolveHealthContext(projectId)
-        target?.let {
+        binding?.let {
             refuseAxisOnNonColour(healthContext, it)
             refuseTriggerAttribute(healthContext, it)
         }
@@ -328,26 +331,31 @@ class ControlSurfaceBindingService(
             val existing = pc.byId[bindingId] ?: return null
             val newDeviceTypeKey = deviceTypeKey ?: existing.deviceTypeKey
             val newControlId = controlId ?: existing.controlId
-            refuseWrongSlot(newDeviceTypeKey, newControlId, target ?: existing.target)
-            refuseWrongKind(newDeviceTypeKey, newControlId, target ?: existing.target)
+            val newBinding = binding ?: existing.binding
+            val newPart = part
+                ?: if (deviceTypeKey == null && controlId == null) existing.part
+                else partFor(newDeviceTypeKey, newControlId, newBinding)
+            // An unreadable row stays editable — moved, re-sorted, its layer or takeover changed — and
+            // is written back byte for byte; only a binding this build reads is judged by its spec.
+            if (binding != null || existing.binding.does !is Does.Unknown) refuse(newDeviceTypeKey, newControlId, newPart, newBinding)
             val newBank = when (bankUpdate) {
                 is FieldUpdate.NoChange -> existing.bank
                 is FieldUpdate.Set -> bankUpdate.value
             }
-            val slotClash = pc.byControl[ControlKey(newDeviceTypeKey, newControlId)]?.get(newBank)
+            val slotClash = pc.byControl[ControlKey(newDeviceTypeKey, newControlId, newPart)]?.get(newBank)
             check(slotClash == null || slotClash.id == bindingId) {
-                "Binding already exists for $newDeviceTypeKey.$newControlId (bank=$newBank) in project $projectId"
+                "Binding already exists for $newDeviceTypeKey.$newControlId ${newPart.name} (bank=$newBank) in project $projectId"
             }
             val raw = transaction(database) {
                 val row = DaoControlSurfaceBinding.findById(bindingId) ?: return@transaction null
                 if (row.project.id.value != projectId) return@transaction null
                 if (deviceTypeKey != null) row.deviceTypeKey = deviceTypeKey
                 if (controlId != null) row.controlId = controlId
+                row.part = newPart.name
                 if (bankUpdate is FieldUpdate.Set) row.bank = bankUpdate.value
-                if (target != null) {
-                    val stored = target.withUuids(projectId)
-                    row.targetType = stored.discriminator()
-                    row.targetPayload = stored.encodePayload()
+                if (binding != null) {
+                    row.targetType = binding.functionId
+                    row.targetPayload = binding.encodePayload()
                 }
                 if (takeoverPolicyUpdate is FieldUpdate.Set) {
                     row.takeoverPolicy = takeoverPolicyUpdate.value?.name
@@ -389,9 +397,10 @@ class ControlSurfaceBindingService(
         val deviceTypeKey: String,
         val controlId: String,
         val bank: String?,
-        val target: BindingTarget,
+        val binding: Binding,
         val takeoverPolicy: BindingTakeoverPolicy? = null,
         val sortOrder: Int = 0,
+        val part: ControlPart = ControlPart.MAIN,
     )
 
     /**
@@ -408,18 +417,14 @@ class ControlSurfaceBindingService(
      * clash and [IllegalArgumentException] for an id that is not this project's.
      */
     fun replace(projectId: Int, deleteIds: List<Int>, creates: List<NewBinding>): List<ResolvedBinding> {
-        creates.forEach {
-            refuseUnknown(it.target)
-            refuseWrongSlot(it.deviceTypeKey, it.controlId, it.target)
-            refuseWrongKind(it.deviceTypeKey, it.controlId, it.target)
-        }
+        creates.forEach { refuse(it.deviceTypeKey, it.controlId, it.part, it.binding) }
         ensureLoaded(projectId)
         // Resolved once for the whole batch — one refusal check per create still runs, but each
-        // reuses this snapshot instead of rebuilding it from scratch per target.
+        // reuses this snapshot instead of rebuilding it from scratch per binding.
         val healthContext = resolveHealthContext(projectId)
         creates.forEach {
-            refuseAxisOnNonColour(healthContext, it.target)
-            refuseTriggerAttribute(healthContext, it.target)
+            refuseAxisOnNonColour(healthContext, it.binding)
+            refuseTriggerAttribute(healthContext, it.binding)
         }
         val created = synchronized(lockFor(projectId)) {
             val pc = cache.getOrPut(projectId) { ProjectCache() }
@@ -427,11 +432,11 @@ class ControlSurfaceBindingService(
             val doomed = deleteIds.map { id ->
                 pc.byId[id] ?: throw IllegalArgumentException("Binding $id not found in project $projectId")
             }
-            val freed = doomed.mapTo(mutableSetOf()) { ControlKey(it.deviceTypeKey, it.controlId) to it.bank }
+            val freed = doomed.mapTo(mutableSetOf()) { ControlKey(it.deviceTypeKey, it.controlId, it.part) to it.bank }
 
             val claimed = mutableSetOf<Pair<ControlKey, String?>>()
             for (create in creates) {
-                val slot = ControlKey(create.deviceTypeKey, create.controlId) to create.bank
+                val slot = ControlKey(create.deviceTypeKey, create.controlId, create.part) to create.bank
                 check(claimed.add(slot)) {
                     "Two new bindings claim ${create.deviceTypeKey}.${create.controlId} (bank=${create.bank})"
                 }
@@ -455,14 +460,14 @@ class ControlSurfaceBindingService(
                 val project = DaoProject.findById(projectId)
                     ?: throw IllegalArgumentException("Project $projectId not found")
                 creates.map { create ->
-                    val stored = create.target.withUuids(projectId)
                     DaoControlSurfaceBinding.new {
                         this.project = project
                         this.deviceTypeKey = create.deviceTypeKey
                         this.controlId = create.controlId
+                        this.part = create.part.name
                         this.bank = create.bank
-                        this.targetType = stored.discriminator()
-                        this.targetPayload = stored.encodePayload()
+                        this.targetType = create.binding.functionId
+                        this.targetPayload = create.binding.encodePayload()
                         this.takeoverPolicy = create.takeoverPolicy?.name
                         this.sortOrder = create.sortOrder
                     }.toResolved()
@@ -505,7 +510,7 @@ class ControlSurfaceBindingService(
             // Copy entries because we mutate byId via (un)install during iteration.
             val snapshot = pc.byId.values.toList()
             for (existing in snapshot) {
-                val newHealth = BindingHealthEvaluator.evaluate(existing.target, context)
+                val newHealth = BindingHealthEvaluator.evaluate(existing.binding, context, existing.deviceTypeKey)
                 if (newHealth == existing.health) continue
                 pc.uninstall(existing)
                 pc.install(existing.copy(health = newHealth))
@@ -527,7 +532,7 @@ class ControlSurfaceBindingService(
 
     private fun ResolvedBinding.withHealth(context: BindingHealthEvaluator.Context?): ResolvedBinding {
         if (context == null) return this
-        val health = BindingHealthEvaluator.evaluate(target, context)
+        val health = BindingHealthEvaluator.evaluate(binding, context, deviceTypeKey)
         return if (health == this.health) this else copy(health = health)
     }
 
@@ -551,20 +556,30 @@ class ControlSurfaceBindingService(
         }
     }
 
+    /** The part a binding with no part named sits on: [inferPart] against the control the slot names. */
+    private fun partFor(deviceTypeKey: String, controlId: String, binding: Binding): ControlPart =
+        inferPart(ControlSurfaceRegistry.typeFor(deviceTypeKey)?.control(controlId), binding.does)
+
+    /** Every refusal that needs no project snapshot: an unknown binding, the strip slot rule, and the spec. */
+    private fun refuse(deviceTypeKey: String, controlId: String, part: ControlPart, binding: Binding) {
+        refuseUnknown(binding)
+        refuseWrongSlot(deviceTypeKey, controlId, binding)
+        refuseWrongKind(deviceTypeKey, controlId, part, binding)
+        refuseBySpec(binding)
+    }
+
     /**
      * A fader, encoder or flash may not drive a one-shot trigger or its arm (stage-view plan session
-     * 9, D15): a trigger fires as an event, and a surface's door to one is [BindingTarget.FireTrigger],
-     * which needs the desk's arm. Without a register to judge by (no show), a name no trigger reserves
-     * passes and one that does is left to health, as an unknown property would be.
+     * 9, D15): a trigger fires as an event, and a surface's door to one is [Does.Fire], which needs
+     * the desk's arm. Without a register to judge by (no show), a name no trigger reserves passes and
+     * one that does is left to health, as an unknown property would be.
      */
-    private fun refuseTriggerAttribute(context: BindingHealthEvaluator.Context?, target: BindingTarget) {
-        val (type, key, attribute) = when (target) {
-            is BindingTarget.FixtureAttribute -> Triple("fixture", target.fixtureKey, target.attribute)
-            is BindingTarget.GroupAttribute -> Triple("group", target.groupName, target.attribute)
-            is BindingTarget.Flash -> return refuseTriggerAttribute(context, target.target)
-            is BindingTarget.SelectionAttribute -> Triple(null, null, target.attribute)
-            is BindingTarget.EncoderBankSet -> Triple(null, null, target.attribute)
-            else -> return
+    private fun refuseTriggerAttribute(context: BindingHealthEvaluator.Context?, binding: Binding) {
+        val attribute = (binding.does.named as? Named.Attribute)?.attribute ?: return
+        val (type, key) = when (val on = binding.on) {
+            is Subject.Fixture -> "fixture" to on.key
+            is Subject.Group -> "group" to on.key
+            else -> null to null
         }
         val refusal = if (context != null) {
             TriggerIndex.refusalLive(context.fixtures, type, key, attribute, "binding")
@@ -586,132 +601,120 @@ class ControlSurfaceBindingService(
     }
 
     /**
-     * A client never writes [BindingTarget.Unknown]: it exists only as the decode fallback, and
-     * accepting one from a request would let a `type` this build cannot dispatch be persisted
-     * on purpose. [IllegalArgumentException] is what the routes already map to a 400.
+     * A client never writes [Does.Unknown]: it exists only as the decode fallback, and accepting one
+     * from a request would let a function this build cannot dispatch be persisted on purpose.
+     * [IllegalArgumentException] is what the routes already map to a 400.
      */
-    private fun refuseUnknown(target: BindingTarget) {
-        if (target is BindingTarget.Unknown) {
-            throw IllegalArgumentException(
-                "A binding target of type '${target.targetType}' cannot be created from a request",
-            )
+    private fun refuseUnknown(binding: Binding) {
+        (binding.does as? Does.Unknown)?.let {
+            throw IllegalArgumentException("A binding of type '${it.storedType}' cannot be created from a request")
         }
     }
 
     /**
      * A strip id and a control id share the `control_id` column but are not interchangeable: a
      * strip binding covers four controls by derivation, so it is only meaningful on a strip, and a
-     * strip slot is only meaningful holding one. Enforced **here** rather than only in the REST
-     * routes because this service is the one door every write goes through — the routes, and MIDI
-     * Learn's commit, which has no route validation of its own. The rest of the strip code takes
-     * the invariant as given: a raw `Strip` reaching dispatch is a control that silently does
-     * nothing, and health cannot see it because a `Strip`'s health only judges its group.
-     *
-     * The routes still run their own version first, to answer a coded 400 the frontend can branch
-     * on; this is the backstop that makes the invariant true rather than merely usual.
+     * strip slot is only meaningful holding one. Enforced here because this service is the one door
+     * every write goes through — the routes, and MIDI Learn's commit, which has no route validation
+     * of its own. The routes still run their own version first, to answer a coded 400.
      */
-    private fun refuseWrongSlot(deviceTypeKey: String, controlId: String, target: BindingTarget) {
+    private fun refuseWrongSlot(deviceTypeKey: String, controlId: String, binding: Binding) {
         val isStripSlot = controlId in stripIndexFor(deviceTypeKey).stripIds
-        if (target is BindingTarget.Strip && !isStripSlot) {
+        val isStrip = binding.does is Does.Strip
+        if (isStrip && !isStripSlot) {
             throw IllegalArgumentException(
                 "'$controlId' on $deviceTypeKey is a control, not a strip — a strip binding covers a whole strip",
             )
         }
-        if (target !is BindingTarget.Strip && isStripSlot) {
+        if (!isStrip && isStripSlot) {
             throw IllegalArgumentException(
-                "'$controlId' on $deviceTypeKey is a strip and takes a strip target; " +
+                "'$controlId' on $deviceTypeKey is a strip and takes a strip binding; " +
                     "bind its controls individually instead",
             )
         }
     }
 
     /**
-     * A control can only be given a target its own half of the dispatch will reach
-     * (`FU-MIDI-BIND-CONTROL-KIND`).
-     *
-     * Nothing else refused this, and the failure was total silence: a `FireCue` on a fader saved,
-     * read health `Ok`, and did nothing — `dispatchContinuous` has no arm for it. A `GroupAttribute`
-     * on a plain button, likewise. And a binding of any kind on a **bank button** can never fire at
-     * all, because `SurfaceInputRouter.route` answers `ResolvedInput.BankButton` and switches the
-     * bank *before* it resolves a binding.
-     *
-     * Here rather than in the routes for [refuseWrongSlot]'s reason — this service is the one door
-     * every write comes through, MIDI Learn's commit included, which has no route validation of its
-     * own. `lib/surfaceDrop.ts`'s `controlKinds` is the client mirror of the table below; keep the
-     * two in step.
-     *
-     * **Strip slots are skipped.** A strip id names no descriptor, and a `Strip` target is validated
-     * by [refuseWrongSlot] and reaches a control only by derivation, never by dispatch.
+     * A control part can only be given a function its input reaches (`FU-MIDI-BIND-CONTROL-KIND`):
+     * the part's input ([inputFor]) must be in the function's [Spec.inputs]. A bank button has no
+     * input at all — it switches the layer before any binding is resolved — and a fader or button
+     * has no push. Strip slots are skipped: a strip id names no descriptor, and [refuseWrongSlot]
+     * judges a strip binding.
      */
-    private fun refuseWrongKind(deviceTypeKey: String, controlId: String, target: BindingTarget) {
+    private fun refuseWrongKind(deviceTypeKey: String, controlId: String, part: ControlPart, binding: Binding) {
         if (controlId in stripIndexFor(deviceTypeKey).stripIds) return
-        val descriptor = ControlSurfaceRegistry.typeFor(deviceTypeKey)
-            ?.controls?.firstOrNull { it.controlId == controlId }
+        val descriptor = ControlSurfaceRegistry.typeFor(deviceTypeKey)?.control(controlId)
             ?: return  // Unknown control: the routes' own shape check answers that, with a better message.
-        val wanted = targetControlKind(target) ?: return  // Strip / Unknown: refused by name elsewhere.
-        val kinds = dispatchableKinds(descriptor)
-        if (wanted in kinds) return
+        val input = descriptor.inputFor(part)
+        val wanted = binding.does.spec.inputs
+        if (input != null && input in wanted) return
         throw BindingRefused(
-            if (kinds.isEmpty()) {
-                "'$controlId' on $deviceTypeKey is a bank button — it switches the bank before any " +
-                    "binding is resolved, so a binding on it can never fire"
-            } else {
-                "'$controlId' on $deviceTypeKey is a ${kinds.joinToString(" and ") { it.name.lowercase() }} " +
-                    "control and cannot dispatch a ${wanted.name.lowercase()} target"
+            when {
+                descriptor is BankButtonDescriptor ->
+                    "'$controlId' on $deviceTypeKey is a layer button — it switches the layer before any " +
+                        "binding is resolved, so a binding on it can never fire"
+                input == null -> "'$controlId' on $deviceTypeKey has no ${part.name.lowercase()} part"
+                else -> "'$controlId' ${part.name.lowercase()} on $deviceTypeKey is a ${input.name.lowercase()} input " +
+                    "and cannot drive ${binding.functionId}"
             },
             CODE_BINDING_WRONG_CONTROL_KIND,
         )
     }
 
+    /** The subject and How the function's [Spec] admits, and the function's own [Does.refusal]. */
+    private fun refuseBySpec(binding: Binding) {
+        val spec = binding.does.spec
+        val kind = binding.on.subjectKind
+        if (kind !in spec.on) {
+            throw BindingRefused(
+                binding.does.refusal(binding.on)
+                    ?: "${binding.functionId} acts on ${spec.on.joinToString(" or ") { it.name.lowercase() }}, " +
+                    "not ${kind.name.lowercase()}",
+                CODE_BINDING_WRONG_SUBJECT,
+            )
+        }
+        binding.does.refusal(binding.on)?.let { throw BindingRefused(it, CODE_BINDING_WRONG_SUBJECT) }
+        val how = binding.how ?: return
+        if (how !in spec.hows && how != spec.defaultHow) {
+            throw BindingRefused(
+                "${binding.functionId} does not take ${how.name.lowercase()}" +
+                    if (spec.hows.isEmpty()) "" else "; it takes ${spec.hows.joinToString { it.name.lowercase() }}",
+                CODE_BINDING_WRONG_HOW,
+            )
+        }
+    }
+
     /**
      * A [ColourAxis] on a property that is not a colour has nothing to drive.
      *
-     * Judged with the **dispatch** lookup — [AttributeChannelResolver.describeAttributeRead] answering
-     * [AttributeChannelResolver.AttributeRead.Colour] — so the refusal can never disagree with what a
-     * move will do. What it does *not* judge is left to health: a fixture or group that does not
-     * exist, or a property name no head declares, is not this rule's — an unknown name has an
-     * unknown type, and health already says `UnknownAttribute` for it. A group is refused only when
-     * **no** member declares the property as a colour, since the write skips the members that do
-     * not and reaches the rest, exactly as [SelectionWrites] does; a selection or encoder-bank
-     * target, which names no head, is judged against the rig's colour vocabulary
-     * ([BindingHealthEvaluator.Context.colourAttributes]) but only for a name the rig *has*
-     * ([isKnownNonColour]) — absent from both vocabularies is the unknown-name case, not a
-     * refusal. A [BindingTarget.Flash] is judged for the
-     * property it wraps, so a flash cannot smuggle in an axis a direct binding would be refused.
-     *
-     * Here rather than in the routes for [refuseWrongSlot]'s reason — one door, MIDI Learn's commit
-     * included. No context (tests, pre-show init) means no refusal.
+     * Judged over the heads the binding reaches ([Heads.of]) with [AttributeChannelResolver.isColour],
+     * the dispatch lookup, so the refusal can never disagree with what a move will do. What it does
+     * *not* judge is left to health: a fixture or group that does not exist, or a property name no
+     * head declares. A fixture or group is refused only when **no** head it reaches declares the
+     * property as a colour, since the write skips the heads that do not and reaches the rest; the
+     * selection, or an encoder page, which names no head, is judged against the rig's colour
+     * vocabulary ([BindingHealthEvaluator.Context.colourAttributes]) but only for a name the rig
+     * *has* ([isKnownNonColour]). No context (tests, pre-show init) means no refusal.
      */
-    private fun refuseAxisOnNonColour(context: BindingHealthEvaluator.Context?, target: BindingTarget) {
+    private fun refuseAxisOnNonColour(context: BindingHealthEvaluator.Context?, binding: Binding) {
         if (context == null) return
-        val axis = target.colourAxisOrNull() ?: return
-        fun isColour(fixture: Fixture, attribute: String): Boolean? {
-            fixture.fixtureAttribute(attribute) ?: return null
-            val read = AttributeChannelResolver.describeAttributeRead(fixture, attribute)
-            return read is AttributeChannelResolver.AttributeRead.Colour
-        }
+        val named = binding.does.named as? Named.Attribute ?: return
+        val attribute = named.attribute
+        val axis = named.axis ?: return
         fun refuse(what: String): Nothing = throw BindingRefused(
             "$what is not a colour attribute, so it has no ${axis.name.lowercase().replace('_', ' ')} to drive",
             CODE_BINDING_AXIS_NEEDS_COLOUR,
         )
-        when (val inner = if (target is BindingTarget.Flash) target.target else target) {
-            is BindingTarget.FixtureAttribute -> {
-                val fixture = runCatching { context.fixtures.untypedFixture(inner.fixtureKey) }.getOrNull() ?: return
-                if (isColour(fixture, inner.attribute) == false) refuse("'${inner.attribute}' on '${inner.fixtureKey}'")
-            }
-            is BindingTarget.GroupAttribute -> {
-                val group = runCatching { context.fixtures.untypedGroup(inner.groupName) }.getOrNull() ?: return
-                val verdicts = group.fixtures.filterIsInstance<Fixture>().mapNotNull { isColour(it, inner.attribute) }
-                if (verdicts.isNotEmpty() && verdicts.none { it }) refuse("'${inner.attribute}' on '${inner.groupName}'")
+        when (val on = binding.on) {
+            is Subject.Fixture, is Subject.Group -> {
+                val verdicts = Heads.of(context.fixtures, on, attribute).mapNotNull { AttributeChannelResolver.isColour(it.fixture, attribute) }
+                if (verdicts.isNotEmpty() && verdicts.none { it }) refuse("'$attribute' on '${on.asTarget()?.key}'")
             }
             // Both need the property to be **known and not a colour**, never merely absent — see
-            // the "left to health" rule above. `selectionAttributes` is what "known" means, and
-            // is the same vocabulary health judges these two targets against.
-            is BindingTarget.SelectionAttribute ->
-                if (isKnownNonColour(context, inner.attribute)) refuse("'${inner.attribute}' on the selection")
-            is BindingTarget.EncoderBankSet ->
-                if (isKnownNonColour(context, inner.attribute)) refuse("'${inner.attribute}' as an encoder bank")
-            else -> Unit
+            // the "left to health" rule above.
+            else -> if (isKnownNonColour(context, attribute)) {
+                refuse(if (binding.does is Does.EncoderPage) "'$attribute' as an encoder page" else "'$attribute' on the selection")
+            }
         }
     }
 
@@ -729,46 +732,16 @@ class ControlSurfaceBindingService(
         attribute in context.selectionAttributes && attribute !in context.colourAttributes
 
     /**
-     * Fill the uuid beside the int on a cue / stack target when the client sent only the int —
-     * the REST picker and MIDI Learn both address rows by id — so every row written from here on
-     * carries the form that survives a clone. Must run inside the caller's transaction. An int
-     * that resolves to nothing (or to another project's row) is stored as sent, and the health
-     * evaluator marks it dead exactly as before.
-     */
-    private fun BindingTarget.withUuids(projectId: Int): BindingTarget = when (this) {
-        is BindingTarget.FireCue -> if (cueUuid != null) this else {
-            val cue = DaoCue.findById(cueId)?.takeIf { it.project.id.value == projectId }
-            if (cue == null) this else copy(cueUuid = cue.uuid.toString())
-        }
-        is BindingTarget.CueStackGo -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
-        is BindingTarget.CueStackBack -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
-        is BindingTarget.CueStackPause -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
-        is BindingTarget.StackFxAmount -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
-        else -> this
-    }
-
-    private fun stackUuidFor(stackId: Int, projectId: Int): String? =
-        DaoCueStack.findById(stackId)?.takeIf { it.project.id.value == projectId }?.uuid?.toString()
-
-    /**
      * Decode one row's payload, and keep the row when the payload cannot be read. An archive
-     * written by a newer desk carries `type` discriminators this build does not know; failing
-     * the whole project load for one of them left every *other* binding dead too — and, because
-     * [ensureLoaded] never marked the project loaded, retried the DB read on every MIDI event.
-     * The row comes back as a [BindingTarget.Unknown] with its bytes intact, which health reports
-     * as `unknownTarget`: dead, visible in the list, rebindable, and re-written verbatim.
+     * written by a newer desk carries functions this build does not know; failing the whole project
+     * load for one of them left every *other* binding dead too. The row comes back as a
+     * [Does.Unknown] with its bytes intact, which health reports as `unknownTarget`: dead, visible
+     * in the list, rebindable, and re-written verbatim.
      */
     private fun DaoControlSurfaceBinding.toResolved(): ResolvedBinding {
-        val target = try {
-            BindingTargetJson.decodeFromString<BindingTarget>(targetPayload)
-        } catch (e: SerializationException) {
-            logger.warn("Binding id={} has an undecodable target (type='{}'): {}", id.value, targetType, e.message)
-            BindingTarget.Unknown(targetType, targetPayload)
-        } catch (e: IllegalArgumentException) {
-            // A variant's own `init` guard (Flash's inner target, a BPM window) rejecting a payload
-            // written under a rule this build no longer accepts.
-            logger.warn("Binding id={} has an invalid target (type='{}'): {}", id.value, targetType, e.message)
-            BindingTarget.Unknown(targetType, targetPayload)
+        val binding = decodeBinding(targetPayload, targetType)
+        if (binding.does is Does.Unknown) {
+            logger.warn("Binding id={} has an undecodable payload (type='{}')", id.value, targetType)
         }
         val policy = takeoverPolicy?.let {
             try {
@@ -783,28 +756,10 @@ class ControlSurfaceBindingService(
             deviceTypeKey = deviceTypeKey,
             controlId = controlId,
             bank = bank,
-            target = target,
+            binding = binding,
             takeoverPolicy = policy,
             sortOrder = sortOrder,
+            part = ControlPart.entries.firstOrNull { it.name == part } ?: ControlPart.MAIN,
         )
     }
 }
-
-/**
- * Return the `@SerialName` discriminator for a [BindingTarget] subtype. Read reflectively
- * from the concrete class's annotation so it always agrees with the JSON wire format —
- * renaming a `@SerialName` only requires touching the subclass declaration.
- */
-internal fun BindingTarget.discriminator(): String {
-    // An unknown target keeps naming the type it was written with, so the DB column, the list
-    // DTO's `targetType` and the matrix filter all say what the row *is* rather than "unknown".
-    if (this is BindingTarget.Unknown) return targetType
-    val klass = this::class
-    val annotated = klass.annotations.filterIsInstance<SerialName>().firstOrNull()?.value
-    return annotated ?: klass.simpleName
-        ?: error("BindingTarget subclass ${klass.java.name} has no @SerialName")
-}
-
-/** The payload column: an unknown target is written back byte-for-byte. */
-internal fun BindingTarget.encodePayload(): String =
-    if (this is BindingTarget.Unknown) rawPayload else BindingTargetJson.encodeToString(this)

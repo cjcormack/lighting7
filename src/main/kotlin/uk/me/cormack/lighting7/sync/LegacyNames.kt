@@ -23,6 +23,8 @@ import uk.me.cormack.lighting7.fx.normalizeFxType
 import uk.me.cormack.lighting7.fx.paletteStepsShape
 import uk.me.cormack.lighting7.fx.parsePaletteColourRefUuid
 import uk.me.cormack.lighting7.fx.parsePaletteIntent
+import uk.me.cormack.lighting7.midi.ControlPart
+import uk.me.cormack.lighting7.midi.SurfaceGrammar
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -64,6 +66,13 @@ object LegacyNames {
      * parameters into the glossary's words (terminology plan session 6).
      */
     const val ATTRIBUTE_FORMAT_VERSION = 39
+
+    /**
+     * The `formatVersion` that put a surface binding's payload in the grammar and gave it a part
+     * (surface-setup plan session 1): a binding in an archive below it is a `BindingTarget`, which
+     * [record] translates through [SurfaceGrammar].
+     */
+    const val SURFACE_GRAMMAR_FORMAT_VERSION = 53
 
     /**
      * Whether a bouncing FX that names no `pingPong` ran with it on: one in an archive written before
@@ -305,10 +314,26 @@ object LegacyNames {
             "speedMasters" -> rename(record, mapOf("usage" to "family")).mapString("family", ::family)
             "fxDefinitions" -> rename(record, DEFINITION_FIELDS).mapString("family", ::family).timing("defaultTiming")
                 .let { d -> (d["parameters"] as? JsonArray)?.let { JsonObject(d + ("parameters" to definitionParameters(it))) } ?: d }
-            "controlSurfaceBindings" -> record.mapString("targetType", ::bindingType).mapString("targetPayload", ::bindingPayload)
+            "controlSurfaceBindings" -> surfaceGrammar(record.mapString("targetType", ::bindingType).mapString("targetPayload", ::bindingPayload))
             else -> record
         }
         return if (out == record) json else canonicalEncode(JsonElement.serializer(), out)
+    }
+
+    /**
+     * A binding record whose payload is a `BindingTarget` in the grammar: its payload and type through
+     * [SurfaceGrammar.row], the one translate database step 15 shares (P4), and `part` where it is an
+     * encoder's push — absent for the main part, as the exporter writes it. An archive's ints are
+     * another desk's, so a cue or stack named by int alone stays as it is, and reads as unknown.
+     */
+    private fun surfaceGrammar(record: JsonObject): JsonObject {
+        if ("part" in record) return record
+        val payload = (record["targetPayload"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return record
+        val device = (record["deviceTypeKey"] as? JsonPrimitive)?.content ?: return record
+        val control = (record["controlId"] as? JsonPrimitive)?.content ?: return record
+        val row = SurfaceGrammar.row(device, control, payload, SurfaceGrammar.NoInts) ?: return record
+        val translated = record + mapOf("targetType" to JsonPrimitive(row.targetType), "targetPayload" to JsonPrimitive(row.payload))
+        return JsonObject(if (row.part == ControlPart.MAIN) translated else translated + ("part" to JsonPrimitive(row.part.name)))
     }
 
     /** The archive folders [record] has old names to move in. */

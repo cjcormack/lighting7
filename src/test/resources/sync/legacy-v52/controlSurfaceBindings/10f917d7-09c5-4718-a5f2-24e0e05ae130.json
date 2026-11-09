@@ -1,0 +1,8 @@
+{
+  "controlId": "button-2",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 3,
+  "targetPayload": "{\"type\":\"selectTarget\",\"target\":{\"type\":\"group\",\"key\":\"front-wash\"},\"mode\":\"replace\"}",
+  "targetType": "selectTarget",
+  "uuid": "10f917d7-09c5-4718-a5f2-24e0e05ae130"
+}

@@ -7,7 +7,6 @@ import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.midi.ActiveBankState
 import uk.me.cormack.lighting7.midi.EncoderBankState
-import uk.me.cormack.lighting7.midi.FlashStateTracker
 import uk.me.cormack.lighting7.midi.SurfaceDispatch
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
@@ -39,7 +38,7 @@ class OscTracingTest {
         transaction(state.database) { DaoCueStack.new { name = "Act 1"; project = DaoProject[projectId] } }
         handler = OscHandler(
             state.database, { projectId },
-            SurfaceDispatch(RecordingSurfaceActions(), ActiveBankState(), EncoderBankState(), FlashStateTracker()),
+            SurfaceDispatch(RecordingSurfaceActions(), ActiveBankState(), EncoderBankState()),
         )
     }
 

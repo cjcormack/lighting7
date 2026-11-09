@@ -25,8 +25,8 @@ const list: OscAddressList = {
   prefix: '/lighting7',
   patterns: [],
   addresses: [
-    { address: '/lighting7/look/haze-fill/on', pattern: '/lighting7/look/{look}/on', args: '–', does: 'The Look on whole', reaches: 'Look Haze fill on', target: { type: 'lookSet', lookUuid: 'l', on: true }, record: { kind: 'LOOK', id: 3, uuid: 'l' } },
-    { address: '/lighting7/look/haze-fill/off', pattern: '/lighting7/look/{look}/off', args: '–', does: '', reaches: 'Look Haze fill off', target: { type: 'lookSet', lookUuid: 'l', on: false }, record: { kind: 'LOOK', id: 3, uuid: 'l' } },
+    { address: '/lighting7/look/haze-fill/on', pattern: '/lighting7/look/{look}/on', args: '–', does: 'The Look on whole', reaches: 'Look Haze fill on', binding: { does: { type: 'look' }, on: { type: 'record', kind: 'LOOK', uuid: 'l' }, how: 'ON' }, record: { kind: 'LOOK', id: 3, uuid: 'l' } },
+    { address: '/lighting7/look/haze-fill/off', pattern: '/lighting7/look/{look}/off', args: '–', does: '', reaches: 'Look Haze fill off', binding: { does: { type: 'look' }, on: { type: 'record', kind: 'LOOK', uuid: 'l' }, how: 'OFF' }, record: { kind: 'LOOK', id: 3, uuid: 'l' } },
   ],
   ambiguous: [],
   unaddressed: [{ kind: 'LOOK', id: 4, uuid: 'x', name: '★', reason: 'Its name has no letter or digit, so it has no address' }],

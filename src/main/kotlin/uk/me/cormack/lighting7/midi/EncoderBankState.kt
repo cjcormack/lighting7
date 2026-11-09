@@ -31,7 +31,7 @@ data class EncoderBankSelection(
  * on the router's hot path and wants to be lock-free, while socket clients want a snapshot.
  *
  * Two ways to move it:
- *   1. A button bound to [BindingTarget.EncoderBankSet] → [SurfaceInputRouter] calls
+ *   1. A button bound to [Does.EncoderPage] → [SurfaceInputRouter] calls
  *      [setAttribute] for the device the button is on.
  *   2. The frontend's `surfaceEncoderBank.set` message → the handler calls [setAttribute].
  *

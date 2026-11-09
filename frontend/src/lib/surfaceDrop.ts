@@ -114,7 +114,8 @@ export function controlKinds(descriptor: ControlDescriptor): readonly ControlKin
  * swap by name (`refuseWrongSlot`); `unknown` is null because `refuseUnknown` will not accept one
  * from a request at all — it exists to be *rebound*, not re-sent.
  *
- * This is now the **mirror** of `midi/BindingControlKind.kt` rather than the only copy: session 4
+ * This is now the **mirror** of the server's rule — `Spec.inputs` against `inputFor(part)`, an
+ * encoder's button function on its push — rather than the only copy: session 4
  * closed `FU-MIDI-BIND-CONTROL-KIND`, so `ControlSurfaceBindingService.refuseWrongKind` refuses a
  * mismatch at the write boundary whichever door it comes through. Keep the two tables in step; a
  * divergence here only makes the palette offer or withhold a chip the server would have judged

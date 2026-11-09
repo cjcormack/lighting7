@@ -519,6 +519,93 @@ export type BindingTarget =
   | SelectionCellsTarget
   | UnknownTarget
 
+// ─── The binding grammar (surface-setup plan session 1) ──────────────────────────────────
+// Mirrors `midi/Binding.kt` and `midi/SurfaceFunctions.kt`: a binding is a function (`does`), the
+// subject it acts on and how a button drives it, at a control part. Every row the desk answers
+// carries it as `binding`, beside `target`, the old union the current screens read; the desk keeps
+// the two in step (`midi/SurfaceGrammar.kt`) until session 3 replaces those screens.
+
+/** A control's part: a fader's move, an encoder's turn or a button's press, or an encoder's push. */
+export type ControlPart = "MAIN" | "PUSH"
+
+export type How = "TOGGLE" | "WHILE_HELD" | "ON" | "OFF" | "TOGGLE_HOLD_REPLACES" | "REPLACE"
+
+export type RecordKind = "STACK" | "ENTRY" | "CUE" | "LOOK" | "PALETTE" | "PAD" | "BANK" | "PAGE" | "MASTER"
+
+export type SurfaceSubject =
+  | { type: "none" }
+  | { type: "selection" }
+  | { type: "slot" }
+  | { type: "group"; key: string }
+  | { type: "fixture"; key: string }
+  | { type: "record"; kind: RecordKind; uuid: string }
+
+export type UndoKind = "UNDO" | "REDO" | "PROGRAMMER"
+
+export type SelectionMove =
+  | "CLEAR" | "NEXT" | "PREV" | "ALL" | "ODD" | "EVEN" | "FIRST_HALF" | "SECOND_HALF" | "INVERT" | "MASTERS"
+
+/** A function and its own parameters; `type` is its id. */
+export type SurfaceDoes =
+  | { type: "level"; attribute: string; axis?: ColourAxis | null }
+  | { type: "flash"; attribute: string; percent?: number }
+  | { type: "select" }
+  | { type: "locate" }
+  | { type: "fan"; axis: FanAxis }
+  | { type: "fxSpeed" }
+  | { type: "palette"; palette: string }
+  | { type: "look" }
+  | { type: "cue" }
+  | { type: "pad" }
+  | { type: "pickUp" }
+  | { type: "place" }
+  | { type: "drop" }
+  | { type: "go" }
+  | { type: "back" }
+  | { type: "pause" }
+  | { type: "stop" }
+  | { type: "goTo" }
+  | { type: "standby" }
+  | { type: "fxAmount" }
+  | { type: "fire"; trigger: string }
+  | { type: "blackout" }
+  | { type: "grandMaster"; level?: number | null }
+  | { type: "tempo"; minBpm?: number; maxBpm?: number; bpm?: number | null }
+  | { type: "tap" }
+  | { type: "tempoScale"; factor: number }
+  | { type: "layer"; layer: string }
+  | { type: "encoderPage"; attribute: string; axis?: ColourAxis | null }
+  | { type: "undo"; kind?: UndoKind }
+  | { type: "buskPage"; step?: number | null }
+  | { type: "windowFocus"; window: string; focus: BuskFocus }
+  | { type: "windowSheet"; window: string }
+  | { type: "selection"; step: SelectionMove }
+  | { type: "strip" }
+  | { type: "unknown"; storedType: string; rawPayload: string }
+
+export interface SurfaceBinding {
+  does: SurfaceDoes
+  /** Absent is `none`. */
+  on?: SurfaceSubject
+  /** Absent is the function's own default. */
+  how?: How | null
+}
+
+/**
+ * The rows the current screens show: one per control and layer, its main part where it has one,
+ * else its push — which is where the desk put an encoder's button binding. A control with both
+ * shows its main part; session 3's editor shows each part.
+ */
+export function bindingsForScreens(bindings: ControlSurfaceBinding[]): ControlSurfaceBinding[] {
+  const shown = new Map<string, ControlSurfaceBinding>()
+  for (const binding of bindings) {
+    const key = `${binding.deviceTypeKey}\u0000${binding.controlId}\u0000${binding.bank ?? ""}`
+    const held = shown.get(key)
+    if (held === undefined || (held.part === "PUSH" && binding.part !== "PUSH")) shown.set(key, binding)
+  }
+  return bindings.filter((binding) => shown.get(`${binding.deviceTypeKey}\u0000${binding.controlId}\u0000${binding.bank ?? ""}`) === binding)
+}
+
 export type TakeoverPolicy = "IMMEDIATE" | "PICKUP"
 
 /**
@@ -539,8 +626,9 @@ export type BindingHealth =
   // Two `ref:` variants used to sit here — carried not because a control surface could hold a
   // reference value, but because this type is the superset `describeHealth` switches over. They
   // retired with the grammar in session 4.
-  | { type: "missingStack"; stackId: number }
-  | { type: "missingCue"; cueId: number }
+  // A binding names a stack or cue by uuid; the id is 0 and stays for the screens session 3 replaces.
+  | { type: "missingStack"; stackId: number; stackUuid?: string | null }
+  | { type: "missingCue"; cueId: number; cueUuid?: string | null }
   | { type: "unknownBank"; deviceTypeKey: string; bankId: string }
   | { type: "missingSpeedMaster"; masterUuid: string }
   // A selection or encoder-bank property no fixture in the patch declares. It names the property
@@ -569,7 +657,10 @@ export interface ControlSurfaceBinding {
   projectId: number
   deviceTypeKey: string
   controlId: string
+  part: ControlPart
   bank: string | null
+  binding: SurfaceBinding
+  /** [binding] in the old union's words, which the current screens read and send. */
   target: BindingTarget
   targetType: string
   takeoverPolicy: TakeoverPolicy | null
@@ -794,6 +885,8 @@ export interface LearnCapturedEvent {
   projectId: number
   deviceTypeKey: string
   controlId: string
+  /** The captured part: an encoder's push is its own. */
+  part?: ControlPart
 }
 
 export interface LearnStartedEvent {

@@ -2,11 +2,16 @@ package uk.me.cormack.lighting7.plugins
 
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonPrimitive
 import uk.me.cormack.lighting7.fx.CueHold
 import uk.me.cormack.lighting7.fx.CueHolds
 import uk.me.cormack.lighting7.fx.CueRunState
-import uk.me.cormack.lighting7.midi.BindingTarget
+import uk.me.cormack.lighting7.midi.Binding
+import uk.me.cormack.lighting7.midi.BindingJson
+import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.Subject
 import uk.me.cormack.lighting7.midi.ColourAxis
+import uk.me.cormack.lighting7.midi.ControlPart
 import uk.me.cormack.lighting7.midi.EncoderBankSelection
 import uk.me.cormack.lighting7.midi.ControlState
 import uk.me.cormack.lighting7.midi.LedState
@@ -54,8 +59,10 @@ class SocketMessageWireFormatTest {
         assertTrue(pressed.contains(""""type":"palettePressed""""), pressed)
         assertTrue(pressed.contains(""""paletteId":3"""), "field names keep the stored word: $pressed")
         // Stored in control_surface_bindings: a rename needs a database step and a LegacyNames entry.
-        val binding = json.encodeToString<BindingTarget>(BindingTarget.PressPalette("u"))
-        assertTrue(binding.contains(""""type":"pressPalette""""), binding)
+        val uuid = java.util.UUID.randomUUID()
+        val binding = BindingJson.encodeToString(Binding.serializer(), Binding(Does.Palette(uuid), Subject.Selection))
+        assertTrue(binding.contains(""""type":"palette""""), binding)
+        assertTrue(binding.contains(""""palette":"$uuid""""), binding)
     }
 
     // ─── Channel domain ─────────────────────────────────────────────────────
@@ -361,18 +368,40 @@ class SocketMessageWireFormatTest {
     }
 
     @Test
-    fun `surface domain — SurfaceLearnCommitInMessage decodes nested BindingTarget`() {
+    fun `surface domain — SurfaceLearnCommitInMessage decodes a nested binding`() {
         val raw = """{
             "type":"surfaceLearn.commit",
             "sessionId":"s-1",
             "bank":"A",
-            "target":{"type":"fixtureAttribute","fixtureKey":"hex-1","attribute":"dimmer"}
+            "binding":{"does":{"type":"level","attribute":"dimmer"},"on":{"type":"fixture","key":"hex-1"}}
         }"""
         val decoded = json.decodeFromString<InMessage>(raw)
         assertIs<SurfaceInMessage>(decoded)
         val leaf = assertIs<SurfaceLearnCommitInMessage>(decoded)
-        val target = assertIs<BindingTarget.FixtureAttribute>(leaf.target)
-        assertEquals("hex-1", target.fixtureKey)
+        assertEquals(Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")), leaf.binding)
+        assertEquals(null, leaf.target)
+    }
+
+    @Test
+    fun `surface domain — SurfaceLearnCommitInMessage still decodes the old union's target`() {
+        val raw = """{
+            "type":"surfaceLearn.commit",
+            "sessionId":"s-1",
+            "target":{"type":"fixtureAttribute","fixtureKey":"hex-1","attribute":"dimmer"}
+        }"""
+        val leaf = assertIs<SurfaceLearnCommitInMessage>(json.decodeFromString<InMessage>(raw))
+        assertEquals(null, leaf.binding)
+        assertEquals("fixtureAttribute", leaf.target?.get("type")?.jsonPrimitive?.content)
+        assertEquals("hex-1", leaf.target?.get("fixtureKey")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `surface domain — SurfaceLearnCapturedOutMessage carries the captured part`() {
+        val out = SurfaceLearnCapturedOutMessage("s-1", 7, "x-touch-compact", "enc-1", ControlPart.PUSH)
+        val encoded = json.encodeToString<OutMessage>(out)
+        assertTrue(encoded.contains(""""type":"surfaceLearn.captured""""), encoded)
+        assertTrue(encoded.contains(""""part":"PUSH""""), encoded)
+        assertEquals(out, assertIs<SurfaceLearnCapturedOutMessage>(json.decodeFromString<OutMessage>(encoded)))
     }
 
     @Test

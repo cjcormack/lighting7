@@ -278,7 +278,7 @@ and its row marked *in review* with its branch. A session's PR is titled
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The binding and its migration | planned | | | |
+| 1 | The binding and its migration | in review | `claude/hopeful-hamilton-eancf5` | | |
 | 2 | Feedback | planned | | | |
 | 3 | The served picture, and editors A and C | planned | | | |
 | 4 | New functions | planned | | | |
@@ -365,6 +365,24 @@ session 2, and the screens keep today's shape until session 3.
   (the adapter, temporary); `FU-MANUAL-SURFACE-SETUP-S1` in `docs/plans/manual-validation.md` (§6).
 - **Local:** the full `./gradlew test` (a `formatVersion` bump and a migration) and
   `npm run check:quick`.
+
+**As built** (where the code led away from the text above):
+
+- **The wire bridge sits on the desk, not in the client.** The current screens name stacks and cues by
+  int id, and only the desk can map an int to the uuid a binding names, so `/surface-bindings` and
+  `surfaceLearn.commit` take `target` in the old union's words beside `binding`, and every row answers
+  `target` and `targetType` beside `binding` and `part` (`midi/SurfaceGrammar.kt`'s `legacyTarget`, with
+  the project's ints). The client's half is the `SurfaceBinding` type and `bindingsForScreens` (a
+  control's main part, else its push). Its tests are `SurfaceGrammarTest`'s round trip and the routes'.
+- **Step 15 drops the stale index rather than rebuilding the table.** SQLite drops an index; the
+  reconciliation has already added `part` and the new index, named `uq_surface_binding_part_slot` so it
+  sits beside the old one until the step drops it. The backup is taken only when a row translates.
+- **A tempo function with no subject is master 1**, as everywhere else in the desk; a stored binding
+  names any other master as a record.
+- **`buskPage` takes a page record as its subject**, or none with a step.
+- `MissingStack` and `MissingCue` health carry the uuid; their ids are 0.
+- A write with no part is placed by the shared rule (`inferPart`; the old union by `partFor`, the
+  migration's): an encoder's push for a function only a button takes.
 
 ### Session 2 — Feedback
 

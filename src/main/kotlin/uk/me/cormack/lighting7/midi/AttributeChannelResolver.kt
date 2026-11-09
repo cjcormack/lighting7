@@ -1,11 +1,15 @@
 package uk.me.cormack.lighting7.midi
 
 import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
 import uk.me.cormack.lighting7.fixture.AttributeCategory
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
+import uk.me.cormack.lighting7.fixture.trait.WithPosition
+import uk.me.cormack.lighting7.fx.AttributeChannelWriter
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.show.Fixtures
@@ -79,12 +83,18 @@ typealias ChannelReader = (Universe, Int) -> UByte?
  *     R, G and B, with the ring reading red alone — which made red and yellow heads report as
  *     uniform (`FU-MIDI-SELECTION-COLOUR-RED-ONLY`) and left an encoder unable to reach a colour at
  *     all (`FU-MIDI-ENCODER-HUE`).
+ *   - [DmxWhiteMixColour] → the same four axes, over the colour its two whites make
+ *     (its `mix`); the writer lands each move on the nearest warm/cold mix.
  *   - [DmxFixtureSetting] → nothing. Faders on enum / setting properties are disallowed per the
  *     control-surface plan's Open Question 7; bind a button.
  *
+ * A head is a fixture or one of its elements; every rule reads the attribute through
+ * [AttributeChannelWriter.resolveAttribute], the one lookup for both. [surfaceWrite] is what a
+ * surface writes: a head's pan or tilt moves its `position`, keeping the other axis, as
+ * `programmer.setPosition` writes it (surface-setup plan D5), so a nudge holds back a position FX.
+ *
  * [flashAttributeValue] is the one colour rule that is *not* an axis: a flash is a level, and on a
- * colour it asserts grey at the binding's max with W/A/UV 0, whatever axis the binding it wraps
- * names.
+ * colour it asserts grey at the binding's percentage with W/A/UV 0.
  *
  * The resolver never touches [uk.me.cormack.lighting7.dmx.ControllerTransaction]; it reads
  * current channels only through the reader a caller hands it, so it is safe from the MIDI input
@@ -338,17 +348,54 @@ object AttributeChannelResolver {
 
     // --- Writes ---
 
+    /** What a surface writes on one head: the programmer key and its value. */
+    data class SurfaceWrite(val attribute: String, val value: CueAssignmentResolver.AttributeValue)
+
     /**
-     * Convert a MIDI 7-bit value for [attribute] on [fixture] into a typed
+     * What a 7-bit move on [attribute] writes on [head]: [toAttributeValue] under [attribute], except
+     * that a head's pan or tilt writes `position`, the other axis kept from [held] (the programmer's
+     * own `position`, staged in Blind) or else as [read] reports it. Null when the head cannot take
+     * the move.
+     */
+    fun surfaceWrite(
+        head: GroupableFixture,
+        attribute: String,
+        midiValue7Bit: UByte,
+        read: ChannelReader,
+        axis: ColourAxis? = null,
+        held: CueAssignmentResolver.AttributeValue.Position? = null,
+    ): SurfaceWrite? {
+        val raw = rawAttribute(head, attribute)
+        if (raw is DmxSlider && axis == null) {
+            val pan = (head as? WithPosition)?.pan as? DmxSlider
+            val tilt = (head as? WithPosition)?.tilt as? DmxSlider
+            if (pan != null && tilt != null && (raw.sameChannel(pan) || raw.sameChannel(tilt))) {
+                val moved = scaleWithinRange(midiValue7Bit, raw.min, raw.max)
+                val panValue = if (raw.sameChannel(pan)) moved else held?.pan ?: read(pan.universe, pan.channelNo) ?: pan.min
+                val tiltValue = if (raw.sameChannel(tilt)) moved else held?.tilt ?: read(tilt.universe, tilt.channelNo) ?: tilt.min
+                return SurfaceWrite(POSITION, CueAssignmentResolver.AttributeValue.Position(panValue, tiltValue))
+            }
+        }
+        return toAttributeValue(head, attribute, midiValue7Bit, read, axis)?.let { SurfaceWrite(attribute, it) }
+    }
+
+    private fun DmxSlider.sameChannel(other: DmxSlider) = universe == other.universe && channelNo == other.channelNo
+
+    /** The programmer key a head's pan and tilt are written under. */
+    const val POSITION = "position"
+
+    /**
+     * Convert a MIDI 7-bit value for [attribute] on [head] into a typed
      * [CueAssignmentResolver.AttributeValue] — the form the programmer store and cue assignments
      * both consume.
      *
      * - [DmxSlider] → [CueAssignmentResolver.AttributeValue.Slider], scaled through the slider's own
      *   `min..max` sub-range so a fader at 100% produces the slider's own max rather than
      *   raw DMX 255.
-     * - [DmxColour] → [CueAssignmentResolver.AttributeValue.Colour] with the [axis] the value names
-     *   moved and the rest of the head's current colour kept, as [read] reports it
-     *   ([colourAtAxis]); the head's current white, amber and UV ride along ([currentExtended]).
+     * - [DmxColour] and [DmxWhiteMixColour] → [CueAssignmentResolver.AttributeValue.Colour] with the
+     *   [axis] the value names moved and the rest of the head's current colour kept, as [read]
+     *   reports it ([colourAtAxis]); an RGB head's current white, amber and UV ride along
+     *   ([currentExtended]).
      * - [DmxFixtureSetting] and unknown types → `null`. Settings are bindable only to buttons.
      *
      * [axis] null is hue. A non-null axis on a slider answers null: the move is dropped on that
@@ -356,49 +403,62 @@ object AttributeChannelResolver {
      * reaches the heads it can.
      */
     fun toAttributeValue(
-        fixture: Fixture,
+        head: GroupableFixture,
         attribute: String,
         midiValue7Bit: UByte,
         read: ChannelReader,
         axis: ColourAxis? = null,
-    ): CueAssignmentResolver.AttributeValue? = when (val raw = rawAttribute(fixture, attribute)) {
+    ): CueAssignmentResolver.AttributeValue? = when (val raw = rawAttribute(head, attribute)) {
         is DmxSlider -> if (axis != null) null else CueAssignmentResolver.AttributeValue.Slider(
             scaleWithinRange(midiValue7Bit, raw.min, raw.max),
         )
         is DmxColour -> {
             val current = currentColour(raw, read)
             val colour = colourAtAxis(axis.effective, midiValue7Bit, current)
-            CueAssignmentResolver.AttributeValue.Colour(currentExtended(fixture, colour, read))
+            CueAssignmentResolver.AttributeValue.Colour(currentExtended(head, colour, read))
+        }
+        is DmxWhiteMixColour -> {
+            val current = currentWhiteMix(raw, read)
+            CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(colourAtAxis(axis.effective, midiValue7Bit, current)))
         }
         else -> null
     }
 
     /**
-     * The typed value a flash press should assert for [attribute] on [fixture] at the
-     * binding's 0..255 [max] level.
+     * The typed value a flash press asserts for [attribute] on [head] at [percent] of the head's own
+     * range, as a fader scales (surface-setup plan D10).
      *
-     * - [DmxSlider] → [CueAssignmentResolver.AttributeValue.Slider] clamped to the slider's own
-     *   `max` so a flash never writes past a dimmer's configured cap.
-     * - [DmxColour] → grey at [max]. A flash is a level, not a hue — it is the one colour rule
-     *   here that does not go through [colourAtHue]. The extended W/A/UV components are 0: a
-     *   flash asserts the whole colour property, where the old channel-level press left W/A/UV
-     *   untouched — and because the programmer sits above cues, a cue-driven white/amber/UV on
-     *   the fixture is forced to 0 for as long as the flash is held (release restores it).
-     *   Deliberate: a flash press is "this colour, now", not a partial overlay.
+     * - [DmxSlider] → [CueAssignmentResolver.AttributeValue.Slider] at [percent] of the slider's own
+     *   `min..max`, so a flash at 100 % lands on a capped dimmer's cap rather than past it.
+     * - [DmxColour] and [DmxWhiteMixColour] → grey at [percent]. A flash is a level, not a hue — it
+     *   is the one colour rule here that does not go through [colourAtHue]. The extended W/A/UV
+     *   components are 0: a flash asserts the whole colour property, and because the programmer
+     *   sits above cues, a cue-driven white/amber/UV on the fixture is forced to 0 for as long as
+     *   the flash is held (release restores it). Deliberate: a flash press is "this colour, now",
+     *   not a partial overlay.
      * - [DmxFixtureSetting] and unknown types → `null`. Flash on a setting is disallowed.
      */
     fun flashAttributeValue(
-        fixture: Fixture,
+        head: GroupableFixture,
         attribute: String,
-        max: UByte,
-    ): CueAssignmentResolver.AttributeValue? = when (val raw = rawAttribute(fixture, attribute)) {
-        is DmxSlider -> CueAssignmentResolver.AttributeValue.Slider(minOf(max, raw.max))
-        is DmxColour -> {
-            val v = max.toInt()
-            CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(Color(v, v, v)))
+        percent: Int,
+    ): CueAssignmentResolver.AttributeValue? {
+        val share = percent.coerceIn(0, 100)
+        return when (val raw = rawAttribute(head, attribute)) {
+            is DmxSlider -> CueAssignmentResolver.AttributeValue.Slider(
+                (raw.min.toInt() + ((raw.max.toInt() - raw.min.toInt()) * share + 50) / 100).toUByte(),
+            )
+            is DmxColour, is DmxWhiteMixColour -> {
+                val v = (255 * share + 50) / 100
+                CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(Color(v, v, v)))
+            }
+            else -> null
         }
-        else -> null
     }
+
+    /** Whether [attribute] on [head] is a colour; null when the head has no continuous [attribute] at all. */
+    fun isColour(head: GroupableFixture, attribute: String): Boolean? =
+        describeAttributeRead(head, attribute)?.let { it is AttributeRead.Colour || it is AttributeRead.WhiteMix }
 
     // --- Reads ---
 
@@ -422,6 +482,15 @@ object AttributeChannelResolver {
         ) : AttributeRead {
             override val channels: List<AttributeChannel> get() = listOf(red, green, blue)
         }
+
+        /** A white-mix colour: its two whites, read as the colour [mix] says they make. */
+        data class WhiteMix(
+            val warm: AttributeChannel,
+            val cold: AttributeChannel,
+            val mix: uk.me.cormack.lighting7.fixture.attribute.WhiteMix,
+        ) : AttributeRead {
+            override val channels: List<AttributeChannel> get() = listOf(warm, cold)
+        }
     }
 
     /** Structural description of one channel that backs a fixture property. */
@@ -434,24 +503,24 @@ object AttributeChannelResolver {
     )
 
     /**
-     * The [AttributeRead] behind [attribute] on [fixture], or null when the property is not
+     * The [AttributeRead] behind [attribute] on [head], or null when the property is not
      * continuous-bindable (a setting, an unknown name, a type with no continuous rule).
      */
-    fun describeAttributeRead(fixture: Fixture, attribute: String): AttributeRead? {
-        val declared = fixture.fixtureAttribute(attribute) ?: return null
-        val raw = try {
-            declared.classProperty.call(fixture)
-        } catch (_: Exception) {
-            return null
-        } ?: return null
-        return when (raw) {
+    fun describeAttributeRead(head: GroupableFixture, attribute: String): AttributeRead? {
+        val resolved = AttributeChannelWriter.resolveAttribute(head, attribute) ?: return null
+        return when (val raw = resolved.value) {
             is DmxSlider -> AttributeRead.Slider(
-                AttributeChannel(raw.universe, raw.channelNo, raw.min, raw.max, declared.category),
+                AttributeChannel(raw.universe, raw.channelNo, raw.min, raw.max, resolved.category),
             )
             is DmxColour -> AttributeRead.Colour(
                 red = AttributeChannel(raw.universe, raw.redSlider.channelNo, 0u, 255u, AttributeCategory.COLOUR),
                 green = AttributeChannel(raw.universe, raw.greenSlider.channelNo, 0u, 255u, AttributeCategory.COLOUR),
                 blue = AttributeChannel(raw.universe, raw.blueSlider.channelNo, 0u, 255u, AttributeCategory.COLOUR),
+            )
+            is DmxWhiteMixColour -> AttributeRead.WhiteMix(
+                warm = AttributeChannel(raw.warm.universe, raw.warm.channelNo, 0u, 255u, AttributeCategory.COLOUR),
+                cold = AttributeChannel(raw.cold.universe, raw.cold.channelNo, 0u, 255u, AttributeCategory.COLOUR),
+                mix = raw.mix,
             )
             else -> null
         }
@@ -461,8 +530,8 @@ object AttributeChannelResolver {
      * The channels that back [attribute] on [fixture] — the flat form of
      * [describeAttributeRead], empty when the property is not continuous-bindable.
      */
-    fun describeFixtureAttribute(fixture: Fixture, attribute: String): List<AttributeChannel> =
-        describeAttributeRead(fixture, attribute)?.channels.orEmpty()
+    fun describeFixtureAttribute(head: GroupableFixture, attribute: String): List<AttributeChannel> =
+        describeAttributeRead(head, attribute)?.channels.orEmpty()
 
     /**
      * Read one head's feedback position through [read], on [axis] for a colour (null is hue).
@@ -484,26 +553,26 @@ object AttributeChannelResolver {
             val b = read(head.blue.universe, head.blue.channel) ?: return null
             colourRead(axis.effective, r, g, b)
         }
-    }
-
-    private fun rawAttribute(fixture: Fixture, attribute: String): Any? {
-        val declared = fixture.fixtureAttribute(attribute) ?: return null
-        return try {
-            declared.classProperty.call(fixture)
-        } catch (_: Exception) {
-            null
+        is AttributeRead.WhiteMix -> {
+            val w = read(head.warm.universe, head.warm.channel) ?: return null
+            val c = read(head.cold.universe, head.cold.channel) ?: return null
+            val colour = head.mix.colourOf(w, c)
+            colourRead(axis.effective, colour.red.toUByte(), colour.green.toUByte(), colour.blue.toUByte())
         }
     }
 
+    private fun rawAttribute(head: GroupableFixture, attribute: String): Any? =
+        AttributeChannelWriter.resolveAttribute(head, attribute)?.value
+
     /**
-     * [colour] with the head's current white, amber and UV beside it, read off the fixture's
-     * `bundleWithColour` sliders through [read]; an emitter the head lacks, or one that cannot be
-     * read, is 0. What makes a hue turn leave the white fader's level alone.
+     * [colour] with the head's current white, amber and UV beside it, read off the head's
+     * `bundleWithColour` sliders (an element's included) through [read]; an emitter the head lacks,
+     * or one that cannot be read, is 0. What makes a hue turn leave the white fader's level alone.
      */
-    private fun currentExtended(fixture: Fixture, colour: Color, read: ChannelReader): ExtendedColour {
+    private fun currentExtended(head: GroupableFixture, colour: Color, read: ChannelReader): ExtendedColour {
         fun emitter(category: AttributeCategory): UByte {
-            val slider = fixture.bundledAttribute(category)?.let { rawAttribute(fixture, it.name) } as? DmxSlider
-                ?: return 0u
+            val bundled = FixtureAttributeCatalogue.of(head::class).bundledByCategory[category] ?: return 0u
+            val slider = rawAttribute(head, bundled.name) as? DmxSlider ?: return 0u
             return read(slider.universe, slider.channelNo) ?: 0u
         }
         return ExtendedColour(
@@ -512,6 +581,12 @@ object AttributeChannelResolver {
             amber = emitter(AttributeCategory.AMBER),
             uv = emitter(AttributeCategory.UV),
         )
+    }
+
+    private fun currentWhiteMix(raw: DmxWhiteMixColour, read: ChannelReader): Color? {
+        val w = read(raw.warm.universe, raw.warm.channelNo) ?: return null
+        val c = read(raw.cold.universe, raw.cold.channelNo) ?: return null
+        return raw.mix.colourOf(w, c)
     }
 
     private fun currentColour(raw: DmxColour, read: ChannelReader): Color? {

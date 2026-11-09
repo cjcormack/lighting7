@@ -16,7 +16,7 @@ const address = (address: string, record: OscAddress['record']): OscAddress => (
   args: '–',
   does: '',
   reaches: '',
-  target: { type: 'blackout' },
+  binding: { does: { type: 'blackout' } },
   record,
 })
 

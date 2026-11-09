@@ -21,7 +21,6 @@ import uk.me.cormack.lighting7.models.LookFxDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.fx.AttributeFamily
-import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.DefaultSurfaceActions
 import uk.me.cormack.lighting7.state.SelectionSource
 import uk.me.cormack.lighting7.models.PaletteRowDto
@@ -463,7 +462,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         client.press(cuePad)
         // Both on at once, as a door with no siblings leaves them: amber's own pad would stop the cue.
         state.show.programmerLayerStack.toggle(
-            uk.me.cormack.lighting7.models.LayerSource.palette(amber, java.util.UUID.fromString(client.paletteUuid(amber)), "amber"),
+            uk.me.cormack.lighting7.models.LayerSource.palette(amber, client.paletteUuid(amber), "amber"),
             listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
         )
         assertTrue(looseHeld(opening))
@@ -495,7 +494,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
 
         // Both on at once, as a door with no siblings leaves them, for the per-head half.
         state.show.programmerLayerStack.toggle(
-            uk.me.cormack.lighting7.models.LayerSource.palette(amber, java.util.UUID.fromString(client.paletteUuid(amber)), "amber"),
+            uk.me.cormack.lighting7.models.LayerSource.palette(amber, client.paletteUuid(amber), "amber"),
             listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
             attributeMask = "COLOUR",
         )
@@ -695,7 +694,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         seedRig()
         val client = jsonClient()
         val amber = client.createPalette("amber")
-        val uuid = java.util.UUID.fromString(client.paletteUuid(amber))
+        val uuid = client.paletteUuid(amber)
         val source = uk.me.cormack.lighting7.models.LayerSource.palette(amber, uuid, "amber")
         val stack = state.show.programmerLayerStack
         val hex1 = listOf(CueTargetDto("fixture", "hex-1"))
@@ -742,16 +741,16 @@ class BuskPressRouteTest : RouteIntegrationTest() {
 
     private fun actions() = DefaultSurfaceActions(state)
 
-    private suspend fun HttpClient.lookUuid(id: Int): String =
-        get("/api/rest/projects/$projectId/looks/$id").body<LookDetails>().uuid
+    private suspend fun HttpClient.lookUuid(id: Int): java.util.UUID =
+        java.util.UUID.fromString(get("/api/rest/projects/$projectId/looks/$id").body<LookDetails>().uuid)
 
-    private suspend fun HttpClient.paletteUuid(id: Int): String =
-        get("/api/rest/projects/$projectId/palettes/$id").body<PaletteDto>().uuid
+    private suspend fun HttpClient.paletteUuid(id: Int): java.util.UUID =
+        java.util.UUID.fromString(get("/api/rest/projects/$projectId/palettes/$id").body<PaletteDto>().uuid)
 
-    private suspend fun HttpClient.padUuid(padId: Int): String =
+    private suspend fun HttpClient.padUuid(padId: Int): java.util.UUID =
         get(pages()).body<List<BuskPageDto>>()
             .flatMap { it.rows }.flatMap { it.columns }.flatMap { it.banks }.flatMap { it.pads }
-            .single { it.id == padId }.uuid
+            .single { it.id == padId }.uuid.let(java.util.UUID::fromString)
 
     @Test
     fun `applyLook presses the Look whole, not onto the selection`() = testApplication {
@@ -813,7 +812,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         assertTrue(state.show.programmerStore.entries().isEmpty(), "a Colour template under an Intensity mask is dropped")
 
         // The fader names its own attribute, so the mask does not touch it (§3.3).
-        actions().writeSelectionAttribute("rgbColour", 127u, null)
+        actions().writeLevel(uk.me.cormack.lighting7.midi.Subject.Selection, "rgbColour", 127u, null)
         assertTrue(state.show.programmerStore.size > 0, "the selection write landed under a mask it is outside")
 
         state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-2")), setOf(AttributeFamily.COLOUR))
@@ -873,11 +872,11 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         val colour = setOf(AttributeFamily.COLOUR)
         state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")), colour)
 
-        actions().selectTarget(CueTargetDto("fixture", "hex-2"), BindingTarget.SelectMode.TOGGLE)
+        actions().selectTarget(CueTargetDto("fixture", "hex-2"), replace = false)
         assertEquals(colour, state.deskSelection.state.value.families, "a select button adds a head under the standing mask")
         assertEquals(SelectionSource.SURFACE, state.deskSelection.state.value.source)
 
-        actions().selectTarget(CueTargetDto("fixture", "hex-2"), BindingTarget.SelectMode.REPLACE)
+        actions().selectTarget(CueTargetDto("fixture", "hex-2"), replace = true)
         assertEquals(listOf(CueTargetDto("fixture", "hex-2")), state.deskSelection.state.value.targets)
         assertNull(state.deskSelection.state.value.families, "a replace has no column axis to speak with")
 
@@ -916,14 +915,14 @@ class BuskPressRouteTest : RouteIntegrationTest() {
             setBody(CreateBuskPageRequest("act two"))
         }.body<BuskPageDto>()
 
-        actions().buskPageSet(second.uuid)
+        actions().buskPageSet(java.util.UUID.fromString(second.uuid))
         assertEquals(second.id, state.buskPageState.pageId.value)
 
         actions().buskPageStep(1)
         assertEquals(first.id, state.buskPageState.pageId.value, "next wraps")
 
         // A uuid that resolves to nothing leaves the page where it is rather than clearing it.
-        actions().buskPageSet("00000000-0000-4000-8000-000000000000")
+        actions().buskPageSet(java.util.UUID.fromString("00000000-0000-4000-8000-000000000000"))
         assertEquals(first.id, state.buskPageState.pageId.value)
     }
 

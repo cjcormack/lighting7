@@ -53,6 +53,14 @@ object ControlSurfaceRegistry {
         /** True when [controlId] is a strip id rather than a control id — the two share one slot namespace. */
         fun isStripId(controlId: String): Boolean = strips.any { it.id == controlId }
 
+        /** Which control part each inbound event addresses, built once per profile. */
+        val inputs: ControlInputIndex by lazy { ControlInputIndex(controls) }
+
+        /** The control [controlId] names, or null for a strip id or an unknown one. */
+        fun control(controlId: String): ControlDescriptor? = controlsById[controlId]
+
+        private val controlsById: Map<String, ControlDescriptor> by lazy { controls.associateBy { it.controlId } }
+
         internal val compiledPortPattern: Regex? = if (portPattern.isEmpty()) null else Regex(portPattern)
     }
 

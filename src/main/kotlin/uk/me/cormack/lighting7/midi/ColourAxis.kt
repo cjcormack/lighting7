@@ -8,12 +8,10 @@ import kotlinx.serialization.Serializable
  * [AttributeChannelResolver] has always preserved on a hue turn — and each axis is one of its three
  * components, plus a fine trim on hue, the one axis coarse enough at 128 steps to want one.
  *
- * **Null means [HUE].** A binding target carries `colourAxis: ColourAxis? = null`, and the wire
- * omits the field for a hue binding (`BindingTargetJson` has `encodeDefaults = false`), so every
- * row written before axes existed means what it always meant and a new hue binding is
- * byte-identical to an old one. The enum still has a `hue` member so a hand-built payload can say
- * it; everything that *compares* an axis goes through [effective] so the two spellings of hue can
- * never read as two axes. `lib/colourAxis.ts` in `lighting-react` mirrors the four serial names.
+ * **Null means [HUE].** A level binding carries `axis: ColourAxis? = null`, and the wire omits the
+ * field for a hue binding (`BindingJson` has `encodeDefaults = false`). The enum still has a `hue`
+ * member so a hand-built payload can say it; everything that *compares* an axis goes through
+ * [effective] so the two spellings of hue can never read as two axes. `lib/colourAxis.ts` in `lighting-react` mirrors the four serial names.
  */
 @Serializable
 enum class ColourAxis {

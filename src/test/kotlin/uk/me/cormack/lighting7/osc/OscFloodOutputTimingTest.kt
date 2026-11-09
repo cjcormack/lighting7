@@ -8,7 +8,6 @@ import org.junit.Test
 import org.junit.rules.Timeout
 import uk.me.cormack.lighting7.midi.ActiveBankState
 import uk.me.cormack.lighting7.midi.EncoderBankState
-import uk.me.cormack.lighting7.midi.FlashStateTracker
 import uk.me.cormack.lighting7.midi.SurfaceDispatch
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
@@ -47,7 +46,7 @@ class OscFloodOutputTimingTest {
         transaction(state.database) { DaoCueStack.new { name = "Act 1"; project = DaoProject[projectId] } }
         service = OscService(
             state.database,
-            OscHandler(state.database, { projectId }, SurfaceDispatch(RecordingSurfaceActions(), ActiveBankState(), EncoderBankState(), FlashStateTracker())),
+            OscHandler(state.database, { projectId }, SurfaceDispatch(RecordingSurfaceActions(), ActiveBankState(), EncoderBankState())),
             DeskMetrics(),
         )
         service.start()

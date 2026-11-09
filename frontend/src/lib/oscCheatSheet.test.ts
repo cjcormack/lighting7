@@ -6,8 +6,8 @@ const list: OscAddressList = {
   prefix: '/lighting7',
   patterns: [],
   addresses: [
-    { address: '/lighting7/tempo/1', pattern: '/lighting7/tempo/{master}', args: 'f BPM', does: '', reaches: 'Tempo of M1 Main', target: { type: 'speedMasterSetBpm', masterUuid: 'm', bpm: 120 } },
-    { address: '/lighting7/stack/act-1/cue/5/go', pattern: '/lighting7/stack/{stack}/cue/{n}/go', args: '–', does: '', reaches: 'GO TO 5 Storm & <Rain> in Act 1', target: { type: 'cueStackGoTo', stackUuid: 's', entryUuid: 'e' } },
+    { address: '/lighting7/tempo/1', pattern: '/lighting7/tempo/{master}', args: 'f BPM', does: '', reaches: 'Tempo of M1 Main', binding: { does: { type: 'tempo' }, on: { type: 'record', kind: 'MASTER', uuid: 'm' } } },
+    { address: '/lighting7/stack/act-1/cue/5/go', pattern: '/lighting7/stack/{stack}/cue/{n}/go', args: '–', does: '', reaches: 'GO TO 5 Storm & <Rain> in Act 1', binding: { does: { type: 'goTo' }, on: { type: 'record', kind: 'ENTRY', uuid: 'e' } } },
   ],
   ambiguous: [{ message: '`storm` names 2 cues: Storm!, storm', records: [], addresses: ['/lighting7/cue/storm/on'] }],
   unaddressed: [{ kind: 'STACK', id: 1, uuid: 'u', name: '???', reason: 'Its name has no letter or digit, so it has no address' }],

@@ -1,0 +1,8 @@
+{
+  "controlId": "fader-2",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 15,
+  "targetPayload": "{\"type\":\"stackFxAmount\",\"stackId\":1,\"stackUuid\":\"debbe51d-4996-44c7-978c-e2853790f759\"}",
+  "targetType": "stackFxAmount",
+  "uuid": "300f2d52-53f7-471c-916f-3bc2d45b0eb5"
+}

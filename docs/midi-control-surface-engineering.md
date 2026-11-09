@@ -27,7 +27,7 @@ The implementation follows four separable concerns, mirroring the phase breakdow
    outbound channels (pattern borrowed from `ArtNetController`).
 2. **Device profile** — a Kotlin class describing the physical layout of a supported device,
    discovered reflectively at startup.
-3. **Binding** — a DB row mapping `(deviceTypeKey, controlId, bank)` to a `BindingTarget`.
+3. **Binding** — a DB row mapping `(deviceTypeKey, controlId, part, bank)` to a `Binding` (*Does · On · How*).
 4. **Routing + reconciliation** — inbound MIDI → target action; fixture state → outbound
    feedback with touch suppression and soft-takeover.
 
@@ -56,21 +56,20 @@ The implementation follows four separable concerns, mirroring the phase breakdow
   │    │                                                                     │
   │    ├─ ControlSurfaceBindingService.resolve(…) → ResolvedBinding?         │
   │    │                                                                     │
-  │    └─ SurfaceActions dispatch by BindingTarget variant:                  │
-  │         ├─ FixtureAttribute / GroupAttribute → ProgrammerStore (T2)      │
-  │         ├─ SelectionAttribute → ProgrammerStore, every selected head     │
-  │         ├─ SelectionFan → SelectionFan.turn → the fan route's resolve    │
-  │         ├─ FxSpeed → SelectionFxSpeed.turn → applyFxUpdate, per Local FX │
-  │         ├─ SelectTarget / ClearSelection → State.deskSelection           │
-  │         ├─ LocateSelection → LocateManager.toggle, per selected target   │
-  │         ├─ CueStackGo / Back / Pause → CueStackManager; FireCue → holds  │
-  │         │    (uuid first; a bare int only for a pre-v11 row)             │
-  │         ├─ FireTrigger → EffectsService.fireFromSurface (needs the arm)  │
-  │         ├─ Flash → T4 write on press, clear on release                   │
-  │         ├─ Blackout / GrandMasterToggle / GrandMasterFader               │
-  │         │    → GlobalScalerState                                         │
-  │         ├─ StackFxAmount → CueStackManager.setFxAmount               │
-  │         └─ SetBank → ActiveBankState.setBank                             │
+  │    └─ SurfaceDispatch: How → Op, then the function's act:               │
+  │         ├─ level → ProgrammerStore on Heads.of(subject) (T2)             │
+  │         │    (a head's pan / tilt as its `position`)                     │
+  │         ├─ fan → SelectionFan.turn → the fan route's resolve             │
+  │         ├─ fxSpeed → SelectionFxSpeed.turn → applyFxUpdate, per Local FX │
+  │         ├─ select / selection → State.deskSelection                      │
+  │         ├─ locate → LocateManager.toggle, per selected target            │
+  │         ├─ go / back / pause / stop / goTo → CueStackManager (by uuid)   │
+  │         ├─ cue → CueHolds (a loose hold)                                 │
+  │         ├─ fire → EffectsService.fireFromSurface (needs the arm)         │
+  │         ├─ flash → FLASH write on press, those heads cleared on release  │
+  │         ├─ blackout / grandMaster → GlobalScalerState                    │
+  │         ├─ fxAmount → CueStackManager.setFxAmount                        │
+  │         └─ layer → ActiveBankState.setBank, the device pressed           │
   │                                                                          │
   └─────────────────────────────────────────────────────────────────────────┘
 
@@ -93,7 +92,7 @@ The implementation follows four separable concerns, mirroring the phase breakdow
   │    └─ sendContinuousFeedback → MidiFeedbackMessage (ring off on null)    │
   │                                                                          │
   │  Parallel subscribers feed other LEDs:                                   │
-  │    FlashStateTracker.changes → flash LEDs                                │
+  │    SurfaceHolds.changes → flash LEDs                                     │
   │    GlobalScalerState.blackoutEnabled + grandMasterEnabled → toggle LEDs  │
   │    GlobalScalerState.grandMasterLevel → grand-master faders              │
   │    DeskSelection.targets → rebuild + resync (select LEDs, selection      │
@@ -143,22 +142,25 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 
 | File | Purpose |
 |---|---|
-| `BindingTarget.kt` | Sealed ADT of what a control drives: `FixtureAttribute`, `GroupAttribute` (each, like `SelectionAttribute` and `EncoderBankSet`, with an optional `colourAxis` — `ColourAxis.kt`, null is hue), `CueStackGo` / `Back` / `Pause`, `FireCue` (each with a uuid beside the int), `FireTrigger(fixtureKey, trigger)` (a one-shot tube, needing the desk's arm), `Flash(target, max)`, `Blackout`, `GrandMasterToggle`, `GrandMasterFader`, `StackFxAmount(stackId, stackUuid?)`, `SetBank`, `SpeedMasterBpm` / `Tap` / `Scale`, the selection family `SelectionAttribute`, `SelectionFan(axis)`, `FxSpeed`, `SelectTarget`, `ClearSelection`, `LocateSelection`, and `Unknown` — the tolerant decode's placeholder, never written by a client. Serialized as JSON with `classDiscriminator = "type"` and `ignoreUnknownKeys = true`. Persisted as text in `DaoControlSurfaceBindings.targetPayload`. |
-| `ControlSurfaceBindingService.kt` | Binding CRUD + in-memory resolver cache keyed by `(projectId, deviceTypeKey, controlId, bank)`; exact-bank wins over global. Decodes **per row**: an undecodable payload becomes `BindingTarget.Unknown` (health `unknownTarget`, re-written verbatim) rather than failing the project. Fills `cueUuid` / `stackUuid` on create and update. Emits `BindingChange` events; broadcast via `surfaceBank.bindingsChanged`. |
-| `SelectionWrites.kt` | The pure fan-out behind `SelectionAttribute`: one programmer write per selected head, a group's members tagged with `sourceGroup`, heads without the attribute skipped, an empty selection → no writes. |
+| `Binding.kt` | The binding (surface-setup plan D1): `Binding(does, on, how)` — a function, its subject (`Subject`: none, the selection, a group, a fixture or element key, a job slot, or a record by uuid — `RecordKind` stack, entry, cue, Look, palette, pad, bank, page, master) and a `How` (Toggle, While held, On, Off, Toggle-hold-replaces, Replace) — at a slot with a `ControlPart` (`MAIN`, or an encoder's `PUSH`). `Spec` (where it writes, the subjects, inputs and Hows it takes, its default How), `Op`, `Acted`, `BindingJson` (`classDiscriminator = "type"`, defaults omitted), `decodeBinding` (an unreadable payload is `Does.Unknown`, kept byte for byte), `inputFor` and `inferPart`. Persisted as text in `DaoControlSurfaceBindings.targetPayload`. |
+| `SurfaceFunctions.kt` | One `Does` per function (P3): its parameters, its `spec` and its `act`, so the service's refusals, dispatch and health read one definition. `Unknown` is the tolerant decode's placeholder, never written by a client. |
+| `SurfaceGrammar.kt` | The one translate from a binding stored before the grammar (P4), shared by database step 15, the archive reader (`LegacyNames.record`) and the REST/WS bridge for the screens session 3 replaces, and the reverse, `legacyTarget`. See §"Before the grammar". |
+| `ControlSurfaceBindingService.kt` | Binding CRUD + in-memory resolver cache keyed by `(projectId, deviceTypeKey, controlId, part, bank)`; exact-bank wins over global. Decodes **per row**: an undecodable payload becomes `Does.Unknown` (health `unknownTarget`, re-written verbatim) rather than failing the project. Refuses what a function's spec does not admit (§"Bind-time refusals"). Emits `BindingChange` events; broadcast via `surfaceBank.bindingsChanged`. |
+| `Heads.kt` | `Heads.of(subject, attribute)`: the heads a write reaches — a fixture or element key, a group's members (elements included) tagged with `sourceGroup`, each selected target so; a cell beside its parent dropped, and a fixture whose attribute lives only on its cells standing for those cells (`PaletteFanOut.headsFor`). The level write, the flash, the colour-axis refusal and the feedback read all expand through it. |
 | `SelectionFxSpeed.kt` | The FX speed controls' gesture over the desk selection's Local FX (fx-speed plan D13): which Local FX paint a selected head, the lead FX, an encoder's detents and a fader's position written as whole-tick cycles through `applyFxUpdate`, and `shown` / `leadSpeed` — the `FxSpeedRing` half the feedback publisher reads. The arithmetic is `fx/FxSpeed.kt`, pinned to the editor's by `fxSpeed.fixture.json`. |
 | `SelectionFan.kt` | The fan encoders' gesture over the desk selection (venue-visit plan S12): the anchor (each head's start, the rig order read once), the amount per axis, a turn read as a move from the value the ring was last shown, a new gesture's pickup at the centre, and `shown` / `amountFor` — the `FanRing` half the feedback publisher reads. |
-| `MidiLearnSessionManager.kt` | 30-second Learn sessions; captures the first matching physical input, holds the captured descriptor until the originating client commits or cancels. Scoped to the originating client via `ownedLearnSessions` so two `/surfaces` tabs don't cross-capture. |
+| `MidiLearnSessionManager.kt` | 30-second Learn sessions; captures the first matching physical input as a control **part** (`ControlInputIndex.capture`), holds it until the originating client commits or cancels. Scoped to the originating client via `ownedLearnSessions` so two `/surfaces` tabs don't cross-capture. |
 
 ### Inbound routing
 
 | File | Purpose |
 |---|---|
-| `SurfaceInputRouter.kt` | Per-device `CoroutineName("SurfaceRouter-$displayKey")` collector. Pipeline: `matchEvent → soft-takeover gate → binding resolve → SurfaceActions dispatch`. |
-| `SurfaceActions.kt` | Port interface between router and show services. Production: `DefaultSurfaceActions` resolves `state.show.*` on every call so project switches route cleanly, reads `state.deskSelection` for the selection arms, and resolves a cue / stack uuid to the current project's row before calling `CueStackManager`. Tests: `RecordingActions`. |
+| `SurfaceInputRouter.kt` | Per-device `CoroutineName("SurfaceRouter-$displayKey")` collector. Pipeline: `profile.inputs.match → soft-takeover gate → binding resolve (with the part) → SurfaceDispatch`. |
+| `ControlInputIndex.kt` | One profile's inbound MIDI indexed once: which control part each control change, note and program change addresses (a move, a press or release of a part, a touch, a layer button). The router routes by it and Learn captures by it. |
+| `SurfaceDispatch.kt` | The one dispatch, `dispatch(binding, input, origin)`: turns the binding's `How` into an `Op` and keeps the holds — a While held press's release, a Toggle-hold-replaces press's pending replace — keyed by control part (`HoldKey`), in `SurfaceHolds`. The router and OSC share it. |
+| `SurfaceActions.kt` | Port interface between the functions and the show services, records named by uuid. Production: `DefaultSurfaceActions` resolves `state.show.*` on every call so project switches route cleanly, reads `state.deskSelection` for the selection, expands a level or flash write through `Heads.of`, and resolves a cue / stack uuid to the current project's row before calling `CueStackManager`. Tests: `RecordingSurfaceActions`. |
 | `AttributeChannelResolver.kt` | `object` owning what a continuous control **means** on an attribute, in both directions — the write (`toAttributeValue`, a 7-bit value → the programmer's `AttributeValue`) and the read (`describeAttributeRead` + `readHead`, the attribute's current channels → a 7-bit feedback position). Sliders scale through their own `min..max`. **Colour is one of four HSV axes** (`ColourAxis`), **hue unless the binding says otherwise**: every axis writes a whole colour built from the head's current one, moving only its own component, and reads that component back. *Hue* keeps the head's saturation and value, the saturation floored at `MIN_SATURATION` (a quarter) so a turn on a white is visible; the ring reads the head's hue, and a head under `HUE_READ_MIN_SATURATION` — black, grey, a warm white — reads as no value rather than lighting for a colour the rig is not showing. *Hue fine* is a centred trim of ±½ coarse step — 64 leaves the head on its step, and the coarse read (which rounds) is unmoved by any fine position; the read is the offset within the step and is **circular**, because the offset is taken from the *nearest* coarse step and at the ends of the trim channel rounding decides which step that is — so a head written at 0 reads back as 0 or as 127 for one colour, and read linearly those are the whole travel apart and a group at 0 would darken its own ring. What circularity cannot fix is the value a single head reports: a motor fader let go at the very bottom can be driven to the top on touch-off — the same colour, the other spelling — which is the trim's one documented flip, confined to its extremes. It sits at the centre *within the head's tolerance* (11 at full chroma, where a written step lands a hair off it). *Saturation* is `v/127` at the head's hue and value — 0 is a white at the head's level, after which the hue and fine rings darken and the next hue turn lifts it back to the floor. *Brightness* is HSV value at the head's hue and saturation; 0 is black, and since the programmer stores RGB the hue and saturation go with it — bind the dimmer on a head that has one. A black or unread head starts from red (hue, fine, saturation) or grey (brightness). Every colour-axis write **carries the head's current white, amber and UV** rather than zeroing them: those emitters are faders of their own now (`white` / `amber` / `uv` dispatch as sliders by name), and a hue turn that zeroed the white set beside it would be a control fighting its neighbour. A slider asked for an axis answers null in both directions, so a mixed selection reaches the heads it can and the feedback fold skips the same ones (`findHeads`). A read carries a tolerance from its **chroma** (not its value: a bright pastel holds hue as coarsely as a dim saturated head), and `commonValue` requires **every pair** of heads to agree, since a tolerance test is not transitive and anchoring on the first head would make the answer depend on enumeration order. The two directions live in one file so a ring can never claim a position a move would not reproduce; the old rule (one value fanned to R/G/B, red read back) is `FU-MIDI-SELECTION-COLOUR-RED-ONLY` / `FU-MIDI-ENCODER-HUE`. A flash on a colour is still grey at the binding's max — a flash is a level. Settings return null (enum bindings are button-only — Open Question 7). For attribute-value → channel resolution elsewhere (preset toggles, locate, programmer publishes), see `fx/AttributeChannelWriter` which accepts full-range `CueAssignmentResolver.AttributeValue` variants and handles Colour + Position without MIDI-7bit scaling. |
 | `ActiveBankState.kt` | Ephemeral `deviceTypeKey → bank` map backed by a `ConcurrentHashMap` fast-lookup plus a `changes: SharedFlow<BankChange>` for WS broadcast. Not persisted. |
-| `FlashStateTracker.kt` | Lock-free `Set<Int>` of currently-held binding IDs (overlapping presses don't clobber release semantics). Exposes `changes: SharedFlow<FlashChange>`. |
 | `GlobalScalerState.kt` | Show-scoped `TransmitModifier` implementation of Blackout and the Grand Master (venue-visit plan S5, D5, D12). Walks fixtures on `fixturesChanged` and classifies channels into two packed-`Long` sets in one `AtomicReference`: **scaled** — every DIMMER and UV channel, and on a head with no dimmer its colour mix (a `DmxColour`'s RGB, WHITE and AMBER sliders), a head being a fixture or one of its elements, dimmerless only when neither it nor its parent has a dimmer — and **strobe**. The grand master multiplies a scaled channel by its level and cuts a strobe channel only at 0 (a strobe holds a rate, so scaling it would change its speed); blackout zeroes both. Colour wheels and presets are never scaled. A change only moves the modifier's own state — output is a continuous stream, so the next frame of each universe carries it (see [dmx-engineering.md §Change latency](dmx-engineering.md#change-latency)). Reads through to a project-scoped `GlobalScalerStateHolder`. `grandMasterLevelOf7Bit` / `grandMasterLevelTo7Bit` are a control's 0..127 both ways. |
 | `GlobalScalerStateHolder.kt` | Per-project holder for blackout and the grand master's level (0–100 %, `grandMasterLevel`), with `grandMasterEnabled` the level read as `> 0`: turning it off takes the level to 0 and back on restores the last level above 0 this holder saw, or full. Lives on `State.scalerHolderFor(projectId)`, outside the `Show` lifecycle; a fresh `GlobalScalerState` facade is constructed against the same holder on every project activation. Writes through to `project_scaler_states` (machine-local, never synced) through `State`'s `LatestWinsWriter`, which writes the latest row per project at most every 250 ms — a fader dragged from a browser moves the level at frame rate. |
 
@@ -301,14 +303,16 @@ strip(id = "strip-master", fader = "fader-9", select = "btn-33")   // no encoder
 
 A strip id lives in the **same `control_id` column** as a control id — no new table, no new column — so the two share one slot namespace and the registry refuses a collision. `buildFromClasses` also fails fast on a duplicate strip id, a strip naming an undeclared control, a role naming a control of the wrong kind (fader→`FaderDescriptor`, select/flash→`ButtonDescriptor`, encoder→`EncoderDescriptor`), and a control claimed by two strips. Same reasoning as the duplicate-`controlId` check: these ids are a persisted contract.
 
-**Derivation** is the pure function `deriveStripTarget(role, target, encoderBank)` in `midi/StripDerivation.kt`:
+**Derivation** is the pure function `deriveStripBinding(role, subject, encoderBank)` in `midi/StripDerivation.kt`, on the strip's group or fixture:
 
 | Role | Behaves as |
 |---|---|
-| fader | `GroupAttribute(key, "dimmer")` / `FixtureAttribute(key, "dimmer")` |
-| select | `SelectTarget(target, TOGGLE)` |
-| encoder | the same attribute target on the device's current [encoder bank](#encoder-bank) |
-| flash | `Flash(<the dimmer target>, 255)` |
+| fader | `level("dimmer")` |
+| select | `select` (Toggle-hold-replaces) |
+| encoder | `level` on the device's current [encoder page](#encoder-bank)'s attribute and axis |
+| flash | `flash("dimmer", 100 %)` |
+
+A strip derives **main parts only**: an encoder's push on a strip is its own binding and does nothing until bound (D4).
 
 One function, because the input router, the feedback index and the frontend inspector all have to agree about what a strip control does.
 
@@ -321,9 +325,9 @@ One function, because the input router, the feedback index and the frontend insp
 
 Direct before strip at **both** levels is the load-bearing part: a bank-agnostic single binding beats an exact-bank strip, which is what makes "any control can still be bound on its own" true regardless of banks. `resolve` is the only resolution entry point — router, feedback index and takeover-policy lookup all come through it — so the strip arm needs no second implementation.
 
-A strip hit is answered as the strip's row with the control's id and the derived target, so the four derived bindings share the strip row's `id`, `takeoverPolicy` and `health`. Health is deliberately **not** re-evaluated per derived target: an encoder whose bank attribute no selected head declares reads unbound and drops its turn, which is a property of the selection rather than a dead binding.
+A strip hit is answered as the strip's row with the control's id and the derived binding, so the four derived bindings share the strip row's `id`, `takeoverPolicy` and `health`. Health is deliberately **not** re-evaluated per derived target: an encoder whose bank attribute no selected head declares reads unbound and drops its turn, which is a property of the selection rather than a dead binding.
 
-`BindingTarget.Strip` is stored but never dispatched, and the rest of the strip code takes that as given — a raw `Strip` reaching dispatch is a control that silently does nothing, and health cannot catch it because a `Strip`'s health only judges its group. So the slot rule is enforced **in `ControlSurfaceBindingService`**, beside `refuseUnknown`, on `create` / `update` / `replace`: that is the one door every write goes through, including MIDI Learn's commit, which has no route validation of its own. `POST` / `PATCH /surface-bindings` run their own copy first only so the frontend gets a coded 400 to branch on — `BINDING_STRIP_NEEDS_STRIP` for a `Strip` on a control id, `BINDING_CONTROL_NOT_STRIP` for anything else on a strip id.
+`Does.Strip` is stored but never dispatched, and the rest of the strip code takes that as given — a raw `Strip` reaching dispatch is a control that silently does nothing, and health cannot catch it because a `Strip`'s health only judges its group. So the slot rule is enforced **in `ControlSurfaceBindingService`**, beside `refuseUnknown`, on `create` / `update` / `replace`: that is the one door every write goes through, including MIDI Learn's commit, which has no route validation of its own. `POST` / `PATCH /surface-bindings` run their own copy first only so the frontend gets a coded 400 to branch on — `BINDING_STRIP_NEEDS_STRIP` for a strip binding on a control id, `BINDING_CONTROL_NOT_STRIP` for anything else on a strip id.
 
 `POST .../{bindingId}/expand` turns a strip row into the four single rows it was deriving (the inspector's *Fader only…*) in one transaction via `ControlSurfaceBindingService.replace`.
 
@@ -331,121 +335,129 @@ A strip hit is answered as the strip's row with the control's id and the derived
 
 What a device's strip encoders drive is per-device session state: `EncoderBankState`, shaped exactly like `ActiveBankState` with an `EncoderBankSelection` — an attribute name and, for a colour, a `ColourAxis` (null is hue) — where that has a bank id: one map-valued `StateFlow` for the snapshot, a lock-free `selectionFor()` for the hot path, a `changes` `SharedFlow` for the publisher. Default `dimmer`. Two selections are one bank when the attribute and the *effective* axis agree, so `(rgbColour, null)` and `(rgbColour, HUE)` are not a change and `(rgbColour, SATURATION)` is.
 
-It moves two ways: a button bound to `EncoderBankSet(attribute, colourAxis?)`, which applies to **the device the button is on** (the payload names no device, so a bank button can never be stranded pointing at a surface that is not attached), or the frontend's `surfaceEncoderBank.set`. The LED lights when both halves match, so a *hue* button and a *saturation* button on one colour attribute light one at a time. `deriveStripTarget` puts the axis on the strip's **encoder** and nowhere else — the fader and flash are the dimmer whatever the bank says.
+It moves two ways: a button bound to `encoderPage(attribute, axis?)`, which applies to **the device the button is on** (the payload names no device, so a bank button can never be stranded pointing at a surface that is not attached), or the frontend's `surfaceEncoderBank.set`. The LED lights when both halves match, so a *hue* button and a *saturation* button on one colour attribute light one at a time. `deriveStripBinding` puts the axis on the strip's **encoder** and nowhere else — the fader and flash are the dimmer whatever the bank says.
 
-It survives a device unplug and is **reset on project switch** (a carried reload of the same project keeps it) — unlike the active bank, which does not. The vocabulary it draws from is the patch's (`BindingHealthEvaluator.selectionAttributesOf`, the same set `SelectionAttribute` validates against), so carrying an attribute across projects could point every encoder at an attribute the new rig has no fixture for.
+It survives a device unplug and is **reset on project switch** (a carried reload of the same project keeps it) — unlike the active bank, which does not. The vocabulary it draws from is the patch's (`BindingHealthEvaluator.selectionAttributesOf`, the same set a level on the selection is judged against), so carrying an attribute across projects could point every encoder at an attribute the new rig has no fixture for.
 
 A change rebuilds the feedback index — every strip encoder now stands on different channels — and re-arms takeover on that type's devices through the same path a bank change uses, because the meaning of the control moved under the operator's hand without them touching it.
 
 ## Binding model
 
-A binding is a row in `DaoControlSurfaceBindings` keyed by:
+A binding is a row in `DaoControlSurfaceBindings` at a slot:
 
 ```
-(projectId, deviceTypeKey, controlId, bank: String?)
+(projectId, deviceTypeKey, controlId, part: MAIN | PUSH, bank: String?)
 ```
 
-where `bank = null` means "global (applies on any bank)" and `bank = "A"` means "only when bank A is active". Resolution: exact-bank wins over global; within a bank, at most one binding per control.
+where `bank = null` means "both layers" and `bank = "layer-a"` "only while layer A is active".
+Resolution: exact-bank wins over global; within a layer, at most one binding per control part.
 
-The `BindingTarget` payload is stored as **text** (JSON), not `json<T>()`, so new variants can be added without schema changes. The JSON codec has `ignoreUnknownKeys = true` for forward/backward compatibility.
+A **part** is what a control feeds (D4): a fader's move, an encoder's turn and a button's press are
+its `MAIN` part, and an encoder's push its `PUSH` part, a binding of its own that does nothing until
+bound — no push writes its turn's attribute full. A part's input is `inputFor(part)`: continuous for a
+turn, a button for a press or a push, nothing for a bank button. A write that names no part is placed
+by `inferPart`: an encoder's push for a function only a button takes, else the main part.
 
-The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt on every mutation (add/update/remove) and on binding reload after project switch. Lookup on the hot path is O(1) `HashMap` with a fallback to the global-bank entry.
+The payload is a `Binding(does, on, how)` (surface-setup plan D1), stored as **text** (`BindingJson`,
+`classDiscriminator = "type"`, defaults omitted) — `{"does":{"type":"go"},"on":{"type":"record",
+"kind":"STACK","uuid":"…"}}` — with its function's id mirrored in `target_type`. *Does* is the function
+with its own parameters; *On* is the subject; *How* how a button drives it, null for the function's
+default. A record is named **by uuid only**, a typed `UUID`: a malformed one fails the decode, and the
+row reads as `Does.Unknown`. Every function is one `Does` (`midi/SurfaceFunctions.kt`) carrying its
+`Spec` — where it writes (Local, Playback, Master, Tempo, Desk; D8), the subjects, inputs and Hows it
+takes — and its `act`, so no `when` over functions decides what a binding may be.
 
-### BindingTarget variants
+The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt on every mutation
+(add/update/remove) and on binding reload after project switch. Lookup on the hot path is O(1)
+`HashMap` with a fallback to the global-bank entry.
 
-| Variant | Control type | Effect |
-|---|---|---|
-| `FixtureAttribute(fixtureKey, attribute, colourAxis?)` | Continuous | Programmer write via `ProgrammerWriter.writeAttribute` (owner `surface`); value typed through `AttributeChannelResolver.toAttributeValue` on the binding's colour axis (null is hue; refused at bind time on a non-colour attribute, `BINDING_AXIS_NEEDS_COLOUR`) |
-| `GroupAttribute(groupName, attribute, colourAxis?)` | Continuous | Same, fanned out across group members; a member on which the attribute is not a colour skips an axis move |
-| `CueStackGo(stackId)` | Button | `CueStackManager.activateAtFirstCue` or `advanceStack(FORWARD)` on press |
-| `CueStackBack(stackId)` | Button | `CueStackManager.advanceStack(BACKWARD)` |
-| `CueStackPause(stackId)` | Button | `CueStackManager.pauseAutoAdvance(stackId)` |
-| `FireCue(cueId)` | Button | `CueHolds.toggleLooseCue` — a loose hold on the cue, taken or let go (cue model plan D6) |
-| `CueStackGoTo(stackUuid, entryUuid)` | Button | `CueStackManager.goToEntry` — GO TO one entry, starting the stack if it is stopped (OSC plan D4). A press onto the entry already live does **nothing** (`already live`): no re-fire, no second *Tempo on GO*, no second events, unlike a bare GO onto the live entry. Health: the stack's `checkStack`, then `missingCue` (with no id) for an entry the stack no longer has |
-| `CueStackStandby(stackUuid, entryUuid)` | Button | `CueRunStateTracker.setStandby`. Health as `CueStackGoTo` |
-| `CueStackStop(stackUuid)` | Button | `CueStackManager.stopStack`, an operator's stop (busk-stack plan D6): the stack reads stopped at once and its cues fade over its release time (0 snaps), or stay at full where another hold keeps them; it drops the desk's arm, running or stopped, except on a stack whose release is still running: that press leaves the stack as it is, the release finishing and the arm untouched |
-| `LooseCueSet(cueUuid, on)` | Button | `FireCue`'s explicit forms (D4): `on` takes a loose hold (`takeLooseCue`), `off` lets it go (`dropLoose`), and either finding the cue already so does nothing. Health `checkCue` |
-| `FireTrigger(fixtureKey, trigger)` | Button | Fire one tube of a one-shot fixture — the Twin Shot's `output1`, or its label `A` — through `EffectsService.fireFromSurface` (stage-view plan session 9). **Needs the desk's arm**, like every fire: an unarmed press sends nothing and is announced on every window (`effects.skipped`, source `surface`), as is a spent tube; a blind programmer rehearses it. Fixture-keyed, as `FixtureAttribute` is. Health: `missingFixture` with no such patch, `missingAttribute` when the fixture has no such trigger — the arm is a fact about this second, never a dead binding. No LED |
-| `Flash(target, max)` | Button (momentary) | Press: programmer write (owner `flash`) at `minOf(max, sliderMax)`. Release: clear the `flash` slot — the attribute cascades to the surviving owner / cue layer / baseline in one publish |
-| `Blackout` | Button | `GlobalScalerState.toggleBlackout()` |
-| `BlackoutSet(on)` | Button | `Blackout`'s explicit form (OSC plan D4): sets blackout on or off, and a press finding it so does nothing. LED lit while blackout is as the button sets it |
-| `GrandMasterToggle` | Button | `GlobalScalerState.toggleGrandMaster()` — to 0, and back to the last level above 0; LED lit while the level is above 0 |
-| `GrandMasterLevel(level)` | Button | `GlobalScalerState.setGrandMasterLevel` to `level` %, 0–100, taken whole (OSC plan D10) — what `/grandmaster` builds from its float |
-| `GrandMasterFader` | Continuous | `GlobalScalerState.setGrandMasterLevel` — 0..127 across 0–100 %. Health always `ok`. Fed back like a tempo control (`GrandMasterEntry`, not a `ContinuousEntry`: its value lives in the holder, not on a channel): the motor or ring follows the level whichever door moved it, a touched motor is spared and catches up on release, and the entry is what arms PICKUP |
-| `StackFxAmount(stackId, stackUuid?)` | Continuous | `CueStackManager.setFxAmount` — one cue stack's FX amount (effects plan D10), 0..127 across 0–100 %. The stack is the uuid's, stamped on write from the int, through `CueStackManager.stackIdForUuid` — one read per show, kept until the show is rebuilt (a sync pull re-creates stacks under new ids and reloads), and a stack deleted is forgotten. A uuid this show does not hold moves nothing and feeds nothing back: the int is used only by a row written before uuids. Health is the stack buttons' `checkStack`. Fed back like the grand master (`StackFxAmountEntry`, resolved by the same rule at rebuild): the control follows the stack's FX amount whichever door moved it, only the stacks whose FX amount moved are resynced, and the entry arms PICKUP |
-| `SetBank(deviceTypeKey, bank)` | Button / bank-button | `ActiveBankState.setBank(deviceTypeKey, bank)` |
-| `SpeedMasterBpm(masterUuid?, minBpm, maxBpm)` | Continuous | `SpeedMasterBank.setBpm` across the binding's window |
-| `SpeedMasterTap(masterUuid?)` | Button | `SpeedMasterBank.tap` |
-| `SpeedMasterSetBpm(masterUuid?, bpm)` | Button | `SpeedMasterBank.setBpm` at `bpm`, 20–300 (OSC plan D10): a typed tempo's write, so on a held master it moves the hold, and a follower refuses it. Health `checkSpeedMaster` |
-| `SpeedMasterScale(masterUuid?, factor)` | Button | `SpeedMasterBank.scale` — ×½ or ×2 (`factor` 0.5 or 2, else refused at decode), a tempo write like a tap: on a held master it moves the hold (fx-speed plan D9, D12). A press that would leave 20–300 is refused (`OutOfRange`) and logged, as a follower's is; no factor is kept, so a tap afterwards sets the beat it hears. Health is `checkSpeedMaster`'s. No LED |
-| `FxSpeed` | Continuous | The **Speed** of every Local FX painting a head of the desk selection, each whole (fx-speed plan D13): `midi/SelectionFxSpeed.kt` through `applyFxUpdate` with only a `cycle`, so nothing splits and an FX partly inside the selection changes on every head it paints. A programmer layer's, a cue's or a Look's FX is not Local and is left alone, and so is an `ownPace` FX, which has no Speed. The router tells the control's kind from its descriptor: an **encoder** moves each FX a quarter of an octave a detent from where its ring shows the **lead FX** (`FxSpeed.stepSpeed`, each stopping at its own powers of two, so FX not a power of two apart keep their ratio only between snaps), the ring a 7-bit step a quarter of an octave so the device's own count and the desk's agree detent for detent, and a turn more than `ENCODER_JUMP` (8) from the ring moving nothing and re-showing it past the transport's last-sent cache (`invalidateFeedbackCache`, as a button release re-asserts its LED); a **fader** sets every one from ×¼ to ×4 on a log scale, stuck within 0.12 of an octave of each power of two (`FxSpeed.faderSpeed`, so ×1 is reachable). Each writes a cycle of whole ticks and keeps the FX's elapsed cycles (D6). The lead is the Local FX painting the first selected head in rig order (`BuskRigOrder`, read once per selection and again after a rig or patch change), the lowest Local rank where two do. Fed back like the fan (`FxSpeedEntry`): the lead's Speed on a ring at 64 + 4·log₂ (28 to 84 over ×1/512–×32), on ×¼–×4 on a fader (at the nearer end past it), which arms PICKUP — except that a fader already standing where it says the lead's Speed (its own write echoing back snapped or rounded, `FxSpeed.faderSays`) keeps its position as the logical value; with no Local FX on the selection the control reads nothing. Health always `ok`: an empty selection or one with no Local FX is a fact about this second |
-| `SelectionAttribute(attribute, colourAxis?)` | Continuous (press = full) | Programmer write (owner `surface`) on **every head in the desk selection** via `SelectionWrites`, on the binding's colour axis where the head's attribute is a colour; an empty selection drops the write with a debug log, never widened to "everything". Health `unknownAttribute` when no patched fixture can take the attribute on a fader |
-| `SelectionFan(axis)` | Continuous | **Fan** the desk selection's positions on `PAN` or `TILT` (venue-visit plan S12), or their landing points on the stage axes `ACROSS` (SR↔SL) or `DEPTH`, a tenth of a metre a 7-bit step and ±6.4 m on the ring (a stage fan, `fan: {x, y}`; the anchor then also keeps each head's latest `near` and the heads' placements, read once for the gesture); a gesture is one or the other, and a turn on the other kind starts a new gesture from where the heads are, through the Fan panel's own resolve (`fanIntoProgrammer`, `mode: ABOUT`, owner `surface`): each head at its own position plus its share of the amount, symmetric about the middle of the order. `midi/SelectionFan.kt` holds the gesture's **anchor** — where each head started, as the desk answered the first turn, and the rig order read once — so a turn never fans a fan and a detent costs no database read. It reads a turn as a **move** from the value the ring was last shown, two centre steps a 7-bit step on `PAN` and `TILT`. The anchor goes and the ring returns to the centre (64) when the selection changes, the show is rebuilt, or anything else has written a fanned head's position since the fan last did — judged at the next turn against Local as output arbitrates it, the axis attributes and the sideband included, and that turn writes nothing, so the next starts from where the heads are. A new gesture **picks up at the centre**: an input more than `PICKUP_STEPS` (4) from 64 is ignored, so a detent sent before the device took the centred ring, or a touched motor fader still standing off it, cannot jump the heads. Fed back like the grand master (`FanEntry`, from `SelectionFan.shown`): 64 is no fan. An empty selection drops the turn. Health always `ok`. Not an encoder-bank attribute: the bank drives one head per strip, and a fan is one gesture over the selection |
-| `SelectTarget(target, mode)` | Button | `DeskSelection.toggle` (head-by-head, a group by its members) or `set(listOf(target))` for `REPLACE`; LED lit while the target's heads are all selected. A `TOGGLE` binding toggles on press **and**, if the button is still held at `SurfaceInputRouter.SELECT_HOLD_MS` (500 ms), fires a `REPLACE` as well — the fader-wing gesture, so the LED is immediate and a hold narrows the selection to that one target. A release always cancels the pending replacement, even if the binding changed or went dead meanwhile. A `REPLACE` binding acts on press and arms no hold |
-| `ClearSelection` | Button | `DeskSelection.clear()` |
-| `LocateSelection` | Button | `toggleLocate` (the `POST /locate/toggle` path) once per selected target: all located → all released, else the unlocated ones come up; LED lit while the selection is non-empty and every target is located |
-| `Strip(target)` | — (a strip slot) | Never dispatched: `resolve` derives it to the target of the control the event arrived on. See [Strips](#strips) |
-| `EncoderBankSet(attribute, colourAxis?)` | Button | `EncoderBankState.set` for the device the button is on; LED lit while that attribute **and** axis are the device's encoder bank. Health `unknownAttribute` when no patched fixture can take it |
-| `LookSet(lookUuid, on)` | Button | `ApplyLook`'s explicit forms (D4): `on` puts the Look on whole through `toggle`, `off` takes every layer of it off through `ProgrammerLayerStack.release`, and either finding it already so does nothing. LED lit while the Look is on, as `ApplyLook`'s. Health `missingLook` |
-| `ApplyLook(lookUuid)` | Button | `ProgrammerLayerStack.toggle` of the Look **whole** — no targets, never the desk selection (absolute-looks plan P1): on puts one layer of it on, off takes every layer of it off. LED lit while the Look has any layer on the stack, whatever is selected (P4). Health `missingLook` for a Look that has gone |
-| `PressPalette(paletteUuid)` | Button | `ProgrammerLayerStack.toggle` on the **desk selection**, masked to the palette's own derived family, with no solo siblings (the family replacement is `toggle`'s own). A *generic* palette with an empty selection is dropped — its rows take their targets from the press; a per-fixture one names its own heads. LED lit while it covers every selected target |
-| `PressPad(padUuid)` | Button | The pad's own press through `BuskPressService`, solo siblings included, with the desk selection as the targets (a Look pad's press ignores them and lands whole). LED is the pad's ring: a palette pad's covers the selection; a Look pad's is on or off, lit while a layer of it is on, whatever is selected (P4); for a cue pad, lit while a press holds the cue loose (`CueHolds.looseHeld`, `cueLooseHeldProvider`) — what the next press lets go of — and dark while only a stack holds it; for a stack pad, lit while its stack runs (`CueStackManager.isStackActive`, `stackRunningProvider`), so dark from the moment it stops, while its release still fades |
-| `PickUpPad(padUuid)` | Button | The record on that pad into the desk's **hand**, stamped `SelectionSource.SURFACE` — the surface door of `hand.pickUp` (multi-screen plan §3.5). A pad, not a record, because a pad is the address a button already carries and what it picks up is exactly what it would otherwise press. The pick-up replaces whatever was held. Health `missingPad`. No LED |
-| `HandPlaceInBank(bankUuid)` | Button | Place whatever the hand holds as a pad on that bank, through the **same append** `POST /busk/banks/{bankId}/pads` makes, then let go. An empty hand is a dropped press. The drop is conditional on the append succeeding, so a refused place leaves the item in the hand. Health `missingBank`. No LED |
-| `HandDrop` | Button | `HandState.drop()`; a no-op on an empty hand. Addresses nothing, so it can never be dead. No LED |
-| `Undo` / `Redo` | Button | The undo key for the surface's own source, `surface:{deviceKey}` (undo plan §4.8, D1, D2), through `moveHistory`, the routes' own: undo takes the newer of the live programmer's top step and the surface's newest show entry, redo whichever of the two was undone last. Never another source's entry. A step is put back at no fade, as a surface press has none. Run off the input's thread, since putting records back reloads what they touch, and one press at a time in press order (a single-threaded dispatcher and a `Mutex` round the whole move), so Undo then Redo pressed quickly never run reversed. A refusal — nothing to take, a conflict, a record that cannot come back — moves nothing and is logged; a surface cannot confirm, so an undo that would move a running show (`HISTORY_CONFIRM`) is not done. Always healthy. No LED |
-| `ProgrammerUndo` | Button | The programmer-only Undo (D2): the live programmer's top step, whoever took it, as the surface's source. Otherwise as `Undo` |
-| `BuskPageNext` / `BuskPagePrev` | Button | `BuskPageState.step(±1)`, wrapping. Page-agnostic, so always healthy — a project with no pages simply has nowhere to step |
-| `BuskPageSet(pageUuid)` | Button | `BuskPageState.setByUuid`; LED lit while that page is the one showing |
-| `BuskFocusSet(windowName, focus)` | Button | One `windows.viewOptions {focus}` to **every** connected window named `windowName`, each addressed by its own row id and carrying the view that row announced; `focus ∈ split · pads · rig`, refused otherwise at construction. Health `missingWindow` while no connected window has the name, **re-evaluated on every registry change**. No LED — focus is that window's tab fact, not a desk state |
-| `BuskSheetToggle(windowName)` | Button | `windows.viewOptions {sheet: toggle}` to every connected window of that name; the window flips between its fold and its last tab. Addressed and judged as `BuskFocusSet`. No LED |
-| `SelectionNext` / `SelectionPrev` | Button | `DeskSelection.subselect(NEXT / PREV)`: the whole selection one step along the rig order, a group as a group, one element when only elements are selected, wrapping. Always healthy. No LED |
-| `SelectionCells(mode)` | Button | `DeskSelection.subselect(mode)` — the Elements chip's rule (`ALL` · `ODD` · `EVEN` · `FIRST_HALF` · `SECOND_HALF` · `INVERT` · `MASTERS` and the two steps) on a button, one op with the chip's `selection.subselect`. Always healthy; a sub-selection is not a desk state, so no LED (`FU-SURFACE-SUBSELECT-LED`) |
-| `Unknown(targetType, rawPayload)` | — | Never dispatched: health `unknownTarget` gates it. Produced only by the tolerant row decode for a `type` this build does not know; re-encoded verbatim; refused by the create / PATCH routes |
+### Functions
 
-The cue and stack variants carry a **uuid beside the int** (`FireCue(cueId, cueUuid?)`,
-`CueStackGo(stackId, stackUuid?)` …). The service fills it on every create and update — the REST
-picker and MIDI Learn still address rows by int — and both `BindingHealthEvaluator` and
-`DefaultSurfaceActions` judge a row **by the uuid alone when one is present**: a uuid that
-resolves to nothing in the current project is dead, and the press is dropped rather than falling
-back to an int that may name another project's row. Only a pre-v11 row with no uuid is dispatched
-by its int. This is what makes a cloned or imported project keep its cue bindings
-(`docs/sync-engineering.md` §"Version 11"; `FU-SYNC-BINDING-PAYLOAD-UUIDS`, first half).
+| Function | On | Input | Effect |
+|---|---|---|---|
+| `level(attribute, axis?)` | selection · group · fixture | Continuous | Programmer write (owner `surface`) on every head the subject reaches (`Heads.of`), typed through `AttributeChannelResolver.surfaceWrite` on the binding's colour axis (null is hue; refused at bind time on a non-colour attribute, `BINDING_AXIS_NEEDS_COLOUR`); a head on which the attribute is not a colour skips an axis move. A head's **pan or tilt writes its `position`**, the other axis kept, as `programmer.setPosition` writes it (D5) — the key a Circle paints, so a nudge holds the Circle back (and holds the other axis against later cues). A `DmxWhiteMixColour` head takes a colour move on the colour its whites make. An empty selection drops the write with a debug log, never widened to "everything". Health `unknownAttribute` for a selection attribute no patched fixture takes |
+| `flash(attribute, percent)` | group · fixture | Button (While held) | Press: programmer write (owner `flash`) at `percent` of each head's own range, as a fader scales (D10), grey at the percentage on a colour. Release: clears the `flash` slot of exactly the heads the press wrote |
+| `select` | group · fixture | Button | `DeskSelection.toggle` (head-by-head, a group by its members), or `set(listOf(target))` on Replace; LED lit while the target's heads are all selected. **Toggle-hold-replaces**, the default, toggles on press and, still held at `SurfaceDispatch.SELECT_HOLD_MS` (500 ms), replaces — the fader-wing gesture. A release always cancels the pending replace, even if the binding changed or went dead meanwhile. Toggle and Replace arm no hold |
+| `locate` | selection | Button | `toggleLocate` once per selected target: all located → all released, else the unlocated ones come up; LED lit while the selection is non-empty and every target is located |
+| `fan(axis)` | selection | Continuous | **Fan** the desk selection's positions on `PAN` or `TILT` (venue-visit plan S12), or their landing points on the stage axes `ACROSS` or `DEPTH`, through the Fan panel's own resolve (`fanIntoProgrammer`, `mode: ABOUT`, owner `surface`). `midi/SelectionFan.kt` holds the gesture's anchor; a new gesture picks up at the centre (`PICKUP_STEPS`). Fed back as `FanEntry`, 64 no fan. Refused on one fixture (D2): a fan spreads over several heads |
+| `fxSpeed` | selection | Continuous | The **Speed** of every Local FX painting a head of the desk selection, each whole (fx-speed plan D13), through `midi/SelectionFxSpeed.kt`: an encoder a quarter of an octave a detent from where its ring shows the lead FX, a fader ×¼–×4. Fed back as `FxSpeedEntry`. Health always `ok` |
+| `palette(palette)` | selection | Button | `ProgrammerLayerStack.toggle` on the **desk selection**, masked to the palette's own derived family, no solo siblings. A *generic* palette with an empty selection is dropped; a per-fixture one names its own heads. LED lit while it covers every selected target. Health `missingPalette` |
+| `look` | record (Look) | Button: Toggle · On · Off | The Look **whole**, never onto the selection (absolute-looks plan P1): Toggle puts one layer of it on or takes every layer off; On and Off land that state and do nothing when it already holds (OSC plan D4). LED lit while any layer of it is on. Health `missingLook` |
+| `cue` | record (cue) | Button: Toggle · On · Off | A cue's **loose hold** (`CueHolds`, cue model plan D6): toggled, or taken (`takeLooseCue`) or let go (`dropLoose`), On and Off doing nothing when it already is so. Health `missingCue` |
+| `pad` | record (pad) | Button | The pad's own press through `BuskPressService`, solo siblings included, with the desk selection as the targets. LED is the pad's ring (a palette pad's covers the selection; a Look pad's is on or off; a cue pad's lit while held loose; a stack pad's while its stack runs). Health `missingPad` |
+| `pickUp` | record (pad) | Button | The record on that pad into the desk's **hand**, stamped `SelectionSource.SURFACE`, replacing what was held. Health `missingPad`. No LED |
+| `place` | record (bank) | Button | Place what the hand holds as a pad on that bank through the **same append** `POST /busk/banks/{bankId}/pads` makes, then let go; an empty hand is a dropped press, a refused place leaves the item in the hand. Health `missingBank`. No LED |
+| `drop` | — | Button | `HandState.drop()`; a no-op on an empty hand. No LED |
+| `go` · `back` · `pause` · `stop` | record (stack) | Button | GO (`CueStackManager.go`), GO BACK (`advanceStack(BACKWARD)`), cancel the follow (`pauseAutoAdvance`), or an operator's **stop** (`stopStack`, busk-stack plan D6: the stack reads stopped at once and its cues fade over its release time, dropping the desk's arm except on a stack whose release is still running). Health `missingStack` |
+| `goTo` · `standby` | record (entry) | Button | GO TO one entry, starting its stack if stopped, nothing if it is already live (OSC plan D4); or arm it as the stack's next GO. The entry names its stack. A marker is refused (`NOT_A_CUE`). Health `missingCue` for an entry that has gone |
+| `fxAmount` | record (stack) | Continuous | `CueStackManager.setFxAmount` — 0..127 across 0–100 %, or an amount taken whole (an OSC float, D10). Fed back as `StackFxAmountEntry`. Health `missingStack` |
+| `fire(trigger)` | fixture | Button | Fire one tube of a one-shot fixture through `EffectsService.fireFromSurface` (stage-view plan session 9). **Needs the desk's arm**: an unarmed press sends nothing and is announced (`effects.skipped`); a blind programmer rehearses it. Fixture only (D2). Health `missingFixture` / `missingAttribute`. No LED |
+| `blackout` | — | Button: Toggle · On · Off | `GlobalScalerState.toggleBlackout()`, or set on or off (a press finding it so does nothing). LED lit while blackout is as the button sets it |
+| `grandMaster(level?)` | — | Continuous · Button | With no level: a fader or encoder sets the level, 0..127 across 0–100 % (fed back as `GrandMasterEntry`), and a button takes it to 0 and back (LED lit while above 0). With a level: a press sets it there. A level taken whole (OSC `/grandmaster`) is a percentage |
+| `tempo(minBpm, maxBpm, bpm?)` | record (master) · none (master 1) | Continuous · Button | With no `bpm`: `SpeedMasterBank.setBpm` across the binding's window. With one: a press sets that tempo, 20–300 — a typed tempo's write, so on a held master it moves the hold, and a follower refuses it. A tempo taken whole (OSC `/tempo/{m}`) is BPM |
+| `tap` · `tempoScale(factor)` | record (master) · none | Button | `SpeedMasterBank.tap`, or ×½ / ×2 (fx-speed plan D12; refused `OutOfRange` outside 20–300) |
+| `layer(layer)` | — | Button | `ActiveBankState.setBank` for **the device the button is on** (D16): the payload names no device |
+| `encoderPage(attribute, axis?)` | — | Button | `EncoderBankState.set` for the device the button is on; LED lit while that attribute **and** axis are its encoder page. Health `unknownAttribute` |
+| `undo(kind)` | — | Button | `UNDO` / `REDO` / `PROGRAMMER`: the undo key for the surface's own source, `surface:{deviceKey}` (undo plan §4.8, D1, D2), through `moveHistory`, off the input's thread and one press at a time. A refusal moves nothing and is logged; a surface cannot confirm. No LED |
+| `buskPage(step?)` | none · record (page) | Button | One page along (`step` ±1, wrapping), or that page (`BuskPageState.setByUuid`; LED lit while it shows). A page with a step, or no page without one, is refused |
+| `windowFocus(window, focus)` · `windowSheet(window)` | — | Button | One `windows.viewOptions` — `{focus}` (`split` · `pads` · `rig`) or `{sheet: toggle}` — to **every** connected window named `window`. Health `missingWindow` while none has the name, re-evaluated on every registry change. No LED |
+| `selection(step)` | — | Button | `CLEAR` empties the desk selection; every other step is `DeskSelection.subselect` (the Elements chip's `ALL` · `ODD` · `EVEN` · `FIRST_HALF` · `SECOND_HALF` · `INVERT` · `MASTERS`, and `NEXT` / `PREV` one step along the rig order). No LED |
+| `strip` | group · fixture | — (a strip slot) | Never dispatched: `resolve` derives it to the binding of the control the event arrived on. See [Strips](#strips) |
+| `unknown` | — | — | Never dispatched: health `unknownTarget` gates it. Produced only by the tolerant decode; re-encoded verbatim; refused from a request |
 
-The five the OSC plan adds — `CueStackGoTo`, `CueStackStandby`, `CueStackStop`, `LooseCueSet` and
-`LookSet` — are **uuid-only**, like the record variants: minted after v11, they have no pre-uuid form.
-The stack list's `CueStackDetails.uuid`, each entry's `uuid` and `cueUuid`, and `CueDetails.uuid` are
-what the picker names them by.
-
-The **record** variants are uuid-addressed for the same reason and with no int beside them: they
-were minted after v11, so there is no pre-uuid form to fall back to. Each has **exactly one
-behaviour**, which is the whole design rule (`docs/plans/completed/midi-surface-plan.md` D6): a Look always
-whole, a palette always onto the selection, a pad always its own bank's plan. A
-button that meant different things depending on what was selected is what a fixed binding exists not
-to be.
-
-**A window-addressed target names its window by registry name**, not by row id, because a binding
+**A window-addressed function names its window by registry name**, not by row id, because a binding
 has to survive the socket that minted the id (busk-further plan D14). Duplicate names are allowed
 (multi-screen plan D9) and every row of the name receives the command; a name matching no connected
-window is a logged no-op at press time and `missingWindow` in health. That health is the one arm
+window is a logged no-op at press time and `missingWindow` in health. That health is the one check
 that is not a database fact, so `SurfaceFeedbackPublisher` collects `WindowRegistry.windows` (by
-name set) and re-runs `invalidateHealth` on every change — without it a binding made before its
-screen was opened stayed dead after the screen arrived. `FU-WINDOWS-NAME-ADDRESSED-BINDING` is the
+name set) and re-runs `invalidateHealth` on every change. `FU-WINDOWS-NAME-ADDRESSED-BINDING` is the
 item for when duplicate names ever matter.
+
+**Health** is the subject's — a fixture or group (with the attribute a level or flash writes on some
+head `Heads.of` reaches, elements included, each judged as cue authoring judges a cell), a fixture's
+trigger, a record by uuid — then the function's own parameters
+(`BindingHealthEvaluator`). `MissingStack` and `MissingCue` name the uuid; their ids are 0, kept for
+the screens session 3 replaces.
+
+### Before the grammar
+
+Until session 1 of the surface-setup plan a binding was a `BindingTarget`, a 50-variant union with
+the subject in the type (`FixtureAttribute`, `GroupAttribute`, `SelectionAttribute` …), on/off forms
+of the toggles (`LookSet`, `BlackoutSet`, `LooseCueSet`) and cues and stacks named by int beside
+their uuid. `midi/SurfaceGrammar.kt` is the one translate from that shape (P4): each variant's
+function, subject and How, an on/off form as its toggle with a How of On or Off, a flash's raw max as
+a percentage, a cue or stack named by int alone as its uuid where the caller can resolve it, and an
+**encoder holding a button variant as its push** (`partFor`). What it cannot translate — an int that
+resolves to nothing, a type this build never knew — answers null and the row keeps its bytes, reading
+as `unknown`. Three callers share it:
+
+- **Database step 15** (`state/SurfaceGrammarMigration.kt`, `PRAGMA user_version` 15) translates every
+  row, its ints resolved in its own project, and drops `uq_surface_binding_slot`: the reconciliation
+  has added `part` and `uq_surface_binding_part_slot` beside it, and SQLite drops an index without
+  rebuilding its table. Backed up first to `<db>.pre-surface-grammar-<utc>.db` when it has a binding to
+  translate.
+- **The archive reader**, `LegacyNames.record("controlSurfaceBindings")`, after the older renames, for
+  an archive below `formatVersion` 53; an archive's ints are another desk's, so none resolve.
+- **The bridge** at `/surface-bindings` and `surfaceLearn.commit`: a write may carry `target`, the old
+  union the current screens still build (with ints), translated with the project's ints, and every row
+  answers `target` and `targetType` in the old words (`legacyTarget`) beside `binding` and `part`. The
+  screens show a control's main part, else its push (`bindingsForScreens`). Session 3 deletes the bridge
+  with those screens.
 
 ### Bind-time refusals
 
-Five rules live on `ControlSurfaceBindingService` rather than in the REST routes, because the
+Six rules live on `ControlSurfaceBindingService` rather than in the REST routes, because the
 service is the one door every write comes through — MIDI Learn's commit reaches `create` directly,
 with no route validation of its own:
 
 | Rule | Refuses | Code |
 |---|---|---|
-| `refuseUnknown` | a `Unknown` target from a request — it exists to be rebound, not re-sent | — |
-| `refuseWrongSlot` | a `Strip` off a strip slot, or anything else on one | `BINDING_STRIP_NEEDS_STRIP` / `BINDING_CONTROL_NOT_STRIP` |
-| `refuseWrongKind` | a target the control's half of the dispatch can never reach | `BINDING_WRONG_CONTROL_KIND` |
-| `refuseTriggerAttribute` | a `FixtureAttribute`, `GroupAttribute`, `SelectionAttribute`, `EncoderBankSet` or the `Flash` around one naming a **one-shot trigger or its arm** (stage-view plan session 9): a trigger fires as an event, and a surface's door to one is `FireTrigger`, which needs the arm. Judged by `TriggerIndex` against the register; a target-less selection or encoder-bank name by every trigger's name. A **fixture command** (fixture optics plan session 7 — a reset, a lamp strike) is refused by the same rule through `CommandIndex`: a command runs from the fixture panel or `run_fixture_command`, never from a control | `TRIGGER_NOT_STORABLE`, `COMMAND_NOT_STORABLE` |
-| `refuseAxisOnNonColour` | a `colourAxis` on an attribute that is not a colour — a fixture or group by the head's own type (the dispatch lookup, so it can never disagree with a move), a selection or encoder bank by the rig's colour vocabulary (`Context.colourAttributes`); a `Flash` for the attribute it wraps. A missing fixture or an unknown attribute name is health's, not this rule's | `BINDING_AXIS_NEEDS_COLOUR` |
+| `refuseUnknown` | an `unknown` binding from a request — it exists to be rebound, not re-sent | — |
+| `refuseWrongSlot` | a strip binding off a strip slot, or anything else on one | `BINDING_STRIP_NEEDS_STRIP` / `BINDING_CONTROL_NOT_STRIP` |
+| `refuseWrongKind` | a function the control part's input is not in (`inputFor(part)` against `Spec.inputs`): a level on a button or a push, a GO on an encoder's turn, anything on a bank button | `BINDING_WRONG_CONTROL_KIND` |
+| `refuseBySpec` | a subject the function's spec does not take — a fan on one fixture, a GO on a cue — or the function's own `refusal` (a busk page with both a page and a step), and a How it does not take | `BINDING_WRONG_SUBJECT` / `BINDING_WRONG_HOW` |
+| `refuseTriggerAttribute` | a `level`, `flash` or `encoderPage` naming a **one-shot trigger or its arm** (stage-view plan session 9): a trigger fires as an event, and a surface's door to one is `fire`, which needs the arm. Judged by `TriggerIndex` against the register; a target-less selection or encoder-bank name by every trigger's name. A **fixture command** (fixture optics plan session 7 — a reset, a lamp strike) is refused by the same rule through `CommandIndex`: a command runs from the fixture panel or `run_fixture_command`, never from a control | `TRIGGER_NOT_STORABLE`, `COMMAND_NOT_STORABLE` |
+| `refuseAxisOnNonColour` | an axis on an attribute that is not a colour — a fixture or group by the heads it reaches (`Heads.of` and `AttributeChannelResolver.isColour`, the dispatch lookup, so it can never disagree with a move), the selection or an encoder page by the rig's colour vocabulary (`Context.colourAttributes`). A missing fixture or an unknown attribute name is health's, not this rule's | `BINDING_AXIS_NEEDS_COLOUR` |
 
 The hand's three are the only place bindings there are — there is deliberately **no
 `HandPlaceInSlot` and no layer-stack place**, because neither a cue slot nor the programmer's layer
@@ -453,15 +465,12 @@ stack has a uuid a binding could carry. A place made from a *window* is that win
 plus `hand.drop` and needs no binding at all (D12); see
 `docs/lighting-composition-model.md` §"The busk layout".
 
-`refuseWrongKind` closes `FU-MIDI-BIND-CONTROL-KIND`, and its two tables are in
-`midi/BindingControlKind.kt`: `dispatchableKinds(descriptor)` — a fader is continuous, an encoder is
-continuous *and*, when it declares a `pushNote`, a button, a button is a button, and a **bank button
-is neither**, because `route` switches the bank before resolving a binding at all — and
-`targetControlKind(target)`. **Strip slots are skipped**: a strip id names no descriptor, and its
-target reaches a control by derivation rather than dispatch. `lib/surfaceDrop.ts` in
-`lighting-react` mirrors both tables and drives the palette's eligibility dim.
+`refuseWrongKind` closes `FU-MIDI-BIND-CONTROL-KIND` from the function's spec: what a part feeds is
+`inputFor(part)` and what a function takes is its `Spec.inputs`. **Strip slots are skipped**: a strip id
+names no descriptor, and its binding reaches a control by derivation rather than dispatch.
+`lib/surfaceDrop.ts` in the frontend mirrors the old tables for the drag library until session 3.
 
-The last two carry a machine-readable code out through `BindingRefused(message, code)`, an
+The coded rules carry their code out through `BindingRefused(message, code)`, an
 `IllegalArgumentException` every existing caller already maps to a 400. Session 2 got a coded
 refusal by *duplicating* each strip rule into the routes' `validateRequestShape`; the rules added
 since take this path instead, because four more rules would have meant four more copies.
@@ -480,7 +489,7 @@ don't need to distinguish.
 `MidiLearnSessionManager` implements 30-second capture sessions:
 
 1. Client calls `beginLearn(sessionId, targetContext)` — server subscribes to every attached device's `input` flow.
-2. First matching physical input (Fader CC, Button note, etc.) is captured as a `ResolvedInput`; the session transitions to `Captured`.
+2. First matching physical input — a fader moved off rest, an encoder turned, a button or an encoder's push pressed — is captured as a control part through the profile's `ControlInputIndex.capture` (an encoder's push is its `PUSH`); the session transitions to `Captured`, and `surfaceLearn.captured` carries the part. The commit binds that part when the function takes its input, else the part it does take (`learntPart`): the screens pick the target first, so a GO learnt by turning an encoder sits on its push, and a level learnt by pressing it on its turn.
 3. Client commits (persisting a binding) or cancels.
 4. Idle sessions expire after 30 s.
 
@@ -490,23 +499,24 @@ Capture events are scoped to the originating WS connection via `ownedLearnSessio
 
 Per-device coroutine `CoroutineName("SurfaceRouter-$displayKey")` collects from `MidiController.input`. Pipeline:
 
-### 1. Match event to control descriptor
+### 1. Match event to control part
 
-`matchEvent(profile, event) → ResolvedInput?`:
+`profile.inputs.match(event)` (`ControlInputIndex`, built once per profile; the first declared control
+wins an address two claim):
 
 | Input event | Matches |
 |---|---|
-| `ControlChange(cc)` | `FaderDescriptor.cc` or `EncoderDescriptor.cc` → `Continuous(controlId, value7Bit)` |
-| `NoteOn(note)` | `ButtonDescriptor.note` → `ButtonPress(controlId)` |
-| `NoteOn(note)` | `EncoderDescriptor.pushNote` → `ButtonPress(controlId)` |
-| `NoteOn(note)` | `FaderDescriptor.touchNote` → `Touch(controlId, down=true)` |
-| `ControlChange(cc)` | `FaderDescriptor.touchCc` → `Touch(controlId, down = value > 0)` |
-| `NoteOn(note)` | `BankButtonDescriptor.inputNote` → `BankButton(bankId, pressed=true)` |
-| `NoteOff(note)` | Corresponding release events |
+| `ControlChange(cc)` | `FaderDescriptor.cc` or `EncoderDescriptor.cc` → `Move(control, value7Bit)`, the main part |
+| `ControlChange(cc)` | `FaderDescriptor.touchCc` → `Touch(control, down = value > 0)` |
+| `NoteOn(note)` | `ButtonDescriptor.note` → `Press(control, MAIN)` |
+| `NoteOn(note)` | `EncoderDescriptor.pushNote` → `Press(control, PUSH)` |
+| `NoteOn(note)` | `FaderDescriptor.touchNote` → `Touch(control, down = true)` |
+| `NoteOn(note)` · `ProgramChange` | `BankButtonDescriptor` → `Layer(bankId)` (press only) |
+| `NoteOff(note)` · `NoteOn(velocity 0)` | the matching `Release` or touch up |
 
 ### 2. Bank-button short-circuit
 
-`BankButtonDescriptor` is intentionally not user-bindable — bank buttons call `ActiveBankState.setBank(deviceTypeKey, bankId)` directly, bypassing the binding resolver. A user who wants to swap banks from an arbitrary button binds `BindingTarget.SetBank` instead.
+`BankButtonDescriptor` is intentionally not user-bindable — bank buttons call `ActiveBankState.setBank(deviceTypeKey, bankId)` directly, bypassing the binding resolver. A user who wants to switch layers from an arbitrary button binds `layer` instead.
 
 ### 3. Soft-takeover gate (continuous only)
 
@@ -516,32 +526,43 @@ Motor faders default to `IMMEDIATE` policy (they're driven to the logical value,
 
 ### 4. Binding resolve
 
-`ControlSurfaceBindingService.resolve(projectId, deviceTypeKey, controlId, activeBank) → ResolvedBinding?`. Returns null for unbound controls.
+`ControlSurfaceBindingService.resolve(projectId, deviceTypeKey, controlId, activeBank, encoderBank, part) → ResolvedBinding?`. Returns null for an unbound part. A release resolves nothing: it lets go of its own part's hold whatever is bound now.
 
 ### 5. Dispatch via SurfaceDispatch
 
-`SurfaceDispatch` (`midi/SurfaceDispatch.kt`) turns a resolved target into a `SurfaceActions` call and
-answers an `ActionOutcome` — `Done(detail?)`, `Refused(code, message)`, `NotFound(message)` or
-`Failed(message)`. The router and the OSC collector share it (OSC plan D2), so a button and an OSC
-message naming one target do one thing: `press` for a button, `continuous` for a 7-bit move, `level`
-for a value taken whole (a stack's FX amount from an OSC float, D10) and `release` for a flash. A
-target given the wrong kind of input is `Refused(WRONG_KIND)`. The router logs at debug what is not
-`Done`, since a MIDI press has no reply channel; the OSC log shows it.
+`SurfaceDispatch.dispatch(binding, input, origin)` (`midi/SurfaceDispatch.kt`) runs the binding's
+function and answers an `ActionOutcome` — `Done(detail?)`, `Refused(code, message)`,
+`NotFound(message)` or `Failed(message)`. The router and the OSC collector share it (OSC plan D2), so a
+button and an OSC message naming one binding do one thing. An input is a `Move` (a 7-bit position), a
+`Set` (a value taken whole, from OSC, D10), a `Press` or a `Release`. A press becomes an `Op` by the
+binding's How, in this one place: Toggle, On, Off and Replace press as themselves; **While held**
+presses on and keeps the release the function answered (`Acted.release`, else an Off), which the
+part's release runs; **Toggle-hold-replaces** toggles and, still held after `SELECT_HOLD_MS`, replaces.
+Holds are keyed by `HoldKey(displayKey, controlId, part)` in `SurfaceHolds`, never by binding id, so
+two devices of one type each hold their own flash; a device unplugged lets go of its holds. A function
+given an op it does not take is `Refused(WRONG_KIND)`, and a subject its spec does not admit (a row
+written by hand) `Refused(WRONG_SUBJECT)`. The router logs at debug what is not `Done`, since a MIDI
+press has no reply channel; the OSC log shows it.
 
 Every input runs inside `SurfaceDispatch.guarded`, which turns a throw — `state.show` mid-switch
 among the causes — into `Failed`, so one bad input never ends a device's collector
 (`FU-MIDI-SHOW-GUARD`).
 
-See the `BindingTarget variants` table above. `DefaultSurfaceActions` handles its own thread coordination:
+See the Functions table above. `DefaultSurfaceActions` handles its own thread coordination:
 - `ProgrammerStore` is lock-free (`ConcurrentHashMap`)
 - Cue stack operations dispatch onto `GlobalScope` with `OptIn(DelicateCoroutinesApi)` — the router thread never blocks on show services
 - Dependencies are resolved through `state.show.*` on every call, so `ProjectManager.switchProject` doesn't leak stale references
 
 ### Flash lifecycle
 
-Press: `AttributeChannelResolver.flashAttributeValue` types the press value, clamping to `minOf(max, sliderMax)` so a Flash at 255 respects a fixture's configured lamp cap (`DmxSlider.max`). The write lands as a programmer slot (owner `flash`) and the engine publishes the composed cascade — store and wire can no longer disagree.
+Press: `AttributeChannelResolver.flashAttributeValue` types each head's value at the binding's
+percentage of the head's own `min..max` (D10), so a flash at 100 % lands on a capped dimmer's cap. The
+write lands as a programmer slot (owner `flash`, sideband not absorbed) on the heads the subject
+reaches, and the engine publishes the composed cascade.
 
-Release: `ProgrammerWriter.clearAttribute` pops the `flash` slot and publishes the composed cascade in one transaction — the surviving owner, the cue layer, or baseline takes over immediately.
+Release: `ProgrammerWriter.clearAttributes` pops the `flash` slot of **the heads the press wrote** and
+publishes the composed cascade in one transaction — the surviving owner, the cue layer, or baseline
+takes over immediately.
 
 ## Feedback path (SurfaceFeedbackPublisher)
 
@@ -609,7 +630,7 @@ The resync path reads *current state*, not edge events, so if a Flash is held at
 
 Parallel coroutines collect from:
 
-- `FlashStateTracker.changes` → flash LED on/off
+- `SurfaceHolds.changes` → flash LED on/off (by binding id; per device in session 2)
 - `GlobalScalerState.blackoutEnabled.combine(grandMasterEnabled)` → scaler LEDs
 - `GlobalScalerState.grandMasterLevel` → grand-master faders (per show, re-armed with the scaler)
 - `StackFxAmounts.state` → stack FX amount faders (per show, re-armed the same way)
@@ -780,7 +801,7 @@ From `State.kt`:
 | `State.midiRegistry` | Lazy; started in `State.initializeShow()` after `show.start()` |
 | `State.activeBankState` | Lazy; ephemeral, no persistence |
 | `State.deskSelection` | Lazy; ephemeral — cleared on project switch (pruned on a carried same-project reload), pruned on fixture reload, no persistence |
-| `State.flashStateTracker` | Lazy; ephemeral |
+| `State.surfaceHolds` | Lazy; ephemeral — every held part, keyed by device, control and part; cleared on a project switch, kept by a carried reload |
 | `Show.globalScalerState` | Per-show; `.attach()` called in `Show.start()` after fixture load; `.detach()` in `Show.close()` |
 | `State.surfaceFeedbackPublisher` | Lazy; started in `initializeShow()` **before** `surfaceInputRouter` so hooks are ready when the first inbound event arrives |
 | `State.surfaceInputRouter` | Lazy; constructed with `DefaultSurfaceActions(state)` (resolves show on every call, not once at construction); `surfaceInputRouter.start(GlobalScope)` in `initializeShow()` |
@@ -805,7 +826,7 @@ From `State.kt`:
 | `stackFxAmount.set` | `{ stackId, amount }` — a cue stack's FX amount, 0–1 (`StackFxAmountSocket.kt`) |
 | `surfaceLearn.begin` | `{ sessionId, targetContext }` |
 | `surfaceLearn.cancel` | `{ sessionId }` |
-| `surfaceLearn.commit` | `{ sessionId, bank?, target, takeoverPolicy? }` |
+| `surfaceLearn.commit` | `{ sessionId, bank?, binding? \| target?, takeoverPolicy? }` |
 | `selection.set` / `.toggle` / `.setFamilies` / `.clear` | `{ targets }` / `{ target }` / `{ families? }` / — (`SelectionSocket.kt`) |
 | `busk.setPage` | `{ pageId }` — the showing busk page (`BuskSocket.kt`) |
 

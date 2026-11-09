@@ -89,7 +89,7 @@ class PreV39BaseSyncTest {
         transaction(state.database) {
             val binding = DaoControlSurfaceBinding.find { DaoControlSurfaceBindings.uuid eq groupFader }.single()
             assertEquals(32, binding.sortOrder)
-            assertEquals("groupAttribute", binding.targetType)
+            assertEquals("level", binding.targetType)
             assertEquals("Warm Amber, ours", DaoLook.find { DaoLooks.uuid eq warmAmber }.single().name)
         }
     }

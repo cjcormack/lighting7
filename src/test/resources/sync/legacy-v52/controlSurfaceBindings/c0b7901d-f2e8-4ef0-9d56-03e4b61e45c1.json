@@ -1,0 +1,8 @@
+{
+  "controlId": "enc-1",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 2,
+  "targetPayload": "{\"type\":\"selectionAttribute\",\"attribute\":\"pan\"}",
+  "targetType": "selectionAttribute",
+  "uuid": "c0b7901d-f2e8-4ef0-9d56-03e4b61e45c1"
+}

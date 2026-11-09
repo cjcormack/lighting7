@@ -9,6 +9,17 @@ The plan and the decisions are `docs/plans/completed/midi-surface-plan.md`; the 
 `docs/midi-control-surface-engineering.md`. This file is the client half: the things that
 will bite.
 
+## The binding grammar, and what these screens still read
+
+Since surface-setup plan session 1 every row the desk answers carries `binding` — a `SurfaceBinding`,
+`{does, on, how}` (`api/surfacesApi.ts`, mirroring `midi/Binding.kt`) — and `part`, `MAIN` or an
+encoder's `PUSH`, beside `target`, the old `BindingTarget` union. **These screens read and send only
+`target`**: the desk translates it both ways (`midi/SurfaceGrammar.kt`), because the old union names
+stacks and cues by int id and only the desk can map those to the uuids a binding names. A control with
+two parts shows its main part, else its push (`bindingsForScreens`, applied to the bindings query), so an
+encoder's GO moved to its push still shows. This is a bridge: session 3 replaces these screens with
+editors that read the desk's served map and catalogue, and deletes both halves.
+
 ## The picture is data, and the state is what the hardware was told
 
 `SurfacePanel` draws `ControlSurfaceType.layout` — named regions and a grid cell per control — so a
@@ -101,8 +112,10 @@ alone — but it is refused on an attribute that is not a colour, by name, at th
 where the named attribute is a colour, and **drops the axis whenever the attribute changes**, so a
 colour → dimmer edit cannot save a 400.
 
-`controlKinds` and `targetControlKind` are now the **mirror** of `midi/BindingControlKind.kt`
-rather than the only copy: session 4 closed `FU-MIDI-BIND-CONTROL-KIND`, so
+`controlKinds` and `targetControlKind` are now the **mirror** of the server's rule — each
+function's `Spec.inputs` against the input a control part feeds (`inputFor`), an encoder's button
+function placed on its push (`inferPart`) — rather than the only copy: session 4 closed
+`FU-MIDI-BIND-CONTROL-KIND`, so
 `ControlSurfaceBindingService.refuseWrongKind` refuses a mismatch at the write boundary whichever
 door it comes through — MIDI Learn, a script, a hand-rolled call. The dim is still worth having: it
 keeps the operator from dropping onto a control that would answer a 400, which is a worse way to

@@ -22,7 +22,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
-import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
@@ -30,7 +30,6 @@ import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.fx.maskAllows
-import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueStack
@@ -64,72 +63,50 @@ import java.util.UUID
 import kotlin.math.roundToInt
 
 /**
- * Port between [SurfaceInputRouter] and the rest of the application. Production wires this
- * to [DefaultSurfaceActions], which delegates into [Fixtures], the programmer layer
- * ([ProgrammerStore] via [FxEngine]), [CueStackManager], and [GlobalScalerState]. Tests can
- * supply a recording fake so the router can be exercised without a running show.
+ * Port between [SurfaceDispatch] and the rest of the application: what a surface function does,
+ * in the words of the show's services. Production wires this to [DefaultSurfaceActions]; tests
+ * supply a recording fake so dispatch can be exercised without a running show.
  *
- * Implementations handle their own thread coordination (the programmer store is lock-free; cue
- * stack activation is dispatched onto [GlobalScope] by [DefaultSurfaceActions]). The actions an OSC
- * address reaches answer an [ActionOutcome], which the router logs and the OSC log shows; the rest
- * are fire-and-forget.
+ * Records are named by uuid only (surface-setup plan D2): a uuid that resolves to nothing in the
+ * current project drops the press. The actions an OSC address reaches answer an [ActionOutcome],
+ * which the router logs and the OSC log shows; the rest are fire-and-forget.
  */
 interface SurfaceActions {
     /**
-     * Write a continuous value (0..127 MIDI 7-bit) to a fixture property. The production
-     * implementation writes a programmer entry — a cue is read-only from a surface, and is
-     * edited by Include / Update like every other authoring path. [colourAxis] is which axis of
-     * a colour property the value moves — null is hue — and means nothing on a slider.
+     * Write a continuous value (0..127) to [attribute] on every head [on] reaches ([Heads.of]) — a
+     * programmer entry, owner `SURFACE`. [colourAxis] is which axis of a colour the value moves (null
+     * is hue). An empty selection drops the write; it is never widened to "everything".
      */
-    fun writeFixtureAttribute(
-        fixtureKey: String,
-        attribute: String,
-        midiValue7Bit: UByte,
-        colourAxis: ColourAxis? = null,
-    )
-
-    /** Group variant of [writeFixtureAttribute], fanned out per member. */
-    fun writeGroupAttribute(
-        groupName: String,
-        attribute: String,
-        midiValue7Bit: UByte,
-        colourAxis: ColourAxis? = null,
-    )
-
-    /** Flash press: store at 0..255 [max] on the property's channels. */
-    fun flashFixtureAttributePress(fixtureKey: String, attribute: String, max: UByte)
-    fun flashGroupAttributePress(groupName: String, attribute: String, max: UByte)
-
-    /** Flash release: clear direct-write entries for the property's channels. */
-    fun flashFixtureAttributeRelease(fixtureKey: String, attribute: String)
-    fun flashGroupAttributeRelease(groupName: String, attribute: String)
+    fun writeLevel(on: Subject, attribute: String, midiValue7Bit: UByte, colourAxis: ColourAxis? = null)
 
     /**
-     * Cue and stack actions take the binding's uuid beside its int. A uuid, when present, is the
-     * only thing consulted — it is what survives a clone — and a uuid that resolves to nothing in
-     * the current project **drops** the press rather than falling back to an int that may name
-     * another project's row. Only a pre-v11 row with no uuid is dispatched by int.
+     * Flash [attribute] on the heads [on] reaches at [percent] of each head's range, in the momentary
+     * owner. Answers the release that clears exactly those heads, or null when it wrote nothing.
      */
-    fun cueStackGo(stackId: Int, stackUuid: String? = null): ActionOutcome
-    fun cueStackBack(stackId: Int, stackUuid: String? = null): ActionOutcome
-    fun cueStackPause(stackId: Int, stackUuid: String? = null): ActionOutcome
-    fun fireCue(cueId: Int, cueUuid: String? = null): ActionOutcome
+    fun flashPress(on: Subject, attribute: String, percent: Int): (() -> Unit)?
 
-    /** GO TO [entryUuid] of [stackUuid], starting it if stopped; nothing if that entry is already live (D4). */
-    fun cueStackGoTo(stackUuid: String, entryUuid: String): ActionOutcome
+    fun cueStackGo(stack: UUID): ActionOutcome
+    fun cueStackBack(stack: UUID): ActionOutcome
+    fun cueStackPause(stack: UUID): ActionOutcome
 
-    /** Arm [entryUuid] as [stackUuid]'s next GO. */
-    fun cueStackStandby(stackUuid: String, entryUuid: String): ActionOutcome
+    /** GO TO [entry], starting its stack if stopped; nothing if that entry is already live (D4). */
+    fun cueStackGoTo(entry: UUID): ActionOutcome
+
+    /** Arm [entry] as its stack's next GO. */
+    fun cueStackStandby(entry: UUID): ActionOutcome
 
     /**
-     * Stop [stackUuid] as an operator does, its cues fading over its release time (busk-stack plan D6),
+     * Stop [stack] as an operator does, its cues fading over its release time (busk-stack plan D6),
      * as the REST deactivate does. It drops the desk's arm, running or stopped, except on a stack whose
      * release is still running, which the press leaves as it is.
      */
-    fun cueStackStop(stackUuid: String): ActionOutcome
+    fun cueStackStop(stack: UUID): ActionOutcome
 
-    /** Take or let go of [cueUuid]'s loose hold; nothing if it already is so (D4). */
-    fun looseCueSet(cueUuid: String, on: Boolean): ActionOutcome
+    /** Toggle [cue]'s loose hold. */
+    fun fireCue(cue: UUID): ActionOutcome
+
+    /** Take or let go of [cue]'s loose hold; nothing if it already is so (D4). */
+    fun looseCueSet(cue: UUID, on: Boolean): ActionOutcome
 
     /**
      * Fire one tube of a one-shot fixture (stage-view plan session 9): through the effects service,
@@ -150,41 +127,29 @@ interface SurfaceActions {
     /** Set the grand master's level from a continuous control, 0..127 across 0–100 %. */
     fun writeGrandMaster(midiValue7Bit: UByte)
 
-    /**
-     * Set a cue stack's FX amount from a continuous control, 0..127 across 0–100 %, the stack
-     * resolved as the stack buttons resolve theirs. A default so a test double that does not care
-     * about stack sizes need not say so.
-     */
-    fun writeStackFxAmount(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {}
+    /** Set [stack]'s FX amount from a continuous control, 0..127 across 0–100 %. */
+    fun writeStackFxAmount(stack: UUID, midiValue7Bit: UByte) {}
 
-    /** A stack's FX amount taken whole, 0–1, from a sender with floats (OSC plan D10). */
-    fun setStackFxAmount(stackId: Int, stackUuid: String?, amount: Double): ActionOutcome
+    /** [stack]'s FX amount taken whole, 0–1, from a sender with floats (OSC plan D10). */
+    fun setStackFxAmount(stack: UUID, amount: Double): ActionOutcome
 
     /**
      * Set a speed master's tempo from a continuous control, scaling 0..127 across
-     * [minBpm]..[maxBpm]. [masterUuid] null → master 1.
+     * [minBpm]..[maxBpm]. [master] null → master 1.
      */
-    fun writeSpeedMasterBpm(masterUuid: String?, minBpm: Double, maxBpm: Double, midiValue7Bit: UByte)
+    fun writeSpeedMasterBpm(master: UUID?, minBpm: Double, maxBpm: Double, midiValue7Bit: UByte)
 
-    /** Tap a speed master's tempo ([masterUuid] null → master 1). */
-    fun tapSpeedMaster(masterUuid: String?): ActionOutcome
+    /** Tap a speed master's tempo ([master] null → master 1). */
+    fun tapSpeedMaster(master: UUID?): ActionOutcome
 
     /**
-     * Set a speed master's tempo taken whole ([masterUuid] null → master 1), 20–300 BPM: a typed
+     * Set a speed master's tempo taken whole ([master] null → master 1), 20–300 BPM: a typed
      * tempo's write, so on a held master it moves the hold, and a follower refuses it.
      */
-    fun setSpeedMasterBpm(masterUuid: String?, bpm: Double): ActionOutcome
+    fun setSpeedMasterBpm(master: UUID?, bpm: Double): ActionOutcome
 
-    /** Halve or double a speed master's tempo ([masterUuid] null → master 1), fx-speed plan D12. */
-    fun scaleSpeedMaster(masterUuid: String?, factor: Double) {}
-
-    /**
-     * Write a continuous value to [attribute] on every target in the desk selection
-     * ([uk.me.cormack.lighting7.state.DeskSelection]) — a group fanned to its members. An empty
-     * selection drops the write with a debug log; it is never widened to "everything".
-     * [colourAxis] as on [writeFixtureAttribute].
-     */
-    fun writeSelectionAttribute(attribute: String, midiValue7Bit: UByte, colourAxis: ColourAxis? = null)
+    /** Halve or double a speed master's tempo ([master] null → master 1), fx-speed plan D12. */
+    fun scaleSpeedMaster(master: UUID?, factor: Double) {}
 
     /** One turn of a fan encoder on [axis] over the desk selection — see [SelectionFan]. */
     fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte)
@@ -195,8 +160,8 @@ interface SurfaceActions {
      */
     fun writeFxSpeed(midiValue7Bit: UByte, encoder: Boolean) {}
 
-    /** Toggle [target] in, or replace the selection with it, per [mode]. */
-    fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode)
+    /** Toggle [target] in, or with [replace] replace the selection with it. */
+    fun selectTarget(target: CueTargetDto, replace: Boolean)
 
     fun clearSelection()
 
@@ -207,33 +172,33 @@ interface SurfaceActions {
     fun locateSelection()
 
     /** Press a Look, whole — never onto the selection (D6; absolute-looks plan D1). */
-    fun applyLook(lookUuid: String): ActionOutcome
+    fun applyLook(look: UUID): ActionOutcome
 
     /** A Look on whole, or every layer of it off; nothing if it already is so (D4). */
-    fun lookSet(lookUuid: String, on: Boolean): ActionOutcome
+    fun lookSet(look: UUID, on: Boolean): ActionOutcome
 
     /**
-     * Press a template onto the **desk selection**. A generic template with nothing selected is
+     * Press a palette onto the **desk selection**. A generic palette with nothing selected is
      * dropped, exactly as its busk pad refuses; a per-fixture one presses on its own heads. The
-     * family mask is derived from the template's rows, never sent.
+     * family mask is derived from the palette's rows, never sent.
      */
-    fun pressPalette(paletteUuid: String)
+    fun pressPalette(palette: UUID)
 
     /** Press a busk pad — its own bank's plan, solo siblings included, on the desk selection. */
-    fun pressPad(padUuid: String): ActionOutcome
+    fun pressPad(pad: UUID): ActionOutcome
 
     /**
      * Put the record on a busk pad into the desk's hand, replacing whatever it held
      * (multi-screen plan §3.5).
      */
-    fun pickUpPad(padUuid: String)
+    fun pickUpPad(pad: UUID)
 
     /**
      * Place whatever the hand holds as a pad on one bank, then let go. An empty hand is a dropped
      * press. The append is the same one `POST /busk/banks/{bankId}/pads` makes — a place is an
      * *existing* mutation whichever door makes it (D12).
      */
-    fun handPlaceInBank(bankUuid: String)
+    fun handPlaceInBank(bank: UUID)
 
     /** Let go of whatever the hand holds; a no-op on an empty hand. */
     fun handDrop()
@@ -244,11 +209,11 @@ interface SurfaceActions {
      */
     fun historyMove(source: HistorySource, undo: Boolean, programmerOnly: Boolean = false)
 
-    /** Move the desk's showing busk page by one, wrapping. */
+    /** Move the desk's showing busk page by [delta], wrapping. */
     fun buskPageStep(delta: Int)
 
     /** Show one named busk page. */
-    fun buskPageSet(pageUuid: String): ActionOutcome
+    fun buskPageSet(page: UUID): ActionOutcome
 
     /**
      * Set the busk focus of every connected window named [windowName] through one
@@ -259,11 +224,8 @@ interface SurfaceActions {
     /** Fold or open the busk side sheet of every connected window named [windowName]. */
     fun buskSheetToggle(windowName: String)
 
-    /** Step the whole desk selection one place along rig order — `+1` next, `−1` previous. */
-    fun selectionStep(delta: Int)
-
     /** Rewrite the desk selection's targets by [mode] (`DeskSelection.subselect`). */
-    fun selectionCells(mode: SubselectMode)
+    fun subselect(mode: SubselectMode)
 }
 
 /**
@@ -304,156 +266,127 @@ class DefaultSurfaceActions(
     private val globalScalerState: GlobalScalerState get() = state.show.globalScalerState
     private val speedMasters: SpeedMasterBank get() = state.show.speedMasterBank
 
-    override fun writeFixtureAttribute(
-        fixtureKey: String,
-        attribute: String,
-        midiValue7Bit: UByte,
-        colourAxis: ColourAxis?,
-    ) {
-        val fixture = try {
-            fixtures.untypedFixture(fixtureKey)
-        } catch (_: Exception) {
-            logger.debug("Surface write: fixture '{}' not found", fixtureKey)
-            return
-        }
-        val value = AttributeChannelResolver.toAttributeValue(
-            fixture, attribute, midiValue7Bit, AttributeChannelResolver.channelReader(fixtures), colourAxis,
-        ) ?: run {
-            logger.debug("Surface write: property '{}' on '{}' not fader-writable", attribute, fixtureKey)
-            return
-        }
-        fxEngine.programmer.writeAttribute(ProgrammerOwner.SURFACE, fixture, attribute, value)
-    }
+    /** The heads [on] reaches for [attribute], the desk selection read now. */
+    private fun headsOf(on: Subject, attribute: String): List<Heads.Head> =
+        Heads.of(fixtures, on, attribute) { state.deskSelection.state.value.targets }
 
-    override fun writeGroupAttribute(
-        groupName: String,
-        attribute: String,
-        midiValue7Bit: UByte,
-        colourAxis: ColourAxis?,
-    ) {
-        val group = try {
-            fixtures.untypedGroup(groupName)
-        } catch (_: Exception) {
-            logger.debug("Surface write: group '{}' not found", groupName)
+    override fun writeLevel(on: Subject, attribute: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
+        // The selection's attribute mask is ignored here on purpose: the control names its own
+        // attribute, as a cell edit is not masked by a marquee elsewhere (multi-screen plan §3.3).
+        val heads = headsOf(on, attribute)
+        if (heads.isEmpty()) {
+            logger.debug("Surface write of '{}' on {} dropped: no head", attribute, on)
             return
         }
-        // Convert per member — sliders scale through each member's own min..max sub-range, and
-        // a colour axis lands on each member's own current colour.
+        // Per head: sliders scale through each head's own min..max, and a colour axis lands on each
+        // head's own current colour.
         val read = AttributeChannelResolver.channelReader(fixtures)
-        val writes = group.fixtures.filterIsInstance<Fixture>().mapNotNull { member ->
-            AttributeChannelResolver.toAttributeValue(member, attribute, midiValue7Bit, read, colourAxis)?.let {
-                ProgrammerWriter.AttributeWrite(member, attribute, it, sourceGroup = groupName)
+        val store = state.show.programmerStore
+        val writes = heads.mapNotNull { head ->
+            val held = store.get(head.fixture.targetKey, AttributeChannelResolver.POSITION)?.value?.resolved
+            AttributeChannelResolver.surfaceWrite(
+                head.fixture, attribute, midiValue7Bit, read, colourAxis,
+                held as? CueAssignmentResolver.AttributeValue.Position,
+            )?.let {
+                ProgrammerWriter.AttributeWrite(head.fixture, it.attribute, it.value, sourceGroup = head.sourceGroup)
             }
         }
         if (writes.isEmpty()) return
         fxEngine.programmer.writeAttributes(ProgrammerOwner.SURFACE, writes)
     }
 
-    override fun flashFixtureAttributePress(fixtureKey: String, attribute: String, max: UByte) {
-        val fixture = fixtures.tryUntypedFixture(fixtureKey) ?: return
-        val value = AttributeChannelResolver.flashAttributeValue(fixture, attribute, max) ?: return
-        // Momentary owner: don't absorb the sideband — release must reveal what was under it.
-        fxEngine.programmer.writeAttribute(
-            ProgrammerOwner.FLASH, fixture, attribute, value, absorbSideband = false,
-        )
-    }
-
-    override fun flashGroupAttributePress(groupName: String, attribute: String, max: UByte) {
-        val group = fixtures.tryUntypedGroup(groupName) ?: return
-        // Clamp per member — slider max can differ across heterogeneous group members.
-        val writes = group.fixtures.filterIsInstance<Fixture>().mapNotNull { member ->
-            AttributeChannelResolver.flashAttributeValue(member, attribute, max)?.let {
-                ProgrammerWriter.AttributeWrite(member, attribute, it, sourceGroup = groupName)
+    override fun flashPress(on: Subject, attribute: String, percent: Int): (() -> Unit)? {
+        val writes = headsOf(on, attribute).mapNotNull { head ->
+            AttributeChannelResolver.flashAttributeValue(head.fixture, attribute, percent)?.let {
+                ProgrammerWriter.AttributeWrite(head.fixture, attribute, it, sourceGroup = head.sourceGroup)
             }
         }
-        if (writes.isEmpty()) return
+        if (writes.isEmpty()) return null
+        // Momentary owner: don't absorb the sideband — release must reveal what was under it.
         fxEngine.programmer.writeAttributes(ProgrammerOwner.FLASH, writes, absorbSideband = false)
-    }
-
-    override fun flashFixtureAttributeRelease(fixtureKey: String, attribute: String) {
-        val fixture = fixtures.tryUntypedFixture(fixtureKey) ?: return
-        // Release pops only the FLASH slot: the property cascades to the surviving owner
-        // underneath (fader/busk level), then the cue layer, then baseline — in one
-        // transaction, skipping keys a running effect covers.
-        fxEngine.programmer.clearAttribute(ProgrammerOwner.FLASH, fixture, attribute)
-    }
-
-    override fun flashGroupAttributeRelease(groupName: String, attribute: String) {
-        val group = fixtures.tryUntypedGroup(groupName) ?: return
-        fxEngine.programmer.clearGroupAttribute(ProgrammerOwner.FLASH, group, attribute)
+        // The release pops only the FLASH slot of the heads this press wrote, whatever the subject
+        // reaches by then: each cascades to the owner underneath, then the cue layer, then baseline.
+        // Heads and programmer are looked up again on release, which a reload may have replaced.
+        val written = writes.map { it.fixture.targetKey to it.attribute }
+        return {
+            val clears = written.mapNotNull { (key, attribute) ->
+                runCatching { fixtures.untypedGroupableFixture(key) }.getOrNull()?.let { it to attribute }
+            }
+            fxEngine.programmer.clearAttributes(ProgrammerOwner.FLASH, clears)
+        }
     }
 
     @OptIn(DelicateCoroutinesApi::class)
-    override fun cueStackGo(stackId: Int, stackUuid: String?): ActionOutcome {
-        val stack = resolveStack(stackId, stackUuid) ?: return stackNotFound(stackUuid ?: "#$stackId")
+    override fun cueStackGo(stack: UUID): ActionOutcome {
+        val ref = resolveStack(stack) ?: return stackNotFound(stack)
         val result = try {
-            cueStackManager.go(state, stack.id, GlobalScope)
+            cueStackManager.go(state, ref.id, GlobalScope)
         } catch (e: IllegalArgumentException) {
-            return ActionOutcome.Refused(ActionOutcome.GO_REFUSED, "${stack.name}: ${e.message}")
+            return ActionOutcome.Refused(ActionOutcome.GO_REFUSED, "${ref.name}: ${e.message}")
         }
-        if (result == null) return ActionOutcome.Refused(ActionOutcome.STACK_EMPTY, "${stack.name} has no cue to GO to")
+        if (result == null) return ActionOutcome.Refused(ActionOutcome.STACK_EMPTY, "${ref.name} has no cue to GO to")
         state.show.fixtures.cueStackListChanged()
         return ActionOutcome.DONE
     }
 
     @OptIn(DelicateCoroutinesApi::class)
-    override fun cueStackBack(stackId: Int, stackUuid: String?): ActionOutcome {
-        val stack = resolveStack(stackId, stackUuid) ?: return stackNotFound(stackUuid ?: "#$stackId")
+    override fun cueStackBack(stack: UUID): ActionOutcome {
+        val ref = resolveStack(stack) ?: return stackNotFound(stack)
         val result = try {
-            cueStackManager.advanceStack(state, stack.id, CueStackManager.AdvanceDirection.BACKWARD, GlobalScope)
+            cueStackManager.advanceStack(state, ref.id, CueStackManager.AdvanceDirection.BACKWARD, GlobalScope)
         } catch (e: IllegalArgumentException) {
-            return ActionOutcome.Refused(ActionOutcome.GO_REFUSED, "${stack.name}: ${e.message}")
+            return ActionOutcome.Refused(ActionOutcome.GO_REFUSED, "${ref.name}: ${e.message}")
         }
-        if (result == null) return ActionOutcome.Done("${stack.name} is not running")
+        if (result == null) return ActionOutcome.Done("${ref.name} is not running")
         state.show.fixtures.cueStackListChanged()
         return ActionOutcome.DONE
     }
 
-    override fun cueStackPause(stackId: Int, stackUuid: String?): ActionOutcome {
-        val stack = resolveStack(stackId, stackUuid) ?: return stackNotFound(stackUuid ?: "#$stackId")
-        return if (cueStackManager.pauseAutoAdvance(state, stack.id)) ActionOutcome.DONE
+    override fun cueStackPause(stack: UUID): ActionOutcome {
+        val ref = resolveStack(stack) ?: return stackNotFound(stack)
+        return if (cueStackManager.pauseAutoAdvance(state, ref.id)) ActionOutcome.DONE
         else ActionOutcome.Done("no follow was running")
     }
 
-    override fun fireCue(cueId: Int, cueUuid: String?): ActionOutcome {
-        val cue = resolveCueId(cueId, cueUuid) ?: return cueNotFound(cueUuid ?: "#$cueId")
+    override fun fireCue(cue: UUID): ActionOutcome {
+        val cueId = resolveCueId(cue) ?: return cueNotFound(cue)
         // A press toggles the cue's loose hold (cue model plan D6, D11), as a busk cue pad does:
         // it names the cue and no stack, and a second press lets it go.
-        val (on, _) = cueStackManager.holds.toggleLooseCue(state, cue) ?: return cueNotFound(cueUuid ?: "#$cueId")
+        val (on, _) = cueStackManager.holds.toggleLooseCue(state, cueId) ?: return cueNotFound(cue)
         return ActionOutcome.Done(if (on) "on" else "off")
     }
 
     @OptIn(DelicateCoroutinesApi::class)
-    override fun cueStackGoTo(stackUuid: String, entryUuid: String): ActionOutcome {
-        val (stack, entryId) = resolveEntry(stackUuid, entryUuid).let { it.second ?: return it.first!! }
+    override fun cueStackGoTo(entry: UUID): ActionOutcome {
+        val (stack, entryId) = resolveEntry(entry).let { it.second ?: return it.first!! }
         if (cueStackManager.getActiveEntryId(stack.id) == entryId) return ActionOutcome.Done(ALREADY_LIVE)
         cueStackManager.goToEntry(state, stack.id, entryId, GlobalScope)
         state.show.fixtures.cueStackListChanged()
         return ActionOutcome.DONE
     }
 
-    override fun cueStackStandby(stackUuid: String, entryUuid: String): ActionOutcome {
-        val (stack, entryId) = resolveEntry(stackUuid, entryUuid).let { it.second ?: return it.first!! }
+    override fun cueStackStandby(entry: UUID): ActionOutcome {
+        val (stack, entryId) = resolveEntry(entry).let { it.second ?: return it.first!! }
         cueStackManager.runState.setStandby(state, stack.id, entryId)
         return ActionOutcome.DONE
     }
 
-    override fun cueStackStop(stackUuid: String): ActionOutcome {
-        val stack = resolveStack(0, stackUuid) ?: return stackNotFound(stackUuid)
-        val running = cueStackManager.isStackActive(stack.id)
-        cueStackManager.stopStack(state, stack.id)
+    override fun cueStackStop(stack: UUID): ActionOutcome {
+        val ref = resolveStack(stack) ?: return stackNotFound(stack)
+        val running = cueStackManager.isStackActive(ref.id)
+        cueStackManager.stopStack(state, ref.id)
         state.show.fixtures.cueStackListChanged()
         return if (running) ActionOutcome.DONE else ActionOutcome.Done("was not running")
     }
 
-    override fun looseCueSet(cueUuid: String, on: Boolean): ActionOutcome {
-        val cue = resolveCueId(0, cueUuid) ?: return cueNotFound(cueUuid)
+    override fun looseCueSet(cue: UUID, on: Boolean): ActionOutcome {
+        val cueId = resolveCueId(cue) ?: return cueNotFound(cue)
         val holds = cueStackManager.holds
-        if (holds.looseHeld(cue) == on) return ActionOutcome.Done(if (on) ALREADY_ON else ALREADY_OFF)
+        if (holds.looseHeld(cueId) == on) return ActionOutcome.Done(if (on) ALREADY_ON else ALREADY_OFF)
         if (on) {
-            holds.takeLooseCue(state, cue) ?: return cueNotFound(cueUuid)
+            holds.takeLooseCue(state, cueId) ?: return cueNotFound(cue)
         } else {
-            holds.dropLoose(state, cue)
+            holds.dropLoose(state, cueId)
         }
         return ActionOutcome.DONE
     }
@@ -483,73 +416,58 @@ class DefaultSurfaceActions(
         globalScalerState.setGrandMasterLevel(grandMasterLevelOf7Bit(midiValue7Bit))
 
     // A fader moves at control rate, so a stack it cannot find is not logged per move: health says so.
-    override fun writeStackFxAmount(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {
-        val resolved = resolveFaderStackId(stackId, stackUuid) ?: return
+    override fun writeStackFxAmount(stack: UUID, midiValue7Bit: UByte) {
+        val resolved = cueStackManager.stackIdForUuid(state.database, stack.toString()) ?: return
         cueStackManager.setFxAmount(resolved, stackFxAmountOf7Bit(midiValue7Bit))
     }
 
-    override fun setStackFxAmount(stackId: Int, stackUuid: String?, amount: Double): ActionOutcome {
-        val resolved = resolveFaderStackId(stackId, stackUuid) ?: return stackNotFound(stackUuid ?: "#$stackId")
+    override fun setStackFxAmount(stack: UUID, amount: Double): ActionOutcome {
+        val resolved = cueStackManager.stackIdForUuid(state.database, stack.toString()) ?: return stackNotFound(stack)
         val held = cueStackManager.setFxAmount(resolved, amount.coerceIn(0.0, 1.0))
         return ActionOutcome.Done("${(held * 100).roundToInt()} %")
     }
 
-    /** A stack button's rule — the uuid wins, the int only without one — through the show's kept lookup. */
-    private fun resolveFaderStackId(stackId: Int, stackUuid: String?): Int? =
-        if (stackUuid == null) stackId else cueStackManager.stackIdForUuid(state.database, stackUuid)
-
     /** A stack this action names: its id and its name, for an outcome's words. */
     private data class StackRef(val id: Int, val name: String)
 
-    /**
-     * Uuid first, and never the int when a uuid is present: a binding cloned from another project
-     * carries that project's int, and the health evaluator already marks a uuid that resolves to
-     * nothing as dead. The lookup is one indexed read per press — button rate, not fader rate.
-     */
-    private fun resolveCueId(cueId: Int, cueUuid: String?): Int? {
-        if (cueUuid == null) return cueId
-        val uuid = uuidOrNull(cueUuid) ?: return null
+    /** [cue]'s id in the current project, else null. One indexed read per press — button rate, not fader rate. */
+    private fun resolveCueId(cue: UUID): Int? {
         val projectId = currentProjectId() ?: return null
         return transaction(state.database) {
-            DaoCue.find { (DaoCues.uuid eq uuid) and (DaoCues.project eq projectId) }.firstOrNull()?.id?.value
+            DaoCue.find { (DaoCues.uuid eq cue) and (DaoCues.project eq projectId) }.firstOrNull()?.id?.value
         }
     }
 
-    /** [stackUuid]'s stack in the current project, else [stackId]'s for a row that has no uuid. */
-    private fun resolveStack(stackId: Int, stackUuid: String?): StackRef? {
+    /** [stack]'s stack in the current project, else null. */
+    private fun resolveStack(stack: UUID): StackRef? {
         val projectId = currentProjectId() ?: return null
         return transaction(state.database) {
-            val stack = if (stackUuid == null) {
-                DaoCueStack.findById(stackId)?.takeIf { it.project.id.value == projectId }
-            } else {
-                val uuid = uuidOrNull(stackUuid) ?: return@transaction null
-                DaoCueStack.find { (DaoCueStacks.uuid eq uuid) and (DaoCueStacks.project eq projectId) }.firstOrNull()
-            }
-            stack?.let { StackRef(it.id.value, it.name) }
+            DaoCueStack.find { (DaoCueStacks.uuid eq stack) and (DaoCueStacks.project eq projectId) }.firstOrNull()
+                ?.let { StackRef(it.id.value, it.name) }
         }
     }
 
-    /** A cue entry of [stackUuid] by its uuid, or the outcome that says why there is none. */
-    private fun resolveEntry(stackUuid: String, entryUuid: String): Pair<ActionOutcome?, Pair<StackRef, Int>?> {
-        val stack = resolveStack(0, stackUuid) ?: return stackNotFound(stackUuid) to null
-        val uuid = uuidOrNull(entryUuid) ?: return ActionOutcome.NotFound("No cue $entryUuid in ${stack.name}") to null
-        val entry = transaction(state.database) {
-            DaoCueStackEntry.find { DaoCueStackEntries.uuid eq uuid }.firstOrNull()
-                ?.takeIf { it.stackId == stack.id }
-                ?.let { it.id.value to it.isMarker }
-        } ?: return ActionOutcome.NotFound("No cue $entryUuid in ${stack.name}") to null
-        if (entry.second) return ActionOutcome.Refused(ActionOutcome.NOT_A_CUE, "That entry of ${stack.name} is a marker") to null
-        return null to (stack to entry.first)
+    /** A cue entry by its uuid, with its stack in the current project, or the outcome that says why there is none. */
+    private fun resolveEntry(entry: UUID): Pair<ActionOutcome?, Pair<StackRef, Int>?> {
+        val projectId = currentProjectId() ?: return ActionOutcome.NotFound("No current project") to null
+        val found = transaction(state.database) {
+            DaoCueStackEntry.find { DaoCueStackEntries.uuid eq entry }.firstOrNull()
+                ?.takeIf { it.stack.project.id.value == projectId }
+                ?.let { Triple(StackRef(it.stackId, it.stack.name), it.id.value, it.isMarker) }
+        } ?: return ActionOutcome.NotFound("No cue entry $entry in this show") to null
+        val (stack, entryId, marker) = found
+        if (marker) return ActionOutcome.Refused(ActionOutcome.NOT_A_CUE, "That entry of ${stack.name} is a marker") to null
+        return null to (stack to entryId)
     }
 
-    private fun stackNotFound(what: String): ActionOutcome {
-        logger.warn("Surface stack action dropped: no stack {} in the current project", what)
-        return ActionOutcome.NotFound("No stack $what in this show")
+    private fun stackNotFound(stack: UUID): ActionOutcome {
+        logger.warn("Surface stack action dropped: no stack {} in the current project", stack)
+        return ActionOutcome.NotFound("No stack $stack in this show")
     }
 
-    private fun cueNotFound(what: String): ActionOutcome {
-        logger.warn("Surface cue action dropped: no cue {} in the current project", what)
-        return ActionOutcome.NotFound("No cue $what in this show")
+    private fun cueNotFound(cue: UUID): ActionOutcome {
+        logger.warn("Surface cue action dropped: no cue {} in the current project", cue)
+        return ActionOutcome.NotFound("No cue $cue in this show")
     }
 
     private fun currentProjectId(): Int? = try {
@@ -559,36 +477,15 @@ class DefaultSurfaceActions(
         null
     }
 
-    private fun uuidOrNull(raw: String): UUID? = try {
-        UUID.fromString(raw)
-    } catch (_: IllegalArgumentException) {
-        null
-    }
-
-    override fun writeSelectionAttribute(attribute: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
-        // The selection's attribute mask is ignored here on purpose: the control names its own
-        // attribute, as a cell edit is not masked by a marquee elsewhere (multi-screen plan §3.3).
-        val targets = state.deskSelection.state.value.targets
-        if (targets.isEmpty()) {
-            logger.debug("Surface selection write of '{}' dropped: nothing selected", attribute)
-            return
-        }
-        val writes = SelectionWrites.forTargets(fixtures, targets, attribute, midiValue7Bit, colourAxis)
-        if (writes.isEmpty()) return
-        fxEngine.programmer.writeAttributes(ProgrammerOwner.SURFACE, writes)
-    }
-
     override fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte) = state.selectionFan.turn(axis, midiValue7Bit)
 
     override fun writeFxSpeed(midiValue7Bit: UByte, encoder: Boolean) = state.selectionFxSpeed.turn(midiValue7Bit, encoder)
 
-    override fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode) {
-        when (mode) {
-            // A toggle adds a head under whatever mask is standing; a replace has no column axis
-            // to speak with, so it clears the mask by passing none (multi-screen plan D2).
-            BindingTarget.SelectMode.TOGGLE -> state.deskSelection.toggle(target, SelectionSource.SURFACE)
-            BindingTarget.SelectMode.REPLACE -> state.deskSelection.set(listOf(target), source = SelectionSource.SURFACE)
-        }
+    override fun selectTarget(target: CueTargetDto, replace: Boolean) {
+        // A toggle adds a head under whatever mask is standing; a replace has no column axis to speak
+        // with, so it clears the mask by passing none (multi-screen plan D2).
+        if (replace) state.deskSelection.set(listOf(target), source = SelectionSource.SURFACE)
+        else state.deskSelection.toggle(target, SelectionSource.SURFACE)
     }
 
     override fun clearSelection() = state.deskSelection.clear()
@@ -612,14 +509,14 @@ class DefaultSurfaceActions(
      * one layer of it on, off takes every layer of it off. A failure is logged: a MIDI press has no
      * reply channel, so the log line is the only trace the operator gets.
      */
-    override fun applyLook(lookUuid: String): ActionOutcome {
-        val source = lookSource(lookUuid) ?: return lookNotFound(lookUuid)
+    override fun applyLook(look: UUID): ActionOutcome {
+        val source = lookSource(look) ?: return lookNotFound(look)
         val outcome = state.show.programmerLayerStack.toggle(source = source, targets = emptyList())
         return ActionOutcome.Done(if (outcome.action == "applied") withBlind("on") else "off")
     }
 
-    override fun lookSet(lookUuid: String, on: Boolean): ActionOutcome {
-        val source = lookSource(lookUuid) ?: return lookNotFound(lookUuid)
+    override fun lookSet(look: UUID, on: Boolean): ActionOutcome {
+        val source = lookSource(look) ?: return lookNotFound(look)
         val layers = state.show.programmerLayerStack
         val applied = state.show.programmerStore.layers.any { it.source.uuid == source.uuid && it.source.kind == LayerSourceKind.LOOK }
         if (applied == on) return ActionOutcome.Done(if (on) ALREADY_ON else ALREADY_OFF)
@@ -627,18 +524,17 @@ class DefaultSurfaceActions(
         return if (on && fxEngine.programmerStore.blind) ActionOutcome.Done(STAGED_BLIND) else ActionOutcome.DONE
     }
 
-    /** The Look [lookUuid] names in the current project, as the layer source a press puts on. */
-    private fun lookSource(lookUuid: String): LayerSource? {
-        val uuid = uuidOrNull(lookUuid) ?: return null
+    /** The Look [look] names in the current project, as the layer source a press puts on. */
+    private fun lookSource(look: UUID): LayerSource? {
         val projectId = currentProjectId() ?: return null
         return transaction(state.database) {
-            DaoLook.find { (DaoLooks.uuid eq uuid) and (DaoLooks.project eq projectId) }.firstOrNull()?.layerSource()
+            DaoLook.find { (DaoLooks.uuid eq look) and (DaoLooks.project eq projectId) }.firstOrNull()?.layerSource()
         }
     }
 
-    private fun lookNotFound(lookUuid: String): ActionOutcome {
-        logger.warn("Surface Look press dropped: no Look {} in the current project", lookUuid)
-        return ActionOutcome.NotFound("No Look $lookUuid in this show")
+    private fun lookNotFound(look: UUID): ActionOutcome {
+        logger.warn("Surface Look press dropped: no Look {} in the current project", look)
+        return ActionOutcome.NotFound("No Look $look in this show")
     }
 
     /** A programmer write in Blind is staged, not sent — which the operator reading the log needs to know. */
@@ -653,14 +549,10 @@ class DefaultSurfaceActions(
      * rule as every other door: a template whose family is outside it is refused by name, and the
      * refusal is a log line because a button has no reply channel (multi-screen plan D5).
      */
-    override fun pressPalette(paletteUuid: String) {
-        val uuid = uuidOrNull(paletteUuid) ?: run {
-            logger.warn("Surface pressPalette dropped: '{}' is not a uuid", paletteUuid)
-            return
-        }
+    override fun pressPalette(palette: UUID) {
         val projectId = currentProjectId() ?: return
         val press = transaction(state.database) {
-            DaoPalette.find { (DaoPalettes.uuid eq uuid) and (DaoPalettes.project eq projectId) }
+            DaoPalette.find { (DaoPalettes.uuid eq palette) and (DaoPalettes.project eq projectId) }
                 .firstOrNull()
                 ?.let { t ->
                     Triple(
@@ -671,7 +563,7 @@ class DefaultSurfaceActions(
                 }
         }
         if (press == null) {
-            logger.warn("Surface pressPalette dropped: no template {} in project {}", paletteUuid, projectId)
+            logger.warn("Surface pressPalette dropped: no palette {} in project {}", palette, projectId)
             return
         }
         val (source, family, isGeneric) = press
@@ -693,7 +585,7 @@ class DefaultSurfaceActions(
             // The hardware door of the press log — pressing from the desk's own buttons counts, or
             // the programmer's recents row would disagree with the surface the operator is using.
             // The **on** arm only: a release is not a press (`PalettePressLog`). The two refusals
-            // above (no uuid / no such template, and a generic template with nothing selected) have
+            // above (no palette / no such template, and a generic template with nothing selected) have
             // already returned, and a `toggle` that threw lands in `onFailure`.
             if (outcome.action == "applied") {
                 PalettePressLog.record(state, projectId, source.id)
@@ -707,11 +599,10 @@ class DefaultSurfaceActions(
      * the two. The desk selection's targets *and* mask go in together: the button acts on the desk
      * fact, which is the pair a following window sends (multi-screen plan D4).
      */
-    override fun pressPad(padUuid: String): ActionOutcome {
-        val uuid = uuidOrNull(padUuid) ?: return ActionOutcome.NotFound("No busk pad $padUuid in this show")
+    override fun pressPad(pad: UUID): ActionOutcome {
         val projectId = currentProjectId() ?: return ActionOutcome.NotFound("No current project")
         val selection = state.deskSelection.state.value
-        return when (val outcome = BuskPressService.pressByUuid(state, projectId, uuid, selection.targets, selection.families)) {
+        return when (val outcome = BuskPressService.pressByUuid(state, projectId, pad, selection.targets, selection.families)) {
             // A stack pad on a stack with no cues started nothing, as the stack's own GO refuses it.
             is BuskPressService.Outcome.Pressed if outcome.action == "empty" ->
                 ActionOutcome.Refused(ActionOutcome.STACK_EMPTY, "That stack pad's stack has no cue to GO to")
@@ -730,8 +621,8 @@ class DefaultSurfaceActions(
                 ActionOutcome.Refused("TARGET_MISSING", outcome.message)
             }
             BuskPressService.Outcome.NotFound -> {
-                logger.warn("Surface pressPad dropped: no busk pad {} in project {}", padUuid, projectId)
-                ActionOutcome.NotFound("No busk pad $padUuid in this show")
+                logger.warn("Surface pressPad dropped: no busk pad {} in project {}", pad, projectId)
+                ActionOutcome.NotFound("No busk pad $pad in this show")
             }
         }
     }
@@ -741,15 +632,11 @@ class DefaultSurfaceActions(
      * presses, stamped [SelectionSource.SURFACE] — to a chip every surface is "the desk", the same
      * reading a selection write from a surface gets.
      */
-    override fun pickUpPad(padUuid: String) {
-        val uuid = uuidOrNull(padUuid) ?: run {
-            logger.warn("Surface pickUpPad dropped: '{}' is not a uuid", padUuid)
-            return
-        }
+    override fun pickUpPad(pad: UUID) {
         val projectId = currentProjectId() ?: return
-        val record = HandService.resolveByPadUuid(state, projectId, uuid, SelectionSource.SURFACE)
+        val record = HandService.resolveByPadUuid(state, projectId, pad, SelectionSource.SURFACE)
         if (record == null) {
-            logger.warn("Surface pickUpPad dropped: no busk pad {} in project {}", padUuid, projectId)
+            logger.warn("Surface pickUpPad dropped: no busk pad {} in project {}", pad, projectId)
             return
         }
         // Null once the desk is closing; a press racing teardown is dropped rather than arming a
@@ -777,19 +664,15 @@ class DefaultSurfaceActions(
      * timeout landing in the same instant should not swallow the gesture. The guard exists to stop
      * this press clearing somebody else's item, not to stop it finishing its own.
      */
-    override fun handPlaceInBank(bankUuid: String) {
-        val uuid = uuidOrNull(bankUuid) ?: run {
-            logger.warn("Surface handPlaceInBank dropped: '{}' is not a uuid", bankUuid)
-            return
-        }
+    override fun handPlaceInBank(bank: UUID) {
         val held = state.handState.held.value ?: run {
             logger.debug("Surface handPlaceInBank dropped: the hand is empty")
             return
         }
         val projectId = currentProjectId() ?: return
-        when (val outcome = HandService.placeInBank(state, projectId, uuid, held)) {
+        when (val outcome = HandService.placeInBank(state, projectId, bank, held)) {
             AddPadOutcome.NotFound ->
-                logger.warn("Surface handPlaceInBank dropped: no busk bank {} in project {}", bankUuid, projectId)
+                logger.warn("Surface handPlaceInBank dropped: no busk bank {} in project {}", bank, projectId)
             is AddPadOutcome.Invalid ->
                 logger.warn("Surface handPlaceInBank dropped: {}", outcome.message)
             is AddPadOutcome.Ref -> logger.warn(
@@ -852,11 +735,9 @@ class DefaultSurfaceActions(
 
     override fun buskPageStep(delta: Int) = state.buskPageState.step(delta)
 
-    override fun buskPageSet(pageUuid: String): ActionOutcome {
-        val uuid = uuidOrNull(pageUuid) ?: return ActionOutcome.NotFound("No busk page $pageUuid in this show")
-        return if (state.buskPageState.setByUuid(uuid)) ActionOutcome.DONE
-        else ActionOutcome.NotFound("No busk page $pageUuid in this show")
-    }
+    override fun buskPageSet(page: UUID): ActionOutcome =
+        if (state.buskPageState.setByUuid(page)) ActionOutcome.DONE
+        else ActionOutcome.NotFound("No busk page $page in this show")
 
     override fun buskFocusSet(windowName: String, focus: String) =
         viewOptionsToWindows(windowName, mapOf(VIEW_OPTION_FOCUS to focus))
@@ -864,10 +745,7 @@ class DefaultSurfaceActions(
     override fun buskSheetToggle(windowName: String) =
         viewOptionsToWindows(windowName, mapOf(VIEW_OPTION_SHEET to VIEW_OPTION_TOGGLE))
 
-    override fun selectionStep(delta: Int) =
-        state.deskSelection.subselect(if (delta >= 0) SubselectMode.NEXT else SubselectMode.PREV, SelectionSource.SURFACE)
-
-    override fun selectionCells(mode: SubselectMode) = state.deskSelection.subselect(mode, SelectionSource.SURFACE)
+    override fun subselect(mode: SubselectMode) = state.deskSelection.subselect(mode, SelectionSource.SURFACE)
 
     /**
      * One `windows.viewOptions` to **every** connected row named [windowName] (duplicate names are
@@ -888,12 +766,12 @@ class DefaultSurfaceActions(
     }
 
     override fun writeSpeedMasterBpm(
-        masterUuid: String?,
+        master: UUID?,
         minBpm: Double,
         maxBpm: Double,
         midiValue7Bit: UByte,
     ) {
-        withSpeedMasterTarget(masterUuid) { uuid ->
+        withSpeedMasterTarget(master) { uuid ->
             val bpm = minBpm + (maxBpm - minBpm) * (midiValue7Bit.toInt() / 127.0)
             // MasterClock.setBpm coerces into 20..300 itself; the binding's window is a
             // sub-range on top of that, not a replacement for it.
@@ -901,23 +779,21 @@ class DefaultSurfaceActions(
         }
     }
 
-    override fun tapSpeedMaster(masterUuid: String?): ActionOutcome =
-        withSpeedMasterTarget(masterUuid) { speedMasters.tap(it) }
+    override fun tapSpeedMaster(master: UUID?): ActionOutcome =
+        withSpeedMasterTarget(master) { speedMasters.tap(it) }
 
-    override fun setSpeedMasterBpm(masterUuid: String?, bpm: Double): ActionOutcome =
-        withSpeedMasterTarget(masterUuid) { speedMasters.setBpm(it, bpm, SpeedMasterSource.MANUAL) }
+    override fun setSpeedMasterBpm(master: UUID?, bpm: Double): ActionOutcome =
+        withSpeedMasterTarget(master) { speedMasters.setBpm(it, bpm, SpeedMasterSource.MANUAL) }
             .let { if (it is ActionOutcome.Done) ActionOutcome.Done("${"%.1f".format(java.util.Locale.ROOT, bpm)} BPM") else it }
 
-    override fun scaleSpeedMaster(masterUuid: String?, factor: Double) {
-        withSpeedMasterTarget(masterUuid) { speedMasters.scale(it, factor) }
+    override fun scaleSpeedMaster(master: UUID?, factor: Double) {
+        withSpeedMasterTarget(master) { speedMasters.scale(it, factor) }
     }
 
     /**
-     * Resolve a tempo-write target, mirroring `SpeedMasterSocket.withWriteTarget`: null or
-     * absent means master 1, while a present-but-malformed uuid DROPS the write rather than
-     * degrading to master 1 — a corrupt binding payload must not be able to retune the
-     * global tempo. (An unknown-but-well-formed uuid is dropped one layer down, by the
-     * bank's own write resolution.)
+     * Resolve a tempo-write target: null means master 1, and a uuid the bank does not hold is
+     * dropped by the bank's own write resolution. A malformed uuid never gets this far — it fails
+     * the binding's decode.
      *
      * Every dropped or refused write is logged — this surface has no reply channel, so the
      * log line is the only trace a MIDI-only operator gets of why their TAP/knob did nothing.
@@ -925,20 +801,10 @@ class DefaultSurfaceActions(
      * would flood the log for as long as the operator keeps turning it.
      */
     private inline fun withSpeedMasterTarget(
-        raw: String?,
-        write: (java.util.UUID?) -> SpeedMasterBank.TempoWriteOutcome,
+        raw: UUID?,
+        write: (UUID?) -> SpeedMasterBank.TempoWriteOutcome,
     ): ActionOutcome {
-        val outcome = if (raw == null) {
-            write(null)
-        } else {
-            val uuid = speedMasterUuidOrNull(raw)
-            if (uuid == null) {
-                warnTempoWriteDropped("Surface tempo write dropped: binding target '$raw' is not a uuid")
-                return ActionOutcome.NotFound("No speed master $raw in this show")
-            }
-            write(uuid)
-        }
-        return when (outcome) {
+        return when (val outcome = write(raw)) {
             is SpeedMasterBank.TempoWriteOutcome.Applied -> ActionOutcome.DONE
 
             is SpeedMasterBank.TempoWriteOutcome.UnknownMaster -> {
@@ -975,12 +841,3 @@ class DefaultSurfaceActions(
 
 private const val TEMPO_DROP_WARN_INTERVAL_MS = 5_000L
 
-// --- Small helpers that turn the existing throwing lookups into nullable returns.
-
-private fun Fixtures.tryUntypedFixture(key: String): Fixture? = try {
-    untypedFixture(key)
-} catch (_: Exception) { null }
-
-private fun Fixtures.tryUntypedGroup(name: String): uk.me.cormack.lighting7.fixture.group.FixtureGroup<*>? = try {
-    untypedGroup(name)
-} catch (_: Exception) { null }

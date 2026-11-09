@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.sync
 
+import uk.me.cormack.lighting7.midi.ControlPart
 import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.fixture.locate.storedLocate
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
@@ -404,6 +405,11 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // because a v51 reader would drop a stack pad as naming nothing; MIN stays at 5, since an older
 // archive's pads name the other three.
 //
+// v53 put a surface binding's payload in the grammar — `{does, on, how}` — and gave the record a `part`
+// (surface-setup plan session 1). SUPPORTED moved because a v52 reader would decode every binding as
+// unknown; MIN stays at 5, since an older archive's payloads are translated on read
+// (`LegacyNames.record`, through `SurfaceGrammar`).
+//
 // **These two constants are the real gate.** `FormatVersionJson.minReader` is *written* but never
 // read by the importer — `loadAndValidateArchive` compares against these — so bumping the DTO
 // alone leaves the gate wide open.
@@ -411,7 +417,7 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 52
+internal const val SUPPORTED_FORMAT_VERSION = 53
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -2703,6 +2709,9 @@ class ProjectImporter(private val state: State) {
         run.read("controlSurfaceBindings") { json ->
             val b = canonicalDecode(ControlSurfaceBindingJson.serializer(), json)
             val uuid = UUID.fromString(b.uuid)
+            if (ControlPart.entries.none { it.name == b.part }) {
+                throw ImportError.invalidArchive("Surface binding ${b.uuid} names no control part: ${b.part}")
+            }
             run.row(
                 DaoControlSurfaceBinding, "controlSurfaceBindings", uuid,
                 find = {
@@ -2714,6 +2723,7 @@ class ProjectImporter(private val state: State) {
                 this.project = project
                 deviceTypeKey = b.deviceTypeKey
                 controlId = b.controlId
+                part = b.part
                 bank = b.bank
                 targetType = b.targetType
                 targetPayload = b.targetPayload

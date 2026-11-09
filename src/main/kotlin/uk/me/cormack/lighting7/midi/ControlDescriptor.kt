@@ -119,8 +119,8 @@ data class BankButtonDescriptor(
 data class BankDefinition(val id: String, val name: String)
 
 /**
- * The role a control plays within a [StripDescriptor]. [Strip derivation][deriveStripTarget]
- * turns a role plus the strip's target into the [BindingTarget] the control behaves as.
+ * The role a control plays within a [StripDescriptor]. [Strip derivation][deriveStripBinding]
+ * turns a role plus the strip's subject into the [Binding] the control behaves as.
  */
 enum class StripRole { FADER, SELECT, ENCODER, FLASH }
 
