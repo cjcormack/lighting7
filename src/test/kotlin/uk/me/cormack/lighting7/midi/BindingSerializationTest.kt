@@ -30,11 +30,21 @@ class BindingSerializationTest {
         Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")),
         Binding(Does.Level("rgbColour", ColourAxis.SATURATION), Subject.Group("front")),
         Binding(Does.Level("pan"), Subject.Selection),
+        Binding(Does.PageLevel, Subject.Group("front")),
         Binding(Does.Flash("dimmer", percent = 78), Subject.Fixture("hex-1")),
+        Binding(Does.Flash("dimmer"), Subject.Selection),
         Binding(Does.Select, Subject.Group("front"), How.REPLACE),
         Binding(Does.Locate, Subject.Selection),
+        Binding(Does.Locate, Subject.Fixture("hex-1")),
         Binding(Does.Fan(FanAxis.TILT), Subject.Selection),
+        Binding(Does.Fan(FanAxis.PAN), Subject.Group("front")),
         Binding(Does.FxSpeed, Subject.Selection),
+        Binding(Does.FxSpeed, Subject.Fixture("hex-1")),
+        Binding(Does.Clear(fade = 1.5)),
+        Binding(Does.Blind(), how = How.WHILE_HELD),
+        Binding(Does.Release(), Subject.Group("front")),
+        Binding(Does.Record, Subject.Record(RecordKind.STACK, stack)),
+        Binding(Does.Update),
         Binding(Does.Palette(palette), Subject.Selection),
         Binding(Does.Look, Subject.Record(RecordKind.LOOK, look), How.ON),
         Binding(Does.Cue, Subject.Record(RecordKind.CUE, cue), How.OFF),
@@ -91,6 +101,7 @@ class BindingSerializationTest {
         override val displayKey = "x-touch"
         override val hold = SurfaceDispatch.HoldKey("x-touch", control.controlId, ControlPart.MAIN)
         override val control = control
+        override val encoderPage = EncoderBankState.DEFAULT
         override fun stackId(stack: UUID) = 7
         override fun cueId(cue: UUID) = 8
         override fun pad(pad: UUID): PadRef = PadRef.Stack(7)
@@ -114,15 +125,16 @@ class BindingSerializationTest {
         override fun buskPage(): Int? = null
         override fun held(key: SurfaceDispatch.HoldKey) = false
         override fun encoderPage(displayKey: String) = EncoderBankState.DEFAULT
-        override fun fanAmount(axis: FanAxis) = 0
-        override fun fxLeadSpeed() = 1.0
+        override fun fanAmount(on: Subject, axis: FanAxis) = 0
+        override fun fxLeadSpeed(on: Subject) = 1.0
+        override fun blind() = false
     }
 
     /** The functions whose button shows a state (P3); every other one declares it has none. */
     private val lit = setOf(
         Does.Flash::class, Does.Select::class, Does.Locate::class, Does.Palette::class, Does.Look::class,
         Does.Cue::class, Does.Pad::class, Does.Go::class, Does.Blackout::class, Does.GrandMaster::class,
-        Does.EncoderPage::class, Does.BuskPage::class,
+        Does.EncoderPage::class, Does.BuskPage::class, Does.Blind::class,
     )
 
     @Test
@@ -186,6 +198,7 @@ class BindingSerializationTest {
             "a malformed record uuid" to """{"does":{"type":"go"},"on":{"type":"record","kind":"STACK","uuid":"nope"}}""",
             "a payload from before the grammar" to """{"type":"cueStackGo","stackId":3}""",
             "a value its function refuses" to """{"does":{"type":"flash","attribute":"dimmer","percent":400}}""",
+            "a fade past the programmer's longest" to """{"does":{"type":"clear","fade":900}}""",
             "not JSON" to "{{",
         )
         for ((why, payload) in cases) {

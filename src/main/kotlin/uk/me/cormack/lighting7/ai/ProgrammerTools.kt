@@ -38,6 +38,8 @@ import uk.me.cormack.lighting7.routes.CODE_PALETTE_NEEDS_SELECTION
 import uk.me.cormack.lighting7.routes.CODE_PALETTE_OUTSIDE_MASK
 import uk.me.cormack.lighting7.routes.RecordLookCoreResult
 import uk.me.cormack.lighting7.routes.RecordMode
+import uk.me.cormack.lighting7.routes.setProgrammerBlind
+import uk.me.cormack.lighting7.routes.MAX_PROGRAMMER_FADE_SECONDS
 import uk.me.cormack.lighting7.routes.RecordSource
 import uk.me.cormack.lighting7.routes.PalettePressLog
 import uk.me.cormack.lighting7.routes.applyPaletteToProgrammer
@@ -49,9 +51,6 @@ import uk.me.cormack.lighting7.routes.performProgrammerRecordLook
 import uk.me.cormack.lighting7.routes.pressWouldRelease
 import uk.me.cormack.lighting7.routes.paletteOutsideMaskMessage
 import uk.me.cormack.lighting7.state.State
-
-/** The longest fade a programmer tool takes, in seconds. */
-private const val MAX_FADE_SECONDS = 600.0
 
 /**
  * The programmer tools that write it: `set_programmer`, `clear_programmer`, `set_blind`,
@@ -196,10 +195,7 @@ internal class ProgrammerTools(private val state: State) {
     private fun setBlindUnguarded(input: JsonObject): ToolExecutionResult {
         val blind = input.flag("blind") ?: return errorResult("Missing 'blind': true or false")
         val fadeMs = fadeMs(input).getOrElse { return errorResult(it.message ?: "Bad arguments") }
-        state.show.fxEngine.programmer.setBlind(blind, fadeMs)
-        state.sceneryService.onBlindChanged()
-        state.programmerTempo.onBlindChanged()
-        state.effectsService.onBlindChanged()
+        setProgrammerBlind(state, blind, fadeMs)
         val now = state.show.programmerStore.blind
         return ToolExecutionResult(
             success = true,
@@ -423,7 +419,9 @@ internal class ProgrammerTools(private val state: State) {
         val raw = input.present("fadeSeconds") ?: return@runCatching 0L
         val seconds = (raw as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
             ?: throw IllegalArgumentException("fadeSeconds must be a number")
-        require(seconds in 0.0..MAX_FADE_SECONDS) { "fadeSeconds must be between 0 and ${MAX_FADE_SECONDS.toInt()}, got $seconds" }
+        require(seconds in 0.0..MAX_PROGRAMMER_FADE_SECONDS) {
+            "fadeSeconds must be between 0 and ${MAX_PROGRAMMER_FADE_SECONDS.toInt()}, got $seconds"
+        }
         (seconds * 1000).toLong()
     }
 

@@ -41,5 +41,8 @@ sealed interface ActionOutcome {
 
         /** A tempo write that would leave 20–300 BPM. */
         const val SPEED_MASTER_RANGE = "SPEED_MASTER_RANGE"
+
+        /** An Update with nothing included to write back into. */
+        const val NOTHING_INCLUDED = "NOTHING_INCLUDED"
     }
 }

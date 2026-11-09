@@ -55,6 +55,21 @@ import uk.me.cormack.lighting7.routes.PalettePressLog
 import uk.me.cormack.lighting7.routes.paletteOutsideMaskMessage
 import uk.me.cormack.lighting7.routes.layerSource
 import uk.me.cormack.lighting7.routes.toggleLocate
+import uk.me.cormack.lighting7.routes.CODE_VENUE_RECORD_OFF
+import uk.me.cormack.lighting7.routes.RecordCoreResult
+import uk.me.cormack.lighting7.routes.RecordMode
+import uk.me.cormack.lighting7.routes.RecordSource
+import uk.me.cormack.lighting7.routes.UpdateCoreResult
+import uk.me.cormack.lighting7.routes.clearProgrammerCompletely
+import uk.me.cormack.lighting7.routes.performProgrammerRecord
+import uk.me.cormack.lighting7.routes.performProgrammerUpdate
+import uk.me.cormack.lighting7.routes.setProgrammerBlind
+import uk.me.cormack.lighting7.plugins.ProgrammerClearTargetInMessage
+import uk.me.cormack.lighting7.plugins.ProgrammerHandler
+import uk.me.cormack.lighting7.models.CueType
+import uk.me.cormack.lighting7.routes.isVenueLive
+import uk.me.cormack.lighting7.history.historyLabel
+import kotlinx.coroutines.CancellationException
 import uk.me.cormack.lighting7.state.SelectionSource
 import uk.me.cormack.lighting7.state.SubselectMode
 import uk.me.cormack.lighting7.state.WindowRegistry
@@ -151,14 +166,14 @@ interface SurfaceActions {
     /** Halve or double a speed master's tempo ([master] null → master 1), fx-speed plan D12. */
     fun scaleSpeedMaster(master: UUID?, factor: Double) {}
 
-    /** One turn of a fan encoder on [axis] over the desk selection — see [SelectionFan]. */
-    fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte)
+    /** One turn of a fan encoder on [axis] over [on], the selection or a group — see [SelectionFan]. */
+    fun writeFan(on: Subject, axis: FanAxis, midiValue7Bit: UByte)
 
     /**
-     * One move of an *FX speed* control over the desk selection's Local FX — see [SelectionFxSpeed].
+     * One move of an *FX speed* control over the Local FX painting [on]'s heads — see [SelectionFxSpeed].
      * [encoder] is whether the control is an encoder (detents) or a fader (a position).
      */
-    fun writeFxSpeed(midiValue7Bit: UByte, encoder: Boolean) {}
+    fun writeFxSpeed(on: Subject, midiValue7Bit: UByte, encoder: Boolean) {}
 
     /** Toggle [target] in, or with [replace] replace the selection with it. */
     fun selectTarget(target: CueTargetDto, replace: Boolean)
@@ -166,10 +181,32 @@ interface SurfaceActions {
     fun clearSelection()
 
     /**
-     * Locate every selected target, or release them all when every one is already located —
-     * the same toggle `POST /locate/toggle` makes, once per target.
+     * Locate every target [on] names — the selection's, or the one group or fixture — or release
+     * them all when every one is already located: the toggle `POST /locate/toggle` makes, once per
+     * target.
      */
-    fun locateSelection()
+    fun locate(on: Subject)
+
+    /** Clear the whole programmer over [fadeMs], as its Clear does. */
+    fun clearProgrammer(fadeMs: Long)
+
+    /** Whether the programmer is Blind. */
+    fun isBlind(): Boolean
+
+    /** Put the programmer into Blind or take it out, over [fadeMs]; already so is done (D4). */
+    fun setBlind(blind: Boolean, fadeMs: Long): ActionOutcome
+
+    /** Release everything the programmer holds on each target [on] names, as its Release does, over [fadeMs]. */
+    fun release(on: Subject, fadeMs: Long): ActionOutcome
+
+    /**
+     * Record the programmer as a new cue at the end of [stack], with the Record sheet's defaults:
+     * every touched value, all attributes, FX, held scenery and held tempos. On the serial lane.
+     */
+    fun record(stack: UUID): ActionOutcome
+
+    /** Write the programmer back into what Include loaded (Update's Mode A), on the serial lane; refused when nothing is included. */
+    fun update(): ActionOutcome
 
     /** Press a Look, whole — never onto the selection (D6; absolute-looks plan D1). */
     fun applyLook(look: UUID): ActionOutcome
@@ -244,7 +281,10 @@ class DefaultSurfaceActions(
     companion object {
         private val logger = LoggerFactory.getLogger(DefaultSurfaceActions::class.java)
 
-        /** Every surface's undo and redo presses, one at a time in press order. */
+        /**
+         * The serial lane: every surface's undo, redo, Record and Update, one at a time in press
+         * order, off the input's thread, since each opens transactions or reloads.
+         */
         private val historyDispatcher = Dispatchers.IO.limitedParallelism(1)
         private val historyMutex = Mutex()
 
@@ -475,9 +515,10 @@ class DefaultSurfaceActions(
         null
     }
 
-    override fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte) = state.selectionFan.turn(axis, midiValue7Bit)
+    override fun writeFan(on: Subject, axis: FanAxis, midiValue7Bit: UByte) = state.selectionFan.turn(axis, midiValue7Bit, on)
 
-    override fun writeFxSpeed(midiValue7Bit: UByte, encoder: Boolean) = state.selectionFxSpeed.turn(midiValue7Bit, encoder)
+    override fun writeFxSpeed(on: Subject, midiValue7Bit: UByte, encoder: Boolean) =
+        state.selectionFxSpeed.turn(midiValue7Bit, encoder, on)
 
     override fun selectTarget(target: CueTargetDto, replace: Boolean) {
         // A toggle adds a head under whatever mask is standing; a replace has no column axis to speak
@@ -488,10 +529,13 @@ class DefaultSurfaceActions(
 
     override fun clearSelection() = state.deskSelection.clear()
 
-    override fun locateSelection() {
-        val targets = state.deskSelection.state.value.targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) }
+    /** The targets [on] names: the desk selection's now, or the one group or fixture. */
+    private fun targetsOf(on: Subject): List<CueTargetDto> = on.targets { state.deskSelection.state.value.targets }
+
+    override fun locate(on: Subject) {
+        val targets = targetsOf(on).mapNotNull { TargetRef.ofOrNull(it.type, it.key) }
         if (targets.isEmpty()) {
-            logger.debug("Surface locate dropped: nothing selected")
+            logger.debug("Surface locate dropped: nothing to locate on {}", on)
             return
         }
         val located = state.show.locateManager.activeTargets.value
@@ -688,6 +732,123 @@ class DefaultSurfaceActions(
     }
 
     override fun handDrop() = state.handState.drop()
+
+    // At once rather than on the serial lane: it opens no transaction and reloads nothing, and a Clear
+    // queued behind a busy lane would wipe what was written after the press.
+    override fun clearProgrammer(fadeMs: Long) {
+        clearProgrammerCompletely(state, fadeMs)
+    }
+
+    override fun isBlind(): Boolean = state.show.programmerStore.blind
+
+    override fun setBlind(blind: Boolean, fadeMs: Long): ActionOutcome =
+        if (setProgrammerBlind(state, blind, fadeMs)) ActionOutcome.Done(if (blind) "on" else "off")
+        else ActionOutcome.Done(if (blind) ALREADY_ON else ALREADY_OFF)
+
+    override fun release(on: Subject, fadeMs: Long): ActionOutcome {
+        val targets = targetsOf(on)
+        if (targets.isEmpty()) return ActionOutcome.Done("nothing selected")
+        var values = 0
+        // A Local FX over several of the targets, which each target's own Release leaves as partial.
+        var fx = if (targets.size > 1) {
+            ProgrammerHandler.releaseLocalFxWithin(state, targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) }, fadeMs)
+        } else {
+            0
+        }
+        for (target in targets) {
+            val cleared = ProgrammerHandler.clearTarget(state, ProgrammerClearTargetInMessage(target.type, target.key, fadeMs))
+            cleared.error?.let { logger.warn("Surface release of {} '{}': {}", target.type, target.key, it) }
+            values += cleared.values
+            fx += cleared.fx
+        }
+        return ActionOutcome.Done("$values values, $fx FX")
+    }
+
+    override fun record(stack: UUID): ActionOutcome {
+        val projectId = currentProjectId() ?: return ActionOutcome.NotFound("No current project")
+        if (inVenue()) return recordOffInVenue("Record")
+        val ref = resolveStack(stack) ?: return stackNotFound(stack)
+        onSerialLane("record") {
+            if (currentProjectId() != projectId) return@onSerialLane
+            historyLabel("Record")
+            val project = state.projectManager.currentProject
+            val result = performProgrammerRecord(
+                state, project,
+                mode = RecordMode.CREATE,
+                source = RecordSource.TOUCHED,
+                cueType = CueType.STANDARD,
+                cueStackId = ref.id,
+                cueId = null,
+                mask = null,
+                includeFx = true,
+                name = null,
+                cueNumber = null,
+                sortOrder = null,
+                targets = null,
+            )
+            when (result) {
+                is RecordCoreResult.Ok -> logger.info("Surface Record into {}: {}", ref.name, result.details.name)
+                is RecordCoreResult.Failure -> logger.warn("Surface Record into {} refused: {}", ref.name, result.message)
+                is RecordCoreResult.NumberRefused -> logger.warn("Surface Record into {} refused: {}", ref.name, result.refusal.message)
+            }
+        }
+        return ActionOutcome.DONE
+    }
+
+    override fun update(): ActionOutcome {
+        val projectId = currentProjectId() ?: return ActionOutcome.NotFound("No current project")
+        if (inVenue()) return recordOffInVenue("Update")
+        if (state.show.programmerStore.lastIncludedTarget == null) {
+            logger.info("Surface Update refused: nothing is included")
+            return ActionOutcome.Refused(ActionOutcome.NOTHING_INCLUDED, "Nothing is included to update")
+        }
+        onSerialLane("update") {
+            if (currentProjectId() != projectId) return@onSerialLane
+            // Checked again here: a Clear queued ahead of this press may have dropped the include target.
+            if (state.show.programmerStore.lastIncludedTarget == null) {
+                logger.info("Surface Update refused: nothing is included")
+                return@onSerialLane
+            }
+            val project = state.projectManager.currentProject
+            when (val result = performProgrammerUpdate(state, project, targets = null, mask = null, preview = false, includeFx = true)) {
+                is UpdateCoreResult.CuesUpdated -> logger.info("Surface Update: {}", result.results.joinToString { it.cueName })
+                is UpdateCoreResult.LookUpdated -> logger.info("Surface Update of a Look: wrote {}", result.result.wroteAnything)
+                is UpdateCoreResult.IncludeTargetGone -> logger.warn("Surface Update refused: {}", result.message)
+                is UpdateCoreResult.Failure -> logger.warn("Surface Update refused: {}", result.message)
+                is UpdateCoreResult.Checklist -> logger.warn("Surface Update refused: nothing is included")
+            }
+        }
+        return ActionOutcome.DONE
+    }
+
+    /** Whether Record and Update are off here: the live project is a venue, or its kind cannot be read. */
+    private fun inVenue(): Boolean = runCatching { isVenueLive(state) }.getOrElse { e ->
+        logger.warn("Surface Record refused: the project's kind could not be read: {}", e.toString())
+        true
+    }
+
+    private fun recordOffInVenue(what: String): ActionOutcome {
+        logger.info("Surface {} refused: Record is off in a venue", what)
+        return ActionOutcome.Refused(CODE_VENUE_RECORD_OFF, "Record is off in a venue: the programmer here is for testing and focus")
+    }
+
+    /**
+     * Run [block] on the serial lane, under the input's origin so its writes are the surface's in the
+     * history. A failure is logged: a button has no reply channel.
+     */
+    @OptIn(DelicateCoroutinesApi::class)
+    private fun onSerialLane(what: String, block: suspend () -> Unit): Job =
+        GlobalScope.launch(historyDispatcher + (WriteOrigin.current() ?: EmptyCoroutineContext)) {
+            historyMutex.withLock {
+                try {
+                    block()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logger.warn("Surface {} failed: {}", what, e.toString())
+                }
+            }
+        }
 
     override fun historyMove(source: HistorySource, undo: Boolean, programmerOnly: Boolean) {
         launchHistoryMove(source, HistoryMove(undo, programmerOnly = programmerOnly))

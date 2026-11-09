@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import uk.me.cormack.lighting7.fx.MasterClock
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
+import uk.me.cormack.lighting7.routes.MAX_PROGRAMMER_FADE_SECONDS
 
 /**
  * The function catalogue (surface-setup plan D15): every function an editor offers, read from the
@@ -32,7 +33,8 @@ object SurfaceCatalogue {
         is Does.GrandMaster -> if (does.level == null) "grandMaster" else "grandMasterLevel"
         is Does.Tempo -> if (does.bpm == null) "tempo" else "tempoSet"
         is Does.Unknown -> null
-        is Does.Level, is Does.Flash, Does.Select, Does.Locate, is Does.Fan, Does.FxSpeed, is Does.Palette,
+        is Does.Level, Does.PageLevel, is Does.Flash, Does.Select, Does.Locate, is Does.Fan, Does.FxSpeed,
+        is Does.Clear, is Does.Blind, is Does.Release, Does.Record, Does.Update, is Does.Palette,
         Does.Look, Does.Cue, Does.Pad, Does.PickUp, Does.Place, Does.Drop, Does.Go, Does.Back, Does.Pause,
         Does.Stop, Does.GoTo, Does.Standby, Does.FxAmount, is Does.Fire, Does.Blackout, Does.Tap,
         is Does.TempoScale, is Does.Layer, is Does.EncoderPage, is Does.Undo, is Does.BuskPage,
@@ -49,7 +51,7 @@ data class CatalogueEntry(
     /** The function id a binding built from this entry carries as its `does.type`. */
     val does: String,
     val label: String,
-    /** The heading the entry is listed under: Fixtures, Playback, Busk, Masters, Tempo, Desk, Strips. */
+    /** The heading the entry is listed under: Fixtures, Programmer, Playback, Busk, Masters, Tempo, Desk, Strips. */
     val group: String,
     val help: String,
     /** The inputs that reach it: a continuous part (a fader's move, an encoder's turn), a button. Empty for a strip. */
@@ -120,6 +122,7 @@ private class EntrySpec(
 }
 
 private const val FIXTURES = "Fixtures"
+private const val PROGRAMMER = "Programmer"
 private const val PLAYBACK = "Playback"
 private const val BUSK = "Busk"
 private const val MASTERS = "Masters"
@@ -157,10 +160,19 @@ internal val SELECTION_MOVE_WORDS: Map<SelectionMove, String> = mapOf(
 
 private val PLACEHOLDER_UUID = java.util.UUID(0, 0)
 
+private val FADE = CatalogueParam(
+    "fade", "Fade, seconds", ParamKind.NUMBER, default = JsonPrimitive(0.0), min = 0.0, max = MAX_PROGRAMMER_FADE_SECONDS,
+)
+
 private val ENTRIES = listOf(
     EntrySpec(
         "level", "Level", FIXTURES, "One attribute of the heads it is on, from a fader or an encoder.",
         Does.Level("dimmer"), listOf(ATTRIBUTE, AXIS),
+    ),
+    EntrySpec(
+        "pageLevel", "Level on the encoder page", FIXTURES,
+        "The attribute the encoder page of the device it is on names, of the heads it is on.",
+        Does.PageLevel,
     ),
     EntrySpec(
         "flash", "Flash", FIXTURES, "While held, an attribute at a share of each head's range; let go, it goes back.",
@@ -168,9 +180,9 @@ private val ENTRIES = listOf(
         listOf(ATTRIBUTE, CatalogueParam("percent", "Level", ParamKind.NUMBER, default = JsonPrimitive(100), min = 0.0, max = 100.0)),
     ),
     EntrySpec("select", "Select", FIXTURES, "Put a group or fixture into the desk selection, or replace the selection with it.", Does.Select),
-    EntrySpec("locate", "Locate", FIXTURES, "Locate the selection, or release it when it is all located.", Does.Locate),
+    EntrySpec("locate", "Locate", FIXTURES, "Locate the heads it is on, or release them when they are all located.", Does.Locate),
     EntrySpec(
-        "fan", "Fan", FIXTURES, "Spread the selection's positions about their centre.",
+        "fan", "Fan", FIXTURES, "Spread the positions of the selection or a group about their centre.",
         Does.Fan(FanAxis.PAN),
         listOf(
             CatalogueParam(
@@ -179,7 +191,7 @@ private val ENTRIES = listOf(
             ),
         ),
     ),
-    EntrySpec("fxSpeed", "FX speed", FIXTURES, "The speed of the Local FX on the selection's heads.", Does.FxSpeed),
+    EntrySpec("fxSpeed", "FX speed", FIXTURES, "The speed of the Local FX on the heads it is on.", Does.FxSpeed),
     EntrySpec(
         "palette", "Palette", FIXTURES, "Press a palette onto the selection.",
         Does.Palette(PLACEHOLDER_UUID),
@@ -190,6 +202,15 @@ private val ENTRIES = listOf(
         Does.Fire("output1"),
         listOf(CatalogueParam("trigger", "Trigger", ParamKind.TEXT, required = true)),
     ),
+    EntrySpec("clear", "Clear", PROGRAMMER, "Clear the whole programmer, as its Clear does.", Does.Clear(), listOf(FADE)),
+    EntrySpec("blind", "Blind", PROGRAMMER, "The programmer's Blind: toggled, or on while held.", Does.Blind(), listOf(FADE)),
+    EntrySpec("release", "Release", PROGRAMMER, "Release what the programmer holds on the heads it is on.", Does.Release(), listOf(FADE)),
+    EntrySpec(
+        "record", "Record", PROGRAMMER,
+        "Record the programmer as a new cue at the end of a stack: every touched value, its FX, scenery and tempos.",
+        Does.Record,
+    ),
+    EntrySpec("update", "Update", PROGRAMMER, "Write the programmer back into what was included.", Does.Update),
     EntrySpec("go", "GO", PLAYBACK, "GO on a cue stack.", Does.Go),
     EntrySpec("back", "Back", PLAYBACK, "GO BACK on a cue stack.", Does.Back),
     EntrySpec("pause", "Pause", PLAYBACK, "Cancel a stack's running follow.", Does.Pause),

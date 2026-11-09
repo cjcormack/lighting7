@@ -46,6 +46,7 @@ import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.routes.clearProgrammerCompletely
+import uk.me.cormack.lighting7.routes.setProgrammerBlind
 import uk.me.cormack.lighting7.routes.heldOutsideSource
 import uk.me.cormack.lighting7.routes.resolveLayerSource
 import uk.me.cormack.lighting7.models.sceneryStateObject
@@ -1058,12 +1059,7 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
             ProgrammerClearedOutMessage(cleared.entryCount, cleared.fxCleared)
         }
         is ProgrammerSetBlindInMessage -> {
-            state.show.fxEngine.programmer.setBlind(message.blind, message.fadeMs ?: 0)
-            // Blind takes the programmer off stage, its Looks' scenery with it.
-            state.sceneryService.onBlindChanged()
-            state.programmerTempo.onBlindChanged()
-            // Blind rehearses every fire and holds the cannons' arm channels down (session 9).
-            state.effectsService.onBlindChanged()
+            setProgrammerBlind(state, message.blind, message.fadeMs ?: 0)
             ProgrammerBlindStateOutMessage(state.show.programmerStore.blind)
         }
         is ProgrammerStateInMessage -> ProgrammerHandler.stateSnapshot(state)
@@ -1426,23 +1422,9 @@ object ProgrammerHandler {
             )
         val target = TargetRef.ofOrNull(message.targetType, message.targetKey)
             ?: return answer(0, 0, emptyList(), "Unknown targetType '${message.targetType}'")
-        val fixtures = state.show.fixtures
-        val roots: List<GroupableFixture> = when (target) {
-            is TargetRef.Fixture -> try {
-                listOf(fixtures.untypedGroupableFixture(target.key))
-            } catch (_: Exception) {
-                return answer(0, 0, emptyList(), "Unknown fixture '${target.key}'")
-            }
-            is TargetRef.Group -> try {
-                fixtures.untypedGroup(target.key).fixtures
-            } catch (_: Exception) {
-                return answer(0, 0, emptyList(), "Unknown group '${target.key}'")
-            }
-        }
-        // Each root and its heads: a fixture's Release takes its cells with it.
-        val heads: List<GroupableFixture> = roots.flatMap { root ->
-            listOf(root) + ((root as? uk.me.cormack.lighting7.fixture.group.MultiElementFixture<*>)?.elements ?: emptyList())
-        }.distinctBy { it.targetKey }
+        val roots = releaseRoots(state, target)
+            ?: return answer(0, 0, emptyList(), "Unknown ${if (target is TargetRef.Group) "group" else "fixture"} '${target.key}'")
+        val heads = releaseHeads(roots)
         val headKeys = heads.mapTo(HashSet()) { it.targetKey }
         // The channels the roots are patched on — what finds a raw write on a channel no property backs.
         val footprint = buildSet {
@@ -1489,6 +1471,41 @@ object ProgrammerHandler {
             if (owner == ProgrammerOwner.LOCATE) state.show.locateManager.pruneWrite(fixtureKey, attribute)
         }
         return answer(release.values, stopped, partial)
+    }
+
+    /** The fixtures [target] names — the fixture, or the group's members — or null when it names none. */
+    private fun releaseRoots(state: State, target: TargetRef): List<GroupableFixture>? = try {
+        when (target) {
+            is TargetRef.Fixture -> listOf(state.show.fixtures.untypedGroupableFixture(target.key))
+            is TargetRef.Group -> state.show.fixtures.untypedGroup(target.key).fixtures
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    /** Each root and its heads: a fixture's Release takes its cells with it. */
+    private fun releaseHeads(roots: List<GroupableFixture>): List<GroupableFixture> = roots.flatMap { root ->
+        listOf(root) + ((root as? uk.me.cormack.lighting7.fixture.group.MultiElementFixture<*>)?.elements ?: emptyList())
+    }.distinctBy { it.targetKey }
+
+    /**
+     * Stop each Local FX all of whose heads lie among [targets]' heads together, over [fadeMs], as
+     * [clearTarget] stops one inside its own target: the FX a Release over several targets takes,
+     * which each target's [clearTarget] alone answers as partial. Call it before those, so the
+     * values under it ramp. Answers how many it let go.
+     */
+    fun releaseLocalFxWithin(state: State, targets: List<TargetRef>, fadeMs: Long): Int {
+        val headKeys = targets.flatMapTo(HashSet()) { target ->
+            releaseRoots(state, target)?.let(::releaseHeads).orEmpty().map { it.targetKey }
+        }
+        val engine = state.show.fxEngine
+        val stop = engine.getActiveFx().filter { effect ->
+            effect.isLocalFx && engine.fixtureKeysCoveredBy(effect).let { painted -> painted.isNotEmpty() && painted.all { it in headKeys } }
+        }
+        val store = state.show.programmerStore
+        return engine.releaseFx(stop, fadeMs) { key, attribute ->
+            store.slotsFor(key, attribute).any { it.owner != ProgrammerOwner.LAYERS }
+        }
     }
 
     /** The layer stack as the desk sees it, with the resolved applied state beside it. */

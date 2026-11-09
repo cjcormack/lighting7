@@ -140,11 +140,17 @@ object SurfaceLabels {
         val how = binding.how
         return when (val does = binding.does) {
             is Does.Level -> with(attributeWord(does.attribute) + axisWord(does.axis))
+            Does.PageLevel -> with("Page level")
             is Does.Flash -> with(if (does.percent == 100) "Flash" else "Flash ${does.percent}%")
             Does.Select -> with(if (how == How.REPLACE) "Select only" else "Select")
             Does.Locate -> with("Locate")
             is Does.Fan -> with("Fan ${FAN_WORDS.getValue(does.axis)}")
             Does.FxSpeed -> with("FX speed")
+            is Does.Clear -> "Clear programmer"
+            is Does.Blind -> if (binding.effectiveHow == How.WHILE_HELD) "Blind while held" else "Blind"
+            is Does.Release -> with("Release")
+            Does.Record -> with("Record")
+            Does.Update -> "Update"
             is Does.Palette -> names.record(RecordKind.PALETTE, does.palette) ?: "A missing palette"
             Does.Look -> with(onOff("Look", how))
             Does.Cue -> with(onOff("Cue", how))
@@ -204,6 +210,9 @@ object SurfaceLabels {
             is Does.Level -> "$continuous what Local holds for $s's ${attributeWord(does.attribute).lowercase()}${axisWord(does.axis)}, " +
                 "or the stage where Local holds nothing." +
                 if (binding.on == Subject.Selection) " It goes dark while the selected heads differ." else ""
+            Does.PageLevel -> "$continuous what Local holds for $s's attribute on the encoder page, " +
+                "or the stage where Local holds nothing." +
+                if (binding.on == Subject.Selection) " It goes dark while the selected heads differ." else ""
             is Does.Fan -> "$continuous the fan amount. The centre is no fan."
             Does.FxSpeed -> "$continuous the speed of the first Local FX on $s."
             Does.FxAmount -> "$continuous $s's FX amount."
@@ -221,6 +230,7 @@ object SurfaceLabels {
                 if (binding.effectiveHow == How.TOGGLE_HOLD_REPLACES) " Hold for half a second to select only it." else ""
             is Does.Flash -> "Lit while held. Lets go to whatever was under it."
             Does.Locate -> "Lit while $s is located."
+            is Does.Blind -> "Lit while the programmer is Blind."
             is Does.Palette -> "Lit while ${names.record(RecordKind.PALETTE, does.palette) ?: "the palette"} covers the selection."
             Does.Look -> "Lit while $s is on."
             Does.Cue -> "Lit while a press holds $s."
@@ -232,7 +242,7 @@ object SurfaceLabels {
             Does.Strip -> "Its fader and encoder show what Local holds, or the stage; its select button is lit while selected."
             Does.PickUp, Does.Place, Does.Drop, Does.Back, Does.Pause, Does.Stop, Does.GoTo, Does.Standby, is Does.Fire,
             Does.Tap, is Does.TempoScale, is Does.Layer, is Does.Undo, is Does.WindowFocus, is Does.WindowSheet,
-            is Does.SelectionStep, is Does.Unknown,
+            is Does.SelectionStep, is Does.Clear, is Does.Release, Does.Record, Does.Update, is Does.Unknown,
                 -> NO_LIGHT
         }
     }

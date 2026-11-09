@@ -46,15 +46,15 @@ class SelectionFanTest : RouteIntegrationTest() {
         assertIs<FanOutcome.Done>(fanIntoProgrammer(state, request, null))
     }
 
-    /** A control swept from the centre, a step at a time, to [to] — as a hand turns it. */
-    private fun sweep(axis: FanAxis, to: Int) {
+    /** A control fanning [on] swept from the centre, a step at a time, to [to] — as a hand turns it. */
+    private fun sweep(axis: FanAxis, to: Int, on: Subject = Subject.Selection) {
         val step = if (to >= 64) 2 else -2
         var at = 64 + step
         while (if (step > 0) at < to else at > to) {
-            state.selectionFan.turn(axis, at.toUByte())
+            state.selectionFan.turn(axis, at.toUByte(), on)
             at += step
         }
-        state.selectionFan.turn(axis, to.toUByte())
+        state.selectionFan.turn(axis, to.toUByte(), on)
     }
 
     private fun positions() = movers.map { state.show.programmerStore.get(it, "position")!!.value.resolved.serialize() }
@@ -130,11 +130,12 @@ class SelectionFanTest : RouteIntegrationTest() {
         val fan = state.selectionFan
         fan.turn(FanAxis.PAN, 65u)
         val first = fan.shown.value
+        val firstAmount = fan.amountFor(FanAxis.PAN)
         // A new selection: its rebuild showed the ring at 64, and the same turn lands the same amount.
         state.deskSelection.set(movers.take(2).map(::fixture))
         assertEquals(0, fan.amountFor(FanAxis.PAN))
         fan.turn(FanAxis.PAN, 65u)
-        assertEquals(first.amounts, fan.shown.value.amounts)
+        assertEquals(firstAmount, fan.amountFor(FanAxis.PAN))
         assertTrue(fan.shown.value.stamp > first.stamp)
     }
 
@@ -199,5 +200,27 @@ class SelectionFanTest : RouteIntegrationTest() {
         state.selectionFan.turn(FanAxis.PAN, 100u)
         assertEquals(listOf("128,128", "128,128", "128,128"), positions())
         assertEquals(0, state.selectionFan.amountFor(FanAxis.PAN))
+    }
+
+    @Test
+    fun `a fan on a group spreads the group's heads, with a gesture of its own beside the selection's`() = testApplication {
+        seed()
+        LocateTestSupport.seedGroup(state, projectId, "movers", *movers.toTypedArray())
+        mountTestApp(state)
+        place(movers, "pos:0,0")
+        val group = Subject.Group("movers")
+        val fan = state.selectionFan
+
+        sweep(FanAxis.PAN, 74, group)
+        assertEquals(listOf("108,128", "128,128", "148,128"), positions(), "nothing selected, the group still fans")
+        assertEquals(20, fan.amountFor(FanAxis.PAN, group))
+        assertEquals(0, fan.amountFor(FanAxis.PAN), "the selection's fan has not moved")
+
+        // The selection's own fan over two of the heads starts a gesture of its own, and the group's
+        // ring keeps its amount while the selection's turns.
+        state.deskSelection.set(listOf(fixture("spot-1"), fixture("spot-2")))
+        fan.turn(FanAxis.TILT, 66u)
+        assertEquals(4, fan.amountFor(FanAxis.TILT))
+        assertEquals(20, fan.amountFor(FanAxis.PAN, group))
     }
 }

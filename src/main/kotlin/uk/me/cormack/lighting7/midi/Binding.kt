@@ -113,6 +113,10 @@ fun Subject.asTarget(): CueTargetDto? = when (this) {
     else -> null
 }
 
+/** The targets [this] subject names: [selection]'s for the selection, the one group or fixture, else none. */
+fun Subject.targets(selection: () -> List<CueTargetDto>): List<CueTargetDto> =
+    if (this == Subject.Selection) selection() else listOfNotNull(asTarget())
+
 /** [this] subject's uuid when it is a record of [kind], else null. */
 fun Subject.recordUuid(kind: RecordKind): UUID? = (this as? Subject.Record)?.takeIf { it.kind == kind }?.uuid
 

@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-SURFACE-SETUP-S4`](#fu-manual-surface-setup-s4) | Record from a button makes a cue at the end of its stack; Update writes back into it; Blind while held; Release on a group; Locate, a fan and FX speed bound on a group; an encoder following the encoder page | Surface setup session 4, 2026-11-09 |
 | [`FU-MANUAL-SURFACE-SETUP-S1`](#fu-manual-surface-setup-s1) | an upgraded show's bindings all still work; a pan encoder beats a running Circle; a strip encoder's push does nothing; a flash on a capped head lands at its percentage; the blinder takes a colour move; QLab's OSC cues unchanged; a layer B binding fires | Surface setup session 1, 2026-11-09 |
 | [`FU-MANUAL-SURFACE-SETUP-S3`](#fu-manual-surface-setup-s3) | touching a bound GO selects it in the editor without firing it; viewing Layer B leaves the desk on Layer A; a strip control made its own; the mapping table on a phone, with *Fill in order* | Surface setup session 3, 2026-11-09 |
 | [`FU-MANUAL-SURFACE-SETUP-S2`](#fu-manual-surface-setup-s2) | a motor fader holds still under a Local FX; Blind shows and keeps the staged value; a held flash leaves the faders alone; the jump rule on a fast flick; the X-Touch adopts a ring value and darkens on `ringOffValue`; a push LED re-asserted on release; two X-Touches keep their own layers | Surface setup session 2, 2026-11-09 |
@@ -246,6 +247,36 @@ allowlist:
    each does what it did.
 7. **Layer B.** Switch the device to Layer B with its own button and press a button bound on layer B
    only: it fires. The profile maps Layer A's MIDI only, so if it does not, note what the device sends.
+
+---
+
+## `FU-MANUAL-SURFACE-SETUP-S4`
+
+**What it proves**: *New functions* (surface-setup plan session 4) — the programmer's verbs from a
+button, and Locate, Fan and FX speed on a named group or fixture, as an operator presses them.
+
+**Why it is here**: the tests dispatch bindings against a test show; only the X-Touch shows the serial
+lane's Record landing while the desk keeps running, and Blind held on a real button.
+
+**Test**, on the dev desk with the X-Touch Compact attached, a stack *Act 1* and a group *Front* of
+movers, bound from Settings › Surfaces:
+
+1. **Record.** Bind *Record* on *Act 1* to a button. Raise two heads in the programmer and press it: a
+   new cue appears at the end of Act 1, holding those values, and the programmer's source strip names it.
+2. **Update.** Bind *Update* to a button. Change one head's level and press it: the recorded cue takes
+   the change, and no cue is made. Clear the programmer and press it again: nothing changes, and the log
+   says nothing is included.
+3. **Blind.** Bind *Blind* with *While held*. Hold it: the programmer goes Blind and the button lights;
+   let go: it comes back. Bind *Clear* with a 2 s fade and press it: the programmer clears over two
+   seconds.
+4. **Release.** Bind *Release* on *Front* and raise Front and another head: the press releases Front's
+   heads and leaves the other.
+5. **Named subjects.** Bind *Locate* on *Front*: a press locates Front alone, lit while it is. Bind a fan
+   on *Front* to an encoder: turning it fans Front's heads in member order whatever is selected. Start a
+   Wave on one fixture, bind *FX speed* on that fixture: turning it moves that Wave only.
+6. **Encoder page.** Bind *Level on the encoder page* on *The selection* to an encoder outside the
+   strips. Switch the encoder page to Colour: the encoder now moves the selection's colour, and its ring
+   follows.
 
 ---
 
