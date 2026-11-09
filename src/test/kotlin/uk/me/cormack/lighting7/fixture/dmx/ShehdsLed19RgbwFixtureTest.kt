@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.createTestTransaction
+import uk.me.cormack.lighting7.routes.ColourAttributeDescriptor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -85,6 +86,16 @@ class ShehdsLed19RgbwFixtureTest {
         assertEquals("shehds-1.zone-1", fixture.zone(0).elementKey)
         assertEquals("shehds-1.zone-2", fixture.zone(1).elementKey)
         assertEquals("shehds-1.zone-3", fixture.zone(2).elementKey)
+    }
+
+    @Test
+    fun `24ch mode's zone colour descriptors carry their white, as the fixture's does`() {
+        val fixture = ShehdsLed19RgbwFixture.Mode24Ch(universe, "shehds-1", "Shehds 1", 1)
+
+        val zones = assertNotNull(fixture.generateElementDescriptors())
+        val whites = zones.map { zone -> zone.attributes.filterIsInstance<ColourAttributeDescriptor>().single().whiteChannel?.channelNo }
+        assertEquals(listOf(12, 16, 20), whites)
+        assertEquals(emptyList(), zones.flatMap { zone -> zone.attributes.filter { it.name == "white" } })
     }
 
     @Test

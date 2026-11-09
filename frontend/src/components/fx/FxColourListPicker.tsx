@@ -24,14 +24,15 @@ import {
   type ExtendedChannelFlags,
   type ExtendedColour,
 } from './colourUtils'
-import { ColourEditorBody } from './ColourEditorBody'
+import { FxColourEditor } from './FxColourEditor'
+import { useRouteProjectId } from './useRouteProjectId'
 
 interface FxColourListPickerProps {
   value: string
   /**
-   * [release] is false for a frame of a swatch's drag and true for its end and for every edit that
-   * is one already — an add, a removal, a reorder, a typed hex, a preset — so the host's live push
-   * lands the last move and floors the rest.
+   * [release] is false for a frame of a swatch's gesture and true for its end — the picker or a
+   * slider let go, a field left, a recent tapped — and for an add, a removal and a reorder, so the
+   * host's live push lands the last move and floors the rest.
    */
   onChange: (value: string, release: boolean) => void
   label?: string
@@ -41,7 +42,6 @@ interface FxColourListPickerProps {
 
 interface ColourItem {
   id: string
-  raw: string
   colour: ExtendedColour
 }
 
@@ -57,6 +57,7 @@ export function FxColourListPicker({
   description,
   extendedChannels,
 }: FxColourListPickerProps) {
+  const projectId = useRouteProjectId()
   const [items, setItems] = useState<ColourItem[]>(() => parseColourList(value))
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   // A reorder drag is live (dnd-kit's own, on the swatches).
@@ -132,14 +133,14 @@ export function FxColourListPicker({
   const handleColourChange = useCallback(
     (index: number, colour: ExtendedColour, release: boolean) => {
       const newItems = [...items]
-      newItems[index] = { ...newItems[index], colour, raw: serializeExtendedColour(colour) }
+      newItems[index] = { ...newItems[index], colour }
       emitChange(newItems, release)
     },
     [items, emitChange]
   )
 
   const handleAdd = useCallback(() => {
-    const newItems = [...items, { id: makeId(), raw: '#ffffff', colour: { hex: '#ffffff', white: 0, amber: 0, uv: 0 } }]
+    const newItems = [...items, { id: makeId(), colour: { hex: '#ffffff', white: 0, amber: 0, uv: 0 } }]
     emitChange(newItems, true)
     setEditingIndex(newItems.length - 1)
   }, [items, emitChange])
@@ -184,6 +185,7 @@ export function FxColourListPicker({
                 onColourChange={(colour, release) => handleColourChange(index, colour, release)}
                 onRelease={handleRelease}
                 extendedChannels={extendedChannels}
+                projectId={projectId}
               />
             ))}
           </SortableContext>
@@ -209,6 +211,7 @@ function SortableColourSwatch({
   onColourChange,
   onRelease,
   extendedChannels,
+  projectId,
 }: {
   item: ColourItem
   isEditing: boolean
@@ -217,6 +220,7 @@ function SortableColourSwatch({
   onColourChange: (colour: ExtendedColour, release: boolean) => void
   onRelease: () => void
   extendedChannels?: Partial<ExtendedChannelFlags>
+  projectId: number | undefined
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id })
@@ -260,13 +264,15 @@ function SortableColourSwatch({
           x
         </button>
       </div>
-      <PopoverContent className="w-auto p-3" align="start" side="right">
-        <ColourEditorBody
+      <PopoverContent className="w-[352px] p-3" align="start" side="right">
+        {/* No Palettes band: a list's colours are literals. */}
+        <FxColourEditor
           colour={item.colour}
-          onColourChange={onColourChange}
-          onRelease={onRelease}
-          rawValue={item.raw}
           extendedChannels={extendedChannels}
+          onColourChange={(colour) => onColourChange(colour, false)}
+          onRelease={onRelease}
+          open={isEditing}
+          projectId={projectId}
         />
       </PopoverContent>
     </Popover>
@@ -279,5 +285,5 @@ function parseColourList(value: string): ColourItem[] {
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s !== '' && !isPaletteRef(s))
-    .map((raw) => ({ id: makeId(), raw, colour: parseExtendedColour(raw) }))
+    .map((raw) => ({ id: makeId(), colour: parseExtendedColour(raw) }))
 }

@@ -1318,8 +1318,11 @@ colour picker's swatches and a 3D material list are unrelated.
 
 `FxColourPalettes.tsx` owns both halves of the UI: `useColourPalettes()` (the offerable list plus
 the three lookups a picker needs to draw a reference) and `FxColourPaletteRow` (the chips, plus
-**Save `<hex>` as palette…**, which fills the library the way Record ▾'s *A new palette* does). Both pickers read `projectId` from the **route**, not a prop — the
-FX library page has no project, and there the row simply offers nothing and still edits literals.
+**Save `<hex>` as palette…**, which fills the library the way Record ▾'s *A new palette* does);
+`FxColourPicker` hands the row to the colour editor (`ColourEditorCore`) as its `references` band
+(venue-rig-fixes plan D18), and Colour Cycle's list draws none. Both pickers read `projectId` from the **route**, not a
+prop — the FX library page has no project, and there the row simply offers nothing and still edits
+literals.
 
 **The programmer is a layer stack too**, and `LookStack` (`components/looks/LookStack.tsx`) is
 the one component that draws both — that sharing is the point rather than a saving, because a
@@ -4340,15 +4343,30 @@ each was:
   declared temperatures and a level, committing the colour that mix makes (`lib/whiteMix.ts`;
   `docs/fixtures-engineering.md` §"DmxWhiteMixColour"), with Save and Fan in its footer — and
   `ColourCell` dispatches between the two. Its controls are `editor/WarmthEditor`, which the fixture
-  sheet's `white-mix` row draws too. Five hosts: the programmer's colour
+  sheet's `white-mix` row draws too. Its hosts: the programmer's colour
   cell through a thinned `ColourPickerPopover` (the popover at 352 — `contentClassName`, measured
   in the app on 2026-09-22 with the picker at 234×200 — and **528 compact**, the side sheet's
   compact width, because the compact body sits its 208px emitter column beside a 256px picker row
   and at 352 it wrapped under, costing the height compact exists to save; and both sheets, `wide`
   on the side sheet),
   the busk tab docked, the Fan tab's colour endpoint (`footer` and `counts` off — a colour intent
-  has no emitter component) and the fixture sheet's colour rows (docked in the row, `footer` and
-  `counts` off, the typed channels on). The picker-only form in a 224px popover was the property
+  has no emitter component), the fixture sheet's colour rows (docked in the row, `footer` and
+  `counts` off, the typed channels on) and the FX colour parameters (venue-rig-fixes plan D18):
+  `FxColourPicker` and each swatch of `FxColourListPicker` in a 352px popover, through one
+  adapter, `fx/FxColourEditor`, over **`ColourEditorCore`** — `ColourEditor` is the core plus its two press bands, which reach
+  `ApplyPicker` and through it `FxEditor`, where these pickers are drawn, so mounting `ColourEditor`
+  there would be an import cycle — `footer` off, the
+  typed channels on, the band as **`references`** — `FxColourPaletteRow`'s chips picking a
+  `pal:{uuid}` and its *Save `<hex>` as palette…*, the read-out naming the palette a value
+  references — and **`onRelease`**, the gesture's end (the picker let go a frame after its last
+  move, a picker key's key-up, a field left, a slider's commit a microtask on, a recent tapped, the
+  editor closed), each edit before it a frame, which is how the FX editor's live push and the cue
+  FX tab's saves keep their floors. Pure white stays `#ffffff` there (`pickerWhiteLed` off, its
+  hints not drawn): one FX colour reaches every head, and the white LED alone would black an RGB
+  one. Their emitter rows are the targets' heads' through `emitterFlagsOf`, the walk
+  `emitterHeadCounts` runs (`lib/emitterHeads.ts`), a Shehds' zones included (D19); a palette's
+  FX offers what any patched head takes; an emitter the targets lack is never written, so the
+  value keeps a stored one. The picker-only form in a 224px popover was the property
   visualisers', which fixture-fx-sheets session 4 deleted. **Pick reads the heads the editor is
   editing** through one hidden `FixtureAppearanceSource` leaf per parent fixture, mounted by the
   editor itself in a store-bound child (`AppearanceLeaves`) so a cell mounted with no project pays
@@ -4409,9 +4427,8 @@ each was:
     (`warmth`). The two cells draw their editor body as an inner component (`SliderEditorBody`,
     `PositionEditorBody`) so the recorder mounts and unmounts with the open editor: a hook at the
     cell's level would outlive the popover and never send what a closed editor staged.
-  - `ColourEditorBody`, under both FX colour pickers (each colour of a list too): a typed hex is
-    staged until its field is left, a drag sends on the body's `onRelease`, a slider's commit and a
-    preset at once; the project is the route's, as the pickers' palettes are.
+  - the FX colour pickers (each colour of a list too) through `ColourEditorCore`, which records as in
+    every host; the project is the route's, as the pickers' palettes are.
   - the palette editor's `FamilyControls`, given the palette's `projectId` by `PaletteEditor` and
     the palette sheet's Value cell: `PercentControl` records `palette-level:<attribute>`,
     `PositionControl` the pair, and `ColourControl` its hex alone (D20a) on the window's release

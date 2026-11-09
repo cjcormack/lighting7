@@ -323,6 +323,9 @@ abstract class DmxFixture(
 
     private fun extractElementAttributes(element: FixtureElement<*>): List<AttributeDescriptor> {
         val descriptors = mutableListOf<AttributeDescriptor>()
+        var whiteChannel: ChannelRef? = null
+        var amberChannel: ChannelRef? = null
+        var uvChannel: ChannelRef? = null
 
         for (prop in FixtureAttributeCatalogue.of(element::class).all) {
             @Suppress("UNCHECKED_CAST")
@@ -345,8 +348,15 @@ abstract class DmxFixture(
                 }
                 is DmxWhiteMixColour -> descriptors.add(whiteMixDescriptor(prop, value, displayName))
                 is DmxSlider -> {
-                    // Skip bundled colour channels in element properties
-                    if (!prop.bundleWithColour) {
+                    // A bundled emitter is the element's colour's, as on the fixture.
+                    if (prop.bundleWithColour) {
+                        when (prop.category) {
+                            AttributeCategory.WHITE -> whiteChannel = ChannelRef(universe.universe, value.channelNo)
+                            AttributeCategory.AMBER -> amberChannel = ChannelRef(universe.universe, value.channelNo)
+                            AttributeCategory.UV -> uvChannel = ChannelRef(universe.universe, value.channelNo)
+                            else -> {}
+                        }
+                    } else {
                         descriptors.add(buildSliderDescriptor(prop, value, displayName))
                     }
                 }
@@ -354,6 +364,12 @@ abstract class DmxFixture(
                     descriptors.add(buildSettingDescriptor(prop, value, displayName))
                 }
             }
+        }
+
+        val colourIndex = descriptors.indexOfFirst { it is ColourAttributeDescriptor }
+        if (colourIndex >= 0) {
+            descriptors[colourIndex] = (descriptors[colourIndex] as ColourAttributeDescriptor)
+                .copy(whiteChannel = whiteChannel, amberChannel = amberChannel, uvChannel = uvChannel)
         }
 
         // Add position descriptor if element has pan and tilt

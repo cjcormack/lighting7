@@ -61,6 +61,7 @@ import { startingSpec, paletteDraftOf, withPaletteDraft, type FxDraft, type FxSc
 import { swappedTiming } from '@/lib/fxTiming'
 import { offeredFx } from '@/lib/fxTargetAttributes'
 import { EditorReadout } from '@/components/editor/EditorReadout'
+import { emitterFlagsOf } from '@/lib/emitterHeads'
 import { findFxEntry } from '@/components/busking/buskingTypes'
 import { useFxLibraryQuery, type FxLibraryEntry } from '@/store/fixtureFx'
 import { useSpeedMasterForFamily } from '@/store/speedMasters'
@@ -592,6 +593,8 @@ function FxControls({
   // offering every patched head's options of that name — two models' gobo wheels are one list.
   const { data: fixtures } = useVisibleFixtureListQuery()
   const rigSettings = useMemo(() => rigSettingUnion(fixtures ?? []), [fixtures])
+  // A palette has no head of its own, so its colour FX offers the emitters any patched head takes.
+  const rigEmitters = useMemo(() => (entry?.family === 'colour' ? emitterFlagsOf(fixtures ?? []) : undefined), [entry, fixtures])
 
   // Filtered through the same map the write boundary derives the family with, rather than by string
   // equality against one spelling: `attributeFamilyForFxFamily` is case-insensitive and takes `color`
@@ -720,7 +723,7 @@ function FxControls({
             timingSource={draft.timingSource}
             draft={fxDraft}
             scope={PALETTE_SCOPE}
-            extendedChannels={undefined}
+            extendedChannels={rigEmitters}
             settingAttribute={slotSetting}
             attribute={draft.attribute}
             paletteFamily={family}

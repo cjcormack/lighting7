@@ -404,9 +404,9 @@ run `./gradlew compileTestKotlin` and the touched packages' tests where they tou
 |---|---|---|---|---|---|
 | 1 | OSC sender ranges and the address list | merged | `claude/magical-ritchie-84882h` | [#410](https://github.com/cjcormack/lighting7/pull/410) | `7296801` |
 | 2 | Auto numbers from position | merged | `claude/gallant-meitner-7xk6a8` | [#411](https://github.com/cjcormack/lighting7/pull/411) | `210c26d` |
-| 3 | The Show view follows the show | in review | `claude/zen-dirac-kc1wi2` | [#413](https://github.com/cjcormack/lighting7/pull/413) | `5a7f5cc` |
-| 4 | Include, and Record's cue list and placement | in review | `claude/sharp-lamport-6erbz0` | | |
-| 5 | One colour editor for FX | planned | | | |
+| 3 | The Show view follows the show | merged | `claude/zen-dirac-kc1wi2` | [#413](https://github.com/cjcormack/lighting7/pull/413) | `5a7f5cc` |
+| 4 | Include, and Record's cue list and placement | merged | `claude/sharp-lamport-6erbz0` | [#415](https://github.com/cjcormack/lighting7/pull/415) | `0015e0e` |
+| 5 | One colour editor for FX | in review | `claude/venue-rig-fixes-1fe92b` | | |
 | 6 | Path's Size | planned | | | |
 | 7 | Move in dark's instant rows | planned | | | |
 | 8 | A show's name for a venue fixture | planned | | | |
@@ -619,6 +619,32 @@ D18, D19.
 - Docs: frontend `CLAUDE.md`'s FX colour paragraphs (§Looks, palettes and layers' `pal:` section,
   `FxColourPalettes.tsx`).
 - Local: `check:quick`.
+- *As built*: the FX pickers mount `editor/ColourEditorCore.tsx` through one adapter,
+  `fx/FxColourEditor.tsx`, the editor's body moved out of
+  `ColourEditor.tsx`, which is now the core plus its two press bands: `PaletteBand` and `FxBand` reach
+  `ApplyPicker` and through it `FxEditor`, where the FX colour parameters are drawn, so mounting
+  `ColourEditor` there was an import cycle. Its programmer hosts and tests are unchanged. The core
+  gained `onRelease` beside `references`: the FX editor's live push and the
+  cue FX tab's saves read a release, and the programmer's hosts write every move, so each edit is a
+  frame and `onRelease` the gesture's end — the picker let go a frame after its last move, a picker
+  key's key-up, a field left, a slider's commit, a recent tapped, the editor closed. A typed channel
+  therefore lands when its field is left, where the old hex field released each valid hex. The old
+  body's hex field and colour presets went with it, since the programmer's editor has neither (the
+  read-out shows the hex); `COLOUR_PRESETS` and `isValidHexColour`, used only there, were deleted.
+  The references band is `FxColourPaletteRow` with a frame of its own, and the read-out names the
+  palette a value references. `detectExtendedChannels` was deleted for `emitterFlagsOf`, beside
+  `emitterHeadCounts` and over its walk in `lib/emitterHeads.ts` (re-exported by both editor modules),
+  which `useFxScope` and the palette editor (over the visible fixtures) read. An emitter the targets
+  lack is never written, so a stored one is kept. The programmer's picker turns pure white into the
+  white LED alone (`#000000;w255`); an FX colour reaches every head and an RGB-only one would go
+  black, so the core's `pickerWhiteLed` is off in the FX hosts, white stays `#ffffff` and the
+  white-LED hints are not drawn. The
+  programmer's colour cell reads W on a collapsed Shehds row from the zones' colour descriptors, as
+  its test pins, but the desk built an element's colour descriptor without its bundled emitters, so
+  no zone carried `whiteChannel` and neither the cell nor an FX on a Shehds offered W:
+  `DmxFixture.extractElementAttributes` now bundles them as the fixture's descriptor does
+  (`ShehdsLed19RgbwFixtureTest`). Both
+  popovers are the cell's 352px, since the editor's picker is fluid.
 
 ### Session 6 — Path's Size
 

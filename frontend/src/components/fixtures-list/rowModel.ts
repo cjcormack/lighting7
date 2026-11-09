@@ -596,8 +596,7 @@ export function targetFamilies(
  * `uvChannel` (see `hooks/useTargetAttributes`), so scanning categories the way [targetFamilies]
  * does would find no emitter on any head. The `slider`-with-that-category arm is the belt to that
  * braces — it costs one comparison and catches a head that publishes an emitter as a plain slider
- * rather than folding it in. Same probe as `detectExtendedChannels` in `components/fx/colourUtils`,
- * which asks it of a whole picker rather than of a selection.
+ * rather than folding it in.
  */
 export function targetEmitters(targets: readonly WriteTarget[]): string[] {
   const out = new Set<string>()
