@@ -70,6 +70,11 @@ export interface RecordRequest {
   includeFx?: boolean
   name?: string
   cueNumber?: string
+  /**
+   * A CREATE's place: directly after this entry of `cueStackId`, found by the desk when it records
+   * (venue-rig-fixes plan D17). Absent appends.
+   */
+  afterEntryId?: number
   /** Where a CREATE's `cueNumber` reading out of order puts the cue; absent is `HERE`. */
   placement?: CueNumberPlacement
   /**

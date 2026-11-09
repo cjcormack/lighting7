@@ -1471,13 +1471,24 @@ when Record is pressed, so a cancelled sheet leaves nothing behind; once made it
 a failed Record is retried into it. A show with no stack opens on it. Its last item is ***No stack***,
 which sends no `cueStackId`: the new cue is loose, and the sheet says it is found in the Cues table
 (§"The Cues table"). Merge, Replace and Remove are offered from every Record, not only from a cue row,
-and each draws `RecordCuePicker`: one filterable radio list of **every cue, flat and by name**
-(`cuePickerRows` — markers left out). The programmer Record menu's *An existing cue…* opens on Merge
-with it (`RecordPreset.existingCue`); until S10 it opened the sheet with only *New cue* to offer.
-**A row names every place its cue sits**, from the list's `entries` — `Q7 · Act 1, Q14 · Act 2`, or
-*Loose* — the list the Cues table reads, so a loose cue is still a cue, labelled by its name, and a
-shared cue is one row because it is one cue. The filter matches the name or any place's number or
-stack.
+and each draws `RecordCuePicker`: one filterable radio list of every cue **in show order** under a
+divider per stack (venue-rig-fixes plan D15; `cuePickerSections` over `lib/runningOrder.ts`'s
+`cuesInShowOrder`, markers left out): the running order's stacks, then the busk stacks (*· busk*), each
+cue once at its first place in that order, then the loose cues by name. The programmer Record menu's
+*An existing cue…* opens on Merge with it (`RecordPreset.existingCue`); until S10 it opened the sheet
+with only *New cue* to offer. **A row names every place its cue sits**, in the same order, from the
+list's `entries` — `Q7 · Act 1, Q14 · Act 2`, or *Loose* — the list the Cues table reads, so a loose
+cue is still a cue, labelled by its name, and a shared cue is one row because it is one cue. The
+filter matches the name or any place's number or stack, and keeps a divider only over a match. On
+Merge with no cue named, the sheet **preselects** the included cue when Include last loaded one, else
+the live cue of the stack the show's playhead is on (D16, `preselectedRecordCue`), filling it in when
+either arrives after the open; the preselection is held apart from the cue picked, so a cue nobody
+picked is never what a Replace or a Remove writes into, and the picker brings a picked row into view
+once. Record ▾'s ***A new cue after Q13*** (D17) opens on New cue with `RecordPreset.afterEntryId`, the
+entry the include named, its subtitle *Act 1 · directly after 13* (*· appended* when the include named
+none or the stack list does not hold it — never a row guessed by cue); the sheet
+says *After Q13 in Act 1* under the stack select while that stack is the choice, with a *Put it at the
+end* checkbox, and sends `afterEntryId`, which the desk resolves when it records.
 
 **Provenance names the winning layer.** `ProvenanceEntry` gained `layerId` and `layerSource` —
 the resolved referent, `kind` + `id` + `name` — which `useRowOwnership` aggregates into
@@ -5146,7 +5157,16 @@ step by the kit's `arrowStepTarget`, which every sheet on the kit steps by too (
 `lib/listExpansion.ts`): one `sessionStorage` entry per project and selection scope, group names and
 fixture keys, so a row opened on the programmer is open on the way back to it, a show's same-named
 group never opens another show's, and a name the loaded rig lacks is dropped on the next write.
-Include, the heads chip's landings and a deep link add to it. **Expand all · Collapse all**
+A deep link adds to it. **A landing does not** (venue-rig-fixes plan D14, `fixtures-list/landing.ts`):
+Include's and the heads chip's (`landTargets`) fold the keys first — a multi-head fixture all of whose
+heads came in is selected as its own row, collapsed (`foldLandingKeys`) — and what a landing opens,
+a fixture only some of whose heads came in and in the grouped view a fixture's group, is held by
+`useLandingOpenings` over the stored set while the list stays mounted, each landing replacing the
+last's. The chevrons, Expand all and Collapse all are the operator's: a row they close is closed
+whichever opened it, a row they open is stored, and a landing's row they leave open stays the
+landing's — but Expand all, a ⌥-click level expand and a deep link's group store what they mean to
+open, a landing's rows among them. The Include landing selects on the commit after its openings, as
+`landTargets` does, because the row door keeps only rows that are shown. **Expand all · Collapse all**
 (`ExpandAllButton`, the toolbar's `expand` part) opens every group and multi-head fixture the filter
 shows — a closed group's members included — and reads *Collapse all* once none is closed; a collapse
 leaves open a fixture whose element rows hold a selected row or cell, and a group whose member rows

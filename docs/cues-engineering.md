@@ -353,7 +353,12 @@ position), each with its stack, position, number and follow. Its place fields �
 `cueStackName`, `entryId`, `sortOrder` (the entry's **position**, markers counted), the number,
 follow and `trackedScenery` — describe the entry `?entryId=` names, else the cue's only entry, and
 are null for a shared cue read without one, or a loose cue. `NewCue` takes an optional
-`cueStackId` (absent makes a loose cue) and `sortOrder`, a position (appended if omitted).
+`cueStackId` (absent makes a loose cue) and `sortOrder`, a position (appended if omitted). Record's
+CREATE (`POST /programmer/record`) takes the same `sortOrder`, or `afterEntryId`: the entry of
+`cueStackId` the new cue goes directly after, found inside Record's transaction so a list that moved
+since the sheet opened cannot misplace it — 400 *Cue stack entry not found* when it is not one of
+that stack's, 400 beside `sortOrder`, and 400 on any other mode (venue-rig-fixes plan D17). The cue
+takes an auto number from its place.
 
 **In the sync archive** (`formatVersion` 32, cue model plan session 3; `docs/sync-engineering.md`
 §"Version 32"): `cues/{uuid}.json` is what the cue is — name, fade, notes, stomp, scenery, events —

@@ -39,8 +39,10 @@ vi.mock('@/store/programmer', () => ({
 vi.mock('@/store/fixtureFx', () => ({ useActiveFxQuery: queryOf(() => effects) }))
 const desk = { connected: true }
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => desk.connected }))
+const ACT_1 = vi.hoisted(() => [{ id: 2, name: 'Act 1', cues: [] as unknown[] }])
+const stackList = vi.hoisted(() => ({ value: ACT_1 as unknown[] }))
 vi.mock('@/store/cueStacks', () => ({
-  useProjectCueStackListQuery: () => ({ data: [{ id: 2, name: 'Act 1', cues: [] }] }),
+  useProjectCueStackListQuery: () => ({ data: stackList.value }),
 }))
 
 const venue = { isVenue: false }
@@ -100,6 +102,7 @@ afterEach(() => {
   heldTempo = 0
   layers = []
   venue.isVenue = false
+  stackList.value = ACT_1
   resetProgrammerFadeStore()
 })
 
@@ -243,6 +246,43 @@ describe('ProgrammerActionBar', () => {
     expect(screen.getByText('An existing cue…')).toBeTruthy()
     // NOT a predicted "becomes Q4.5" — the server assigns the number.
     expect(screen.queryByText(/Q4\.5/)).toBeNull()
+  })
+
+  it('places A new cue after 4 directly after the entry it was included from (D17)', () => {
+    summary = { ...summary, entryCount: 12, lastIncluded: { ...CUE, cueStackId: 2, entryId: 21 } }
+    stackList.value = [
+      { id: 2, name: 'Act 1', cues: [{ entryId: 21, id: CUE.kind === 'CUE' ? CUE.cueId : 0, name: 'Warm Wash', cueNumber: '4', cueType: 'STANDARD' }] },
+    ]
+    render(<ProgrammerActionBar projectId={1} />)
+    openRecordMenu()
+    // The number is the entry's, bare, as the source strip shows it.
+    expect(screen.getByText('Act 1 · directly after 4')).toBeTruthy()
+    fireEvent.click(screen.getByText('A new cue after 4'))
+    expect(sheets.openRecord).toHaveBeenCalledWith({ defaultCueStackId: 2, afterEntryId: 21 })
+  })
+
+  it('appends A new cue after a cue whose entry the stack list does not hold', () => {
+    summary = { ...summary, entryCount: 12, lastIncluded: { ...CUE, cueStackId: 2 } }
+    render(<ProgrammerActionBar projectId={1} />)
+    openRecordMenu()
+    expect(screen.getByText('Act 1 · appended')).toBeTruthy()
+    fireEvent.click(screen.getByText('A new cue after Q4'))
+    expect(sheets.openRecord).toHaveBeenCalledWith({ defaultCueStackId: 2, afterEntryId: undefined })
+  })
+
+  it.each([
+    ['named no entry', undefined],
+    ['named an entry the list does not hold', 99],
+  ])('appends rather than guess a place when the include %s', (_, entryId) => {
+    summary = { ...summary, entryCount: 12, lastIncluded: { ...CUE, cueStackId: 2, entryId } }
+    stackList.value = [
+      { id: 2, name: 'Act 1', cues: [{ entryId: 21, id: CUE.kind === 'CUE' ? CUE.cueId : 0, name: 'Warm Wash', cueNumber: '4', cueType: 'STANDARD' }] },
+    ]
+    render(<ProgrammerActionBar projectId={1} />)
+    openRecordMenu()
+    expect(screen.getByText('Act 1 · appended')).toBeTruthy()
+    fireEvent.click(screen.getByText('A new cue after 4'))
+    expect(sheets.openRecord).toHaveBeenCalledWith({ defaultCueStackId: 2, afterEntryId: undefined })
   })
 
   it('offers the included Look as a destination, opening Record look on it', () => {

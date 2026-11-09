@@ -26,7 +26,13 @@ import {
 } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { formatError } from '@/lib/formatError'
-import { useCreateProjectCueStackMutation, useProjectCueStackListQuery } from '@/store/cueStacks'
+import { cn } from '@/lib/utils'
+import {
+  useCreateProjectCueStackMutation,
+  useProjectCueStackListQuery,
+  useProjectProgramStateQuery,
+} from '@/store/cueStacks'
+import { useProgrammerSummaryQuery } from '@/store/programmer'
 import { useRecordProgrammerMutation } from '@/store/programmerOps'
 import { cueNumberProblem } from '@/lib/cueNumber'
 import { outOfOrderOf, useCueNumberPlacement } from '@/components/cues/CueNumberPlacement'
@@ -42,6 +48,7 @@ import { RecordTempoRow } from './RecordTempoRow'
 import { RecordReferencesNote } from './RecordReferencesNote'
 import { announceWrite, recordNote } from './writeToasts'
 import { RecordCuePicker, usePickedCueName } from './RecordCuePicker'
+import { preselectedRecordCue } from './cuePickerRows'
 
 export interface RecordSheetProps {
   open: boolean
@@ -53,8 +60,13 @@ export interface RecordSheetProps {
   /** Preselect a stack to create in. */
   defaultCueStackId?: number
   /**
-   * Open on Merge with the cue picker, nothing picked — the Record menu's "An existing cue…".
-   * Ignored when [targetCueId] names the cue already.
+   * The entry of [defaultCueStackId] a new cue goes directly after (D17), shown as *After Q13 in
+   * Act 1* while that stack is the choice, with *Put it at the end* to append instead.
+   */
+  afterEntryId?: number
+  /**
+   * Open on Merge with the cue picker — the Record menu's "An existing cue…" — on D16's preselection
+   * where there is one. Ignored when [targetCueId] names the cue already.
    */
   existingCue?: boolean
 }
@@ -115,9 +127,14 @@ export function RecordSheet({
   targetCueId,
   targetCueName,
   defaultCueStackId,
+  afterEntryId,
   existingCue = false,
 }: RecordSheetProps) {
   const { data: stacks } = useProjectCueStackListQuery(projectId)
+  // With no cue named, the picker opens on the included cue, else the playhead stack's live one (D16).
+  const { data: summary } = useProgrammerSummaryQuery()
+  const { data: program } = useProjectProgramStateQuery(projectId)
+  const preselectedCueId = preselectedRecordCue(summary?.lastIncluded, program?.activeStackId, stacks)
   const [record, { isLoading: recording, error: recordError, reset }] = useRecordProgrammerMutation()
   const [createStack, { isLoading: creatingStack, error: createStackError, reset: resetCreateStack }] =
     useCreateProjectCueStackMutation()
@@ -140,9 +157,13 @@ export function RecordSheet({
   const [selectedOnly, setSelectedOnly] = useState(false)
   const [stackId, setStackId] = useState<string>('')
   const [newStackName, setNewStackName] = useState('')
+  // The cue named or picked by hand. D16's preselection is held apart and offered on Merge alone, so
+  // a cue nobody picked is never what a Replace or a Remove writes into.
   const [cueId, setCueId] = useState<number | null>(targetCueId ?? null)
+  const [preselected, setPreselected] = useState<number | null>(null)
   const [name, setName] = useState('')
   const [cueNumber, setCueNumber] = useState('')
+  const [putAtEnd, setPutAtEnd] = useState(false)
   // Set by a Record that landed, until the next open: the sheet animates out still mounted, and its
   // Record must not take a second press meanwhile.
   const [done, setDone] = useState(false)
@@ -168,6 +189,7 @@ export function RecordSheet({
     openedRef.current = true
     setMode(openingMode)
     setCueId(targetCueId ?? null)
+    setPreselected(preselectedCueId)
     setSource('TOUCHED')
     // A Record that quietly left a family out is only found when the cue is fired.
     setMask(null)
@@ -181,6 +203,7 @@ export function RecordSheet({
     setSelectedOnly(false)
     setName('')
     setCueNumber('')
+    setPutAtEnd(false)
     // A show with no stack yet opens on *New stack…*, so the first Record of a show needs no
     // detour through the Show view to make somewhere to put it — but only once the list says so:
     // an unloaded list is not an empty one, and the effect below fills it in when it arrives.
@@ -200,9 +223,24 @@ export function RecordSheet({
     if (open && stackId === '' && stacks != null) setStackId(defaultStackChoice())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, stackId, stacks])
+  // Likewise the preselection, once: a GO while the sheet is open does not move it.
+  useEffect(() => {
+    if (open && preselected == null && preselectedCueId != null) setPreselected(preselectedCueId)
+  }, [open, preselected, preselectedCueId])
+
+  // *After Q13 in Act 1* while the entry's stack is the choice; another stack appends.
+  const afterEntry = useMemo(() => {
+    if (afterEntryId == null) return null
+    const stack = recordableStacks.find((s) => s.cues.some((c) => c.entryId === afterEntryId))
+    const row = stack?.cues.find((c) => c.entryId === afterEntryId)
+    if (stack == null || row == null) return null
+    return { stack, label: row.cueNumber ? `Q${row.cueNumber}` : row.name }
+  }, [afterEntryId, recordableStacks])
 
   const creating = mode === 'CREATE'
+  const intoCueId = cueId ?? (mode === 'MERGE' ? preselected : null)
   const newStack = stackId === NEW_STACK
+  const placingAfter = creating && afterEntry != null && stackId === String(afterEntry.stack.id)
   // The stack's error only while *New stack…* is still the choice: picking an existing stack after a
   // failed create must not leave it standing over the Record that follows (submit resets it too).
   // An out-of-order number is asked about in the placement dialog, not shown as a failure.
@@ -210,13 +248,13 @@ export function RecordSheet({
   // Only while the field is shown: a loose cue takes no number, so a leftover one is ignored.
   const numberProblem = creating && stackId !== NO_STACK ? cueNumberProblem(cueNumber) : null
   const canSubmit =
-    (creating ? (newStack ? newStackName.trim() !== '' : stackId !== '') : cueId != null) &&
+    (creating ? (newStack ? newStackName.trim() !== '' : stackId !== '') : intoCueId != null) &&
     !maskIsEmpty(mask) &&
     numberProblem == null
-  const pickedCueName = usePickedCueName(projectId, creating ? null : cueId)
+  const pickedCueName = usePickedCueName(projectId, creating ? null : intoCueId)
   // The list's name once it has loaded, the preset's until then — and the preset's only for its
   // own cue, never for one picked since.
-  const intoCueName = pickedCueName ?? (cueId != null && cueId === targetCueId ? targetCueName : null)
+  const intoCueName = pickedCueName ?? (intoCueId != null && intoCueId === targetCueId ? targetCueName : null)
   // Guarded on the selection as well as the checkbox: the list can unmount (or be deselected)
   // while this sheet is open, and sending an empty `targets` is a 400, not a whole-rig record.
   const scoped = selectedOnly && selectedKeys.length > 0
@@ -226,8 +264,8 @@ export function RecordSheet({
   // dialog to ask about.
   const { writeNumber, dialog: numberDialog } = useCueNumberPlacement()
 
-  // A numbered new cue is sent asking first: a number that reads out of order at the end of the
-  // stack opens the placement dialog, which sends again moved to its place or kept at the end.
+  // A numbered new cue is sent asking first: a number that reads out of order where the cue would
+  // land opens the placement dialog, which sends again moved to its number's place or kept there.
   const submit = () => {
     if (done) return
     if (creating && stackId !== NO_STACK && cueNumber.trim() !== '') writeNumber((placement) => submitWith(placement))
@@ -268,10 +306,11 @@ export function RecordSheet({
         ? selectedKeys.map((key) => ({ type: 'fixture' as const, key }))
         : undefined,
       cueStackId,
-      cueId: creating ? undefined : (cueId ?? undefined),
+      cueId: creating ? undefined : (intoCueId ?? undefined),
       name: creating && name.trim() !== '' ? name.trim() : undefined,
       // A number is an entry's, so a cue in no stack has none to take.
       cueNumber: creating && cueStackId != null && cueNumber.trim() !== '' ? cueNumber.trim() : undefined,
+      afterEntryId: placingAfter && !putAtEnd ? afterEntryId : undefined,
       placement,
     })
     if ('error' in response && outOfOrderOf(response.error)) throw response.error
@@ -316,7 +355,7 @@ export function RecordSheet({
           </div>
 
           {!creating && (
-            <RecordCuePicker projectId={projectId} value={cueId} onChange={setCueId} disabled={isLoading} />
+            <RecordCuePicker projectId={projectId} value={intoCueId} onChange={setCueId} disabled={isLoading} />
           )}
 
           {creating && (
@@ -340,6 +379,22 @@ export function RecordSheet({
                 </Select>
                 {stackId === NO_STACK && (
                   <p className="text-xs text-muted-foreground">In no stack — find it in the Cues table.</p>
+                )}
+                {placingAfter && (
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className={cn('text-muted-foreground', putAtEnd && 'line-through')} data-record-after>
+                      After {afterEntry.label} in {afterEntry.stack.name}
+                    </span>
+                    <label className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={putAtEnd}
+                        onChange={(e) => setPutAtEnd(e.target.checked)}
+                        className="size-3.5"
+                      />
+                      Put it at the end
+                    </label>
+                  </div>
                 )}
               </div>
               {newStack && (

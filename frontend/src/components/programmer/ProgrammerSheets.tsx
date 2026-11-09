@@ -14,6 +14,8 @@ export interface RecordPreset {
   targetCueName?: string
   /** Create a new cue in this stack. */
   defaultCueStackId?: number
+  /** …directly after this entry of it: Record ▾'s *A new cue after Q13*. */
+  afterEntryId?: number
   /** Open on Merge with the cue picker — the Record menu's "An existing cue…". */
   existingCue?: boolean
 }
@@ -97,7 +99,9 @@ export function ProgrammerSheetsProvider({
           key={
             record.targetCueId != null
               ? `cue:${record.targetCueId}`
-              : record.defaultCueStackId != null
+              : record.afterEntryId != null
+                ? `after:${record.afterEntryId}`
+                : record.defaultCueStackId != null
                 ? `stack:${record.defaultCueStackId}`
                 : record.existingCue
                   ? 'existing'
@@ -109,6 +113,7 @@ export function ProgrammerSheetsProvider({
           targetCueId={record.targetCueId}
           targetCueName={record.targetCueName}
           defaultCueStackId={record.defaultCueStackId}
+          afterEntryId={record.afterEntryId}
           existingCue={record.existingCue}
         />
       )}
