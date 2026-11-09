@@ -300,7 +300,7 @@ describe('below md', () => {
     expect(drawer.style.transform).toBe('translateX(-100%)')
     // …and the opener the ShowHeader draws below `md` opens it.
     fireEvent.click(screen.getByRole('button', { name: 'open drawer' }))
-    expect(drawer.style.transform).toBe('translateX(0)')
+    expect(drawer.style.transform).toBe('translateX(0px)')
   })
 
   it('still draws the app header with its hamburger while the fact is off', async () => {

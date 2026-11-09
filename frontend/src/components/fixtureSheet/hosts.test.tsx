@@ -346,7 +346,7 @@ describe('PhoneSheet', () => {
     })
     expect(content.style.bottom).toBe('300px')
     expect(content.className).not.toContain(SAFE_BOTTOM_CLASS)
-    expect(content.style.maxHeight).toBe('calc(88svh - 300px)')
+    expect(content.style.maxHeight).toBe('calc(-300px + 88svh)')
   })
 })
 
