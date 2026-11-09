@@ -506,16 +506,15 @@ class ControlSurfaceBindingService(
      * the binding *rows* haven't moved, only their derived health. Called from listeners
      * when fixtures / patches / cues / cue stacks mutate.
      *
-     * No-op if the project isn't loaded, the provider is null, or the provider returns
-     * null (pre-show init). Safe to call from any thread.
+     * No-op if the project isn't loaded or no context can be read: no provider, pre-show init,
+     * or a desk shutting down under the caller. Safe to call from any thread.
      */
     fun invalidateHealth(projectId: Int) {
         if (!loaded.contains(projectId)) return
-        val provider = healthContextProvider ?: return
         var changed = false
         synchronized(lockFor(projectId)) {
             val pc = cache[projectId] ?: return
-            val context = provider(projectId) ?: return
+            val context = resolveHealthContext(projectId) ?: return
             // Copy entries because we mutate byId via (un)install during iteration.
             val snapshot = pc.byId.values.toList()
             for (existing in snapshot) {
