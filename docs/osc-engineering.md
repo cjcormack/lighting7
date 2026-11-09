@@ -4,8 +4,9 @@ QLab and other show-control senders drive the desk over OSC: a Network cue sends
 address and optional arguments, and the desk does what the address names. The plan is
 [`plans/completed/osc-plan.md`](plans/completed/osc-plan.md); this document is what is built.
 Session 1 is the listener, stacks, Looks, loose cues and busk pads; session 2 masters and tempo, and
-finding addresses: the listing, *Copy OSC address*, the cheat sheet and the moved-address warning;
-session 3 TCP and replies. Learnable addresses, and the fader and LED feedback a learned sender
+finding addresses: the listing, *Copy OSC address*, the address list and the moved-address warning;
+session 3 TCP and replies. Sender ranges and the on-screen address list are the venue-rig-fixes plan's
+session 1 ([`plans/venue-rig-fixes-plan.md`](plans/venue-rig-fixes-plan.md), D1–D5). Learnable addresses, and the fader and LED feedback a learned sender
 would want, wait for one to be in use (`FU-OSC-LEARN` in `plans/followups.md`).
 
 ## The address set
@@ -111,7 +112,7 @@ the connection reads on, and each message goes into the same channel as UDP's. A
 open; a ninth closes the one idle longest rather than being turned away, so a QLab machine that lost
 power mid-show, its connection never closed, cannot lock its own reconnect out (keepalive closes such
 a connection in time too). The sender is looked up again for every frame, and a settings save closes
-the connections of senders it removed. UDP and TCP bind separately and are reconciled separately, so
+the connections of senders no entry admits any more. UDP and TCP bind separately and are reconciled separately, so
 a port another program holds on one still leaves the other listening, a save that moves neither
 leaves a running one alone, and `error` names the one that failed. Nothing on these threads touches
 the database or the show (D8).
@@ -124,19 +125,31 @@ admin on the desk's own listener turns it on in Install Settings → OSC:
 `GET/PUT /api/rest/install/osc` (`routes/installOsc.kt`), `{enabled, bindAddress, port, senders:
 [{id, name, address, replies}]}`, the `PUT` the whole document — a sender with no `id` is new, one left out is
 removed — refused 400 `OSC_SETTINGS_INVALID` naming every problem at once (a port outside 1024–65535,
-an address that is not an IP literal, a sender twice). Both are 403 `OSC_SETTINGS_LOCAL_ONLY` on the
+an address that is neither an IP literal nor a range, a sender twice). Both are 403 `OSC_SETTINGS_LOCAL_ONLY` on the
 public listener. The default port is **8415**, UDP and TCP (D13); `bindAddress` null listens on every
 interface, and is how a desk keeps OSC off a network it does not trust. A hostname is never looked
 up: the allowlist compares addresses, and DNS has no place on the settings route.
 
+**A sender is an address or a range** (D1): `a.b.c.d/n` (0–32) or an IPv6 `addr/n` (0–128), stored
+as its network in canonical form — `192.168.0.1/24` saves as `192.168.0.0/24`, and an address and its
+`/32` (or `/128`) are one entry, saved as the bare address. Two entries naming the same address or
+network are refused as *listed twice*, whatever their spelling; overlapping ranges are allowed. An
+IPv4-mapped IPv6 entry is the IPv4 one. `osc/OscSenderMatcher.kt` parses an entry (`canonical`) and
+is the one lookup every receive path asks (D2), built when the settings load: an exact address wins,
+then the longest matching prefix, IPv4 and IPv6 apart, an IPv4-mapped source matching as IPv4. The
+entry it answers names the sender in History and the log; the log row also carries the packet's
+`source`, so a message through a range says which machine sent it.
+
 **Only listed senders are heard.** A packet from anywhere else is dropped before parsing and counted,
-one row per address (at most 20, the stalest going first) with *Allow this sender* for an admin. A
+one row per address (at most 20, the stalest going first) with *Allow this sender* for an admin, which
+adds the exact address. A save drops every refused address the new settings admit, a range's included. A
 source address can be forged by anyone on the LAN, so the allowlist keeps out the wrong machine, not
 an attacker. A port in use is `osc.state`'s `error`, never a failed startup.
 
 Storage is `osc_settings` (one row) and `osc_senders`, both `MachineLocal` in `SyncDispositions`:
 they never sync, and need no migration — `osc_senders.replies`, session 3's, is a column
-`createMissingTablesAndColumns` adds, off.
+`createMissingTablesAndColumns` adds, off, and `osc_senders.address`'s 64 characters hold an IPv6
+`/128`.
 
 ## Replies
 
@@ -161,7 +174,8 @@ it to watch the answers in its OSC monitor.
 `osc.state` (`plugins/MachineSocket.kt`) goes to every socket on the desk's own listener, operators'
 included (D12), and none on the public one: `{enabled, listening, tcpListening, port, error?,
 received, dropped, refused, refusedSenders, recent, warnings}` (`listening` is UDP's), at most four times a second. Each of the last 50 messages is a
-row — time, sender (the allowlist's name), address, arguments, outcome and a one-line detail naming
+row — time, sender (the allowlist's name), source (the address it came from), address, arguments,
+outcome and a one-line detail naming
 what it reached (*GO TO 31 Storm builds in Act 2*) or why it did nothing (*No stack `act-3` in this
 show*). Outcomes: **done**, **not found**, **ambiguous**, **refused**, **failed**, **bad message**.
 A dropped message never reaches the collector, so drops are a count, not rows. Every address resolved
@@ -190,9 +204,21 @@ project, both roles, and never on the public listener (403 `OSC_LOCAL_ONLY`, D5)
 **Copy OSC address** is a submenu on a stack's ⋯ (the Show view), a cue's ⋯ (`CueActions`: the entry's
 GO TO and standby, then the cue's loose hold), a busk pad's hold menu, and an *OSC address* button on
 a Look's sheet (`components/osc/CopyOscAddressMenu.tsx`). It reads the listing as it opens, so it
-follows a rename, and says why where a record has none. **Print cheat sheet**, on the OSC tab, opens
-every address of the current show as one printable page (`lib/oscCheatSheet.ts`), by kind, with the
-names that have none.
+follows a rename, and says why where a record has none.
+
+**The address list** (`components/osc/OscAddressList.tsx`, D4) is on the OSC tab under the listener
+settings, for the current project and either role, and absent in remote mode, where the desk refuses
+the listing (403 `OSC_LOCAL_ONLY`): *Addresses · `<project>`* with what the desk listens on (*port N ·
+UDP and TCP*, *· UDP* or *· TCP*, *OSC is off*), a filter over the address, what it reaches and what it does, then the addresses by kind (Cue
+stacks, Loose cues, Looks, Busk pads and pages, Masters and tempo, Other — `oscAddressSections` in
+`lib/oscAddresses.ts`), each a row of Address, Args, Reaches and a copy button, then *Ambiguous* and
+*No address*. It reads the listing as it mounts and on *Refresh*, as the menus do, since no frame says
+an address moved; a read that fails says so, and that a list still drawn may be out of date. A copy
+goes through `copyOscAddress`: the Clipboard API, else the browser's own `execCommand('copy')`, which
+a plain-http LAN origin still allows inside a gesture, the address set on its `copy` event so a
+menu's focus trap cannot take the selection away (counted only when that event ran), else the address
+selected in its cell with *Press ⌘C to copy* (a menu, which has no cell, says it could not copy). It
+replaced the printable cheat sheet (D5).
 
 ## Addresses that move
 

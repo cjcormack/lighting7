@@ -8,6 +8,7 @@ import type { OscAddressList } from '../lib/oscAddresses'
 export interface OscSender {
   id: number
   name: string
+  /** One IP or a range (`192.168.1.0/24`), as the desk stores it: a range as its network. */
   address: string
   /** Each message it sends is answered with a `/lighting7/reply`; absent is off. */
   replies?: boolean
@@ -48,7 +49,7 @@ export const oscApi = restApi.injectEndpoints({
         }
       },
     }),
-    // Read when a menu or the cheat sheet opens, and asked again each time: an address follows a
+    // Read when a menu or the address list opens, and asked again each time: an address follows a
     // rename, a renumber or a pad moved, none of which this cache hears about.
     oscAddresses: build.query<OscAddressList, number>({
       query: (projectId) => `projects/${projectId}/osc/addresses`,
@@ -58,7 +59,7 @@ export const oscApi = restApi.injectEndpoints({
   overrideExisting: false,
 })
 
-export const { useOscSettingsQuery, useSaveOscSettingsMutation, useOscAddressesQuery, useLazyOscAddressesQuery } = oscApi
+export const { useOscSettingsQuery, useSaveOscSettingsMutation, useOscAddressesQuery } = oscApi
 
 const subscribe = (notify: () => void) => {
   const subscription = lightingApi.osc.subscribe(() => notify())

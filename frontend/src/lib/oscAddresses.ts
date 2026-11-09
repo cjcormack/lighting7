@@ -104,3 +104,42 @@ export function unseenWarnings(warnings: readonly OscAddressWarning[] | undefine
 export function newestWarningId(warnings: readonly OscAddressWarning[] | undefined): number {
   return (warnings ?? []).reduce((max, w) => Math.max(max, w.id), 0)
 }
+
+/** The address list's sections, by what an address's pattern starts with, in the order they are drawn. */
+export const OSC_SECTIONS: readonly { title: string; prefix: readonly string[] }[] = [
+  { title: 'Cue stacks', prefix: ['/stack/'] },
+  { title: 'Loose cues', prefix: ['/cue/'] },
+  { title: 'Looks', prefix: ['/look/'] },
+  { title: 'Busk pads and pages', prefix: ['/busk/'] },
+  { title: 'Masters and tempo', prefix: ['/blackout', '/grandmaster', '/tempo/'] },
+]
+
+export const OSC_OTHER_SECTION = 'Other'
+
+/** The section [address] is listed under: its pattern past the desk's prefix, else *Other*. */
+export function oscSectionOf(list: OscAddressList, address: OscAddress): string {
+  const tail = address.pattern.startsWith(list.prefix) ? address.pattern.slice(list.prefix.length) : address.pattern
+  return OSC_SECTIONS.find((s) => s.prefix.some((p) => tail.startsWith(p)))?.title ?? OSC_OTHER_SECTION
+}
+
+/** [addresses] by section, in [OSC_SECTIONS]' order then *Other*, each in table order; empty sections left out. */
+export function oscAddressSections(
+  list: OscAddressList,
+  addresses: readonly OscAddress[] = list.addresses,
+): { title: string; addresses: OscAddress[] }[] {
+  const groups = new Map<string, OscAddress[]>()
+  for (const address of addresses) {
+    const title = oscSectionOf(list, address)
+    groups.set(title, [...(groups.get(title) ?? []), address])
+  }
+  return [...OSC_SECTIONS.map((s) => s.title), OSC_OTHER_SECTION]
+    .filter((title) => groups.has(title))
+    .map((title) => ({ title, addresses: groups.get(title)! }))
+}
+
+/** Whether [address] matches a filter: its address, what it reaches or what it does, ignoring case. */
+export function oscAddressMatches(address: OscAddress, query: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (q === '') return true
+  return [address.address, address.reaches, address.does].some((text) => text.toLowerCase().includes(q))
+}

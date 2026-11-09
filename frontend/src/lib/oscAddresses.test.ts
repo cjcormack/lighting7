@@ -4,6 +4,9 @@ import {
   newestWarningId,
   noOscAddressReason,
   oscAddressesFor,
+  oscAddressMatches,
+  oscAddressSections,
+  oscSectionOf,
   oscAddressVerb,
   unseenWarnings,
   type OscAddress,
@@ -67,5 +70,44 @@ describe('the moved-address warning', () => {
     expect(unseenWarnings(undefined, 0)).toEqual([])
     expect(newestWarningId(warnings)).toBe(3)
     expect(newestWarningId(undefined)).toBe(0)
+  })
+})
+
+describe('the address list’s sections', () => {
+  const at = (pattern: string, text = '') => ({ ...address(pattern.replace(/\{\w+\}/g, 'x'), null), pattern, reaches: text })
+  const kinds = { ...list, addresses: [] }
+
+  it('files each kind of address under its section', () => {
+    expect(oscSectionOf(kinds, at('/lighting7/stack/{stack}/go'))).toBe('Cue stacks')
+    expect(oscSectionOf(kinds, at('/lighting7/stack/{stack}/cue/{n}/go'))).toBe('Cue stacks')
+    expect(oscSectionOf(kinds, at('/lighting7/cue/{cue}/on'))).toBe('Loose cues')
+    expect(oscSectionOf(kinds, at('/lighting7/look/{look}/off'))).toBe('Looks')
+    expect(oscSectionOf(kinds, at('/lighting7/busk/{page}/{bank}/{pad}/press'))).toBe('Busk pads and pages')
+    expect(oscSectionOf(kinds, at('/lighting7/busk/{page}/show'))).toBe('Busk pads and pages')
+    expect(oscSectionOf(kinds, at('/lighting7/blackout'))).toBe('Masters and tempo')
+    expect(oscSectionOf(kinds, at('/lighting7/grandmaster'))).toBe('Masters and tempo')
+    expect(oscSectionOf(kinds, at('/lighting7/tempo/{master}/tap'))).toBe('Masters and tempo')
+    expect(oscSectionOf(kinds, at('/lighting7/undo'))).toBe('Other')
+  })
+
+  it('orders the sections as drawn, each in table order, leaving out the empty ones', () => {
+    const tempo = at('/lighting7/tempo/{master}')
+    const go = at('/lighting7/stack/{stack}/go')
+    const standby = at('/lighting7/stack/{stack}/standby')
+    const other = at('/lighting7/undo')
+    expect(oscAddressSections({ ...list, addresses: [other, tempo, go, standby] })).toEqual([
+      { title: 'Cue stacks', addresses: [go, standby] },
+      { title: 'Masters and tempo', addresses: [tempo] },
+      { title: 'Other', addresses: [other] },
+    ])
+  })
+
+  it('matches a filter against the address, what it reaches and what it does, ignoring case', () => {
+    const go = { ...at('/lighting7/stack/{stack}/go', 'GO Act 1'), does: 'The next cue' }
+    expect(oscAddressMatches(go, '')).toBe(true)
+    expect(oscAddressMatches(go, ' act 1 ')).toBe(true)
+    expect(oscAddressMatches(go, 'NEXT')).toBe(true)
+    expect(oscAddressMatches(go, '/lighting7/stack')).toBe(true)
+    expect(oscAddressMatches(go, 'haze')).toBe(false)
   })
 })

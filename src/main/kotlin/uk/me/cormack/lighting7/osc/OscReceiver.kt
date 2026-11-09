@@ -9,20 +9,22 @@ import java.net.SocketException
 import java.time.Instant
 
 /**
- * An allowlisted sender, by its row id, its name and its canonical IP literal, and whether it is
- * answered with a `/lighting7/reply`.
+ * An allowlisted sender, by its row id, its name and its canonical address or range, and whether it
+ * is answered with a `/lighting7/reply`.
  */
 data class OscSender(val id: Int, val name: String, val address: String, val replies: Boolean = false)
 
 /**
- * One item off the wire for the collector: who sent it, when, and what [OscPacket] made of it;
- * [replyTo] where its reply goes, null when its sender takes none.
+ * One item off the wire for the collector: the entry that admitted it, when, and what [OscPacket]
+ * made of it; [replyTo] where its reply goes, null when its sender takes none; [source] the address
+ * it came from, which a range entry does not say.
  */
 data class OscInbound(
     val at: Instant,
     val sender: OscSender,
     val item: OscPacket.Item,
     val replyTo: OscReplyTo? = null,
+    val source: String = sender.address,
 )
 
 /**
@@ -37,7 +39,7 @@ data class OscInbound(
 internal class OscReceiver(
     val bindAddress: InetAddress?,
     val port: Int,
-    private val senders: () -> Map<String, OscSender>,
+    private val senders: () -> OscSenderMatcher,
     private val deliver: (OscInbound) -> Unit,
     private val onRefused: (address: String) -> Unit,
 ) : AutoCloseable {
@@ -75,14 +77,14 @@ internal class OscReceiver(
                 packet.setLength(buffer.size)
                 s.receive(packet)
                 val source = canonicalIp(packet.address)
-                val sender = senders()[source]
+                val sender = senders().match(packet.address)
                 if (sender == null) {
                     onRefused(source)
                     continue
                 }
                 val at = Instant.now()
                 val replyTo = if (sender.replies) replyTo(packet.address, packet.port) else null
-                for (item in OscPacket.parse(buffer, packet.length)) deliver(OscInbound(at, sender, item, replyTo))
+                for (item in OscPacket.parse(buffer, packet.length)) deliver(OscInbound(at, sender, item, replyTo, source))
             } catch (_: SocketException) {
                 // The socket was closed under the receive: a stop or a restart.
             } catch (e: Exception) {

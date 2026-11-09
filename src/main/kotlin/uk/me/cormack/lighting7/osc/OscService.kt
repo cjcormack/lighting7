@@ -61,7 +61,7 @@ class OscService(
     }
 
     @Volatile
-    private var senders: Map<String, OscSender> = emptyMap()
+    private var senders: OscSenderMatcher = OscSenderMatcher.EMPTY
 
     @Volatile
     private var settings: OscSettingsDto = OscSettingsDto(enabled = false, bindAddress = null, port = OSC_DEFAULT_PORT, senders = emptyList())
@@ -185,9 +185,9 @@ class OscService(
             val name = sender.name.trim()
             if (name.isEmpty()) add("Sender ${i + 1} has no name")
             if (name.length > 100) add("Sender ${i + 1}'s name is longer than 100 characters")
-            val address = ipLiteral(sender.address.trim())
+            val address = OscSenderMatcher.canonical(sender.address)
             when {
-                address == null -> add("Sender ${i + 1}'s address `${sender.address}` is not an IP address")
+                address == null -> add("Sender ${i + 1}'s address `${sender.address}` is not an IP address or a range")
                 !seen.add(address) -> add("`${sender.address}` is listed twice")
             }
         }
@@ -208,7 +208,7 @@ class OscService(
                 val existing = sender.id?.let { DaoOscSender.findById(it) }
                 val dao = existing ?: DaoOscSender.new {}
                 dao.name = sender.name.trim()
-                dao.address = ipLiteral(sender.address.trim())!!
+                dao.address = OscSenderMatcher.canonical(sender.address)!!
                 dao.replies = sender.replies
             }
         }
@@ -299,9 +299,10 @@ class OscService(
         }
         settings = read
         loaded = true
-        senders = read.senders.associate { it.address to OscSender(it.id, it.name, it.address, it.replies) }
-        // A sender allowed since it was refused leaves the refused list.
-        synchronized(data) { refusedSenders.keys.removeAll(senders.keys) }
+        val matcher = OscSenderMatcher(read.senders.map { OscSender(it.id, it.name, it.address, it.replies) })
+        senders = matcher
+        // A sender allowed since it was refused leaves the refused list, by an address or a range.
+        synchronized(data) { refusedSenders.keys.removeAll { matcher.match(it) != null } }
         changed()
     }
 
@@ -403,6 +404,7 @@ class OscService(
         val row = OscLogRowDto(
             at = inbound.at.truncatedToMillis().toIsoUtc(),
             sender = inbound.sender.name,
+            source = inbound.source,
             address = address,
             args = message?.args?.map { it.render() }.orEmpty(),
             outcome = handled.outcome,
@@ -498,7 +500,10 @@ data class OscSettingsDto(
     val senders: List<OscSenderDto>,
 )
 
-/** [replies]: each message this sender sends is answered with a `/lighting7/reply` (D14). */
+/**
+ * [address] is one IP or a range (`192.168.1.0/24`), stored canonical. [replies]: each message this
+ * sender sends is answered with a `/lighting7/reply` (D14).
+ */
 @Serializable
 data class OscSenderDto(val id: Int, val name: String, val address: String, val replies: Boolean = false)
 
@@ -549,10 +554,12 @@ data class OscAddressChangeDto(val address: String, val was: String?, val now: S
 @Serializable
 data class OscRefusedSenderDto(val address: String, val count: Long, val lastAt: String)
 
+/** [sender] is the allowlist entry's name, [source] the address the message came from. */
 @Serializable
 data class OscLogRowDto(
     val at: String,
     val sender: String,
+    val source: String,
     val address: String,
     val args: List<String>,
     val outcome: OscOutcome,

@@ -8,8 +8,10 @@ export type OscOutcome = 'DONE' | 'NOT_FOUND' | 'AMBIGUOUS' | 'REFUSED' | 'FAILE
 /** One received message and what it did. */
 export interface OscLogRow {
   at: string
-  /** The allowlist's name for the sender. */
+  /** The allowlist's name for the sender, which may be a range's. */
   sender: string
+  /** The address the message came from. */
+  source: string
   address: string
   args: string[]
   outcome: OscOutcome

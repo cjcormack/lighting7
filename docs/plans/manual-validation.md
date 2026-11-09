@@ -441,7 +441,8 @@ step 1), a show with a stack *Act 1* holding cues 1 and 5:
 2. **Tempo.** `/lighting7/tempo/1 128` sets M1 to 128 BPM; `/lighting7/tempo/1 400` does nothing and
    its row is a *bad message*.
 3. **Copy.** On the Show view, cue 5's ⋯ → *Copy OSC address* → *go*. Paste into a new QLab Network
-   cue and fire it: cue 5 runs, first time. *Print cheat sheet* on the OSC tab prints every address.
+   cue and fire it: cue 5 runs, first time. On the OSC tab, *Addresses* lists every address; filtering
+   it for `cue/5` leaves cue 5's, and its copy button pastes the same address into QLab.
 4. **The warning.** Renumber cue 5 to 6 on the desk: within a second every window toasts that
    `/lighting7/stack/act-1/cue/5/go` no longer works, and the OSC tab lists it under *Addresses that
    moved*.

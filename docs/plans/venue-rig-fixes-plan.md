@@ -1,6 +1,6 @@
 # After the rig session
 
-> **Document status: ACTIVE — agreed 2026-11-09, no session started.** Calls decided 2026-11-09
+> **Document status: ACTIVE — agreed 2026-11-09, session 1 in progress.** Calls decided 2026-11-09
 > (§3).
 
 The design record is [`venue-rig-fixes-design/INDEX.md`](venue-rig-fixes-design/INDEX.md), and its
@@ -402,7 +402,7 @@ run `./gradlew compileTestKotlin` and the touched packages' tests where they tou
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | OSC sender ranges and the address list | planned | | | |
+| 1 | OSC sender ranges and the address list | in review | `claude/magical-ritchie-84882h` | | |
 | 2 | Auto numbers from position | planned | | | |
 | 3 | The Show view follows the show | planned | | | |
 | 4 | Include, and Record's cue list and placement | planned | | | |
@@ -440,6 +440,19 @@ D1–D5.
   `/install/osc` and OSC lines (ranges, *What *Copy OSC address* … the OSC tab's cheat sheet read*
   becomes the address list).
 - Local: `compileTestKotlin`, `--tests 'uk.me.cormack.lighting7.osc.*'`, `check:quick`.
+- *As built*: the matcher takes an `InetAddress` (and an IP literal, for the refused list and a
+  TCP connection's re-check), and `OscInbound` carries the packet's `source` beside the entry that
+  admitted it. A refused clipboard is not always a cell to select: the address list's copy button
+  selects its cell for ⌘C, but a *Copy OSC address* menu closes on select and hands focus back to its
+  trigger, so both first try the browser's own `execCommand('copy')` — which a plain-http LAN origin,
+  where `navigator.clipboard` is absent, still allows inside a gesture — and a menu with neither says
+  it could not copy. That copy sets the address on its `copy` event and counts only when the event
+  ran: a selected offscreen field alone copied nothing under a dropdown's focus trap, which takes
+  focus back to the menu item, while `execCommand` still answered true. The matcher keys exact
+  entries by address bytes and compares a prefix bit by bit, and unmaps an IPv4-mapped source with
+  `InetAddress.getByAddress`, as `canonicalIp` does. The chip counts above 2²⁰ as a power of two (`range · 2^24 addresses`). The
+  `--tests` filter needs `:test`, since `:launcher:test` finds none; in a cloud container
+  `compileKotlin` also wanted `-Pkotlin.daemon.jvmargs=-Xmx5g`.
 
 ### Session 2 — Auto numbers from position
 

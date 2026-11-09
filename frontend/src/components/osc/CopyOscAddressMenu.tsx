@@ -96,14 +96,68 @@ function OscAddressItems({ projectId, records, menu }: CopyOscAddressMenuProps) 
   )
 }
 
-/** `navigator.clipboard` is absent on a plain-http LAN origin, so a failure says so. */
-export function copyOscAddress(address: string) {
-  void (async () => {
-    try {
-      await navigator.clipboard.writeText(address)
+/**
+ * Copy [address] for QLab. `navigator.clipboard` is absent on a plain-http LAN origin and may be
+ * refused, so then the browser's own copy is tried, and failing that the address is selected in
+ * [cell] and the toast says to copy it by hand.
+ */
+export function copyOscAddress(address: string, cell?: HTMLElement | null) {
+  const fallback = () => {
+    if (copyBySelection(address)) {
       toast.success(`Copied ${address}`)
-    } catch {
-      toast.error('Could not copy the address')
+    } else if (cell != null && selectContents(cell)) {
+      toast.message('Press ⌘C to copy', { description: address })
+    } else {
+      toast.error(`Couldn’t copy ${address}`)
     }
-  })()
+  }
+  if (navigator.clipboard?.writeText == null) {
+    fallback()
+    return
+  }
+  navigator.clipboard.writeText(address).then(() => toast.success(`Copied ${address}`), fallback)
+}
+
+/**
+ * The pre-Clipboard-API copy, which a plain-http origin still allows inside a gesture. The text is
+ * put on the `copy` event itself, since a menu's focus trap can take focus, and with it the
+ * selection, back from the field; the field stays for a browser that enables copy only over one.
+ */
+function copyBySelection(text: string): boolean {
+  if (typeof document.execCommand !== 'function') return false
+  let written = false
+  const onCopy = (event: ClipboardEvent) => {
+    if (event.clipboardData == null) return
+    event.clipboardData.setData('text/plain', text)
+    event.preventDefault()
+    written = true
+  }
+  const previous = document.activeElement as HTMLElement | null
+  const field = document.createElement('textarea')
+  field.value = text
+  field.readOnly = true
+  field.style.position = 'fixed'
+  field.style.opacity = '0'
+  document.body.appendChild(field)
+  field.select()
+  document.addEventListener('copy', onCopy, true)
+  try {
+    return document.execCommand('copy') && written
+  } catch {
+    return false
+  } finally {
+    document.removeEventListener('copy', onCopy, true)
+    field.remove()
+    previous?.focus?.()
+  }
+}
+
+function selectContents(cell: HTMLElement): boolean {
+  const selection = window.getSelection()
+  if (selection == null) return false
+  const range = document.createRange()
+  range.selectNodeContents(cell)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  return true
 }
