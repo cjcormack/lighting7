@@ -211,4 +211,28 @@ class SelectionFxSpeedTest : RouteIntegrationTest() {
         assertNull(speed.leadSpeed())
     }
 
+
+    @Test
+    fun `a control on a fixture or a group moves the Local FX on those heads, whatever is selected`() = testApplication {
+        seed()
+        LocateTestSupport.seedGroup(state, projectId, "pair", "d1", "d2")
+        mountTestApp(state)
+        val a = wave("d1", ticks = 96)
+        val b = wave("d2", ticks = 96)
+        val c = wave("d3", ticks = 96)
+        state.deskSelection.set(listOf(fixture("d3")))
+
+        val d2 = Subject.Fixture("d2")
+        assertEquals(1.0, speed.leadSpeed(d2))
+        speed.turn((FxSpeed.ringPosition(1.0) + 1).toUByte(), encoder = true, on = d2)
+        assertEquals(81, ticksOf(b), "the fixture's FX a quarter of an octave up")
+        assertEquals(96, ticksOf(a))
+        assertEquals(96, ticksOf(c), "the selection's FX is left alone")
+
+        speed.turn(127u, encoder = false, on = Subject.Group("pair"))
+        assertEquals(24, ticksOf(a), "×4 on every FX the group's heads carry")
+        assertEquals(24, ticksOf(b))
+        assertEquals(96, ticksOf(c))
+        assertEquals(4.0, speed.leadSpeed(Subject.Group("pair")))
+    }
 }

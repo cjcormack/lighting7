@@ -57,16 +57,29 @@ open class RecordingSurfaceActions : SurfaceActions {
         calls += RecordedCall.WriteStackFxAmount(stack, midiValue7Bit)
     }
 
-    override fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte) { calls += RecordedCall.WriteFan(axis, midiValue7Bit) }
-    override fun writeFxSpeed(midiValue7Bit: UByte, encoder: Boolean) {
-        calls += RecordedCall.WriteFxSpeed(midiValue7Bit, encoder)
+    override fun writeFan(on: Subject, axis: FanAxis, midiValue7Bit: UByte) { calls += RecordedCall.WriteFan(axis, midiValue7Bit, on) }
+    override fun writeFxSpeed(on: Subject, midiValue7Bit: UByte, encoder: Boolean) {
+        calls += RecordedCall.WriteFxSpeed(midiValue7Bit, encoder, on)
     }
 
     override fun selectTarget(target: CueTargetDto, replace: Boolean) {
         calls += RecordedCall.SelectTarget(target, replace)
     }
     override fun clearSelection() { calls += RecordedCall.ClearSelection }
-    override fun locateSelection() { calls += RecordedCall.LocateSelection }
+    override fun locate(on: Subject) { calls += RecordedCall.Locate(on) }
+
+    /** Whether [setBlind] last left the programmer Blind. */
+    @Volatile
+    var blind = false
+    override fun clearProgrammer(fadeMs: Long) { calls += RecordedCall.ClearProgrammer(fadeMs) }
+    override fun isBlind(): Boolean = blind
+    override fun setBlind(blind: Boolean, fadeMs: Long): ActionOutcome {
+        this.blind = blind
+        return answer(RecordedCall.SetBlind(blind, fadeMs))
+    }
+    override fun release(on: Subject, fadeMs: Long): ActionOutcome = answer(RecordedCall.Release(on, fadeMs))
+    override fun record(stack: UUID): ActionOutcome = answer(RecordedCall.Record(stack))
+    override fun update(): ActionOutcome = answer(RecordedCall.Update)
     override fun toggleBlackout(): Boolean { calls += RecordedCall.ToggleBlackout; return true }
     override fun toggleGrandMaster(): Boolean { calls += RecordedCall.ToggleGrandMaster; return true }
     override fun writeGrandMaster(midiValue7Bit: UByte) { calls += RecordedCall.WriteGrandMaster(midiValue7Bit) }
@@ -104,7 +117,7 @@ sealed class RecordedCall {
     data class WriteLevel(val on: Subject, val prop: String, val value: UByte, val axis: ColourAxis? = null) : RecordedCall()
     data class FlashPress(val on: Subject, val prop: String, val percent: Int) : RecordedCall()
     data class FlashRelease(val on: Subject, val prop: String) : RecordedCall()
-    data class WriteFan(val axis: FanAxis, val value: UByte) : RecordedCall()
+    data class WriteFan(val axis: FanAxis, val value: UByte, val on: Subject = Subject.Selection) : RecordedCall()
     data class CueStackGo(val stack: UUID) : RecordedCall()
     data class CueStackBack(val stack: UUID) : RecordedCall()
     data class CueStackPause(val stack: UUID) : RecordedCall()
@@ -119,7 +132,12 @@ sealed class RecordedCall {
     data class WriteStackFxAmount(val stack: UUID, val value: UByte) : RecordedCall()
     data class SelectTarget(val target: CueTargetDto, val replace: Boolean) : RecordedCall()
     data object ClearSelection : RecordedCall()
-    data object LocateSelection : RecordedCall()
+    data class Locate(val on: Subject = Subject.Selection) : RecordedCall()
+    data class ClearProgrammer(val fadeMs: Long) : RecordedCall()
+    data class SetBlind(val blind: Boolean, val fadeMs: Long) : RecordedCall()
+    data class Release(val on: Subject, val fadeMs: Long) : RecordedCall()
+    data class Record(val stack: UUID) : RecordedCall()
+    data object Update : RecordedCall()
     data object ToggleBlackout : RecordedCall()
     data object ToggleGrandMaster : RecordedCall()
     data class WriteGrandMaster(val value: UByte) : RecordedCall()
@@ -137,5 +155,5 @@ sealed class RecordedCall {
     data class SetBlackout(val on: Boolean) : RecordedCall()
     data class SetGrandMasterLevel(val percent: Double) : RecordedCall()
     data class ScaleSpeedMaster(val master: UUID?, val factor: Double) : RecordedCall()
-    data class WriteFxSpeed(val value7Bit: UByte, val encoder: Boolean) : RecordedCall()
+    data class WriteFxSpeed(val value7Bit: UByte, val encoder: Boolean, val on: Subject = Subject.Selection) : RecordedCall()
 }

@@ -75,7 +75,7 @@ internal data class LocateToggleResult(val outcome: LocateManager.ToggleOutcome,
 
 /**
  * Toggle [target]'s locate state through [LocateManager.toggle] with the route's apply / clear
- * callbacks. Shared by `POST /locate/toggle` and the surface's `LocateSelection` button so a
+ * callbacks. Shared by `POST /locate/toggle` and the surface's Locate so a
  * press from hardware is the same toggle a click makes. Existence is the caller's check: a
  * target that no longer resolves reports itself stale here and asserts nothing.
  */

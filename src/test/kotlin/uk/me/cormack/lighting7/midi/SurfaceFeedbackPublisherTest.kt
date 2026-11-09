@@ -482,13 +482,13 @@ class SurfaceFeedbackPublisherTest {
     /** A fan the test sets by hand: [SelectionFan]'s ring half without a desk behind it. */
     private class FakeFanRing : FanRing {
         var pan = 0
-        private val stamps = kotlinx.coroutines.flow.MutableStateFlow(SelectionFan.Shown(SelectionFan.Amounts(), 0))
+        private val stamps = kotlinx.coroutines.flow.MutableStateFlow(SelectionFan.Shown(0))
         override val shown: kotlinx.coroutines.flow.StateFlow<SelectionFan.Shown> = stamps
-        override fun amountFor(axis: FanAxis) = if (axis == FanAxis.PAN) pan else 0
+        override fun amountFor(axis: FanAxis, on: Subject) = if (axis == FanAxis.PAN) pan else 0
 
         fun set(amount: Int) {
             pan = amount
-            stamps.value = SelectionFan.Shown(SelectionFan.Amounts(pan = amount), stamps.value.stamp + 1)
+            stamps.value = SelectionFan.Shown(stamps.value.stamp + 1)
         }
     }
 
@@ -496,7 +496,7 @@ class SurfaceFeedbackPublisherTest {
     private class FakeFxSpeedRing : FxSpeedRing {
         var lead: Double? = null
         override val shown = kotlinx.coroutines.flow.MutableStateFlow(0L)
-        override fun leadSpeed() = lead
+        override fun leadSpeed(on: Subject) = lead
     }
 
     /**

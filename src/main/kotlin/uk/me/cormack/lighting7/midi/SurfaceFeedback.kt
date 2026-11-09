@@ -89,6 +89,9 @@ interface FeedbackSite {
     val hold: SurfaceDispatch.HoldKey
     val control: ControlDescriptor
 
+    /** The encoder page of the device, as it stands while this index does. */
+    val encoderPage: EncoderBankSelection
+
     fun stackId(stack: UUID): Int?
     fun cueId(cue: UUID): Int?
     fun pad(pad: UUID): PadRef?
@@ -122,6 +125,9 @@ interface FeedbackPass {
     fun buskPage(): Int?
     fun held(key: SurfaceDispatch.HoldKey): Boolean
     fun encoderPage(displayKey: String): EncoderBankSelection
-    fun fanAmount(axis: FanAxis): Int?
-    fun fxLeadSpeed(): Double?
+    fun fanAmount(on: Subject, axis: FanAxis): Int?
+    fun fxLeadSpeed(on: Subject): Double?
+
+    /** Whether the programmer is Blind. */
+    fun blind(): Boolean
 }

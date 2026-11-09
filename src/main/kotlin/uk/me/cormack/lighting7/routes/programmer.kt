@@ -36,6 +36,9 @@ internal fun Route.routeApiRestProgrammer(state: State) {
     }
 }
 
+/** The longest programmer fade a surface or an MCP tool takes, in seconds. */
+internal const val MAX_PROGRAMMER_FADE_SECONDS = 600.0
+
 /** What a full programmer clear swept: stored entries, and programmer-band FX instances. */
 internal data class ProgrammerClearOutcome(val entryCount: Int, val fxCleared: Int)
 
@@ -80,4 +83,17 @@ internal fun clearProgrammerCompletely(state: State, fadeMs: Long = 0): Programm
     state.show.programmerStore.sourceKeys = null
     state.show.programmerStore.recordedValues = null
     return ProgrammerClearOutcome(entryCount, fxCleared)
+}
+
+/**
+ * Put the programmer into Blind or take it out over [fadeMs], with everything that follows Blind:
+ * its Looks' scenery, its held tempos, and the fires it rehearses. Answers whether it changed.
+ */
+internal fun setProgrammerBlind(state: State, blind: Boolean, fadeMs: Long = 0): Boolean {
+    if (state.show.programmerStore.blind == blind) return false
+    state.show.fxEngine.programmer.setBlind(blind, fadeMs)
+    state.sceneryService.onBlindChanged()
+    state.programmerTempo.onBlindChanged()
+    state.effectsService.onBlindChanged()
+    return true
 }

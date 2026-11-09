@@ -7,9 +7,11 @@ import uk.me.cormack.lighting7.fx.AppliedExtent
 import uk.me.cormack.lighting7.fx.MasterClock
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
+import uk.me.cormack.lighting7.routes.MAX_PROGRAMMER_FADE_SECONDS
 import uk.me.cormack.lighting7.state.SubselectMode
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.roundToLong
 import kotlin.reflect.KClass
 
 private val logger = LoggerFactory.getLogger("SurfaceFunctions")
@@ -89,8 +91,29 @@ sealed interface Does {
     }
 
     /**
+     * A [Level] on whatever attribute, and colour axis, the encoder page of the device it is on names
+     * — the page a strip encoder follows, on any continuous control and subject.
+     */
+    @Serializable
+    @SerialName("pageLevel")
+    data object PageLevel : Does {
+        override val spec get() = Spec(WritesTo.LOCAL, HEADS, CONTINUOUS)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
+        // A page change rebuilds the device's index, so the page read here is the one in force.
+        override fun read(binding: Binding, site: FeedbackSite): Readout =
+            Level(site.encoderPage.attribute, site.encoderPage.colourAxis).read(binding, site)
+
+        override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
+            val page = ctx.encoderBankState.selectionFor(ctx.origin.displayKey)
+            return Level(page.attribute, page.colourAxis).act(on, op, ctx)
+        }
+    }
+
+    /**
      * While held, each head's [attribute] at [percent] of its own range, as a fader scales (D10), in
-     * the momentary owner; the release takes off exactly the heads the press wrote.
+     * the momentary owner; the release takes off exactly the heads the press wrote, whatever the
+     * selection is by then.
      */
     @Serializable
     @SerialName("flash")
@@ -99,7 +122,7 @@ sealed interface Does {
             require(percent in 0..100) { "A flash is 0–100 %" }
         }
 
-        override val spec get() = Spec(WritesTo.LOCAL, NAMED_HEADS, BUTTON, setOf(How.WHILE_HELD), How.WHILE_HELD)
+        override val spec get() = Spec(WritesTo.LOCAL, HEADS, BUTTON, setOf(How.WHILE_HELD), How.WHILE_HELD)
         override fun led(binding: Binding, site: FeedbackSite): Led = Led.Light(setOf(Signal.HOLDS)) { held(site.hold) }
 
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted = when (op) {
@@ -132,36 +155,45 @@ sealed interface Does {
         }
     }
 
-    /** Locate the selection, or release it when every selected target is located. */
+    /** Locate the subject's targets, or release them when every one is located. */
     @Serializable
     @SerialName("locate")
     data object Locate : Does {
-        override val spec get() = Spec(WritesTo.LOCAL, SELECTION, BUTTON, setOf(How.TOGGLE), How.TOGGLE)
-        override fun led(binding: Binding, site: FeedbackSite): Led = Led.Light(setOf(Signal.SELECTION, Signal.LOCATE)) {
-            selection.isNotEmpty() && located().let { located ->
-                selection.all { TargetRef.ofOrNull(it.type, it.key)?.let { ref -> ref in located } ?: false }
+        override val spec get() = Spec(WritesTo.LOCAL, HEADS, BUTTON, setOf(How.TOGGLE), How.TOGGLE)
+        override fun led(binding: Binding, site: FeedbackSite): Led {
+            val named = binding.on.asTarget()?.let { TargetRef.ofOrNull(it.type, it.key) }
+            if (binding.on != Subject.Selection) {
+                return if (named == null) Led.Light(emptySet()) { false } else Led.Light(setOf(Signal.LOCATE)) { named in located() }
+            }
+            return Led.Light(setOf(Signal.SELECTION, Signal.LOCATE)) {
+                selection.isNotEmpty() && located().let { located ->
+                    selection.all { TargetRef.ofOrNull(it.type, it.key)?.let { ref -> ref in located } ?: false }
+                }
             }
         }
 
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted = when (op) {
-            Op.Toggle, Op.On -> done { ctx.actions.locateSelection() }
+            Op.Toggle, Op.On -> done { ctx.actions.locate(on) }
             else -> wrongKind(op)
         }
     }
 
-    /** Fan the selection's positions on [axis] — see [SelectionFan]. */
+    /** Fan the subject's positions on [axis], with an anchor per subject — see [SelectionFan]. */
     @Serializable
     @SerialName("fan")
     data class Fan(val axis: FanAxis) : Does {
-        override val spec get() = Spec(WritesTo.LOCAL, SELECTION, CONTINUOUS)
+        override val spec get() = Spec(WritesTo.LOCAL, SELECTION + SubjectKind.GROUP, CONTINUOUS)
         override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
-        override fun read(binding: Binding, site: FeedbackSite): Readout =
-            Readout(setOf(Signal.FAN, Signal.SELECTION)) {
-                fanAmount(axis)?.let { Reading.Value(SelectionFan.amountTo7Bit(axis, it).toUByte()) } ?: Reading.Nothing
+        override fun read(binding: Binding, site: FeedbackSite): Readout {
+            val on = binding.on
+            val signals = if (on == Subject.Selection) setOf(Signal.FAN, Signal.SELECTION) else setOf(Signal.FAN)
+            return Readout(signals) {
+                fanAmount(on, axis)?.let { Reading.Value(SelectionFan.amountTo7Bit(axis, it).toUByte()) } ?: Reading.Nothing
             }
+        }
 
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted = when (op) {
-            is Op.Move -> done { ctx.actions.writeSelectionFan(axis, op.value7Bit) }
+            is Op.Move -> done { ctx.actions.writeFan(on, axis, op.value7Bit) }
             else -> wrongKind(op)
         }
 
@@ -169,16 +201,19 @@ sealed interface Does {
             if (on is Subject.Fixture) "A fan spreads over several heads, so it takes the selection, not one fixture" else null
     }
 
-    /** The Speed of the Local FX painting the selection's heads — see [SelectionFxSpeed]. */
+    /** The Speed of the Local FX painting the subject's heads — see [SelectionFxSpeed]. */
     @Serializable
     @SerialName("fxSpeed")
     data object FxSpeed : Does {
-        override val spec get() = Spec(WritesTo.LOCAL, SELECTION, CONTINUOUS)
+        override val spec get() = Spec(WritesTo.LOCAL, HEADS, CONTINUOUS)
         override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
         override fun read(binding: Binding, site: FeedbackSite): Readout {
             val encoder = site.control is EncoderDescriptor
-            return Readout(setOf(Signal.FX_LIST, Signal.SELECTION, Signal.FX_SPEED_SHOWN)) {
-                val lead = fxLeadSpeed() ?: return@Readout Reading.Nothing
+            val on = binding.on
+            val signals = if (on == Subject.Selection) setOf(Signal.FX_LIST, Signal.SELECTION, Signal.FX_SPEED_SHOWN)
+                else setOf(Signal.FX_LIST, Signal.FX_SPEED_SHOWN)
+            return Readout(signals) {
+                val lead = fxLeadSpeed(on) ?: return@Readout Reading.Nothing
                 if (encoder) Reading.Value(uk.me.cormack.lighting7.fx.FxSpeed.ringPosition(lead).toUByte())
                 // A fader's own write lands within a stick and whole-tick rounding of where it was moved.
                 else Reading.Value(uk.me.cormack.lighting7.fx.FxSpeed.faderPosition(lead).toUByte(), tolerance = FADER_ECHO_STEPS)
@@ -186,9 +221,100 @@ sealed interface Does {
         }
 
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted = when (op) {
-            is Op.Move -> done { ctx.actions.writeFxSpeed(op.value7Bit, op.encoder) }
+            is Op.Move -> done { ctx.actions.writeFxSpeed(on, op.value7Bit, op.encoder) }
             else -> wrongKind(op)
         }
+    }
+
+    /** Clear the whole programmer — its layers, Locate, scenery and tempos too — as its Clear does, over [fade] seconds. */
+    @Serializable
+    @SerialName("clear")
+    data class Clear(val fade: Double = 0.0) : Does {
+        init {
+            requireFade(fade)
+        }
+
+        override val spec get() = Spec(WritesTo.LOCAL, NONE, BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
+        override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted =
+            if (op == Op.On || op == Op.Toggle) done { ctx.actions.clearProgrammer(fadeMs(fade)) } else wrongKind(op)
+    }
+
+    /**
+     * The programmer's Blind over [fade] seconds: toggled, or on while held, which lets it go on
+     * release only when the press put it on. Lit while Blind.
+     */
+    @Serializable
+    @SerialName("blind")
+    data class Blind(val fade: Double = 0.0) : Does {
+        init {
+            requireFade(fade)
+        }
+
+        override val spec get() = Spec(WritesTo.LOCAL, NONE, BUTTON, setOf(How.TOGGLE, How.WHILE_HELD), How.TOGGLE)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.Light(setOf(Signal.PROGRAMMER)) { blind() }
+
+        override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
+            val fadeMs = fadeMs(fade)
+            return when (op) {
+                Op.Toggle -> answered(ctx.actions.setBlind(!ctx.actions.isBlind(), fadeMs))
+                Op.On -> {
+                    val wasBlind = ctx.actions.isBlind()
+                    val outcome = ctx.actions.setBlind(true, fadeMs)
+                    // A release undoes what the press did, so a press on an already-blind desk leaves it blind.
+                    Acted(outcome, release = { if (!wasBlind) ctx.actions.setBlind(false, fadeMs) })
+                }
+                Op.Off -> answered(ctx.actions.setBlind(false, fadeMs))
+                else -> wrongKind(op)
+            }
+        }
+    }
+
+    /** Release everything the programmer holds on the subject's targets, each as its Release does, over [fade] seconds. */
+    @Serializable
+    @SerialName("release")
+    data class Release(val fade: Double = 0.0) : Does {
+        init {
+            requireFade(fade)
+        }
+
+        override val spec get() = Spec(WritesTo.LOCAL, HEADS, BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
+        override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted =
+            if (op == Op.On || op == Op.Toggle) answered(ctx.actions.release(on, fadeMs(fade))) else wrongKind(op)
+    }
+
+    /**
+     * Record the programmer as a new cue at the end of a stack: every touched value, all
+     * attributes, with its FX, held scenery and held tempos, as the Record sheet's defaults do. On
+     * the serial lane with Undo.
+     */
+    @Serializable
+    @SerialName("record")
+    data object Record : Does {
+        override val spec get() = stackPress
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
+        override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
+            val stack = on.recordUuid(RecordKind.STACK) ?: return wrongSubject(on)
+            return if (op == Op.On || op == Op.Toggle) answered(ctx.actions.record(stack)) else wrongKind(op)
+        }
+    }
+
+    /**
+     * Write the programmer back into what Include loaded, as its Update does (Mode A). Refused when
+     * nothing is included. On the serial lane with Undo.
+     */
+    @Serializable
+    @SerialName("update")
+    data object Update : Does {
+        override val spec get() = Spec(WritesTo.PLAYBACK, NONE, BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
+        override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted =
+            if (op == Op.On || op == Op.Toggle) answered(ctx.actions.update()) else wrongKind(op)
     }
 
     /** Press [palette] onto the selection. */
@@ -703,6 +829,8 @@ sealed interface Named {
 val Does.named: Named?
     get() = when (this) {
         is Does.Level -> Named.Attribute(attribute, axis)
+        // Its attribute is the device's encoder page, which no binding names.
+        Does.PageLevel -> null
         is Does.Flash -> Named.Attribute(attribute)
         is Does.EncoderPage -> Named.Attribute(attribute, axis)
         is Does.Fire -> Named.Trigger(trigger)
@@ -710,7 +838,8 @@ val Does.named: Named?
         Does.PickUp, Does.Place, Does.Drop, Does.Go, Does.Back, Does.Pause, Does.Stop, Does.GoTo,
         Does.Standby, Does.FxAmount, Does.Blackout, is Does.GrandMaster, is Does.Tempo, Does.Tap,
         is Does.TempoScale, is Does.Layer, is Does.Undo, is Does.BuskPage, is Does.WindowFocus,
-        is Does.WindowSheet, is Does.SelectionStep, Does.Strip, is Does.Unknown,
+        is Does.WindowSheet, is Does.SelectionStep, is Does.Clear, is Does.Blind, is Does.Release, Does.Record,
+        Does.Update, Does.Strip, is Does.Unknown,
             -> null
     }
 
@@ -753,6 +882,11 @@ private fun FeedbackPass.coversSelection(palette: UUID): Boolean {
  * octaves over 127 steps.
  */
 private const val FADER_ECHO_STEPS = 5
+
+private fun requireFade(fade: Double) =
+    require(fade.isFinite() && fade in 0.0..MAX_PROGRAMMER_FADE_SECONDS) { "A fade is 0–${MAX_PROGRAMMER_FADE_SECONDS.toInt()} s" }
+
+private fun fadeMs(fade: Double): Long = (fade * 1000).roundToLong()
 
 private val stackPress = Spec(WritesTo.PLAYBACK, setOf(SubjectKind.STACK), BUTTON, defaultHow = How.ON)
 private val entryPress = Spec(WritesTo.PLAYBACK, setOf(SubjectKind.ENTRY), BUTTON, defaultHow = How.ON)

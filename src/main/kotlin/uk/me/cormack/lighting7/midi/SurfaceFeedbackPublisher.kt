@@ -512,6 +512,7 @@ class SurfaceFeedbackPublisher(
         override val displayKey: String,
         override val hold: SurfaceDispatch.HoldKey,
         override val control: ControlDescriptor,
+        override val encoderPage: EncoderBankSelection,
         private val lookups: Lookups,
     ) : FeedbackSite {
         override fun stackId(stack: UUID) = lookups.stackId(stack)
@@ -588,7 +589,7 @@ class SurfaceFeedbackPublisher(
                     val input = control.inputFor(part) ?: continue
                     val binding = bindingService.resolve(projectId, attached.typeKey, control.controlId, layer, page, part) ?: continue
                     val hold = SurfaceDispatch.HoldKey(displayKey, control.controlId, part)
-                    val site = Site(displayKey, hold, control, lookups)
+                    val site = Site(displayKey, hold, control, page, lookups)
                     val entry = when (input) {
                         ControlKind.CONTINUOUS -> binding.binding.does.read(binding.binding, site)?.let { readout ->
                             Entry(displayKey, control, part, binding, readout = readout, jump = JumpPolicy.of(control, binding.takeoverPolicy))
@@ -693,8 +694,9 @@ class SurfaceFeedbackPublisher(
         override fun buskPage(): Int? = buskPageState?.pageId?.value
         override fun held(key: SurfaceDispatch.HoldKey): Boolean = holds.isHeld(key)
         override fun encoderPage(displayKey: String): EncoderBankSelection = encoderBankState.selectionFor(displayKey)
-        override fun fanAmount(axis: FanAxis): Int? = selectionFan?.amountFor(axis)
-        override fun fxLeadSpeed(): Double? = runCatching { fxSpeed?.leadSpeed() }.getOrNull()
+        override fun fanAmount(on: Subject, axis: FanAxis): Int? = selectionFan?.amountFor(axis, on)
+        override fun fxLeadSpeed(on: Subject): Double? = runCatching { fxSpeed?.leadSpeed(on) }.getOrNull()
+        override fun blind(): Boolean = runCatching { programmerStoreProvider?.invoke()?.blind }.getOrNull() == true
     }
 
     /**

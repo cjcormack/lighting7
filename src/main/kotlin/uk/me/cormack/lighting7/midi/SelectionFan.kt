@@ -43,30 +43,30 @@ interface FanRing {
     /** Re-feed the rings on every emission. */
     val shown: StateFlow<SelectionFan.Shown>
 
-    /** The amount a control on [axis] shows. */
-    fun amountFor(axis: FanAxis): Int
+    /** The amount a control on [axis] fanning [on] shows. */
+    fun amountFor(axis: FanAxis, on: Subject = Subject.Selection): Int
 }
 
 /**
- * The surface's **fan** (venue-visit plan S12): an encoder bound to [Does.Fan]
- * fans the desk selection's positions about their own, through the same desk resolve as the Spread
- * panel's Fan ([fanIntoProgrammer], owner `SURFACE`).
+ * The surface's **fan** (venue-visit plan S12): an encoder bound to [Does.Fan] fans its subject's
+ * positions — the desk selection, or a group — about their own, through the Spread panel's desk
+ * resolve ([fanIntoProgrammer], owner `SURFACE`).
  *
- * It holds the gesture's **anchor** — where each head started, as the desk answered it, and the rig
- * order read once for the gesture rather than once per detent — and the amount on each axis, so a
- * turn sets the fan from where the heads were when the gesture began and never fans a fan.
+ * Each subject has its own gesture, so a group's fan and the selection's do not reset each other. A
+ * gesture holds its **anchor** — where each head started, as the desk answered it, and the rig order
+ * read once — and the amount on each axis, so a turn fans from where the heads began and never fans
+ * a fan.
  *
  * A turn is read as a **move**: the change from the value the control was last shown, two centre
  * steps a 7-bit step on pan and tilt, a tenth of a metre on a stage axis. A gesture is in pan and
- * tilt or on the stage, and a turn on the other kind starts a new one from where the heads are; a
- * stage gesture also holds the heads' placements and their latest degrees.
+ * tilt or on the stage; a turn on the other kind starts a new one from where the heads are. A stage
+ * gesture also holds the heads' placements and their latest degrees.
  *
- * The anchor goes, and the ring returns to the centre, when the selection changes, the show is
- * rebuilt, or something else has written a fanned head's position since the fan last did — judged
- * at the next turn against Local as output arbitrates it, and that turn writes nothing: the next one
- * starts from where the heads are. A new gesture starts from the centre: an input further than
- * [SoftTakeoverStateMachine.JUMP_STEPS] from 64 moves nothing and shows the ring the centre again, since
- * the jump rule judges against what the ring was last shown, which a reset reaches a moment later.
+ * The anchor goes, and the ring returns to the centre, when the selection changes (for the
+ * selection's gesture), the show is rebuilt, or something else has written a fanned head's position
+ * since — judged at the next turn against Local, which then writes nothing. A new gesture starts
+ * from the centre: an input further than [SoftTakeoverStateMachine.JUMP_STEPS] from 64 moves nothing
+ * and shows the ring the centre again.
  */
 class SelectionFan(private val state: State) : FanRing {
     private val logger = LoggerFactory.getLogger(SelectionFan::class.java)
@@ -88,8 +88,8 @@ class SelectionFan(private val state: State) : FanRing {
         }
     }
 
-    /** What the rings were last told to show, stamped so an equal value written again still reaches the publisher. */
-    data class Shown(val amounts: Amounts, val stamp: Long)
+    /** A change to what the rings show, stamped so an equal value written again still reaches the publisher. */
+    data class Shown(val stamp: Long)
 
     private class Anchor(
         /** Weak, so a fan last turned on a show that has since been switched away keeps none of it reachable. */
@@ -107,39 +107,48 @@ class SelectionFan(private val state: State) : FanRing {
         val written: Map<String, LocalPosition>,
     )
 
-    private var anchor: Anchor? = null
-    private var amounts = Amounts()
+    /** One subject's gesture: its anchor, and the amount on each axis. */
+    private class Gesture(var anchor: Anchor? = null, var amounts: Amounts = Amounts())
+
+    private val gestures = HashMap<Subject, Gesture>()
     private var stamp = 0L
-    private val _shown = MutableStateFlow(Shown(Amounts(), 0))
+    private val _shown = MutableStateFlow(Shown(0))
 
     /** The feedback publisher's signal to re-feed the rings; [amountFor] is what each shows. */
     override val shown: StateFlow<Shown> = _shown.asStateFlow()
 
-    /** The amount a control on [axis] shows: 0 once the selection or the show has moved off the anchor's. */
+    /** The amount a control on [axis] fanning [on] shows: 0 once its targets or the show have moved off the anchor's. */
     @Synchronized
-    override fun amountFor(axis: FanAxis): Int = if (anchorCurrent() && anchor?.stage == axis.stage) amounts.of(axis) else 0
+    override fun amountFor(axis: FanAxis, on: Subject): Int {
+        val gesture = gestures[on] ?: return 0
+        return if (anchorCurrent(on, gesture) && gesture.anchor?.stage == axis.stage) gesture.amounts.of(axis) else 0
+    }
 
-    /** One turn of an encoder on [axis], at [value7Bit]. An empty selection drops it. */
+    /** The targets a fan on [on] spreads: the desk selection now, or the one group (its spec admits no other subject). */
+    private fun targetsOf(on: Subject): List<CueTargetDto> = on.targets { state.deskSelection.state.value.targets }
+
+    /** One turn of an encoder on [axis] fanning [on], at [value7Bit]. An empty selection drops it. */
     @Synchronized
-    fun turn(axis: FanAxis, value7Bit: UByte) {
-        val targets = state.deskSelection.state.value.targets
+    fun turn(axis: FanAxis, value7Bit: UByte, on: Subject = Subject.Selection) {
+        val targets = targetsOf(on)
         if (targets.isEmpty()) {
-            logger.debug("Surface fan dropped: nothing selected")
+            logger.debug("Surface fan dropped: nothing to fan on {}", on)
             return
         }
-        val held = anchor?.takeIf { anchorCurrent() && it.stage == axis.stage }
+        val gesture = gestures.getOrPut(on) { Gesture() }
+        val held = gesture.anchor?.takeIf { anchorCurrent(on, gesture) && it.stage == axis.stage }
         if (held != null && !untouched(held)) {
             // Something else moved a fanned head: the ring back to the centre, and nothing written.
-            anchor = null
-            amounts = Amounts()
-            _shown.value = Shown(amounts, ++stamp)
+            gesture.anchor = null
+            gesture.amounts = Amounts()
+            _shown.value = Shown(++stamp)
             return
         }
-        val current = if (held != null) amounts else Amounts()
+        val current = if (held != null) gesture.amounts else Amounts()
         val shown = amountTo7Bit(axis, current.of(axis))
         if (held == null && abs(value7Bit.toInt() - shown) > SoftTakeoverStateMachine.JUMP_STEPS) {
             logger.debug("Surface fan: {} at {} is far from the centre; showing it again", axis, value7Bit)
-            _shown.value = Shown(amounts, ++stamp)
+            _shown.value = Shown(++stamp)
             return
         }
         val raw = current.with(axis, clampAmount(axis, current.of(axis) + (value7Bit.toInt() - shown) * stepOf(axis)))
@@ -168,7 +177,7 @@ class SelectionFan(private val state: State) : FanRing {
             is FanOutcome.Invalid -> logger.debug("Surface fan refused: {}", outcome.message)
             is FanOutcome.Done -> {
                 val answer = outcome.response
-                anchor = Anchor(
+                gesture.anchor = Anchor(
                     show = WeakReference(state.show),
                     targets = targets,
                     stage = axis.stage,
@@ -182,15 +191,15 @@ class SelectionFan(private val state: State) : FanRing {
                         position?.let { write.target.key to LocalPosition(it.pan, it.tilt) }
                     }.toMap(),
                 )
-                amounts = raw
-                _shown.value = Shown(raw, ++stamp)
+                gesture.amounts = raw
+                _shown.value = Shown(++stamp)
             }
         }
     }
 
-    private fun anchorCurrent(): Boolean {
-        val held = anchor ?: return false
-        return held.show.get() === state.show && held.targets == state.deskSelection.state.value.targets
+    private fun anchorCurrent(on: Subject, gesture: Gesture): Boolean {
+        val held = gesture.anchor ?: return false
+        return held.show.get() === state.show && held.targets == targetsOf(on)
     }
 
     /** Nothing else has written a head the fan wrote since: Local still holds, axis by axis, what the fan put there. */

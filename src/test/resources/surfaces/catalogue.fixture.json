@@ -50,6 +50,25 @@
         ]
     },
     {
+        "id": "pageLevel",
+        "does": "pageLevel",
+        "label": "Level on the encoder page",
+        "group": "Fixtures",
+        "help": "The attribute the encoder page of the device it is on names, of the heads it is on.",
+        "inputs": [
+            "CONTINUOUS"
+        ],
+        "subjects": [
+            "SELECTION",
+            "GROUP",
+            "FIXTURE"
+        ],
+        "hows": [],
+        "defaultHow": null,
+        "writesTo": "LOCAL",
+        "params": []
+    },
+    {
         "id": "flash",
         "does": "flash",
         "label": "Flash",
@@ -59,6 +78,7 @@
             "BUTTON"
         ],
         "subjects": [
+            "SELECTION",
             "GROUP",
             "FIXTURE"
         ],
@@ -112,12 +132,14 @@
         "does": "locate",
         "label": "Locate",
         "group": "Fixtures",
-        "help": "Locate the selection, or release it when it is all located.",
+        "help": "Locate the heads it is on, or release them when they are all located.",
         "inputs": [
             "BUTTON"
         ],
         "subjects": [
-            "SELECTION"
+            "SELECTION",
+            "GROUP",
+            "FIXTURE"
         ],
         "hows": [
             "TOGGLE"
@@ -131,12 +153,13 @@
         "does": "fan",
         "label": "Fan",
         "group": "Fixtures",
-        "help": "Spread the selection's positions about their centre.",
+        "help": "Spread the positions of the selection or a group about their centre.",
         "inputs": [
             "CONTINUOUS"
         ],
         "subjects": [
-            "SELECTION"
+            "SELECTION",
+            "GROUP"
         ],
         "hows": [],
         "defaultHow": null,
@@ -174,12 +197,14 @@
         "does": "fxSpeed",
         "label": "FX speed",
         "group": "Fixtures",
-        "help": "The speed of the Local FX on the selection's heads.",
+        "help": "The speed of the Local FX on the heads it is on.",
         "inputs": [
             "CONTINUOUS"
         ],
         "subjects": [
-            "SELECTION"
+            "SELECTION",
+            "GROUP",
+            "FIXTURE"
         ],
         "hows": [],
         "defaultHow": null,
@@ -238,6 +263,131 @@
                 "required": true
             }
         ]
+    },
+    {
+        "id": "clear",
+        "does": "clear",
+        "label": "Clear",
+        "group": "Programmer",
+        "help": "Clear the whole programmer, as its Clear does.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "LOCAL",
+        "params": [
+            {
+                "key": "fade",
+                "label": "Fade, seconds",
+                "kind": "NUMBER",
+                "default": 0.0,
+                "min": 0.0,
+                "max": 600.0
+            }
+        ]
+    },
+    {
+        "id": "blind",
+        "does": "blind",
+        "label": "Blind",
+        "group": "Programmer",
+        "help": "The programmer's Blind: toggled, or on while held.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE"
+        ],
+        "hows": [
+            "TOGGLE",
+            "WHILE_HELD"
+        ],
+        "defaultHow": "TOGGLE",
+        "writesTo": "LOCAL",
+        "params": [
+            {
+                "key": "fade",
+                "label": "Fade, seconds",
+                "kind": "NUMBER",
+                "default": 0.0,
+                "min": 0.0,
+                "max": 600.0
+            }
+        ]
+    },
+    {
+        "id": "release",
+        "does": "release",
+        "label": "Release",
+        "group": "Programmer",
+        "help": "Release what the programmer holds on the heads it is on.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "SELECTION",
+            "GROUP",
+            "FIXTURE"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "LOCAL",
+        "params": [
+            {
+                "key": "fade",
+                "label": "Fade, seconds",
+                "kind": "NUMBER",
+                "default": 0.0,
+                "min": 0.0,
+                "max": 600.0
+            }
+        ]
+    },
+    {
+        "id": "record",
+        "does": "record",
+        "label": "Record",
+        "group": "Programmer",
+        "help": "Record the programmer as a new cue at the end of a stack: every touched value, its FX, scenery and tempos.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "STACK"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "PLAYBACK",
+        "params": []
+    },
+    {
+        "id": "update",
+        "does": "update",
+        "label": "Update",
+        "group": "Programmer",
+        "help": "Write the programmer back into what was included.",
+        "inputs": [
+            "BUTTON"
+        ],
+        "subjects": [
+            "NONE"
+        ],
+        "hows": [
+            "ON"
+        ],
+        "defaultHow": "ON",
+        "writesTo": "PLAYBACK",
+        "params": []
     },
     {
         "id": "go",

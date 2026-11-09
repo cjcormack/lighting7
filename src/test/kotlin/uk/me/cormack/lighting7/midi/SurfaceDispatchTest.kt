@@ -211,4 +211,86 @@ class SurfaceDispatchTest {
         actions.outcome = { ActionOutcome.DONE }
         assertEquals(ActionOutcome.DONE, SurfaceDispatch.guarded("test") { press(go) })
     }
+
+    @Test
+    fun `the programmer's verbs reach their actions, Record into the stack it names`() {
+        val group = Subject.Group("front-wash")
+        assertEquals(ActionOutcome.DONE, press(Binding(Does.Clear(fade = 1.5))))
+        press(Binding(Does.Release(), group))
+        press(Binding(Does.Release(fade = 0.25), Subject.Selection))
+        press(Binding(Does.Record, record(RecordKind.STACK, stack)))
+        press(Binding(Does.Update))
+        assertEquals(
+            listOf(
+                RecordedCall.ClearProgrammer(1500), RecordedCall.Release(group, 0), RecordedCall.Release(Subject.Selection, 250),
+                RecordedCall.Record(stack), RecordedCall.Update,
+            ),
+            actions.calls,
+        )
+        actions.outcome = { ActionOutcome.Refused(ActionOutcome.NOTHING_INCLUDED, "Nothing is included to update") }
+        assertEquals(ActionOutcome.Refused(ActionOutcome.NOTHING_INCLUDED, "Nothing is included to update"), press(Binding(Does.Update)))
+    }
+
+    @Test
+    fun `Blind toggles, and while held lets go on release only when its press put it on`() {
+        press(Binding(Does.Blind()))
+        assertTrue(actions.blind)
+        press(Binding(Does.Blind()))
+        assertFalse(actions.blind)
+
+        val held = Binding(Does.Blind(fade = 0.5), how = How.WHILE_HELD)
+        val origin = surface()
+        dispatch.dispatch(held, SurfaceDispatch.Input.Press, origin)
+        assertTrue(actions.blind, "held, the programmer is Blind")
+        dispatch.dispatch(held, SurfaceDispatch.Input.Release, origin)
+        assertFalse(actions.blind, "let go, it is not")
+
+        // Already Blind when pressed: the press put nothing on, so the release takes nothing off.
+        actions.blind = true
+        actions.calls.clear()
+        dispatch.dispatch(held, SurfaceDispatch.Input.Press, origin)
+        dispatch.dispatch(held, SurfaceDispatch.Input.Release, origin)
+        assertTrue(actions.blind)
+        assertEquals(listOf<RecordedCall>(RecordedCall.SetBlind(true, 500)), actions.calls.toList())
+    }
+
+    @Test
+    fun `Locate, Fan and FX speed act on the subject they are bound on`() {
+        val group = Subject.Group("front-wash")
+        val fixture = Subject.Fixture("hex-1")
+        press(Binding(Does.Locate, group))
+        press(Binding(Does.Locate, fixture))
+        dispatch.dispatch(Binding(Does.Fan(FanAxis.PAN), group), SurfaceDispatch.Input.Move(70u, encoder = true), osc)
+        dispatch.dispatch(Binding(Does.FxSpeed, fixture), SurfaceDispatch.Input.Move(65u, encoder = true), osc)
+        dispatch.dispatch(Binding(Does.FxSpeed, group), SurfaceDispatch.Input.Move(96u), osc)
+        assertEquals(
+            listOf(
+                RecordedCall.Locate(group), RecordedCall.Locate(fixture), RecordedCall.WriteFan(FanAxis.PAN, 70u, group),
+                RecordedCall.WriteFxSpeed(65u, encoder = true, on = fixture), RecordedCall.WriteFxSpeed(96u, encoder = false, on = group),
+            ),
+            actions.calls,
+        )
+    }
+
+    @Test
+    fun `a page level writes whatever the encoder page of the device it is on names`() {
+        val pages = EncoderBankState()
+        val paged = SurfaceDispatch(actions, ActiveBankState(), pages)
+        val binding = Binding(Does.PageLevel, Subject.Selection)
+        val here = surface(controlId = "enc-1")
+        val there = surface(displayKey = "x-touch-2", controlId = "enc-1")
+        paged.dispatch(binding, SurfaceDispatch.Input.Move(40u, encoder = true), here)
+        pages.set("x-touch", EncoderBankSelection("rgbColour", ColourAxis.SATURATION))
+        paged.dispatch(binding, SurfaceDispatch.Input.Move(41u, encoder = true), here)
+        paged.dispatch(binding, SurfaceDispatch.Input.Move(42u, encoder = true), there)
+        assertEquals(
+            listOf<RecordedCall>(
+                RecordedCall.WriteLevel(Subject.Selection, "dimmer", 40u),
+                RecordedCall.WriteLevel(Subject.Selection, "rgbColour", 41u, ColourAxis.SATURATION),
+                RecordedCall.WriteLevel(Subject.Selection, "dimmer", 42u),
+            ),
+            actions.calls.toList(),
+            "each device's own page",
+        )
+    }
 }

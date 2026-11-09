@@ -62,7 +62,9 @@ The implementation follows four separable concerns, mirroring the phase breakdow
   │         ├─ fan → SelectionFan.turn → the fan route's resolve             │
   │         ├─ fxSpeed → SelectionFxSpeed.turn → applyFxUpdate, per Local FX │
   │         ├─ select / selection → State.deskSelection                      │
-  │         ├─ locate → LocateManager.toggle, per selected target            │
+  │         ├─ locate → LocateManager.toggle, per target of the subject      │
+  │         ├─ clear / blind / release → the programmer's own gestures       │
+  │         ├─ record / update / undo → the serial lane                      │
   │         ├─ go / back / pause / stop / goTo → CueStackManager (by uuid)   │
   │         ├─ cue → CueHolds (a loose hold)                                 │
   │         ├─ fire → EffectsService.fireFromSurface (needs the arm)         │
@@ -369,11 +371,17 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | Function | On | Input | Effect |
 |---|---|---|---|
 | `level(attribute, axis?)` | selection · group · fixture | Continuous | Programmer write (owner `surface`) on every head the subject reaches (`Heads.of`), typed through `AttributeChannelResolver.surfaceWrite` on the binding's colour axis (null is hue; refused at bind time on a non-colour attribute, `BINDING_AXIS_NEEDS_COLOUR`); a head on which the attribute is not a colour skips an axis move. A head's **pan or tilt writes its `position`**, the other axis kept, as `programmer.setPosition` writes it (D5) — the key a Circle paints, so a nudge holds the Circle back (and holds the other axis against later cues). A `DmxWhiteMixColour` head takes a colour move on the colour its whites make. An empty selection drops the write with a debug log, never widened to "everything". Health `unknownAttribute` for a selection attribute no patched fixture takes |
-| `flash(attribute, percent)` | group · fixture | Button (While held) | Press: programmer write (owner `flash`) at `percent` of each head's own range, as a fader scales (D10), grey at the percentage on a colour. Release: clears the `flash` slot of exactly the heads the press wrote |
+| `pageLevel` | selection · group · fixture | Continuous | A `level` on whatever attribute and colour axis the [encoder page](#encoder-bank) of **the device it is on** names, as a strip encoder follows it, on any continuous control and subject. A page change rebuilds that device's index, so the readout follows the new attribute at once. Health is the subject's alone: its attribute is the device's, which no binding names |
+| `flash(attribute, percent)` | selection · group · fixture | Button (While held) | Press: programmer write (owner `flash`) at `percent` of each head's own range, as a fader scales (D10), grey at the percentage on a colour. Release: clears the `flash` slot of exactly the heads the press wrote — on the selection, the heads selected at the press, not whatever is selected at the release |
 | `select` | group · fixture | Button | `DeskSelection.toggle` (head-by-head, a group by its members), or `set(listOf(target))` on Replace; LED lit while the target's heads are all selected. **Toggle-hold-replaces**, the default, toggles on press and, still held at `SurfaceDispatch.SELECT_HOLD_MS` (500 ms), replaces — the fader-wing gesture. A release always cancels the pending replace, even if the binding changed or went dead meanwhile. Toggle and Replace arm no hold |
-| `locate` | selection | Button | `toggleLocate` once per selected target: all located → all released, else the unlocated ones come up; LED lit while the selection is non-empty and every target is located |
-| `fan(axis)` | selection | Continuous | **Fan** the desk selection's positions on `PAN` or `TILT` (venue-visit plan S12), or their landing points on the stage axes `ACROSS` or `DEPTH`, through the Fan panel's own resolve (`fanIntoProgrammer`, `mode: ABOUT`, owner `surface`). `midi/SelectionFan.kt` holds the gesture's anchor; a new gesture starts from the centre, an input further than the jump rule's eight steps from it showing the ring the centre again. Fed back by its readout (`Signal.FAN`). Refused on one fixture (D2): a fan spreads over several heads |
-| `fxSpeed` | selection | Continuous | The **Speed** of every Local FX painting a head of the desk selection, each whole (fx-speed plan D13), through `midi/SelectionFxSpeed.kt`: an encoder a quarter of an octave a detent from where its ring shows the lead FX, a fader ×¼–×4. Fed back by its readout (`Signal.FX_LIST`), a fader's within five steps of where it was moved. Health always `ok` |
+| `locate` | selection · group · fixture | Button | `toggleLocate` once per target of the subject — each selected target, or the one group or fixture: all located → all released, else the unlocated ones come up; LED lit while every target is located (the selection's while it is non-empty) |
+| `fan(axis)` | selection · group | Continuous | **Fan** the subject's positions — the desk selection's, or a group's in its member order — on `PAN` or `TILT` (venue-visit plan S12), or their landing points on the stage axes `ACROSS` or `DEPTH`, through the Fan panel's own resolve (`fanIntoProgrammer`, `mode: ABOUT`, owner `surface`). `midi/SelectionFan.kt` holds a gesture per subject, so a group's fan and the selection's do not reset each other; a new gesture starts from the centre, an input further than the jump rule's eight steps from it showing the ring the centre again. Fed back by its readout (`Signal.FAN`). Refused on one fixture (D2): a fan spreads over several heads |
+| `fxSpeed` | selection · group · fixture | Continuous | The **Speed** of every Local FX painting a head of the subject, each whole (fx-speed plan D13), through `midi/SelectionFxSpeed.kt`: an encoder a quarter of an octave a detent from where its ring shows the lead FX (the one on the subject's first head in rig order), a fader ×¼–×4. Fed back by its readout (`Signal.FX_LIST`), a fader's within five steps of where it was moved. Health always `ok` |
+| `clear(fade)` | — | Button | The programmer's whole **Clear** (`clearProgrammerCompletely`: values, its FX, layers, Locate, scenery, tempos and the include target) over `fade` seconds, at once on the input's thread. The programmer fade is the browser's, so the binding carries its own, 0–600 s as MCP's programmer tools take (`MAX_PROGRAMMER_FADE_SECONDS`). No LED |
+| `blind(fade)` | — | Button: Toggle · While held | The programmer's **Blind** (`setProgrammerBlind`, the WS frame's and MCP's one helper: its Looks' scenery, its tempos and its fires follow) over `fade` seconds. While held lets go on release only when its press put it on. LED lit while Blind (`Signal.PROGRAMMER`, which the poll moves on a Blind change) |
+| `release(fade)` | selection · group · fixture | Button | `programmer.clearTarget` once per target of the subject: everything the programmer holds on it and its heads, and its Local FX, over `fade` seconds. A Local FX all of whose heads lie among several targets together is stopped first (`releaseLocalFxWithin`), as the UI's *Release n* stops one each target alone answers as partial. An empty selection releases nothing. No LED |
+| `record` | record (stack) | Button | **Record** a new cue at the end of the stack (`performProgrammerRecord`, `CREATE`): every touched value, all attributes, with the programmer's FX, held scenery and held tempos — the Record sheet's defaults — named and numbered as the sheet's default would be, on the serial lane. Refused in a venue (`VENUE_RECORD_OFF`); a press on a stack the show lacks is `NotFound`. No LED. Not on OSC (OSC plan D6) |
+| `update` | — | Button | **Update** Mode A (`performProgrammerUpdate` with no targets) into what Include, or the last Record, left included — a cue or a Look — on the serial lane. Refused `NOTHING_INCLUDED` when nothing is, and in a venue. No LED |
 | `palette(palette)` | selection | Button | `ProgrammerLayerStack.toggle` on the **desk selection**, masked to the palette's own derived family, no solo siblings. A *generic* palette with an empty selection is dropped; a per-fixture one names its own heads. LED lit while it covers every selected target. Health `missingPalette` |
 | `look` | record (Look) | Button: Toggle · On · Off | The Look **whole**, never onto the selection (absolute-looks plan P1): Toggle puts one layer of it on or takes every layer off; On and Off land that state and do nothing when it already holds (OSC plan D4). LED lit while any layer of it is on. Health `missingLook` |
 | `cue` | record (cue) | Button: Toggle · On · Off | A cue's **loose hold** (`CueHolds`, cue model plan D6): toggled, or taken (`takeLooseCue`) or let go (`dropLoose`), On and Off doing nothing when it already is so. Health `missingCue` |
@@ -391,7 +399,7 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `tap` · `tempoScale(factor)` | record (master) · none | Button | `SpeedMasterBank.tap`, or ×½ / ×2 (fx-speed plan D12; refused `OutOfRange` outside 20–300) |
 | `layer(layer)` | — | Button | `ActiveBankState.setBank` for **the device the button is on** (D16): the payload names no device |
 | `encoderPage(attribute, axis?)` | — | Button | `EncoderBankState.set` for the device the button is on; LED lit while that attribute **and** axis are its encoder page. Health `unknownAttribute` |
-| `undo(kind)` | — | Button | `UNDO` / `REDO` / `PROGRAMMER`: the undo key for the surface's own source, `surface:{deviceKey}` (undo plan §4.8, D1, D2), through `moveHistory`, off the input's thread and one press at a time. A refusal moves nothing and is logged; a surface cannot confirm. No LED |
+| `undo(kind)` | — | Button | `UNDO` / `REDO` / `PROGRAMMER`: the undo key for the surface's own source, `surface:{deviceKey}` (undo plan §4.8, D1, D2), through `moveHistory`, on the serial lane. A refusal moves nothing and is logged; a surface cannot confirm. No LED |
 | `buskPage(step?)` | none · record (page) | Button | One page along (`step` ±1, wrapping), or that page (`BuskPageState.setByUuid`; LED lit while it shows). A page with a step, or no page without one, is refused |
 | `windowFocus(window, focus)` · `windowSheet(window)` | — | Button | One `windows.viewOptions` — `{focus}` (`split` · `pads` · `rig`) or `{sheet: toggle}` — to **every** connected window named `window`. Health `missingWindow` while none has the name, re-evaluated on every registry change. No LED |
 | `selection(step)` | — | Button | `CLEAR` empties the desk selection; every other step is `DeskSelection.subselect` (the Elements chip's `ALL` · `ODD` · `EVEN` · `FIRST_HALF` · `SECOND_HALF` · `INVERT` · `MASTERS`, and `NEXT` / `PREV` one step along the rig order). No LED |
@@ -405,6 +413,14 @@ window is a logged no-op at press time and `missingWindow` in health. That healt
 that is not a database fact, so `SurfaceFeedbackPublisher` collects `WindowRegistry.windows` (by
 name set) and re-runs `invalidateHealth` on every change. `FU-WINDOWS-NAME-ADDRESSED-BINDING` is the
 item for when duplicate names ever matter.
+
+**The serial lane** is `DefaultSurfaceActions`' one-at-a-time dispatcher and mutex: Undo, Redo, Record
+and Update run there in press order, off the input's thread, since each opens transactions or reloads,
+under the input's `WriteOrigin` so their writes are the surface's own in the history. A press queued
+behind a project switch is dropped when it reaches the head of the lane. A press of another function
+made while the lane is busy can land before a queued Record reads the programmer, which is accepted.
+Clear acts at once: it opens no transaction and reloads nothing, and queued it would wipe what was
+written after the press.
 
 **Health** is the subject's — a fixture or group (with the attribute a level or flash writes on some
 head `Heads.of` reaches, elements included, each judged as cue authoring judges a cell), a fixture's
@@ -708,7 +724,9 @@ surfaces that turn it off locally.
 | Fire trigger | `EffectsService.fireFromSurface` | **above composition, under park** (`TriggerOutput`) | A ~300 ms pulse on the tube's channel, only while the desk is armed; never a value, so no tier holds it |
 | Fader → SelectionAttribute | `ProgrammerWriter.writeAttributes` (owner `surface`) | **Tier 2 (programmer)** | One write per selected head, a group's members tagged with `sourceGroup` — the same slot a fixed fader uses, so releasing a flash reveals it the same way |
 | Select / Clear button | `State.deskSelection` | *(no tier — the desk's selection)* | What the next selection-relative move acts on |
-| Locate button | `LocateManager.toggle` (owner `locate`) | **Tier 2 (programmer)** | Per selected target, the `POST /locate/toggle` path |
+| Locate button | `LocateManager.toggle` (owner `locate`) | **Tier 2 (programmer)** | Per target of the subject, the `POST /locate/toggle` path |
+| Clear · Release · Blind | `clearProgrammerCompletely` · `clearTarget` · `setProgrammerBlind` | **Tier 2 (programmer)** | The programmer's own gestures, at the binding's fade |
+| Record · Update | `performProgrammerRecord` · `performProgrammerUpdate` | *(writes the show)* | The REST routes' cores; a recorded or updated live cue republishes as it would from the sheet |
 | Apply Look / Press palette | `ProgrammerLayerStack.toggle` | **Tier 2 (a programmer layer)** | The Look whole, the palette onto the selection; the same `toggle` a busk pad makes |
 | Press pad | `BuskPressService` | **Tier 2, or Tier 4 for a cue pad** | The pad's whole plan — solo siblings included — through the one implementation `POST /busk/pads/{id}/press` also uses |
 | Busk page buttons | `State.buskPageState` | *(no tier — a screen position)* | Moves the desk's page; every window *following* it moves too (a window may hold its own — `lib/buskPageFollow.ts`) |
@@ -735,13 +753,12 @@ covered target takes those heads off head-by-head — an entry the press does no
 spelling, a group it only partly covers is respelt as the members left behind. An unresolvable
 group expands to itself, so a stale entry stays comparable rather than vanishing.
 
-The surface reaches it through three targets (`SelectionAttribute`, `SelectTarget`,
-`ClearSelection`) plus `LocateSelection` and `SelectionFan`, and — since the record variants — `PressPalette` and
-`PressPad` too, and since the busk-further plan `SelectionNext` / `SelectionPrev` /
-`SelectionCells`, which rewrite the selection's targets over the rig order through
-`DeskSelection.subselect` (`docs/lighting-composition-model.md` §"The rig"); the router stays selection-blind — every arm calls a `SurfaceActions` method and
-`DefaultSurfaceActions` reads `state.deskSelection`, which is what keeps `RecordingActions` a
-complete test double.
+The surface reaches it through every fixture function bound on the selection — `level`, `pageLevel`,
+`flash`, `locate`, `fan`, `fxSpeed`, `release` — through `select`, `palette` and `pad`, and through
+`selection(step)`, whose moves rewrite the selection's targets over the rig order through
+`DeskSelection.subselect` (`docs/lighting-composition-model.md` §"The rig"); the router stays
+selection-blind — every function calls a `SurfaceActions` method and `DefaultSurfaceActions` reads
+`state.deskSelection`, which is what keeps `RecordingSurfaceActions` a complete test double.
 
 ## The showing busk page
 
@@ -819,6 +836,7 @@ empty snapshot. `SurfaceSocket` sends the connect burst from the tracker's store
 | `ControlSurfaceBindingService` cache mutations | per-project `Mutex` via `lockFor(projectId)` | ConcurrentHashMap reads |
 | `ProgrammerStore` | any thread | lock-free `ConcurrentHashMap` slot stacks |
 | Cue stack dispatch | `GlobalScope` (fire-and-forget) | service's own coordination |
+| Undo, Redo, Record, Update | the serial lane: `Dispatchers.IO.limitedParallelism(1)` on `GlobalScope` | one `Mutex`, in press order |
 
 The router thread never blocks on show services. The one continuous target that does real work on it is `SelectionFan`: a turn runs the fan route's resolve synchronously under the fan's monitor, and reads the rig order — a database transaction — once per gesture, not once per detent, as a stage fan reads its placements. Programmer store mutations are lock-free (the engine's publish serialises on its own lock). Cue stack operations and fire-cue dispatches land on `GlobalScope` so the router keeps draining MIDI events even during slow cue transitions.
 

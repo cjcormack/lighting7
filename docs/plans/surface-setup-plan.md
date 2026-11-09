@@ -280,8 +280,8 @@ and its row marked *in review* with its branch. A session's PR is titled
 |---|---|---|---|---|---|
 | 1 | The binding and its migration | merged | `claude/hopeful-hamilton-eancf5` | [#407](https://github.com/cjcormack/lighting7/pull/407) | bd866bb |
 | 2 | Feedback | merged | `claude/happy-heisenberg-vh2hqw` | [#409](https://github.com/cjcormack/lighting7/pull/409) | 1c407f7 |
-| 3 | The served picture, and editors A and C | in review | `claude/beautiful-heisenberg-fvjsu7` | | |
-| 4 | New functions | planned | | | |
+| 3 | The served picture, and editors A and C | in review | `claude/beautiful-heisenberg-fvjsu7` | [#412](https://github.com/cjcormack/lighting7/pull/412) | 6f12ce6 |
+| 4 | New functions | in review | `claude/beautiful-turing-37vey4` | | |
 | 5 | Jobs | planned | | | |
 | 6 | Assign from the thing | planned | | | |
 
@@ -546,6 +546,36 @@ session 2, and the screens keep today's shape until session 3.
 - **Docs:** `docs/midi-control-surface-engineering.md`; `FU-MANUAL-SURFACE-SETUP-S4`.
 - **Local:** `./gradlew compileTestKotlin`, then `./gradlew test` for the `midi`, `routes` and `fx`
   packages; `npm run check:quick`.
+
+**As built** (where the code led away from the text above):
+
+- **Clear, Blind and Release carry their own fade**, `fade` in seconds, 0–600 as MCP's programmer tools
+  take (`MAX_PROGRAMMER_FADE_SECONDS`), default 0: the programmer fade is a browser setting
+  (`lib/programmerFade.ts`), so the desk has none to read.
+- **Clear is the programmer's whole Clear**, `clearProgrammerCompletely`, not `ProgrammerWriter.clearAll`:
+  the latter leaves the layers, Locate, scenery, tempos and the include target, which the Clear button
+  takes.
+- **Following the encoder page is a function of its own**, `pageLevel` (*Level on the encoder page*),
+  rather than a `level` with no attribute: every reader of `level` names its attribute. It takes any
+  continuous control, a fader too, since nothing about the page needs detents.
+- **Clear acts at once, not on the serial lane**: it opens no transaction and reloads nothing, so the
+  lane's reason does not hold, and queued behind a busy lane it would wipe what was written after the
+  press. Record and Update stay on the lane, accepting that a press made while it is busy can land
+  before a queued Record reads the programmer.
+- **Release over several targets also stops a Local FX all of whose heads lie among them together**
+  (`ProgrammerHandler.releaseLocalFxWithin`), which each target's `clearTarget` alone answers as
+  partial, as the UI's *Release n* does.
+- **Blind is one helper**, `setProgrammerBlind`, which the `programmer.setBlind` frame and MCP's
+  `set_blind` now call too, so a surface's Blind takes the programmer's scenery, tempos and fires with
+  it. Its LED follows `Signal.PROGRAMMER`, which the poll already moves on a Blind change.
+- **Record and Update are refused in a venue** (`VENUE_RECORD_OFF`), as their routes are. Update is
+  refused at the press when nothing is included and checked again on the lane, where a Clear since may
+  have dropped the include target. A project whose kind cannot be read refuses both. A press reaching the lane after a project switch is dropped.
+- **A fan's anchor per subject is a gesture per subject**: the anchor and the amounts both, so a group's
+  ring keeps its amount while the selection's turns; `SelectionFan.Shown` is only a stamp, each ring
+  reading its own subject's amount. FX speed's rig order is cached per show rather than
+  per selection, since it does not depend on the targets, so two subjects do not evict each other.
+- **`palette` stays on the selection**: D2 lists it, but no session's text gives it a group or fixture.
 
 ### Session 5 — Jobs
 

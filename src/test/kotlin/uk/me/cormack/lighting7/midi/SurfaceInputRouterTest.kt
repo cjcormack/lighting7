@@ -619,7 +619,7 @@ class SurfaceInputRouterTest {
             listOf(
                 RecordedCall.SelectTarget(washTarget, replace = true),
                 RecordedCall.ClearSelection,
-                RecordedCall.LocateSelection,
+                RecordedCall.Locate(),
             ),
             actions.calls.toList(),
         )

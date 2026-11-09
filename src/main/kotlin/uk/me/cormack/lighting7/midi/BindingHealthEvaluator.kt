@@ -186,6 +186,7 @@ object BindingHealthEvaluator {
             // announces. Transient, unlike every other check — see `AssignmentHealth.MissingWindow`.
             is Does.WindowFocus -> windowHealth(does.window, context)
             is Does.WindowSheet -> windowHealth(does.window, context)
+            Does.PageLevel, is Does.Clear, is Does.Blind, is Does.Release, Does.Record, Does.Update,
             is Does.Flash, Does.Select, Does.Locate, is Does.Fan, Does.FxSpeed, Does.Look, Does.Cue, Does.Pad,
             Does.PickUp, Does.Place, Does.Drop, Does.Go, Does.Back, Does.Pause, Does.Stop, Does.GoTo,
             Does.Standby, Does.FxAmount, is Does.Fire, Does.Blackout, is Does.GrandMaster, is Does.Tempo,

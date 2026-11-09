@@ -96,6 +96,11 @@ private fun isRuntimeGesture(rest: List<String>): Boolean = when (rest.firstOrNu
 /** A record into a venue: the Programmer works there, but Record is off (venue plan D11). */
 internal const val CODE_VENUE_RECORD_OFF = "VENUE_RECORD_OFF"
 
+/** Whether the live project is a venue, where Record is off (venue plan D11). */
+internal fun isVenueLive(state: State): Boolean =
+    // A kind is fixed at creation, so the entity loaded at the last switch answers it.
+    transaction(state.database) { state.projectManager.currentProject.kind } == ProjectKind.VENUE
+
 /**
  * Refuse a record while the live project is a venue, with 409 [CODE_VENUE_RECORD_OFF] (venue plan
  * D11): a venue holds a rig, not cues, Looks or templates, and its programmer is for testing and
@@ -103,9 +108,7 @@ internal const val CODE_VENUE_RECORD_OFF = "VENUE_RECORD_OFF"
  * is the one to ask. Returns true when it answered.
  */
 internal suspend fun RoutingContext.refusedRecordInVenue(state: State): Boolean {
-    // A kind is fixed at creation, so the entity loaded at the last switch answers it.
-    val kind = transaction(state.database) { state.projectManager.currentProject.kind }
-    if (kind != ProjectKind.VENUE) return false
+    if (!isVenueLive(state)) return false
     call.respond(
         HttpStatusCode.Conflict,
         ErrorResponse("Record is off in a venue: the programmer here is for testing and focus", CODE_VENUE_RECORD_OFF),

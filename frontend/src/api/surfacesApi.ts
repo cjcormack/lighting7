@@ -56,11 +56,17 @@ export type SelectionMove =
 /** A function and its own parameters; `type` is its id. */
 export type SurfaceDoes =
   | { type: "level"; attribute: string; axis?: ColourAxis | null }
+  | { type: "pageLevel" }
   | { type: "flash"; attribute: string; percent?: number }
   | { type: "select" }
   | { type: "locate" }
   | { type: "fan"; axis: FanAxis }
   | { type: "fxSpeed" }
+  | { type: "clear"; fade?: number }
+  | { type: "blind"; fade?: number }
+  | { type: "release"; fade?: number }
+  | { type: "record" }
+  | { type: "update" }
   | { type: "palette"; palette: string }
   | { type: "look" }
   | { type: "cue" }
