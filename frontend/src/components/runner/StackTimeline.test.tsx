@@ -66,11 +66,12 @@ vi.mock('@dnd-kit/core', async (importOriginal) => {
     },
   }
 })
+const virtual = vi.hoisted(() => ({ scrollToIndex: vi.fn() }))
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count, estimateSize }: { count: number; estimateSize: () => number }) => ({
     getTotalSize: () => count * estimateSize(),
     getVirtualItems: () => Array.from({ length: count }, (_, index) => ({ index, key: index, start: index * estimateSize(), size: estimateSize() })),
-    scrollToIndex: () => {},
+    scrollToIndex: virtual.scrollToIndex,
   }),
 }))
 
@@ -142,6 +143,7 @@ beforeEach(() => {
 afterEach(() => {
   sessionStorage.clear()
   vi.restoreAllMocks()
+  virtual.scrollToIndex.mockClear()
 })
 
 function cell(entryId: number, col: string): HTMLElement {
@@ -392,6 +394,45 @@ describe('StackTimeline', () => {
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Choose the scenery shown' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
     fireEvent.click(screen.getByRole('menuitem', { name: 'Show all' }))
     expect(timelineFiltersStore.getSnapshot().hiddenScenery).toEqual(['elsewhere'])
+  })
+})
+
+describe('StackTimeline — following the show (venue-rig-fixes plan D10, D12)', () => {
+  /** A 100px scroller, Tabs out inside it and every later row below it. */
+  function stubScroller() {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const box = (top: number, height: number) => ({ left: 0, top, right: 1100, bottom: top + height, width: 1100, height, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
+      if (this.hasAttribute('data-sheet-scroller')) return box(0, 100)
+      const id = this.getAttribute('data-row-id')
+      if (id != null) return id === 'entry:101' ? box(30, 36) : box(400, 36)
+      return box(0, 0)
+    })
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(function (this: Element) {
+      return this.hasAttribute('data-sheet-scroller') ? 100 : 0
+    })
+  }
+
+  it('centres the live row on entering a running stack, and a GO off the sheet centres again', () => {
+    stubScroller()
+    const view = render(<StackTimeline stack={STACK} projectId={1} activeEntryId={102} />)
+    expect(virtual.scrollToIndex).toHaveBeenCalledExactlyOnceWith(1, { align: 'center' })
+    virtual.scrollToIndex.mockClear()
+    view.rerender(<StackTimeline stack={STACK} projectId={1} activeEntryId={101} />)
+    expect(virtual.scrollToIndex).not.toHaveBeenCalled()
+    view.rerender(<StackTimeline stack={STACK} projectId={1} activeEntryId={101} standbyEntryId={103} />)
+    expect(virtual.scrollToIndex).toHaveBeenCalledExactlyOnceWith(3, { align: 'center' })
+  })
+
+  it('selects Duplicate’s copies once the refetch draws them and scrolls to the first', () => {
+    stubLayout()
+    const view = render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
+    pressCell(cell(102, PALETTE).firstElementChild as HTMLElement, 400, 1)
+    const onDuplicated = cueActions.last!.onDuplicated as (ids: number[]) => void
+    act(() => onDuplicated([104]))
+    expect(virtual.scrollToIndex).not.toHaveBeenCalled()
+    view.rerender(<StackTimeline stack={{ ...STACK, cues: [...STACK.cues, cueRow(4, { name: 'Copy' })] }} projectId={1} activeEntryId={null} />)
+    expect(document.querySelector('[data-row-id="entry:104"]')).toHaveAttribute('data-state', 'selected')
+    expect(virtual.scrollToIndex).toHaveBeenCalledExactlyOnceWith(4, { align: 'center' })
   })
 })
 

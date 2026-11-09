@@ -516,7 +516,7 @@ export function EditorSurface({
  * editor taller than that room — a colour cell with its bands, low in the cue editor — would
  * otherwise hang off the window with no way to reach the part outside it.
  */
-const POPOVER_BOUND_CLASS = 'max-h-[var(--radix-popover-content-available-height)] overflow-y-auto'
+const POPOVER_BOUND_CLASS = 'max-h-[var(--radix-popover-content-available-height)] overflow-y-auto overscroll-contain'
 
 /**
  * The cell's trigger, marked with the editor's open state and nothing else.

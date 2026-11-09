@@ -110,7 +110,7 @@ import {
   type TimelineVerbState,
 } from './TimelineEditing'
 import { SharedCueChip } from './SharedCueChip'
-import { entryRowId } from './CueSheet'
+import { entryRowId, useSheetFollow } from './useSheetFollow'
 
 /** The live and next rows' edges, as the Table draws them. */
 const LIVE_ROW_CLASS = 'bg-green-500/[0.07] shadow-[inset_3px_0_0_rgb(34,197,94)]'
@@ -716,6 +716,17 @@ export function StackTimeline({
     scrollTo(row.id)
   }, [openedEntryId, rows, scrollTo, setRows])
 
+  const onDuplicated = useSheetFollow({
+    stack,
+    rows,
+    activeEntryId,
+    standbyEntryId,
+    linkedEntryId: openedEntryId,
+    sheetRef,
+    setRows,
+    scrollTo,
+  })
+
   /** Arming is what a click on the cue column means while locked, as on the Table. */
   const onRowClick = useCallback(
     (id: string, e: React.MouseEvent) => {
@@ -933,6 +944,7 @@ export function StackTimeline({
                     onRequestUnlock={onRequestUnlock}
                     lockedReason={LOCKED_REASON}
                     fromShowView
+                    onDuplicated={onDuplicated}
                   />
                 )}
                 <Button variant="ghost" size="sm" onClick={sheet.clearByLadder} title="Deselect all">

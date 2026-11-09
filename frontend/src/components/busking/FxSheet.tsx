@@ -235,7 +235,7 @@ export function FxSheet({
           FX…
         </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-1.5" data-effects-list>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5" data-effects-list>
         {selected.length === 0 ? (
           <p className="px-2 py-3 text-xs text-muted-foreground">Select heads on the rig to see the FX running on them.</p>
         ) : effects.length === 0 ? (

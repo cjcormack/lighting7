@@ -188,6 +188,20 @@
   }
 }
 
+/* The desk's shell is one fixed screen (`Layout`'s `useDeskShell`): nothing scrolls or bounces the
+   document, so a wheel past a list's end or over the header moves nothing. Only while the shell is
+   mounted; the pages outside it scroll the document as before. */
+html.desk-shell,
+html.desk-shell body,
+html.desk-shell #root {
+  height: 100%;
+}
+html.desk-shell,
+html.desk-shell body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 /* A row marked with a fixture colour (`tagClass` in `lib/fixtureColours.ts`): `--tag` for the name's
    swatch, and a wash on the sticky name cell, mixed with the sheet ground because that cell has to
    stay opaque over the cells sliding under it. Unlayered, so it beats the cell's `bg-background`

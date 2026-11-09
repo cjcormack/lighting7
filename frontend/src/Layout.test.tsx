@@ -322,3 +322,34 @@ describe('the cue action set’s dialogs', () => {
     expect(screen.getByTestId('record-sheet').textContent).toBe('12')
   })
 })
+
+describe('the desk’s shell is one fixed screen (venue-rig-fixes plan D13)', () => {
+  const shell = () => document.documentElement.classList.contains('desk-shell')
+
+  it('holds the shell class on html while it is mounted, and drops it after', async () => {
+    const view = draw('/projects/1/show')
+    await screen.findByTestId('page')
+    expect(shell()).toBe(true)
+    view.unmount()
+    expect(shell()).toBe(false)
+  })
+
+  it('leaves the pages outside it — a reset link — scrolling the document', async () => {
+    const router = createMemoryRouter(
+      [
+        { path: '/', element: <Layout />, children: [{ path: '*', element: <Page /> }] },
+        { path: '/reset/:token', element: <div data-testid="reset">Reset</div> },
+      ],
+      { initialEntries: ['/reset/abc'] },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('reset')
+    expect(shell()).toBe(false)
+    await act(() => router.navigate('/projects/1/show'))
+    await screen.findByTestId('page')
+    expect(shell()).toBe(true)
+    await act(() => router.navigate('/reset/abc'))
+    await screen.findByTestId('reset')
+    expect(shell()).toBe(false)
+  })
+})

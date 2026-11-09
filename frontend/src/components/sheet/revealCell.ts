@@ -24,11 +24,9 @@ export function revealCellInScroller(scroller: HTMLElement, cell: CellRef<string
   if (element == null) return false
   const box = scroller.getBoundingClientRect()
   const header = scroller.querySelector('[data-grid-header]')
-  const headerHeight = header?.getBoundingClientRect().height ?? 0
   const stickyWidth = header?.firstElementChild?.getBoundingClientRect().width ?? 0
   const rect = element.getBoundingClientRect()
-  const top = box.top + headerHeight
-  const bottom = box.top + scroller.clientHeight
+  const { top, bottom } = rowBand(scroller)
   const left = box.left + stickyWidth
   const right = box.left + scroller.clientWidth
   if (rect.top < top) scroller.scrollTop -= top - rect.top
@@ -36,6 +34,20 @@ export function revealCellInScroller(scroller: HTMLElement, cell: CellRef<string
   if (rect.left < left) scroller.scrollLeft -= left - rect.left
   else if (rect.right > right) scroller.scrollLeft += rect.right - right
   return true
+}
+
+/** Where a row shows whole in [scroller]: below its sticky header, above a horizontal scrollbar. */
+export function rowBand(scroller: HTMLElement): { top: number; bottom: number } {
+  const box = scroller.getBoundingClientRect()
+  const header = scroller.querySelector('[data-grid-header]')
+  return { top: box.top + (header?.getBoundingClientRect().height ?? 0), bottom: box.top + scroller.clientHeight }
+}
+
+/** Whether [row] shows whole in [scroller]. */
+export function rowInView(row: Element, scroller: HTMLElement): boolean {
+  const { top, bottom } = rowBand(scroller)
+  const rect = row.getBoundingClientRect()
+  return rect.top >= top && rect.bottom <= bottom
 }
 
 /**

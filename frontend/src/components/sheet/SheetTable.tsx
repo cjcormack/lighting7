@@ -352,6 +352,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div
         ref={attachScroller}
+        data-sheet-scroller
         // The frame is `sheetFrame.ts`'s (CLAUDE.md §List shell): the sheet ground on the scroller,
         // so the sticky first column and the body are one colour, and no top line — the row
         // above owns it.

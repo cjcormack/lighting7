@@ -108,6 +108,7 @@ export default function Layout() {
   useWindowsBridge()
   // *Show · Desk name* on every route, the app bar's switcher's name in the tab (navigation plan §4.1).
   useDocumentTitle()
+  useDeskShell()
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -406,6 +407,22 @@ export default function Layout() {
       </MobileDrawerContext.Provider>
     </TooltipProvider>
   )
+}
+
+/** The class `index.css` makes the desk one fixed screen with, on `html` while the shell is drawn. */
+const DESK_SHELL_CLASS = 'desk-shell'
+
+/**
+ * **The desk's shell is one fixed screen** (venue-rig-fixes plan D13): the document never scrolls
+ * or rubber-bands under it, only its own scrollers do. On `html` for the shell's life alone, so
+ * the pages drawn outside it (onboarding, a reset link, a device login) still scroll the document.
+ */
+function useDeskShell() {
+  useEffect(() => {
+    const root = document.documentElement
+    root.classList.add(DESK_SHELL_CLASS)
+    return () => root.classList.remove(DESK_SHELL_CLASS)
+  }, [])
 }
 
 /** ⌘K *Apply FX*'s picker, mounted only while open: it reads the current project and the fixture list. */

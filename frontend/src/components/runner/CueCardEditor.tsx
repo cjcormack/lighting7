@@ -66,6 +66,8 @@ interface CueCardEditorProps {
   locked?: boolean
   /** Lift the lock, where it is the operator's to lift — a locked cue action asks first. */
   onRequestUnlock?: () => void
+  /** Duplicate's copies, by entry: the list brings the first into view. */
+  onDuplicated?: (entryIds: number[]) => void
 }
 
 /**
@@ -89,6 +91,7 @@ export function CueCardEditor({
   onSetStandby,
   locked = false,
   onRequestUnlock,
+  onDuplicated,
 }: CueCardEditorProps) {
   // Sorted by entry id, as the list's `SortableContext` is: rows are entries.
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -359,6 +362,7 @@ export function CueCardEditor({
               locked={locked}
               onRequestUnlock={onRequestUnlock}
               fromShowView
+              onDuplicated={onDuplicated}
               className="min-w-0"
             />
           </div>
