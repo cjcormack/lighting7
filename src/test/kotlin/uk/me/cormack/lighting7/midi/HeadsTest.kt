@@ -1,12 +1,17 @@
 package uk.me.cormack.lighting7.midi
 
-import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.dmx.China2CellLedBlinderFixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.ShehdsLed19RgbwFixture
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
+import uk.me.cormack.lighting7.fx.ExtendedColour
+import uk.me.cormack.lighting7.fx.FxOutput
+import uk.me.cormack.lighting7.fx.LayerResolver
+import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
@@ -14,22 +19,23 @@ import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
  * [Heads], the heads a surface write reaches, and what [AttributeChannelResolver.surfaceWrite] writes on
- * each — together what `DefaultSurfaceActions.writeLevel` sends. A pure function of the patch and the
- * selection, so built without a show.
+ * each from the head's readback (`LayerResolver.localOver`) — together what
+ * `DefaultSurfaceActions.writeLevel` sends. A function of the patch, the selection, the programmer
+ * and the cue layer, so built without a show.
  */
 class HeadsTest {
 
     private val universe = Universe(0, 0)
 
-    private fun fixtures(controller: MockDmxController? = null): Fixtures {
+    private fun fixtures(): Fixtures {
         val fixtures = Fixtures()
         fixtures.register {
-            if (controller != null) addController(controller)
             val h1 = addFixture(HexFixture(universe, "hex-1", "Hex 1", firstChannel = 1))
             val h2 = addFixture(HexFixture(universe, "hex-2", "Hex 2", firstChannel = 13, maxDimmerLevel = 200u))
             addFixture(HexFixture(universe, "hex-3", "Hex 3", firstChannel = 25))
@@ -48,6 +54,28 @@ class HeadsTest {
 
     private fun List<Heads.Head>.keys(): List<Pair<String, String?>> = map { it.fixture.targetKey to it.sourceGroup }
 
+    /** The programmer and the cue layer under it, as the show composes them. */
+    private class Layers {
+        val store = ProgrammerStore()
+        val resolver = LayerResolver(CueAssignmentResolver(), store)
+
+        fun hold(key: String, attribute: String, value: CueAssignmentResolver.AttributeValue) =
+            store.put(ProgrammerOwner.WEB, key, attribute, value)
+
+        fun cue(key: String, attribute: String, category: AttributeCategory, value: CueAssignmentResolver.AttributeValue) =
+            resolver.applyAssignments(
+                listOf(
+                    CueAssignmentResolver.Assignment(
+                        cueId = 1, priority = 1, fadeWeight = 1.0, targetKey = key, targetIsGroup = false,
+                        attribute = attribute, category = category, value = value,
+                    ),
+                ),
+            )
+    }
+
+    private fun colour(colour: Color, white: UByte = 0u, amber: UByte = 0u, uv: UByte = 0u) =
+        CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(colour, white, amber, uv))
+
     /** Each head's key and what a move on [attribute] writes there, as the surface's level write makes it. */
     private fun writes(
         fixtures: Fixtures,
@@ -55,12 +83,13 @@ class HeadsTest {
         attribute: String,
         value: UByte,
         axis: ColourAxis? = null,
-    ): List<Pair<String, AttributeChannelResolver.SurfaceWrite>> {
-        val read = AttributeChannelResolver.channelReader(fixtures)
-        return Heads.of(fixtures, subject, attribute).mapNotNull { head ->
-            AttributeChannelResolver.surfaceWrite(head.fixture, attribute, value, read, axis)?.let { head.fixture.targetKey to it }
+        layers: Layers = Layers(),
+    ): List<Pair<String, AttributeChannelResolver.SurfaceWrite>> =
+        Heads.of(fixtures, subject, attribute).mapNotNull { head ->
+            val current = AttributeChannelResolver.composedTarget(head.fixture, attribute)
+                ?.let { layers.resolver.localOver(it, head.fixture, head.fixture.targetKey) }
+            AttributeChannelResolver.surfaceWrite(head.fixture, attribute, value, current, axis)?.let { head.fixture.targetKey to it }
         }
-    }
 
     private fun colourOf(write: AttributeChannelResolver.SurfaceWrite): Color =
         assertIs<CueAssignmentResolver.AttributeValue.Colour>(write.value).value.color
@@ -163,14 +192,11 @@ class HeadsTest {
 
     @Test
     fun `a colour write is a hue on each head's own current colour`() {
-        val controller = MockDmxController(universe)
-        val fixtures = fixtures(controller)
-        // hex-1's colour is channels 2..4, hex-2's 14..16: a dim blue and a bright half-saturated cyan.
-        controller.setValue(4, 200u, 0)
-        controller.setValue(15, 255u, 0)
-        controller.setValue(16, 255u, 0)
-        controller.setValue(14, 128u, 0)
-        val written = writes(fixtures, Subject.Group("front-wash"), "rgbColour", 0u)
+        val layers = Layers()
+        // A dim blue held in Local, and a bright half-saturated cyan from the cue under it.
+        layers.hold("hex-1", "rgbColour", colour(Color(0, 0, 200)))
+        layers.cue("hex-2", "rgbColour", AttributeCategory.COLOUR, colour(Color(128, 255, 255)))
+        val written = writes(fixtures(), Subject.Group("front-wash"), "rgbColour", 0u, layers = layers)
         assertEquals(listOf("hex-1", "hex-2"), written.map { it.first })
         assertEquals(Color(200, 0, 0), colourOf(written[0].second), "dim and saturated stays so, at the new hue")
         assertEquals(Color(255, 128, 128), colourOf(written[1].second), "bright and pastel stays so, at the new hue")
@@ -178,14 +204,12 @@ class HeadsTest {
 
     @Test
     fun `a colour axis lands on each head's own current colour, and a slider under an axis takes nothing`() {
-        val controller = MockDmxController(universe)
-        val fixtures = fixtures(controller)
+        val fixtures = fixtures()
+        val layers = Layers()
         // hex-1 a dim blue, hex-2 a bright pastel cyan — saturation 0 leaves each a white at its own level.
-        controller.setValue(4, 200u, 0)
-        controller.setValue(14, 128u, 0)
-        controller.setValue(15, 255u, 0)
-        controller.setValue(16, 255u, 0)
-        val written = writes(fixtures, Subject.Group("front-wash"), "rgbColour", 0u, ColourAxis.SATURATION)
+        layers.hold("hex-1", "rgbColour", colour(Color(0, 0, 200)))
+        layers.hold("hex-2", "rgbColour", colour(Color(128, 255, 255)))
+        val written = writes(fixtures, Subject.Group("front-wash"), "rgbColour", 0u, ColourAxis.SATURATION, layers)
         assertEquals(listOf("hex-1", "hex-2"), written.map { it.first })
         assertEquals(Color(200, 200, 200), colourOf(written[0].second))
         assertEquals(Color(255, 255, 255), colourOf(written[1].second))
@@ -198,12 +222,11 @@ class HeadsTest {
 
     @Test
     fun `a hue turn on an element keeps the white bundled with its colour`() {
-        val controller = MockDmxController(universe)
-        val fixtures = fixtures(controller)
-        // Zone 1 is CH109–112, red and its white at 90.
-        controller.setValue(109, 255u, 0)
-        controller.setValue(112, 90u, 0)
-        val written = writes(fixtures, Subject.Group("wash-zones"), "rgbColour", 40u, ColourAxis.HUE)
+        val layers = Layers()
+        // Zone 1 red, and its white at 90 held on its own key.
+        layers.hold("wash.zone-1", "rgbColour", colour(Color(255, 0, 0)))
+        layers.hold("wash.zone-1", "white", CueAssignmentResolver.AttributeValue.Slider(90u))
+        val written = writes(fixtures(), Subject.Group("wash-zones"), "rgbColour", 40u, ColourAxis.HUE, layers)
         assertEquals("wash.zone-1", written.first().first)
         val colour = assertIs<CueAssignmentResolver.AttributeValue.Colour>(written.first().second.value).value
         assertEquals(90u.toUByte(), colour.white)
@@ -211,10 +234,10 @@ class HeadsTest {
 
     @Test
     fun `a white-mix cell takes a colour move, from the colour its own two whites make`() {
-        val controller = MockDmxController(universe)
-        val fixtures = fixtures(controller)
-        controller.setValue(205, 255u, 0)
-        val written = writes(fixtures, Subject.Fixture("blinder"), "rgbColour", 64u, ColourAxis.BRIGHTNESS)
+        val layers = Layers()
+        // Cell 1 at full warm white; cell 2 holds nothing.
+        layers.hold("blinder.cell-1", "rgbColour", colour(China2CellLedBlinderFixture.WHITE_MIX.colourOf(255u, 0u)))
+        val written = writes(fixtures(), Subject.Fixture("blinder"), "rgbColour", 64u, ColourAxis.BRIGHTNESS, layers)
         assertEquals(listOf("blinder.cell-1", "blinder.cell-2"), written.map { it.first })
         assertTrue(written.all { it.second.attribute == "rgbColour" })
         assertEquals(
@@ -228,40 +251,85 @@ class HeadsTest {
 
     @Test
     fun `a pan or tilt move writes the head's position, keeping the other axis`() {
-        val wash = fixtures().untypedFixture("wash")
-        // Pan is channel 101, its fine 102, tilt 103.
-        val read: ChannelReader = { _, channel ->
-            when (channel) {
-                101 -> 200u
-                103 -> 77u
-                else -> null
-            }
-        }
+        val fixtures = fixtures()
+        val layers = Layers()
+        layers.cue("wash", "position", AttributeCategory.PAN, CueAssignmentResolver.AttributeValue.Position(200u, 77u))
+        fun write(attribute: String, value: UByte, axis: ColourAxis? = null) =
+            writes(fixtures, Subject.Fixture("wash"), attribute, value, axis, layers).singleOrNull()?.second
         assertEquals(
             AttributeChannelResolver.SurfaceWrite("position", CueAssignmentResolver.AttributeValue.Position(255u, 77u)),
-            AttributeChannelResolver.surfaceWrite(wash, "pan", 127u, read),
+            write("pan", 127u),
+            "the tilt the cue holds is kept",
         )
         assertEquals(
             AttributeChannelResolver.SurfaceWrite("position", CueAssignmentResolver.AttributeValue.Position(200u, 0u)),
-            AttributeChannelResolver.surfaceWrite(wash, "tilt", 0u, read),
+            write("tilt", 0u),
         )
         assertEquals(
             AttributeChannelResolver.SurfaceWrite("panFine", CueAssignmentResolver.AttributeValue.Slider(255u)),
-            AttributeChannelResolver.surfaceWrite(wash, "panFine", 127u, read),
+            write("panFine", 127u),
             "a fine channel is its own attribute",
         )
-        assertNull(AttributeChannelResolver.surfaceWrite(wash, "pan", 64u, read, ColourAxis.HUE), "a pan has no colour axis")
+        assertNull(write("pan", 64u, ColourAxis.HUE), "a pan has no colour axis")
     }
 
     @Test
-    fun `the other axis is the programmer's held position before the stage's, so Blind keeps a staged tilt`() {
-        val wash = fixtures().untypedFixture("wash")
-        val stage: ChannelReader = { _, channel -> if (channel == 103) 77u else null }
+    fun `the other axis is Local's position over the cue's, so Blind keeps a staged tilt`() {
+        val layers = Layers()
+        layers.cue("wash", "position", AttributeCategory.PAN, CueAssignmentResolver.AttributeValue.Position(50u, 77u))
+        layers.store.blind = true
+        layers.hold("wash", "position", CueAssignmentResolver.AttributeValue.Position(10u, 200u))
         assertEquals(
-            AttributeChannelResolver.SurfaceWrite("position", CueAssignmentResolver.AttributeValue.Position(255u, 200u)),
-            AttributeChannelResolver.surfaceWrite(
-                wash, "pan", 127u, stage, held = CueAssignmentResolver.AttributeValue.Position(10u, 200u),
-            ),
+            listOf("wash" to AttributeChannelResolver.SurfaceWrite("position", CueAssignmentResolver.AttributeValue.Position(255u, 200u))),
+            writes(fixtures(), Subject.Fixture("wash"), "pan", 127u, layers = layers),
         )
+    }
+
+    @Test
+    fun `a colour turn in Blind keeps the staged white, amber and UV, not the stage's`() {
+        val fixtures = fixtures()
+        val layers = Layers()
+        // The cue on stage: a red with a little white. The programmer, blind, stages a blue with its own W/A/UV.
+        layers.cue("hex-1", "rgbColour", AttributeCategory.COLOUR, colour(Color(255, 0, 0), white = 50u))
+        layers.store.blind = true
+        layers.hold("hex-1", "rgbColour", colour(Color(0, 0, 200), white = 200u, amber = 10u, uv = 30u))
+        val hex = fixtures.untypedFixture("hex-1")
+        val target = assertNotNull(AttributeChannelResolver.composedTarget(hex, "rgbColour"))
+        val onStage = assertIs<FxOutput.Colour>(layers.resolver.fallbackFor(target, hex, "hex-1")).color
+        assertEquals(50u.toUByte(), onStage.white, "output, in Blind, is the cue's")
+
+        for (axis in ColourAxis.entries) {
+            val written = assertIs<CueAssignmentResolver.AttributeValue.Colour>(
+                writes(fixtures, Subject.Fixture("hex-1"), "rgbColour", 40u, axis, layers).single().second.value,
+            ).value
+            assertEquals(200u.toUByte(), written.white, "$axis keeps the staged white")
+            assertEquals(10u.toUByte(), written.amber, "$axis keeps the staged amber")
+            assertEquals(30u.toUByte(), written.uv, "$axis keeps the staged UV")
+        }
+    }
+
+    @Test
+    fun `a colour turn keeps a cue's own white, amber and UV rows, which output keeps off the colour key`() {
+        val fixtures = fixtures()
+        val layers = Layers()
+        layers.resolver.applyAssignments(
+            listOf(
+                "white" to (AttributeCategory.WHITE to 120u.toUByte()),
+                "uv" to (AttributeCategory.UV to 30u.toUByte()),
+            ).map { (attribute, cv) ->
+                CueAssignmentResolver.Assignment(
+                    cueId = 1, priority = 1, fadeWeight = 1.0, targetKey = "hex-1", targetIsGroup = false,
+                    attribute = attribute, category = cv.first, value = CueAssignmentResolver.AttributeValue.Slider(cv.second),
+                )
+            },
+        )
+        for (axis in ColourAxis.entries) {
+            val written = assertIs<CueAssignmentResolver.AttributeValue.Colour>(
+                writes(fixtures, Subject.Fixture("hex-1"), "rgbColour", 40u, axis, layers).single().second.value,
+            ).value
+            assertEquals(120u.toUByte(), written.white, "$axis keeps the cue's white")
+            assertEquals(30u.toUByte(), written.uv, "$axis keeps the cue's UV")
+            assertEquals(0u.toUByte(), written.amber, "an emitter the cue does not set stays dark")
+        }
     }
 }

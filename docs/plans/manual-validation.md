@@ -16,6 +16,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-SURFACE-SETUP-S1`](#fu-manual-surface-setup-s1) | an upgraded show's bindings all still work; a pan encoder beats a running Circle; a strip encoder's push does nothing; a flash on a capped head lands at its percentage; the blinder takes a colour move; QLab's OSC cues unchanged; a layer B binding fires | Surface setup session 1, 2026-11-09 |
+| [`FU-MANUAL-SURFACE-SETUP-S2`](#fu-manual-surface-setup-s2) | a motor fader holds still under a Local FX; Blind shows and keeps the staged value; a held flash leaves the faders alone; the jump rule on a fast flick; the X-Touch adopts a ring value and darkens on `ringOffValue`; a push LED re-asserted on release; two X-Touches keep their own layers | Surface setup session 2, 2026-11-09 |
 | [`FU-MANUAL-RESTORE-S3`](#fu-manual-restore-s3) | a cue deleted last week comes back from the History panel with its place in its stack and the Look it layered, nothing else moves, and ⌘Z takes it back | Snapshot restore S3, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S4`](#fu-manual-busk-stack-s4) | a bound `PressPad` on a stack pad lights while its stack runs and goes dark when it stops; `CueStackStop` and OSC's `/stop` fade over the release time | Busk stack session 4, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S3`](#fu-manual-busk-stack-s3) | a stack pad steps a song by taps, a solo bank's song pad releases a sibling song, and moving the stack back into the running order asks first | Busk stack session 3, 2026-11-08 |
@@ -247,6 +248,38 @@ allowlist:
 
 ---
 
+## `FU-MANUAL-SURFACE-SETUP-S2`
+
+**What it proves**: *Feedback* (surface-setup plan session 2) — a fader or ring shows what Local holds
+over the cue layer, never an FX, park or a held flash; one jump rule takes or refuses every move; and each
+attached device keeps its own layer, encoder page and flash LEDs.
+
+**Why it is here**: the publisher's tests drive a recording controller; only the X-Touch shows what its
+motors and rings really do with what they are sent, and two of the plan's assumptions are about the
+hardware.
+
+**Test**, on the dev desk with the X-Touch Compact attached, a dimmer on fader 1 and its encoder, a
+Wave FX ready to run on that fixture, and (for step 7) a second X-Touch:
+
+1. **Under a Local FX.** Set fader 1 at half, then start a Wave on the same fixture's dimmer from the
+   programmer's *+ FX*: the stage pulses, the motor stays at half.
+2. **Blind.** Turn Blind on and move fader 1 to full: the stage does not change, the motor stays at full
+   when let go, and the ring follows it. Turn Blind off: the stage goes to full.
+3. **A held flash.** Hold the fixture's flash button: the stage flashes, fader 1 does not move. Let go.
+4. **The jump rule.** With encoder 1's ring at a value, flick the encoder fast from a different
+   position the desk did not show it: the dimmer does not jump; the ring is shown its value again. A
+   normal turn moves it.
+5. **The ring.** Confirm the X-Touch **adopts a ring value it is sent** (turn after the desk moved the
+   ring: the turn continues from the ring, not from where the encoder was) and note what byte darkens a
+   ring (select a mixed selection on a selection-bound encoder): if `0` lights the first dot, change
+   `ringOffValue`.
+6. **A push LED.** Bind an encoder's push to a Look and press it: its LED lights and stays lit after
+   release.
+7. **Two devices.** With two X-Touches attached, switch one to Layer B: the other stays on Layer A.
+   Hold a flash on one: only that one's LED lights.
+
+---
+
 ## `FU-MANUAL-BUSK-STACK-S1`
 
 **What it proves**: *Busk stacks and the running order* (busk-stack plan session 1) — a stack out of
@@ -455,7 +488,7 @@ moved.
 
 **Test**, on the dev rig, two Local FX on the selection — a chase at ×1 and a pulse at ×1.5 — and an
 X-Touch with `enc-1` bound to *Selection — FX speed*, and `fader-1` bound to it with the binding's
-takeover set to *Pickup* (a motor fader is *Immediate* by default, its motor going to the lead):
+takeover set to *Pickup* (a motor fader on *Pickup*, the default, is driven: it takes a move within eight steps of what it shows, or while touched):
 
 1. **×½ and ×2.** On the busk rail, ×½ on M2 mid-song: the chase halves and stays on the beat; ×2 puts
    it back. *Capture* M2, then ×2: the card still reads *Held* at the doubled tempo. Take a master to

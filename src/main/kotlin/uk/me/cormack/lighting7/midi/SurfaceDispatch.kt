@@ -39,16 +39,18 @@ class SurfaceDispatch(
     data class HoldKey(val displayKey: String, val controlId: String, val part: ControlPart)
 
     /**
-     * Where an input came from: the device profile a layer or encoder page applies to, the history
-     * source an undo key acts as, the control part a hold is kept on (none for OSC), and the binding
-     * row a held flash lights its LED by.
+     * Where an input came from: the device profile, the history source an undo key acts as, and the
+     * control part a hold is kept on (none for OSC), whose device a layer or encoder page press
+     * switches ([displayKey]).
      */
     data class Origin(
         val deviceTypeKey: String,
         val source: HistorySource,
         val hold: HoldKey? = null,
-        val bindingId: Int? = null,
-    )
+    ) {
+        /** The device the input came from; a sender with no device (OSC) is its device type. */
+        val displayKey: String get() = hold?.displayKey ?: deviceTypeKey
+    }
 
     /** One input from a control part, or a value an OSC message carries. */
     sealed interface Input {
@@ -85,7 +87,7 @@ class SurfaceDispatch(
                 val acted = binding.does.act(binding.on, Op.On, ctx)
                 if (key != null) {
                     val release: () -> Unit = acted.release ?: { binding.does.act(binding.on, Op.Off, ctx) }
-                    holds.hold(key, ctx.origin.bindingId, release)
+                    holds.hold(key, release)
                 }
                 acted.outcome
             }
@@ -163,15 +165,14 @@ class SurfaceDispatch(
 
 /**
  * What every While held press holds now, keyed by control part, with the release that undoes it.
- * The feedback publisher lights a held flash's LED from [isHeldBinding] and [changes].
+ * The feedback publisher lights a held flash's LED from [isHeld] and [changes], so each device lights
+ * its own (D16).
  */
 class SurfaceHolds {
-    private class Held(val bindingId: Int?, val release: () -> Unit)
+    private val held = ConcurrentHashMap<SurfaceDispatch.HoldKey, () -> Unit>()
 
-    private val held = ConcurrentHashMap<SurfaceDispatch.HoldKey, Held>()
-
-    /** A binding's hold starting or ending. */
-    data class HoldChange(val bindingId: Int, val held: Boolean)
+    /** A control part's hold starting or ending. */
+    data class HoldChange(val key: SurfaceDispatch.HoldKey, val held: Boolean)
 
     private val _changes = MutableSharedFlow<HoldChange>(
         replay = 0,
@@ -182,21 +183,18 @@ class SurfaceHolds {
 
     fun isHeld(key: SurfaceDispatch.HoldKey): Boolean = held.containsKey(key)
 
-    /** Whether any control part holds binding [bindingId]. */
-    fun isHeldBinding(bindingId: Int): Boolean = held.values.any { it.bindingId == bindingId }
-
-    internal fun hold(key: SurfaceDispatch.HoldKey, bindingId: Int?, release: () -> Unit) {
-        held[key] = Held(bindingId, release)
-        bindingId?.let { _changes.tryEmit(HoldChange(it, true)) }
+    internal fun hold(key: SurfaceDispatch.HoldKey, release: () -> Unit) {
+        held[key] = release
+        _changes.tryEmit(HoldChange(key, true))
     }
 
     /** Let go of [key]'s hold, undoing what its press wrote. */
     fun release(key: SurfaceDispatch.HoldKey) {
         val gone = held.remove(key) ?: return
         try {
-            gone.release()
+            gone()
         } finally {
-            gone.bindingId?.let { id -> if (!isHeldBinding(id)) _changes.tryEmit(HoldChange(id, false)) }
+            _changes.tryEmit(HoldChange(key, false))
         }
     }
 
@@ -206,8 +204,8 @@ class SurfaceHolds {
 
     /** Forget every hold without undoing it: the project the presses wrote into has gone. */
     fun clearAll() {
-        val ids = held.values.mapNotNull { it.bindingId }.toSet()
+        val keys = held.keys.toList()
         held.clear()
-        ids.forEach { _changes.tryEmit(HoldChange(it, false)) }
+        keys.forEach { _changes.tryEmit(HoldChange(it, false)) }
     }
 }

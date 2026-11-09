@@ -41,7 +41,7 @@ interface FxSpeedRing {
  * sticking at its own powers of two), read as the change from where its ring shows the **lead FX** —
  * the Local FX painting the first selected head in rig order, the lowest Local rank where two do.
  * A **fader** sets every one to its position, ×¼ to ×4 ([FxSpeed.faderSpeed]); soft takeover picks it
- * up at the lead's Speed, which the publisher feeds it. Each writes a cycle of whole ticks (D1), and
+ * up at the lead's Speed, which the publisher feeds it, keeping its own position while the lead reads back to it. Each writes a cycle of whole ticks (D1), and
  * the engine keeps each FX's elapsed cycles across the change (D6).
  */
 class SelectionFxSpeed(private val state: State) : FxSpeedRing {
@@ -92,13 +92,9 @@ class SelectionFxSpeed(private val state: State) : FxSpeedRing {
         }
         val speeds: Map<FxInstance, Double> = if (encoder) {
             val lead = lead(targets, painting) ?: return
+            // A turn far from where the ring was shown is the jump rule's to refuse ([JumpPolicy]).
             val delta = value7Bit.toInt() - FxSpeed.ringPosition(speedOf(lead))
             if (delta == 0) return
-            if (abs(delta) > ENCODER_JUMP) {
-                // The device holds a position the desk did not show it: show it again, move nothing.
-                _shown.value = ++stamp
-                return
-            }
             painting.keys.associateWith { FxSpeed.stepSpeed(speedOf(it), delta) }
         } else {
             val speed = FxSpeed.faderSpeed(value7Bit.toInt())
@@ -181,13 +177,4 @@ class SelectionFxSpeed(private val state: State) : FxSpeedRing {
         if (wallClock) abs(current - next) < 1e-9 else FxPhase.beatCycleTicks(current) == FxPhase.beatCycleTicks(next)
 
     private fun fixture(key: String) = CueTargetDto(TargetRef.Fixture.TYPE, key)
-
-    companion object {
-        /**
-         * The furthest a turn may land from where its ring was shown and still be read as detents: a
-         * fast turn's few. Past it the device holds a stale position (a ring not yet fed), so the turn
-         * moves nothing and the ring is shown again.
-         */
-        const val ENCODER_JUMP = 8
-    }
 }

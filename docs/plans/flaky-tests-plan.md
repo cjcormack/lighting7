@@ -46,6 +46,7 @@ The plan's own rules:
 
 | Test | Seen failing | Suspected cause | Session |
 |---|---|---|---|
+| `OscFloodOutputTimingTest` "a fade runs as it does with no OSC while allowed and refused senders flood TCP", 115 frames against a baseline of 121 | Seen locally on `claude/happy-heisenberg-vh2hqw` before its first commit (surface-setup session 2, 2026-11-09, Linux cloud container), 1 of 1 forced runs of five packages while `npm run check:quick` ran beside it; passed alone, and the `osc` package passed 2 of 2 forced runs. | Not traced. Read rather than reproduced: the test compares a fade's frame count under a TCP flood with a baseline taken without one, so CPU load from another process can cost frames on its own; nothing in that session touched `osc/`. | |
 
 ## 4. Fixed
 

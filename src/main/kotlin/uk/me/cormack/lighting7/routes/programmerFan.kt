@@ -1,5 +1,9 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.fx.ProgrammerReads
+import uk.me.cormack.lighting7.fx.FxOutput
+import uk.me.cormack.lighting7.fx.FxTargetRef
+import uk.me.cormack.lighting7.fx.PositionTarget
 import uk.me.cormack.lighting7.history.historyGesture
 import io.ktor.http.HttpStatusCode
 import io.ktor.resources.Resource
@@ -477,10 +481,11 @@ private fun stageFanShape(request: FanRequest, fan: FanAmountDto, over: FanOver)
 }
 
 /**
- * Where a fanned head starts: the request's own base for it, else — where [readLocal] — Local's own
- * position for it (what Record would capture: a fade in flight, a position effect or Blind leave the
- * output short of it), else what the desk is sending its pan and tilt now, axis by axis. Null when
- * there is nothing to read.
+ * Where a fanned head starts: the request's own base for it, else — where [readLocal] — what the head
+ * reads back as, axis by axis, beneath a held flash as a surface reads: Local's own position for it (what Record would capture: a fade in
+ * flight, a position effect or Blind leave the output short of it), else the cue layer under Local
+ * (`LayerResolver.localOver`, the surface's readback); without [readLocal], what the desk is sending
+ * its pan and tilt now. Null when there is nothing to read.
  */
 private fun fanBase(
     state: State,
@@ -492,12 +497,18 @@ private fun fanBase(
     val positioned = head as? WithPosition ?: return null
     val panSlider = positioned.pan as? DmxSlider ?: return null
     val tiltSlider = positioned.tilt as? DmxSlider ?: return null
-    val local = if (readLocal) localPosition(state.show.programmerStore, head) else null
+    if (readLocal) {
+        val local = localPosition(state.show.programmerStore.beneath(ProgrammerOwner.FLASH), head)
+        val under = state.show.layerResolver.localOver(
+            PositionTarget(FxTargetRef.fixture(head.targetKey), "position"), head, head.targetKey,
+        ) as? FxOutput.Position
+        return AttributeValue.Position(
+            local?.pan ?: under?.pan ?: return null,
+            local?.tilt ?: under?.tilt ?: return null,
+        )
+    }
     fun read(slider: DmxSlider): UByte? = state.show.fixtures.controllerOrNull(slider.universe)?.getValue(slider.channelNo)
-    return AttributeValue.Position(
-        local?.pan ?: read(panSlider) ?: return null,
-        local?.tilt ?: read(tiltSlider) ?: return null,
-    )
+    return AttributeValue.Position(read(panSlider) ?: return null, read(tiltSlider) ?: return null)
 }
 
 /** Local's pan and tilt for one head; an axis Local does not hold is null. */
@@ -509,7 +520,7 @@ internal data class LocalPosition(val pan: UByte?, val tilt: UByte?)
  * property entry (a `tilt` fader on the selection) and the axis channel's sideband slot (a raw
  * write). Null when Local holds neither axis.
  */
-internal fun localPosition(store: ProgrammerStore, head: GroupableFixture): LocalPosition? {
+internal fun localPosition(store: ProgrammerReads, head: GroupableFixture): LocalPosition? {
     val positioned = head as? WithPosition ?: return null
     val entry = store.get(head.targetKey, "position")
     val position = entry?.value?.resolved as? AttributeValue.Position

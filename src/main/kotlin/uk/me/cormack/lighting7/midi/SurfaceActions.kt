@@ -278,16 +278,14 @@ class DefaultSurfaceActions(
             logger.debug("Surface write of '{}' on {} dropped: no head", attribute, on)
             return
         }
-        // Per head: sliders scale through each head's own min..max, and a colour axis lands on each
-        // head's own current colour.
-        val read = AttributeChannelResolver.channelReader(fixtures)
-        val store = state.show.programmerStore
+        // Per head: sliders scale through each head's own min..max, and a colour axis or the other
+        // position axis builds on what the head reads back as — Local over the cue layer, the staged
+        // value in Blind (D6) — so a move lands where the control showed it.
+        val resolver = state.show.layerResolver
         val writes = heads.mapNotNull { head ->
-            val held = store.get(head.fixture.targetKey, AttributeChannelResolver.POSITION)?.value?.resolved
-            AttributeChannelResolver.surfaceWrite(
-                head.fixture, attribute, midiValue7Bit, read, colourAxis,
-                held as? CueAssignmentResolver.AttributeValue.Position,
-            )?.let {
+            val current = AttributeChannelResolver.composedTarget(head.fixture, attribute)
+                ?.let { resolver.localOver(it, head.fixture, head.fixture.targetKey) }
+            AttributeChannelResolver.surfaceWrite(head.fixture, attribute, midiValue7Bit, current, colourAxis)?.let {
                 ProgrammerWriter.AttributeWrite(head.fixture, it.attribute, it.value, sourceGroup = head.sourceGroup)
             }
         }
@@ -413,12 +411,12 @@ class DefaultSurfaceActions(
     }
 
     override fun writeGrandMaster(midiValue7Bit: UByte) =
-        globalScalerState.setGrandMasterLevel(grandMasterLevelOf7Bit(midiValue7Bit))
+        globalScalerState.setGrandMasterLevel(Scale7Bit.PERCENT.of7(midiValue7Bit))
 
     // A fader moves at control rate, so a stack it cannot find is not logged per move: health says so.
     override fun writeStackFxAmount(stack: UUID, midiValue7Bit: UByte) {
         val resolved = cueStackManager.stackIdForUuid(state.database, stack.toString()) ?: return
-        cueStackManager.setFxAmount(resolved, stackFxAmountOf7Bit(midiValue7Bit))
+        cueStackManager.setFxAmount(resolved, Scale7Bit.UNIT.of7(midiValue7Bit))
     }
 
     override fun setStackFxAmount(stack: UUID, amount: Double): ActionOutcome {
@@ -772,7 +770,7 @@ class DefaultSurfaceActions(
         midiValue7Bit: UByte,
     ) {
         withSpeedMasterTarget(master) { uuid ->
-            val bpm = minBpm + (maxBpm - minBpm) * (midiValue7Bit.toInt() / 127.0)
+            val bpm = Scale7Bit(minBpm, maxBpm).of7(midiValue7Bit)
             // MasterClock.setBpm coerces into 20..300 itself; the binding's window is a
             // sub-range on top of that, not a replacement for it.
             speedMasters.setBpm(uuid, bpm, SpeedMasterSource.MANUAL)

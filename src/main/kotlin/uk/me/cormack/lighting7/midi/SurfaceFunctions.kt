@@ -3,7 +3,9 @@ package uk.me.cormack.lighting7.midi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.fx.AppliedExtent
 import uk.me.cormack.lighting7.fx.MasterClock
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.state.SubselectMode
 import java.util.UUID
@@ -49,6 +51,15 @@ sealed interface Does {
     /** Do [op] on [on]. Dispatch has already turned the input and the binding's [How] into [op]. */
     fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted
 
+    /**
+     * The LED a button bound to this function shows (P3): a light, or explicitly none. Abstract, so
+     * no function can be left out of feedback silently.
+     */
+    fun led(binding: Binding, site: FeedbackSite): Led
+
+    /** What a fader or ring bound to this function shows; null for a function no continuous input reaches. */
+    fun read(binding: Binding, site: FeedbackSite): Readout? = null
+
     /** Why this function cannot act on [on] with these parameters, beyond the spec's subject kinds; null when it can. */
     fun refusal(on: Subject): String? = null
 
@@ -64,6 +75,13 @@ sealed interface Does {
     @SerialName("level")
     data class Level(val attribute: String, val axis: ColourAxis? = null) : Does {
         override val spec get() = Spec(WritesTo.LOCAL, HEADS, CONTINUOUS)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+        override fun read(binding: Binding, site: FeedbackSite): Readout {
+            val heads = site.levelHeads(binding.on, attribute, axis)
+            val signals = if (binding.on == Subject.Selection) setOf(Signal.PROGRAMMER, Signal.SELECTION) else setOf(Signal.PROGRAMMER)
+            return Readout(signals) { heads.read() }
+        }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted = when (op) {
             is Op.Move -> done { ctx.actions.writeLevel(on, attribute, op.value7Bit, axis) }
             else -> wrongKind(op)
@@ -82,6 +100,8 @@ sealed interface Does {
         }
 
         override val spec get() = Spec(WritesTo.LOCAL, NAMED_HEADS, BUTTON, setOf(How.WHILE_HELD), How.WHILE_HELD)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.Light(setOf(Signal.HOLDS)) { held(site.hold) }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted = when (op) {
             Op.On -> Acted(ActionOutcome.DONE, ctx.actions.flashPress(on, attribute, percent))
             Op.Off -> Acted(ActionOutcome.DONE)
@@ -97,6 +117,11 @@ sealed interface Does {
             WritesTo.DESK, NAMED_HEADS, BUTTON,
             setOf(How.TOGGLE_HOLD_REPLACES, How.TOGGLE, How.REPLACE), How.TOGGLE_HOLD_REPLACES,
         )
+        override fun led(binding: Binding, site: FeedbackSite): Led {
+            val target = binding.on.asTarget() ?: return Led.Light(emptySet()) { false }
+            return Led.Light(setOf(Signal.SELECTION)) { covers(target) }
+        }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             val target = on.asTarget() ?: return wrongSubject(on)
             return when (op) {
@@ -112,6 +137,12 @@ sealed interface Does {
     @SerialName("locate")
     data object Locate : Does {
         override val spec get() = Spec(WritesTo.LOCAL, SELECTION, BUTTON, setOf(How.TOGGLE), How.TOGGLE)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.Light(setOf(Signal.SELECTION, Signal.LOCATE)) {
+            selection.isNotEmpty() && located().let { located ->
+                selection.all { TargetRef.ofOrNull(it.type, it.key)?.let { ref -> ref in located } ?: false }
+            }
+        }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted = when (op) {
             Op.Toggle, Op.On -> done { ctx.actions.locateSelection() }
             else -> wrongKind(op)
@@ -123,6 +154,12 @@ sealed interface Does {
     @SerialName("fan")
     data class Fan(val axis: FanAxis) : Does {
         override val spec get() = Spec(WritesTo.LOCAL, SELECTION, CONTINUOUS)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+        override fun read(binding: Binding, site: FeedbackSite): Readout =
+            Readout(setOf(Signal.FAN, Signal.SELECTION)) {
+                fanAmount(axis)?.let { Reading.Value(SelectionFan.amountTo7Bit(axis, it).toUByte()) } ?: Reading.Nothing
+            }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted = when (op) {
             is Op.Move -> done { ctx.actions.writeSelectionFan(axis, op.value7Bit) }
             else -> wrongKind(op)
@@ -137,6 +174,17 @@ sealed interface Does {
     @SerialName("fxSpeed")
     data object FxSpeed : Does {
         override val spec get() = Spec(WritesTo.LOCAL, SELECTION, CONTINUOUS)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+        override fun read(binding: Binding, site: FeedbackSite): Readout {
+            val encoder = site.control is EncoderDescriptor
+            return Readout(setOf(Signal.FX_LIST, Signal.SELECTION, Signal.FX_SPEED_SHOWN)) {
+                val lead = fxLeadSpeed() ?: return@Readout Reading.Nothing
+                if (encoder) Reading.Value(uk.me.cormack.lighting7.fx.FxSpeed.ringPosition(lead).toUByte())
+                // A fader's own write lands within a stick and whole-tick rounding of where it was moved.
+                else Reading.Value(uk.me.cormack.lighting7.fx.FxSpeed.faderPosition(lead).toUByte(), tolerance = FADER_ECHO_STEPS)
+            }
+        }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted = when (op) {
             is Op.Move -> done { ctx.actions.writeFxSpeed(op.value7Bit, op.encoder) }
             else -> wrongKind(op)
@@ -148,6 +196,9 @@ sealed interface Does {
     @SerialName("palette")
     data class Palette(@Serializable(with = UuidStringSerializer::class) val palette: UUID) : Does {
         override val spec get() = Spec(WritesTo.LOCAL, SELECTION, BUTTON, setOf(How.TOGGLE), How.TOGGLE)
+        override fun led(binding: Binding, site: FeedbackSite): Led =
+            Led.Light(setOf(Signal.LAYERS, Signal.SELECTION)) { coversSelection(palette) }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted = when (op) {
             Op.Toggle, Op.On -> done { ctx.actions.pressPalette(palette) }
             else -> wrongKind(op)
@@ -159,6 +210,11 @@ sealed interface Does {
     @SerialName("look")
     data object Look : Does {
         override val spec get() = Spec(WritesTo.LOCAL, setOf(SubjectKind.LOOK), BUTTON, ON_OFF, How.TOGGLE)
+        override fun led(binding: Binding, site: FeedbackSite): Led {
+            val look = binding.on.recordUuid(RecordKind.LOOK) ?: return Led.Light(emptySet()) { false }
+            return Led.Light(setOf(Signal.LAYERS)) { applied().any { it.source.uuid == look } }
+        }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             val look = on.recordUuid(RecordKind.LOOK) ?: return wrongSubject(on)
             return when (op) {
@@ -175,6 +231,11 @@ sealed interface Does {
     @SerialName("cue")
     data object Cue : Does {
         override val spec get() = Spec(WritesTo.PLAYBACK, setOf(SubjectKind.CUE), BUTTON, ON_OFF, How.TOGGLE)
+        override fun led(binding: Binding, site: FeedbackSite): Led {
+            val cueId = binding.on.recordUuid(RecordKind.CUE)?.let(site::cueId) ?: return Led.Light(emptySet()) { false }
+            return Led.Light(setOf(Signal.CUE_HOLDS)) { cueLooseHeld(cueId) }
+        }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             val cue = on.recordUuid(RecordKind.CUE) ?: return wrongSubject(on)
             return when (op) {
@@ -191,6 +252,21 @@ sealed interface Does {
     @SerialName("pad")
     data object Pad : Does {
         override val spec get() = Spec(WritesTo.LOCAL, setOf(SubjectKind.PAD), BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led =
+            when (val ref = binding.on.recordUuid(RecordKind.PAD)?.let(site::pad)) {
+                // A Look pad is on or off whatever is selected (absolute-looks plan P4); a palette pad is
+                // the busk view's selection-scoped fold.
+                is PadRef.Layer -> if (ref.isLook) {
+                    Led.Light(setOf(Signal.LAYERS)) { applied().any { it.source.uuid == ref.sourceUuid } }
+                } else {
+                    Led.Light(setOf(Signal.LAYERS, Signal.SELECTION)) { coversSelection(ref.sourceUuid) }
+                }
+                is PadRef.Cue -> Led.Light(setOf(Signal.CUE_HOLDS)) { cueLooseHeld(ref.cueId) }
+                is PadRef.Stack -> Led.Light(setOf(Signal.STACK_RUN)) { stackRunning(ref.stackId) }
+                // The pad is gone; health says so and the LED stays dark.
+                null -> Led.Light(emptySet()) { false }
+            }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             val pad = on.recordUuid(RecordKind.PAD) ?: return wrongSubject(on)
             return if (op == Op.On || op == Op.Toggle) answered(ctx.actions.pressPad(pad)) else wrongKind(op)
@@ -202,6 +278,8 @@ sealed interface Does {
     @SerialName("pickUp")
     data object PickUp : Does {
         override val spec get() = Spec(WritesTo.DESK, setOf(SubjectKind.PAD), BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             val pad = on.recordUuid(RecordKind.PAD) ?: return wrongSubject(on)
             return if (op == Op.On || op == Op.Toggle) done { ctx.actions.pickUpPad(pad) } else wrongKind(op)
@@ -213,6 +291,8 @@ sealed interface Does {
     @SerialName("place")
     data object Place : Does {
         override val spec get() = Spec(WritesTo.DESK, setOf(SubjectKind.BANK), BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             val bank = on.recordUuid(RecordKind.BANK) ?: return wrongSubject(on)
             return if (op == Op.On || op == Op.Toggle) done { ctx.actions.handPlaceInBank(bank) } else wrongKind(op)
@@ -224,6 +304,8 @@ sealed interface Does {
     @SerialName("drop")
     data object Drop : Does {
         override val spec get() = Spec(WritesTo.DESK, NONE, BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted =
             if (op == Op.On || op == Op.Toggle) done { ctx.actions.handDrop() } else wrongKind(op)
     }
@@ -233,6 +315,11 @@ sealed interface Does {
     @SerialName("go")
     data object Go : Does {
         override val spec get() = stackPress
+        override fun led(binding: Binding, site: FeedbackSite): Led {
+            val stackId = binding.on.recordUuid(RecordKind.STACK)?.let(site::stackId) ?: return Led.Light(emptySet()) { false }
+            return Led.Light(setOf(Signal.STACK_RUN)) { stackRunning(stackId) }
+        }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext) = stack(on, op) { ctx.actions.cueStackGo(it) }
     }
 
@@ -241,6 +328,8 @@ sealed interface Does {
     @SerialName("back")
     data object Back : Does {
         override val spec get() = stackPress
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext) = stack(on, op) { ctx.actions.cueStackBack(it) }
     }
 
@@ -249,6 +338,8 @@ sealed interface Does {
     @SerialName("pause")
     data object Pause : Does {
         override val spec get() = stackPress
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext) = stack(on, op) { ctx.actions.cueStackPause(it) }
     }
 
@@ -257,6 +348,8 @@ sealed interface Does {
     @SerialName("stop")
     data object Stop : Does {
         override val spec get() = stackPress
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext) = stack(on, op) { ctx.actions.cueStackStop(it) }
     }
 
@@ -265,6 +358,8 @@ sealed interface Does {
     @SerialName("goTo")
     data object GoTo : Does {
         override val spec get() = entryPress
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext) = entry(on, op) { ctx.actions.cueStackGoTo(it) }
     }
 
@@ -273,6 +368,8 @@ sealed interface Does {
     @SerialName("standby")
     data object Standby : Does {
         override val spec get() = entryPress
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext) = entry(on, op) { ctx.actions.cueStackStandby(it) }
     }
 
@@ -281,6 +378,14 @@ sealed interface Does {
     @SerialName("fxAmount")
     data object FxAmount : Does {
         override val spec get() = Spec(WritesTo.PLAYBACK, setOf(SubjectKind.STACK), CONTINUOUS)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+        override fun read(binding: Binding, site: FeedbackSite): Readout {
+            val stackId = binding.on.recordUuid(RecordKind.STACK)?.let(site::stackId)
+            return Readout(setOf(Signal.STACK_FX)) {
+                stackId?.let(::stackFxAmount)?.let { Reading.Value(Scale7Bit.UNIT.to7(it)) } ?: Reading.Nothing
+            }
+        }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             val stack = on.recordUuid(RecordKind.STACK) ?: return wrongSubject(on)
             return when (op) {
@@ -296,6 +401,8 @@ sealed interface Does {
     @SerialName("fire")
     data class Fire(val trigger: String) : Does {
         override val spec get() = Spec(WritesTo.PLAYBACK, setOf(SubjectKind.FIXTURE), BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             val fixture = (on as? Subject.Fixture)?.key ?: return wrongSubject(on)
             return if (op == Op.On || op == Op.Toggle) done { ctx.actions.fireTrigger(fixture, trigger) } else wrongKind(op)
@@ -307,6 +414,12 @@ sealed interface Does {
     @SerialName("blackout")
     data object Blackout : Does {
         override val spec get() = Spec(WritesTo.MASTER, NONE, BUTTON, ON_OFF, How.TOGGLE)
+        override fun led(binding: Binding, site: FeedbackSite): Led {
+            // Lit while blackout is in the state the button sets: on for a toggle or On, off for Off.
+            val off = binding.how == How.OFF
+            return Led.Light(setOf(Signal.SCALER)) { blackout() != off }
+        }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted = when (op) {
             Op.Toggle -> answered(ActionOutcome.Done(if (ctx.actions.toggleBlackout()) "on" else "off"))
             Op.On -> answered(ctx.actions.setBlackout(true))
@@ -329,6 +442,14 @@ sealed interface Does {
         override val spec get() =
             if (level == null) Spec(WritesTo.MASTER, NONE, CONTINUOUS + BUTTON, setOf(How.TOGGLE), How.TOGGLE)
             else Spec(WritesTo.MASTER, NONE, BUTTON, defaultHow = How.ON)
+
+        override fun led(binding: Binding, site: FeedbackSite): Led =
+            // Lit while the grand master is engaged: a lit button means the lights are live.
+            if (level == null) Led.Light(setOf(Signal.SCALER)) { grandMasterEnabled() } else Led.None
+
+        override fun read(binding: Binding, site: FeedbackSite): Readout? =
+            if (level != null) null
+            else Readout(setOf(Signal.GRAND_MASTER)) { grandMasterLevel()?.let { Reading.Value(Scale7Bit.PERCENT.to7(it)) } ?: Reading.Nothing }
 
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted = when (op) {
             is Op.Move -> done { ctx.actions.writeGrandMaster(op.value7Bit) }
@@ -364,6 +485,14 @@ sealed interface Does {
             if (bpm == null) Spec(WritesTo.TEMPO, MASTER_OR_FIRST, CONTINUOUS)
             else Spec(WritesTo.TEMPO, MASTER_OR_FIRST, BUTTON, defaultHow = How.ON)
 
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+        override fun read(binding: Binding, site: FeedbackSite): Readout? {
+            if (bpm != null) return null
+            val master = master(binding.on)?.value
+            val window = Scale7Bit(minBpm, maxBpm)
+            return Readout(setOf(Signal.TEMPO)) { tempo(master)?.let { Reading.Value(window.to7(it)) } ?: Reading.Nothing }
+        }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             val master = master(on) ?: return wrongSubject(on)
             return when (op) {
@@ -385,6 +514,8 @@ sealed interface Does {
     @SerialName("tap")
     data object Tap : Does {
         override val spec get() = Spec(WritesTo.TEMPO, MASTER_OR_FIRST, BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             val master = master(on) ?: return wrongSubject(on)
             return if (op == Op.On || op == Op.Toggle) answered(ctx.actions.tapSpeedMaster(master.value)) else wrongKind(op)
@@ -400,6 +531,8 @@ sealed interface Does {
         }
 
         override val spec get() = Spec(WritesTo.TEMPO, MASTER_OR_FIRST, BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             val master = master(on) ?: return wrongSubject(on)
             return if (op == Op.On || op == Op.Toggle) done { ctx.actions.scaleSpeedMaster(master.value, factor) } else wrongKind(op)
@@ -411,8 +544,10 @@ sealed interface Does {
     @SerialName("layer")
     data class Layer(val layer: String) : Does {
         override val spec get() = Spec(WritesTo.DESK, NONE, BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted =
-            if (op == Op.On || op == Op.Toggle) done { ctx.bankState.setBank(ctx.origin.deviceTypeKey, layer) } else wrongKind(op)
+            if (op == Op.On || op == Op.Toggle) done { ctx.bankState.setBank(ctx.origin.displayKey, layer) } else wrongKind(op)
     }
 
     /** Point the strip encoders of the device the button is on at [attribute], on [axis] for a colour. */
@@ -420,9 +555,14 @@ sealed interface Does {
     @SerialName("encoderPage")
     data class EncoderPage(val attribute: String, val axis: ColourAxis? = null) : Does {
         override val spec get() = Spec(WritesTo.DESK, NONE, BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.Light(setOf(Signal.ENCODER_PAGE)) {
+            // Through the effective axis: (rgbColour, null) is the same page as (rgbColour, HUE).
+            encoderPage(site.displayKey).let { it.attribute == attribute && it.colourAxis.effective == axis.effective }
+        }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted =
             if (op == Op.On || op == Op.Toggle) {
-                done { ctx.encoderBankState.set(ctx.origin.deviceTypeKey, EncoderBankSelection(attribute, axis)) }
+                done { ctx.encoderBankState.set(ctx.origin.displayKey, EncoderBankSelection(attribute, axis)) }
             } else {
                 wrongKind(op)
             }
@@ -433,6 +573,8 @@ sealed interface Does {
     @SerialName("undo")
     data class Undo(val kind: UndoKind = UndoKind.UNDO) : Does {
         override val spec get() = Spec(WritesTo.DESK, NONE, BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             if (op != Op.On && op != Op.Toggle) return wrongKind(op)
             return done {
@@ -450,6 +592,12 @@ sealed interface Does {
     @SerialName("buskPage")
     data class BuskPage(val step: Int? = null) : Does {
         override val spec get() = Spec(WritesTo.DESK, setOf(SubjectKind.NONE, SubjectKind.PAGE), BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led {
+            val page = binding.on.recordUuid(RecordKind.PAGE) ?: return Led.None
+            val pageId = site.pageId(page)
+            return Led.Light(setOf(Signal.BUSK_PAGE)) { pageId != null && buskPage() == pageId }
+        }
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             if (op != Op.On && op != Op.Toggle) return wrongKind(op)
             on.recordUuid(RecordKind.PAGE)?.let { return answered(ctx.actions.buskPageSet(it)) }
@@ -473,6 +621,8 @@ sealed interface Does {
         }
 
         override val spec get() = Spec(WritesTo.DESK, NONE, BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted =
             if (op == Op.On || op == Op.Toggle) done { ctx.actions.buskFocusSet(window, focus) } else wrongKind(op)
 
@@ -487,6 +637,8 @@ sealed interface Does {
     @SerialName("windowSheet")
     data class WindowSheet(val window: String) : Does {
         override val spec get() = Spec(WritesTo.DESK, NONE, BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted =
             if (op == Op.On || op == Op.Toggle) done { ctx.actions.buskSheetToggle(window) } else wrongKind(op)
     }
@@ -496,6 +648,8 @@ sealed interface Does {
     @SerialName("selection")
     data class SelectionStep(val step: SelectionMove) : Does {
         override val spec get() = Spec(WritesTo.DESK, NONE, BUTTON, defaultHow = How.ON)
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             if (op != Op.On && op != Op.Toggle) return wrongKind(op)
             return done {
@@ -516,6 +670,8 @@ sealed interface Does {
     @SerialName("strip")
     data object Strip : Does {
         override val spec get() = Spec(WritesTo.LOCAL, NAMED_HEADS, emptySet())
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
             logger.warn("A strip binding reached dispatch; the service should have derived it")
             return wrongKind(op)
@@ -531,6 +687,8 @@ sealed interface Does {
     data class Unknown(val storedType: String, val rawPayload: String) : Does {
         override val spec get() = Spec(WritesTo.DESK, emptySet(), emptySet())
         override val functionId: String get() = storedType
+        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
+
         override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted = wrongKind(op)
     }
 }
@@ -579,6 +737,22 @@ enum class SelectionMove(val subselect: SubselectMode?) {
         fun of(mode: SubselectMode): SelectionMove = valueOf(mode.name)
     }
 }
+
+/** A record LED's palette fold: lit while [palette]'s layer covers every selected target whole — the busk pad's ring. */
+private fun FeedbackPass.coversSelection(palette: UUID): Boolean {
+    if (selection.isEmpty()) return false
+    val entry = applied().firstOrNull { it.source.uuid == palette } ?: return false
+    return selection.all { target ->
+        entry.targets.any { it.target.type == target.type && it.target.key == target.key && it.extent == AppliedExtent.ALL }
+    }
+}
+
+/**
+ * How far an FX speed fader's readback may land from where it was moved and still be its own write:
+ * 0.15 of an octave, past a stick's reach from a step and whole-tick rounding at ×4, on a travel of four
+ * octaves over 127 steps.
+ */
+private const val FADER_ECHO_STEPS = 5
 
 private val stackPress = Spec(WritesTo.PLAYBACK, setOf(SubjectKind.STACK), BUTTON, defaultHow = How.ON)
 private val entryPress = Spec(WritesTo.PLAYBACK, setOf(SubjectKind.ENTRY), BUTTON, defaultHow = How.ON)

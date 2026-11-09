@@ -250,8 +250,10 @@ callback with the delta map. This is the **single observation point** for
 "something changed on the wire", and it's used by:
 
 - The WebSocket layer to push `channelState` updates to connected clients
-- [`SurfaceFeedbackPublisher`](midi-control-surface-engineering.md) to drive motor faders
-  and encoder rings in response to composition changes
+
+A surface's motor faders and rings do not read it: they show what the programmer holds over the cue
+layer, polled off this thread ([midi-control-surface-engineering.md](midi-control-surface-engineering.md)
+§"The readback").
 
 Because every source (parking, FX, cues, direct writes, transmit modifiers) converges
 at this listener, observers never need to know *how* a value got to the wire — only that it

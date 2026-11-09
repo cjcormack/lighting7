@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.fixture.AttributeCategory
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 
 /**
@@ -319,25 +321,67 @@ class LayerResolver(
     /**
      * Resolve the fallback [FxOutput] for the given target + fixture. Returned value is what
      * the effect's reset-to-neutral should write before the effect's own contribution blends
-     * over the top.
+     * over the top: [localOver] as output reads it — the programmer left out while Blind, a held
+     * flash included.
      */
-    fun fallbackFor(target: FxTarget, fixture: GroupableFixture, fixtureKey: String): FxOutput {
-        // Resolve the cue layer (or baseline) first — the programmer overlays it, and a
-        // partially-covering programmer contribution (one sideband channel of a colour)
-        // needs the below value for the components it doesn't own.
-        val below = run {
-            val idx = cueLayer.index
-            val cue = if (idx.isNotEmpty()) idx[fixtureKey]?.get(target.attribute) else null
-            cue?.asFxOutputFor(target) ?: baselineFor(target, fixture)
-        }
-        if (programmer.blind) return below
+    fun fallbackFor(target: FxTarget, fixture: GroupableFixture, fixtureKey: String): FxOutput =
+        if (programmer.blind) cueLayerFor(target, fixture, fixtureKey)
+        else composeOver(target, fixture, fixtureKey, programmer)
+
+    /**
+     * What Local holds for [target] on [fixture] over the cue layer, without FX: a surface's readback
+     * (surface-setup plan D6). Read **beneath a held flash** and **whether or not Blind is on** — so in
+     * Blind it is the staged value a fader edits — and blind to park, which a fader does not move.
+     */
+    fun localOver(target: FxTarget, fixture: GroupableFixture, fixtureKey: String): FxOutput =
+        composeOver(target, fixture, fixtureKey, beneathFlash, withCueEmitters(target, fixture, fixtureKey))
+
+    /**
+     * A colour's cue-layer value with the cue's own white, amber and UV rows laid over it. Output keeps
+     * those on their own keys, so the colour key does not carry them when the cue has no colour row; a
+     * readback that left them out would build a hue turn on a white of 0 and write it over the cue's.
+     */
+    private fun withCueEmitters(target: FxTarget, fixture: GroupableFixture, fixtureKey: String): FxOutput {
+        val below = cueLayerFor(target, fixture, fixtureKey)
+        if (target !is ColourTarget) return below
+        val rows = cueLayer.index[fixtureKey] ?: return below
+        val bundled = FixtureAttributeCatalogue.of(fixture::class).bundledByCategory
+        fun emitter(category: AttributeCategory): UByte? =
+            (bundled[category]?.let { rows[it.name] } as? CueAssignmentResolver.AttributeValue.Slider)?.value
+        val white = emitter(AttributeCategory.WHITE)
+        val amber = emitter(AttributeCategory.AMBER)
+        val uv = emitter(AttributeCategory.UV)
+        if (white == null && amber == null && uv == null) return below
+        val colour = (below as? FxOutput.Colour)?.color ?: ExtendedColour.BLACK
+        return FxOutput.Colour(colour.copy(white = white ?: colour.white, amber = amber ?: colour.amber, uv = uv ?: colour.uv))
+    }
+
+    private val beneathFlash: ProgrammerReads = programmer.beneath(ProgrammerOwner.FLASH)
+
+    /** The cue layer's value for [target] on [fixture], else its baseline. */
+    private fun cueLayerFor(target: FxTarget, fixture: GroupableFixture, fixtureKey: String): FxOutput {
+        val idx = cueLayer.index
+        val cue = if (idx.isNotEmpty()) idx[fixtureKey]?.get(target.attribute) else null
+        return cue?.asFxOutputFor(target) ?: baselineFor(target, fixture)
+    }
+
+    // The cue layer (or baseline) is [below]: the programmer overlays it, and a partially-covering
+    // programmer contribution (one sideband channel of a colour) needs the below value for the
+    // components it doesn't own.
+    private fun composeOver(
+        target: FxTarget,
+        fixture: GroupableFixture,
+        fixtureKey: String,
+        reads: ProgrammerReads,
+        below: FxOutput = cueLayerFor(target, fixture, fixtureKey),
+    ): FxOutput {
         // Per-fixture O(1) gate: composeProgrammerOver's colour path does reflective
         // bundled-slider scans, so a busk on one fixture must not tax every other fixture
         // under a running effect each tick. Any sideband slot disables the gate — sideband
         // coverage is channel-shaped and can't be attributed to a fixture without
         // resolving the patch.
         if (!programmer.coversFixture(fixtureKey) && !programmer.hasSidebandEntries) return below
-        return target.composeProgrammerOver(fixture, programmer, below)
+        return target.composeProgrammerOver(fixture, reads, below)
     }
 
     /**

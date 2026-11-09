@@ -64,10 +64,9 @@ interface FanRing {
  * The anchor goes, and the ring returns to the centre, when the selection changes, the show is
  * rebuilt, or something else has written a fanned head's position since the fan last did — judged
  * at the next turn against Local as output arbitrates it, and that turn writes nothing: the next one
- * starts from where the heads are. A new gesture **picks up at the centre**: until an input lands
- * within [PICKUP_STEPS] of 64 it is ignored, so a detent sent before the device took the centred
- * ring, or a touched motor fader still standing where it was, cannot jump the heads by the distance
- * between the two.
+ * starts from where the heads are. A new gesture starts from the centre: an input further than
+ * [SoftTakeoverStateMachine.JUMP_STEPS] from 64 moves nothing and shows the ring the centre again, since
+ * the jump rule judges against what the ring was last shown, which a reset reaches a moment later.
  */
 class SelectionFan(private val state: State) : FanRing {
     private val logger = LoggerFactory.getLogger(SelectionFan::class.java)
@@ -138,8 +137,9 @@ class SelectionFan(private val state: State) : FanRing {
         }
         val current = if (held != null) amounts else Amounts()
         val shown = amountTo7Bit(axis, current.of(axis))
-        if (held == null && abs(value7Bit.toInt() - shown) > PICKUP_STEPS) {
-            logger.debug("Surface fan: {} at {} waits to pick up at the centre", axis, value7Bit)
+        if (held == null && abs(value7Bit.toInt() - shown) > SoftTakeoverStateMachine.JUMP_STEPS) {
+            logger.debug("Surface fan: {} at {} is far from the centre; showing it again", axis, value7Bit)
+            _shown.value = Shown(amounts, ++stamp)
             return
         }
         val raw = current.with(axis, clampAmount(axis, current.of(axis) + (value7Bit.toInt() - shown) * stepOf(axis)))
@@ -199,7 +199,7 @@ class SelectionFan(private val state: State) : FanRing {
         val fixtures = state.show.fixtures
         return held.written.all { (key, written) ->
             val head = runCatching { fixtures.untypedGroupableFixture(key) }.getOrNull() ?: return@all false
-            localPosition(store, head) == written
+            localPosition(store.beneath(ProgrammerOwner.FLASH), head) == written
         }
     }
 
@@ -221,9 +221,6 @@ class SelectionFan(private val state: State) : FanRing {
     companion object {
         /** An amount on [axis] on the 7-bit scale a ring shows: 0 at 64, a step [stepOf] the amount. */
         fun amountTo7Bit(axis: FanAxis, amount: Int): Int = ((amount - minOf(axis)) / stepOf(axis)).coerceIn(0, 127)
-
-        /** How far from the centre a new gesture's first input may land and still be taken: a fast detent or two. */
-        const val PICKUP_STEPS = 4
 
         private const val DECIMETRES_PER_METRE = 10.0
 

@@ -2989,10 +2989,10 @@ A binding naming a deleted master reports `AssignmentHealth.MissingSpeedMaster` 
 falling back to master 1: an *FX* degrading to the global tempo is reasonable, a control
 silently retuning the whole show is not.
 
-`SurfaceFeedbackPublisher` indexes tempo bindings separately from DMX-backed ones (a speed
-master has no channel behind it) and feeds them from `SpeedMasterBank.changes`. That is not
-just for encoder rings — soft takeover arms from `setLogical`, so without an index entry a
-PICKUP encoder would stay ENGAGED and jump the tempo on first touch. Tap buttons get **no**
+A tempo control is one feedback entry like any other, its readout the master's tempo across the
+binding's window, re-read on `SpeedMasterBank.changes` (`Signal.TEMPO`) and judged by the one jump
+rule — so an encoder shows where the tempo sits before the first touch and a far move cannot jump
+it (`docs/midi-control-surface-engineering.md` §"One jump rule"). Tap buttons get **no**
 LED feedback: every other LED entry reflects a steady boolean the publisher can read back,
 and a tap has no "on" state to hold.
 

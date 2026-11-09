@@ -183,11 +183,12 @@ export const surfacesApi = restApi.injectEndpoints({
      */
     expandSurfaceBinding: build.mutation<
       ControlSurfaceBinding[],
-      { projectId: number; bindingId: number }
+      { projectId: number; bindingId: number; displayKey?: string }
     >({
-      query: ({ projectId, bindingId }) => ({
+      query: ({ projectId, bindingId, displayKey }) => ({
         url: `projects/${projectId}/surface-bindings/${bindingId}/expand`,
         method: 'POST',
+        params: displayKey ? { displayKey } : undefined,
       }),
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'SurfaceBinding', id: projectId },
@@ -236,7 +237,7 @@ export const surfacesApi = restApi.injectEndpoints({
       },
     }),
 
-    /** Active bank per `deviceTypeKey`. */
+    /** Active bank per attached device, keyed by its `displayKey`. */
     surfaceBanks: build.query<Record<string, string>, void>({
       queryFn: () => ({ data: lightingApi.surfaces.getBanks() ?? NO_BANKS }),
       async onCacheEntryAdded(_, { cacheDataLoaded, updateCachedData, cacheEntryRemoved }) {
@@ -289,7 +290,7 @@ export const surfacesApi = restApi.injectEndpoints({
       },
     }),
 
-    /** What each device's strip encoders drive, `deviceTypeKey` → selection; absent is `dimmer`. */
+    /** What each device's strip encoders drive, `displayKey` → selection; absent is `dimmer`. */
     surfaceEncoderBanks: build.query<Record<string, EncoderBankSelection>, void>({
       queryFn: () => ({ data: lightingApi.surfaces.getEncoderBanks() ?? NO_ENCODER_BANKS }),
       async onCacheEntryAdded(_, { cacheDataLoaded, updateCachedData, cacheEntryRemoved }) {
@@ -339,7 +340,7 @@ export function useSurfaceDevices(): SurfaceDeviceInfo[] {
   return data ?? NO_DEVICES
 }
 
-/** Active bank per `deviceTypeKey`. */
+/** Active bank per attached device, keyed by its `displayKey`. */
 export function useActiveBanks(): Record<string, string> {
   const { data } = useSurfaceBanksQuery()
   return data ?? NO_BANKS
@@ -360,7 +361,7 @@ export function useSurfaceControls(): SurfaceControlStates {
   return data ?? NO_CONTROLS
 }
 
-/** What each device's strip encoders drive, `deviceTypeKey` → selection; absent is `dimmer`. */
+/** What each device's strip encoders drive, `displayKey` → selection; absent is `dimmer`. */
 export function useEncoderBanks(): Record<string, EncoderBankSelection> {
   const { data } = useSurfaceEncoderBanksQuery()
   return data ?? NO_ENCODER_BANKS

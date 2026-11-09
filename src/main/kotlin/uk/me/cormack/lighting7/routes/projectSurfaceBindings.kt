@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.midi.EncoderBankState
 import io.ktor.http.*
 import io.ktor.resources.*
 import io.ktor.server.application.*
@@ -224,12 +225,15 @@ internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
                 return@withProject
             }
 
-            // Derived at the encoder bank the device is on right now, so the four rows the
-            // operator ends up with are the four bindings they could see a moment ago.
+            // Derived at the encoder page the device the operator is looking at is on right now, so
+            // the four rows they end up with are the four bindings they could see a moment ago.
+            val attached = state.deviceMatcher.attached.value
+            val device = resource.displayKey?.takeIf { attached[it]?.typeKey == existing.deviceTypeKey }
+                ?: attached.entries.firstOrNull { it.value.typeKey == existing.deviceTypeKey }?.key
             val derived = deriveStripBindings(
                 strip = strip,
                 on = existing.binding.on,
-                encoderBank = state.encoderBankState.selectionFor(existing.deviceTypeKey),
+                encoderBank = device?.let(state.encoderBankState::selectionFor) ?: EncoderBankState.DEFAULT,
             )
             try {
                 val created = service.replace(
@@ -371,7 +375,11 @@ data class ProjectSurfaceBindingResource(val parent: ProjectSurfaceBindingsResou
  * them. One transaction; answers the created rows.
  */
 @Resource("/expand")
-data class ProjectSurfaceBindingExpandResource(val parent: ProjectSurfaceBindingResource)
+data class ProjectSurfaceBindingExpandResource(
+    val parent: ProjectSurfaceBindingResource,
+    /** The device whose encoder page the strip is expanded at; absent, the first attached device of the type. */
+    val displayKey: String? = null,
+)
 
 // ─── DTOs ──────────────────────────────────────────────────────────────────
 

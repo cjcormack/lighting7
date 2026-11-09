@@ -16,7 +16,7 @@ import kotlinx.serialization.Serializable
  * strip encoder derived from it drops its turn there ([AttributeChannelResolver.toAttributeValue]).
  *
  * `@Serializable` because `surfaceEncoderBank.state` carries it as it stands — a map of these,
- * one per device type, an absent device meaning [EncoderBankState.DEFAULT].
+ * one per attached device, an absent device meaning [EncoderBankState.DEFAULT].
  */
 @Serializable
 data class EncoderBankSelection(
@@ -25,7 +25,8 @@ data class EncoderBankSelection(
 )
 
 /**
- * Which attribute a device's strip encoders drive, keyed by `deviceTypeKey` — the
+ * Which attribute a device's strip encoders drive, keyed by the attached device's `displayKey`
+ * (surface-setup plan D16: two surfaces of one type each keep their own encoder page) — the
  * attribute-select bank every console has. Shaped exactly like [ActiveBankState], with an
  * [EncoderBankSelection] where that has a bank id, and for the same reasons: the value read is
  * on the router's hot path and wants to be lock-free, while socket clients want a snapshot.
@@ -40,7 +41,7 @@ data class EncoderBankSelection(
  * (`docs/plans/completed/midi-surface-plan.md` D5).
  */
 class EncoderBankState {
-    /** Snapshot of `deviceTypeKey → selection`; absent means [DEFAULT]. */
+    /** Snapshot of `displayKey → selection`; absent means [DEFAULT]. */
     private val _selections = MutableStateFlow<Map<String, EncoderBankSelection>>(emptyMap())
     val selections: StateFlow<Map<String, EncoderBankSelection>> = _selections.asStateFlow()
 
@@ -53,16 +54,16 @@ class EncoderBankState {
 
     /** Emitted on every encoder-bank transition — a change of axis on one property included. */
     data class EncoderBankChange(
-        val deviceTypeKey: String,
+        val displayKey: String,
         val previous: EncoderBankSelection,
         val new: EncoderBankSelection,
     )
 
-    /** What [deviceTypeKey]'s strip encoders currently drive. Never null. */
-    fun selectionFor(deviceTypeKey: String): EncoderBankSelection = _selections.value[deviceTypeKey] ?: DEFAULT
+    /** What the device [displayKey]'s strip encoders currently drive. Never null. */
+    fun selectionFor(displayKey: String): EncoderBankSelection = _selections.value[displayKey] ?: DEFAULT
 
     /**
-     * Point [deviceTypeKey]'s strip encoders at [selection]. Returns true if this was a change —
+     * Point the device [displayKey]'s strip encoders at [selection]. Returns true if this was a change —
      * the publisher rebuilds its index and re-arms takeover on one, because every strip encoder's
      * meaning just moved under the operator's hand. Compared through the effective axis, so
      * `(rgbColour, null)` and `(rgbColour, HUE)` are one bank and not a change.
@@ -75,22 +76,22 @@ class EncoderBankState {
      * cosmetic: [AttributeChannelResolver.toAttributeValue] answers null for any non-null axis on a
      * slider, so every strip encoder on the device would drop its turn and its ring go dark.
      */
-    fun set(deviceTypeKey: String, selection: EncoderBankSelection): Boolean {
+    fun set(displayKey: String, selection: EncoderBankSelection): Boolean {
         val canonical =
             if (selection.colourAxis == ColourAxis.HUE) selection.copy(colourAxis = null) else selection
-        val previous = selectionFor(deviceTypeKey)
+        val previous = selectionFor(displayKey)
         if (previous == canonical) return false
         _selections.update { current ->
-            if (canonical == DEFAULT) current - deviceTypeKey
-            else current + (deviceTypeKey to canonical)
+            if (canonical == DEFAULT) current - displayKey
+            else current + (displayKey to canonical)
         }
-        _changes.tryEmit(EncoderBankChange(deviceTypeKey, previous, canonical))
+        _changes.tryEmit(EncoderBankChange(displayKey, previous, canonical))
         return true
     }
 
     /** [set], for the callers that name a property (and optionally its axis) rather than a selection. */
-    fun setAttribute(deviceTypeKey: String, attribute: String, colourAxis: ColourAxis? = null): Boolean =
-        set(deviceTypeKey, EncoderBankSelection(attribute, colourAxis))
+    fun setAttribute(displayKey: String, attribute: String, colourAxis: ColourAxis? = null): Boolean =
+        set(displayKey, EncoderBankSelection(attribute, colourAxis))
 
     /** Wipe all state, so an encoder bank never leaks across a project switch. */
     fun clearAll() {

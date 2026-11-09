@@ -409,8 +409,19 @@ class GlobalScalerStateTest {
 
     @Test
     fun `a control's 0 to 127 maps onto the level and back`() {
-        assertEquals(0.0, grandMasterLevelOf7Bit(0u))
-        assertEquals(100.0, grandMasterLevelOf7Bit(127u))
-        for (v in 0..127) assertEquals(v.toUByte(), grandMasterLevelTo7Bit(grandMasterLevelOf7Bit(v.toUByte())))
+        assertEquals(0.0, Scale7Bit.PERCENT.of7(0u))
+        assertEquals(100.0, Scale7Bit.PERCENT.of7(127u))
+        for (v in 0..127) assertEquals(v.toUByte(), Scale7Bit.PERCENT.to7(Scale7Bit.PERCENT.of7(v.toUByte())))
+    }
+
+    @Test
+    fun `one scale serves a stack's amount and a tempo window too`() {
+        assertEquals(64u.toUByte(), Scale7Bit.UNIT.to7(0.5))
+        assertEquals(1.0, Scale7Bit.UNIT.of7(127u))
+        val tempo = Scale7Bit(60.0, 180.0)
+        assertEquals(95u.toUByte(), tempo.to7(150.0), "three-quarters of 60–180")
+        assertEquals(180.0, tempo.of7(127u))
+        assertEquals(127u.toUByte(), tempo.to7(300.0), "past the window: its end")
+        assertEquals(0u.toUByte(), Scale7Bit(5.0, 5.0).to7(5.0), "a window with no span")
     }
 }

@@ -1,28 +1,29 @@
 package uk.me.cormack.lighting7.midi
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
-import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
-import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.dmx.packChannelKey
-import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fx.AppliedExtent
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fx.AppliedSource
 import uk.me.cormack.lighting7.fx.CueRunState
+import uk.me.cormack.lighting7.fx.FxTarget
+import uk.me.cormack.lighting7.fx.LayerResolver
 import uk.me.cormack.lighting7.fx.ProgrammerLayerStack
+import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
-import uk.me.cormack.lighting7.fx.FxSpeed
 import uk.me.cormack.lighting7.fx.StackFxAmounts
-import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.perf.MidiLatencyStage
@@ -33,11 +34,8 @@ import uk.me.cormack.lighting7.show.LocateManager
 import uk.me.cormack.lighting7.state.BuskPageState
 import uk.me.cormack.lighting7.state.DeskSelection
 import uk.me.cormack.lighting7.state.WindowRegistry
-import java.util.Collections
-import java.util.IdentityHashMap
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.math.roundToInt
 
 /**
  * Contract the [SurfaceInputRouter] consults on every inbound event with feedback relevance.
@@ -51,10 +49,8 @@ interface SurfaceFeedbackHooks {
     fun onTouch(displayKey: String, controlId: String, down: Boolean)
 
     /**
-     * Decide whether an inbound fader value should be accepted. Returns true to apply, false
-     * to suppress (pickup not yet). Implementations update their internal state regardless
-     * of the return value — [SoftTakeoverStateMachine.acceptInboundFader] bumps the last
-     * known physical position on every call.
+     * Decide whether an inbound move should be taken, by the jump rule ([JumpPolicy]). Returns
+     * false to drop it; the publisher shows a driven control its value again itself.
      */
     fun acceptInboundFader(
         displayKey: String,
@@ -64,51 +60,46 @@ interface SurfaceFeedbackHooks {
     ): Boolean
 
     /**
-     * Notify that a button has just been released. Publisher re-asserts the button's LED to
-     * its logical state, bypassing delta suppression, to work around surfaces (notably the
-     * X-Touch Compact in Momentary mode) that locally drive the LED off on release even when
-     * we've already told them to keep it on. No-op default — only the real publisher cares.
+     * Notify that a button or an encoder's push has just been released. The publisher re-asserts
+     * its LED, bypassing delta suppression, for surfaces (notably the X-Touch Compact in Momentary
+     * mode) that drive the LED off on release even when we've told them to keep it on.
      */
-    fun onButtonRelease(displayKey: String, controlId: String) {}
+    fun onButtonRelease(displayKey: String, controlId: String, part: ControlPart = ControlPart.MAIN) {}
 }
 
 /**
- * Observes the composition model (channel changes, flash state, scaler state, the desk
- * selection, locate state) and drives MIDI feedback back to attached control surfaces: motor
- * position for motorised faders, LED ring position for encoders, button LEDs for flash /
- * blackout / grand-master / select / locate bindings.
+ * Drives MIDI feedback to attached control surfaces — motor positions, LED rings and button LEDs —
+ * from what each bound function says it shows (surface-setup plan P3): a button function's
+ * [Does.led], a continuous function's [Does.read].
  *
- * Also hosts the supporting state — [TouchStateTracker], [SoftTakeoverStateMachine] and the
- * [ControlStateTracker] behind the `surfaceControls.*` stream — and implements
- * [SurfaceFeedbackHooks] so the router can consult them on every inbound event.
+ * ## The index
  *
- * ## Data model
+ * One [Entry] per bound control part on each attached device, at the device's own layer and encoder
+ * page (D16), indexed by the [Signal]s its light or readout follows and by its control part. It is
+ * rebuilt on a binding, device, layer, encoder-page, fixture or record-list change, and on nothing
+ * else: a selection change re-reads the selection's entries, whose heads are expanded again on the
+ * next read.
  *
- * Indexes rebuild on any of: binding add / update / remove, device attach / detach,
- * active-bank change, fixture registration change, project change, desk-selection change. The
- * effective takeover policy is baked into [ContinuousEntry] at rebuild time so the hot
- * [onChannelsChanged] path never walks the binding cache or attached-devices list.
+ * ## The readback, off the transmit thread
  *
- * A continuous entry may stand on **several heads** — a fixed group binding on every member,
- * a selection binding on every selected head — and a head on several channels, since a colour
- * is read as one hue from three. Its feedback value is the one 7-bit value those heads agree
- * on, and **null when they disagree**: nothing goes to the motor, the ring is driven to its
- * off state, takeover is disarmed, and the stream reports `value: null`. A turn or move then
- * writes every head and the next tick reads uniform
- * (`docs/plans/completed/midi-surface-plan.md` D10). What a head's value *is* — and so what a
- * turn writes — is [AttributeChannelResolver]'s rule, not this class's.
+ * A fixture control shows what Local holds for its key over the cue layer, without FX
+ * (`LayerResolver.localOver`, D6): the staged value in Blind, beneath a held flash, blind to park.
+ * None of that is on a DMX channel, so the publisher does not listen to the transmit path at all. A
+ * loop polls every [pollIntervalMs] — the programmer's `revision` and Blind and the cue-layer snapshot's
+ * identity — and re-reads the [Signal.PROGRAMMER] entries when one moved. Every other signal is a
+ * subscription.
  *
- * ## The control-state stream
+ * ## One value, everywhere it lands
  *
- * Every send site writes [controlStates] *before* any early return, so the tracker records what
- * a non-motor fader would have been told, and what a touched motor was spared. The frontend
- * never recomputes a control's state from DMX.
+ * A reading goes through the jump rule ([SoftTakeoverStateMachine.setLogical]), then to the
+ * `surfaceControls.*` stream's [ControlStateTracker] — written before any early return, so the
+ * tracker records what a non-motor fader would have been told and what a touched motor was spared —
+ * and then to the hardware. A mixed or absent value darkens a ring and drives no motor.
  *
  * ## Lifecycle
  *
- * [start] launches all subscription jobs. [stop] cancels them and detaches from the current
- * fixture registry. Project switches re-attach internally via [onProjectChanged] — callers
- * don't need to restart the publisher.
+ * [start] launches the subscriptions and the poll; [stop] cancels them. Project switches re-attach
+ * internally via [onProjectChanged].
  */
 class SurfaceFeedbackPublisher(
     private val deviceMatcher: DeviceMatcher,
@@ -120,79 +111,44 @@ class SurfaceFeedbackPublisher(
     private val projectIdProvider: () -> Int,
     private val fixturesProvider: () -> Fixtures,
     private val globalScalerStateProvider: () -> GlobalScalerState,
-    /**
-     * Speed-master bank for tempo-bound encoders. Like [globalScalerStateProvider] this is
-     * a provider rather than a value because a project switch swaps the whole show, and the
-     * subscription has to follow the live bank.
-     */
+    /** The live show's programmer store, polled for its epoch and Blind. A provider: it is per show. */
+    private val programmerStoreProvider: (() -> ProgrammerStore)? = null,
+    /** The live show's layer resolver: the readback's `localOver`, and the cue layer the poll watches. */
+    private val layerResolverProvider: (() -> LayerResolver)? = null,
     private val speedMasterBankProvider: (() -> SpeedMasterBank)? = null,
-    /**
-     * The desk selection a `SelectionAttribute` control writes and a `SelectTarget` LED shows.
-     * A value, not a provider: it is State-scoped and survives a project switch (cleared, not
-     * rebuilt). Null disables the selection-relative arms — a harness without a desk.
-     */
+    /** The desk selection. A value: it is State-scoped and survives a project switch. Null disables the selection's arms. */
     private val deskSelection: DeskSelection? = null,
-    /** Locate state for `LocateSelection` LEDs; a provider because the manager is per show. */
     private val locateManagerProvider: (() -> LocateManager)? = null,
-    /**
-     * The programmer's layer stack, for the record LEDs — `ApplyLook` and `PressPalette` read its
-     * `appliedState`, which is the same answer a busk pad's ring reads, resolved server-side so the
-     * two cannot drift. A provider because the stack is per show.
-     */
+    /** The programmer's layer stack, whose applied state the record LEDs read, as a busk pad's ring does. */
     private val programmerLayerStackProvider: (() -> ProgrammerLayerStack)? = null,
-    /** The desk's showing busk page, for `BuskPageSet` LEDs. Null disables that arm. */
     private val buskPageState: BuskPageState? = null,
-    /**
-     * The desk's windows, for the **window-addressed** bindings' health (`BuskFocusSet` /
-     * `BuskSheetToggle`, busk-further plan D14). The health context reads the registry's names, but
-     * the context is only rebuilt on the fixture-change hooks — so without this collector a
-     * `missingWindow` binding stayed dead after its window arrived. Null disables it.
-     */
+    /** The desk's windows, for the window-addressed bindings' health. Null disables it. */
     private val windowRegistry: WindowRegistry? = null,
-    /**
-     * Whether a cue is held loose, for a `PressPad` on a **cue** pad. A press toggles the cue's
-     * loose hold (cue model plan D11), so the LED says what the press would let go of: lit when the
-     * pad's press has the cue on, dark when it is live only through a stack — the screen's outline,
-     * which an LED has no way to draw. A function of one cue rather than the registry itself,
-     * because that is the whole of what this class asks of it.
-     */
+    /** Whether a cue is held loose, for a cue's and a cue pad's LED (cue model plan D11). */
     private val cueLooseHeldProvider: ((cueId: Int) -> Boolean)? = null,
-    /** Whether a cue stack runs, for a `PressPad` on a **stack** pad (busk-stack plan §4): lit while it does. */
+    /** A cue uuid's id in the live project, for a cue's LED; read once per index. */
+    private val cueIdResolver: ((cue: UUID) -> Int?)? = null,
+    /** Whether a cue stack runs, for a GO's and a stack pad's LED. */
     private val stackRunningProvider: ((stackId: Int) -> Boolean)? = null,
     /**
-     * What each busk pad presses and what id each busk page has — the database half of a record LED.
-     *
-     * A provider, and **called at most once per rebuild and only when some attached device actually
-     * has a `PressPad` or `BuskPageSet` bound**: a rebuild happens on every selection change, and a
-     * DB read there for a desk that has neither binding would be a query per press of a select
-     * button.
+     * What each busk pad presses and what id each busk page has. Called at most once per index, and
+     * only when a bound control on an attached device names a pad or a page.
      */
     private val buskRefsProvider: ((projectId: Int) -> BuskRefs)? = null,
-    /**
-     * The live show's stack FX amounts, for `StackFxAmount` faders (effects plan D10). A
-     * provider because the FX amounts are per show, like [globalScalerStateProvider].
-     */
     private val stackFxAmountsProvider: (() -> StackFxAmounts)? = null,
-    /**
-     * A stack uuid's id in the live show, for a `StackFxAmount` fader — the input path's own lookup
-     * (`CueStackManager.stackIdForUuid`), kept for the show's life, so a rebuild reads no row twice.
-     */
+    /** A stack uuid's id in the live show — the input path's own lookup — read once per index. */
     private val stackIdResolver: ((stackUuid: String) -> Int?)? = null,
-    /** The fan encoders' gesture, for `SelectionFan` rings (venue-visit plan S12). Null disables that arm. */
     private val selectionFan: FanRing? = null,
-    /** The selection's FX speed, for `FxSpeed` controls (fx-speed plan D13). Null disables that arm. */
     private val fxSpeed: FxSpeedRing? = null,
-    /**
-     * The live show's running-FX list, which an `FxSpeed` control's value follows. A provider because
-     * the engine is per show, like [stackFxAmountsProvider].
-     */
+    /** The live show's running-FX list, which an FX speed control's value follows. */
     private val fxStateProvider: (() -> Flow<*>)? = null,
     private val types: () -> List<ControlSurfaceRegistry.DeviceTypeInfo> = { ControlSurfaceRegistry.allTypes },
+    /** How often the readback polls the programmer: about 50 Hz. */
+    private val pollIntervalMs: Long = 20,
     val touchState: TouchStateTracker = TouchStateTracker(),
     val takeover: SoftTakeoverStateMachine = SoftTakeoverStateMachine(),
     /** The `surfaceControls.*` stream's store — see [ControlStateTracker]. */
     val controlStates: ControlStateTracker = ControlStateTracker(),
-    /** Records per-stage wall-clock duration of motor / LED egress writes. */
     private val latencyTracker: MidiLatencyTracker = MidiLatencyTracker(),
 ) : SurfaceFeedbackHooks {
 
@@ -202,9 +158,8 @@ class SurfaceFeedbackPublisher(
         /**
          * The ring CC value that darkens an encoder ring, per style. `0` for every style the
          * X-Touch Compact can be put in is the working assumption until the rig confirms it
-         * (`docs/plans/completed/midi-surface-plan.md` §9 check 3): if the desk lights the first dot on
-         * `0`, this is the one constant to change. The tracker's [RingState.OFF] is the truth
-         * the view reads regardless of which byte went to the hardware.
+         * (`FU-MANUAL-SURFACE-SETUP-S2`): if the desk lights the first dot on `0`, this is the one
+         * constant to change. The tracker's [RingState.OFF] is the truth the view reads regardless.
          */
         internal fun ringOffValue(style: EncoderRingStyle): UByte? = when (style) {
             EncoderRingStyle.NONE -> null
@@ -213,175 +168,32 @@ class SurfaceFeedbackPublisher(
     }
 
     /**
-     * Continuous-binding entry in the channel reverse index. [policy] is the effective
-     * takeover policy (per-binding override > device-class default) computed once at
-     * [rebuildIndex] time — saves a binding-cache lookup per DMX tick on the hot path.
-     *
-     * [heads] are what the 7-bit feedback position is read from — one per head the target names:
-     * the fixture itself, each member of a group, each selected head of a selection binding. A
-     * head is a slider's one channel or a colour's three read together on the binding's [axis]
-     * ([AttributeChannelResolver.readHead] owns that rule, so the ring reads what a turn writes).
-     * Empty for a selection binding with nothing selected: the entry exists so the control reads
-     * "no selection" rather than "unbound". [channels] is the flat list the index is keyed on.
-     * [axis] is baked here at rebuild, like [policy], so the read path never re-derives it.
+     * One bound control part. Exactly one of [light] and [readout] is set: a button or an encoder's
+     * push has a light, a fader or an encoder's turn a readout. [ledChannel] and [ledNote] are where a
+     * light is sent; [jump] is a readout's rule for inbound moves.
      */
-    private data class ContinuousEntry(
+    private class Entry(
         val displayKey: String,
-        val deviceTypeKey: String,
         val control: ControlDescriptor,
+        val part: ControlPart,
         val binding: ControlSurfaceBindingService.ResolvedBinding,
-        val heads: List<AttributeChannelResolver.AttributeRead>,
-        val policy: BindingTakeoverPolicy,
-        val axis: ColourAxis?,
+        val light: Led.Light? = null,
+        val readout: Readout? = null,
+        val jump: JumpPolicy = JumpPolicy.JUMP,
+        val ledChannel: Int = 0,
+        val ledNote: Int = 0,
     ) {
-        val channels: List<AttributeChannelResolver.AttributeChannel> = heads.flatMap { it.channels }
+        val controlId: String get() = control.controlId
+        val signals: Set<Signal> get() = light?.signals ?: readout?.signals.orEmpty()
     }
 
-    /** Discrete-binding entry for LED feedback (Flash / Blackout / GrandMasterToggle / Select / Locate). */
-    private data class LedEntry(
-        val displayKey: String,
-        val control: ButtonDescriptor,
-        val binding: ControlSurfaceBindingService.ResolvedBinding,
-    )
-
-    /**
-     * A record button's LED, with **its record already resolved**.
-     *
-     * A `PressPad` LED is the pad's ring, and reading it means knowing what the pad holds — which is
-     * a database read. Doing it at LED time would put one on the feedback path, per lit button, per
-     * resync; doing it here costs one read per rebuild, and rebuild already happens on exactly the
-     * events that can stale it (a binding change, a Look / template list change, a layout write).
-     *
-     * [layerUuid] is a Look's or template's uuid, for the applied-state read; [cue] is the cue id
-     * for a pad holding a cue, whose ring comes from the cue's loose hold instead and has nothing to
-     * do with the layer stack at all; [stack] is a stack pad's stack. At most one is set. All null
-     * means the record has gone — health says so, and the LED is dark.
-     */
-    private data class RecordLedEntry(
-        val entry: LedEntry,
-        val kind: RecordLedKind,
-        val layerUuid: UUID?,
-        val cue: Int? = null,
-        val stack: Int? = null,
-    )
-
-    /**
-     * How a record button's LED is read.
-     *
-     * [LOOK_APPLIED] is **selection-independent**: a Look is on or off (absolute-looks plan P4), lit
-     * while a layer of it is on the programmer's stack, whatever is selected — an `ApplyLook` button
-     * and a Look pad alike. [COVERS_SELECTION] is a palette's selection-scoped fold, and dark on an
-     * empty selection is right there — that is also when the press is dropped.
-     */
-    private enum class RecordLedKind { LOOK_APPLIED, COVERS_SELECTION, CUE_LIVE, STACK_RUNNING }
-
-    /**
-     * Continuous entry for a tempo-bound control. Deliberately *not* a [ContinuousEntry]:
-     * that type is built around a DMX [AttributeChannelResolver.AttributeChannel], and a speed
-     * master has no channel behind it — its value lives in the bank.
-     *
-     * This exists mainly so soft takeover works. PICKUP only engages once something calls
-     * [SoftTakeoverStateMachine.setLogical] for the control, and nothing does that for a
-     * target the index doesn't know about — so without this entry a tempo encoder would be
-     * permanently ENGAGED and would jump the show's tempo the instant it was touched.
-     */
-    private data class SpeedMasterEntry(
-        val displayKey: String,
-        val control: ControlDescriptor,
-        val masterUuid: UUID?,
-        val minBpm: Double,
-        val maxBpm: Double,
-        val policy: BindingTakeoverPolicy,
-    )
-
-    /**
-     * A control bound to the grand master's level. Like [SpeedMasterEntry], not a
-     * [ContinuousEntry]: its value lives in the scaler holder, not on a channel, and the entry is
-     * what lets PICKUP know where the level already sits.
-     */
-    private data class GrandMasterEntry(
-        val displayKey: String,
-        val control: ControlDescriptor,
-        val policy: BindingTakeoverPolicy,
-    )
-
-    /**
-     * A control bound to a cue stack's FX amount — [GrandMasterEntry]'s shape, its value in the
-     * show's [StackFxAmounts]. [stackId] is resolved at rebuild; null when the binding's stack is
-     * not in this project, which health already marks dead.
-     */
-    private data class StackFxAmountEntry(
-        val displayKey: String,
-        val control: ControlDescriptor,
-        val stackId: Int?,
-        val policy: BindingTakeoverPolicy,
-    )
-
-    /** An encoder bound to the selection's fan on [axis] — [GrandMasterEntry]'s shape, its value in [SelectionFan]. */
-    private data class FanEntry(
-        val displayKey: String,
-        val control: ControlDescriptor,
-        val axis: FanAxis,
-        val policy: BindingTakeoverPolicy,
-    )
-
-    /**
-     * A control bound to the selection's FX speed — [GrandMasterEntry]'s shape, its value the lead FX's
-     * Speed ([FxSpeedRing.leadSpeed]): a step a quarter of an octave on an encoder's ring, ×¼–×4 for a fader,
-     * which soft takeover picks up there.
-     */
-    private data class FxSpeedEntry(
-        val displayKey: String,
-        val control: ControlDescriptor,
-        val policy: BindingTakeoverPolicy,
-    )
-
-    /** Snapshot of every derived index produced by a single [rebuildIndex] pass. */
-    private data class Index(
-        val byChannel: Map<Long, List<ContinuousEntry>>,
-        val continuousByDisplay: Map<String, List<ContinuousEntry>>,
-        val ledsByDisplay: Map<String, List<LedEntry>>,
-        val flashByBindingId: Map<Int, LedEntry>,
-        val blackoutLeds: List<LedEntry>,
-        val grandMasterLeds: List<LedEntry>,
-        /** `SelectTarget` buttons: lit while the target's heads are all in the selection. */
-        val selectLeds: List<LedEntry>,
-        /** `LocateSelection` buttons: lit while every selected target is located. */
-        val locateLeds: List<LedEntry>,
-        /** `EncoderBankSet` buttons: lit while that property is the device's encoder bank. */
-        val encoderBankLeds: List<LedEntry>,
-        /**
-         * `ApplyLook` / `PressPalette` / `PressPad` buttons, with their records resolved — as a
-         * list for the layer-change sweep and **by binding id** for [ledOn], which is handed one
-         * entry at a time by the full resync and has only the binding to go on.
-         */
-        val recordLeds: List<RecordLedEntry>,
-        val recordLedByBindingId: Map<Int, RecordLedEntry>,
-        /** `BuskPageSet` buttons, paired with the page id their uuid resolves to; likewise both ways. */
-        val buskPageLeds: List<Pair<LedEntry, Int?>>,
-        val buskPageIdByBindingId: Map<Int, Int?>,
-        /**
-         * Tempo-bound continuous controls. A flat list rather than a map: there is at most
-         * one per physical encoder on an attached surface, so a scan per tempo change is
-         * cheaper than maintaining an index — and tempo changes are operator-rate, not
-         * DMX-tick-rate.
-         */
-        val speedMasterEntries: List<SpeedMasterEntry>,
-        /** Grand-master faders: a flat list, scanned per level change, for [speedMasterEntries]' reason. */
-        val grandMasterEntries: List<GrandMasterEntry>,
-        /** Stack FX amount faders: likewise. */
-        val stackFxAmountEntries: List<StackFxAmountEntry>,
-        /** Fan encoders: likewise. */
-        val fanEntries: List<FanEntry> = emptyList(),
-        /** FX speed controls: likewise. */
-        val fxSpeedEntries: List<FxSpeedEntry> = emptyList(),
+    private class Index(
+        val bySignal: Map<Signal, List<Entry>>,
+        val byDisplay: Map<String, List<Entry>>,
+        val byPart: Map<SurfaceDispatch.HoldKey, Entry>,
     ) {
         companion object {
-            val EMPTY = Index(
-                emptyMap(), emptyMap(), emptyMap(), emptyMap(),
-                emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
-                emptyList(), emptyMap(), emptyList(), emptyMap(), emptyList(), emptyList(), emptyList(),
-            )
+            val EMPTY = Index(emptyMap(), emptyMap(), emptyMap())
         }
     }
 
@@ -391,39 +203,31 @@ class SurfaceFeedbackPublisher(
     private var currentFixtures: Fixtures? = null
 
     private val fixtureListener = object : FixturesChangeListener {
-        override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) =
-            onChannelsChanged(universe, changes)
         override fun fixturesChanged() { rebuildAndResync() }
-        // A rename is cosmetic, but a create/delete changes which master uuids resolve — and
-        // a tempo-bound encoder pointing at a deleted master must stop being fed.
+        // A create or delete changes which master uuids resolve, and so the health a binding reads.
         override fun speedMasterListChanged() { rebuildAndResync() }
-        // The record LEDs (D6). A deleted Look, template or pad must stop lighting its button, and a
-        // pad's *resolved record* is baked into the index — so these are index-staling events, not
-        // merely health ones. A layout write is included: it is what moves a pad between banks and
-        // what takes one off a page.
+        // A pad's resolved record is baked into its light, so these stale the index: a deleted Look,
+        // palette or pad must stop lighting its button, and a layout write moves a pad between banks.
         override fun lookListChanged() { rebuildAndResync() }
         override fun paletteListChanged() { rebuildAndResync() }
         override fun buskLayoutChanged(pageIds: List<Int>) { rebuildAndResync() }
-        // A cue pad's ring is its loose hold and a stack pad's its stack running, so a GO or a stop
-        // moves them. Discrete — this fires on transitions, not per fade frame.
-        override fun cueRunStateChanged(runState: CueRunState) { resyncRecordLeds() }
-        override fun cueHoldsChanged() { resyncRecordLeds() }
+        // Discrete: these fire on transitions, not per fade frame.
+        override fun cueRunStateChanged(runState: CueRunState) { refresh(Signal.STACK_RUN) }
+        override fun cueHoldsChanged() { refresh(Signal.CUE_HOLDS) }
     }
 
     private val jobs = mutableListOf<Job>()
-    private var scalerJob: Job? = null
-    private var grandMasterJob: Job? = null
-    private var speedMasterJob: Job? = null
-    private var stackFxAmountJob: Job? = null
-    private var fanJob: Job? = null
-    private var fxSpeedJob: Job? = null
-    private var fxSpeedShownJob: Job? = null
-    private var locateJob: Job? = null
-    private var layersJob: Job? = null
+    private val showJobs = mutableListOf<Job>()
     private var publisherScope: CoroutineScope? = null
     private var running = false
 
-    fun start(scope: CoroutineScope) {
+    /**
+     * Held by [start], [stop] and [onProjectChanged]'s re-subscribe: a project switch's collector and
+     * shutdown run on different threads, and both walk the job lists.
+     */
+    private val lifecycle = Any()
+
+    fun start(scope: CoroutineScope): Unit = synchronized(lifecycle) {
         if (running) return
         running = true
         publisherScope = scope
@@ -437,27 +241,25 @@ class SurfaceFeedbackPublisher(
             bindingService.changes.collect { rebuildAndResync() }
         }
         jobs += scope.launch(CoroutineName("FeedbackPublisher-banks")) {
-            bankState.changes.collect { onBankChanged(it) }
+            bankState.changes.collect { deviceChanged(it.displayKey) }
         }
+        // The encoder page moved: every strip encoder on that device now means another attribute, so
+        // the index is stale and pickup re-arms — the meaning moved under the operator's hand.
         jobs += scope.launch(CoroutineName("FeedbackPublisher-encoder-banks")) {
-            encoderBankState.changes.collect { onEncoderBankChanged(it) }
+            encoderBankState.changes.collect { deviceChanged(it.displayKey) }
         }
-        jobs += scope.launch(CoroutineName("FeedbackPublisher-flash")) {
-            holds.changes.collect { onFlashChanged(it) }
+        jobs += scope.launch(CoroutineName("FeedbackPublisher-holds")) {
+            holds.changes.collect { change -> index.get().byPart[change.key]?.let { apply(it, Pass(), rearm = false) } }
         }
         deskSelection?.let { selection ->
-            // A StateFlow replays its current value on subscribe: the first collect is a
-            // rebuild the start-up path has already done, and is harmless.
-            // Membership only: LEDs and rings read which heads are selected, never the
-            // attribute mask, so a mask-only change must not cost a full resync.
+            // Membership only: nothing here reads the attribute mask.
             jobs += scope.launch(CoroutineName("FeedbackPublisher-selection")) {
-                selection.state.map { it.targets }.distinctUntilChanged().collect { rebuildAndResync() }
+                selection.state.map { it.targets }.distinctUntilChanged().collect { refresh(Signal.SELECTION) }
             }
         }
         windowRegistry?.let { registry ->
+            // By name set, not by row: a re-announce that moves a window's view is not a health event.
             jobs += scope.launch(CoroutineName("FeedbackPublisher-windows")) {
-                // By name set, not by row: a re-announce that moves a window's view is not a health
-                // event, and re-evaluating every binding for it would be a rebuild per navigation.
                 registry.windows
                     .map { rows -> rows.mapTo(HashSet()) { it.name } }
                     .distinctUntilChanged()
@@ -465,185 +267,71 @@ class SurfaceFeedbackPublisher(
             }
         }
         buskPageState?.let { pages ->
-            jobs += scope.launch(CoroutineName("FeedbackPublisher-busk-page")) {
-                pages.pageId.collect { resyncBuskPageLeds() }
+            jobs += pages.pageId.onEach { refresh(Signal.BUSK_PAGE) }.launchIn(scope)
+        }
+        // Machine-scoped like the selection they read, so subscribed once rather than per show.
+        selectionFan?.let { fan -> jobs += fan.shown.onEach { refresh(Signal.FAN) }.launchIn(scope) }
+        fxSpeed?.let { speed -> jobs += speed.shown.onEach { refresh(Signal.FX_SPEED_SHOWN, force = true) }.launchIn(scope) }
+        jobs += scope.launch(CoroutineName("FeedbackPublisher-poll")) {
+            while (isActive) {
+                delay(pollIntervalMs)
+                // The readback's only programmer signal: a throw here must not end it.
+                try {
+                    poll()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logger.warn("Surface feedback poll failed: {}", e.toString())
+                }
             }
         }
-        subscribeScaler(scope)
-        subscribeSpeedMasters(scope)
-        subscribeStackFxAmounts(scope)
-        subscribeLocate(scope)
-        subscribeProgrammerLayers(scope)
-        selectionFan?.let { fan ->
-            // Machine-scoped like the selection it fans, so subscribed once rather than per show.
-            fanJob = fan.shown
-                .onEach { resyncFanEntries(index.get().fanEntries) }
+        subscribeShow(scope)
+    }
+
+    /**
+     * (Re)subscribe to the live show's own state: the scaler, the speed masters, the stack FX amounts,
+     * the running-FX list, locate and the layer stack. Each is per show, so a project switch
+     * subscribes again rather than observing the previous show's.
+     */
+    private fun subscribeShow(scope: CoroutineScope) {
+        showJobs.forEach { it.cancel() }
+        showJobs.clear()
+        fun <T> provided(provider: (() -> T)?): T? = try {
+            provider?.invoke()
+        } catch (_: Exception) {
+            null
+        }
+        provided { globalScalerStateProvider() }?.let { scaler ->
+            showJobs += combine(scaler.blackoutEnabled, scaler.grandMasterEnabled) { b, g -> b to g }
+                .onEach { refresh(Signal.SCALER) }
+                .launchIn(scope)
+            // The level apart from the LEDs above, which only move when it crosses 0: a fader dragged
+            // from the browser moves it at frame rate, and only the faders need to follow.
+            showJobs += scaler.grandMasterLevel.onEach { refresh(Signal.GRAND_MASTER) }.launchIn(scope)
+        }
+        provided(speedMasterBankProvider)?.let { bank -> showJobs += bank.changes.onEach { refresh(Signal.TEMPO) }.launchIn(scope) }
+        provided(stackFxAmountsProvider)?.let { amounts ->
+            showJobs += amounts.state.onEach { refresh(Signal.STACK_FX) }.launchIn(scope)
+        }
+        if (fxSpeed != null) {
+            provided(fxStateProvider)?.let { flow -> showJobs += flow.onEach { refresh(Signal.FX_LIST) }.launchIn(scope) }
+        }
+        provided(locateManagerProvider)?.let { manager ->
+            showJobs += manager.activeTargets.onEach { refresh(Signal.LOCATE) }.launchIn(scope)
+        }
+        provided(programmerLayerStackProvider)?.let { stack ->
+            showJobs += merge(stack.layersFlow.map { }, stack.referencesRevision.map { })
+                .onEach { refresh(Signal.LAYERS) }
                 .launchIn(scope)
         }
-        fxSpeed?.let { speed ->
-            fxSpeedShownJob = speed.shown
-                .onEach { resyncFxSpeedEntries(index.get().fxSpeedEntries, force = true) }
-                .launchIn(scope)
-        }
-        subscribeFxState(scope)
     }
 
-    /**
-     * (Re)subscribe to the programmer's layer stack, per show like [subscribeLocate].
-     *
-     * This is the record LEDs' live signal. It is a **`SharedFlow` with `replay = 1`**, so
-     * subscribing re-delivers the current stack — the same harmless duplicate first emission the
-     * selection subscription documents. Only the LEDs are re-fed, not the whole index: a layer
-     * moving changes nothing about which buttons are bound.
-     */
-    private fun subscribeProgrammerLayers(scope: CoroutineScope) {
-        layersJob?.cancel()
-        val stack = try {
-            programmerLayerStackProvider?.invoke()
-        } catch (_: Exception) {
-            null
-        } ?: return
-        layersJob = merge(stack.layersFlow.map { }, stack.referencesRevision.map { })
-            .onEach { resyncRecordLeds() }
-            .launchIn(scope)
-    }
-
-    /** Re-read every record button's LED. Cheap: a handful of buttons, one `appliedState` fold. */
-    private fun resyncRecordLeds() {
-        val idx = index.get()
-        if (idx.recordLeds.isEmpty()) return
-        // Folded once for the whole pass, not once per button — `appliedState()` walks every
-        // layer/target/group, so N bound buttons used to mean N folds of the same state.
-        val applied = appliedSources()
-        for (record in idx.recordLeds) sendLed(record.entry, recordLedOn(record, applied))
-    }
-
-    private fun resyncBuskPageLeds() {
-        val idx = index.get()
-        if (idx.buskPageLeds.isEmpty()) return
-        val showing = buskPageState?.pageId?.value
-        for ((entry, pageId) in idx.buskPageLeds) sendLed(entry, pageId != null && pageId == showing)
-    }
-
-    /**
-     * (Re)subscribe to the current show's [GlobalScalerState] flows. The facade is
-     * re-created on project switch (the underlying holder is preserved elsewhere), so
-     * the subscription needs to follow the active facade — otherwise the publisher would
-     * still observe the previous project's holder after a switch.
-     */
-    private fun subscribeScaler(scope: CoroutineScope) {
-        scalerJob?.cancel()
-        grandMasterJob?.cancel()
-        val scaler = try {
-            globalScalerStateProvider()
-        } catch (_: Exception) {
-            null
-        } ?: return
-        scalerJob = combine(scaler.blackoutEnabled, scaler.grandMasterEnabled) { b, g -> b to g }
-            .onEach { (blackout, grandMaster) -> onScalerChanged(blackout, grandMaster) }
-            .launchIn(scope)
-        // Apart from the LEDs above, which only move when the level crosses 0: a fader dragged
-        // from the browser moves the level at frame rate, and only the faders need to follow it.
-        grandMasterJob = scaler.grandMasterLevel
-            .onEach { resyncGrandMasterEntries(index.get().grandMasterEntries) }
-            .launchIn(scope)
-    }
-
-    /**
-     * (Re)subscribe to the current show's speed-master bank, for the same project-switch
-     * reason as [subscribeScaler]. Only the changed master's controls are re-fed: a tap
-     * arrives at operator rate but there is no reason to rewrite every tempo encoder.
-     */
-    private fun subscribeSpeedMasters(scope: CoroutineScope) {
-        speedMasterJob?.cancel()
-        val bank = try {
-            speedMasterBankProvider?.invoke()
-        } catch (_: Exception) {
-            null
-        } ?: return
-        speedMasterJob = bank.changes
-            .onEach { change ->
-                resyncSpeedMasterEntries(
-                    index.get().speedMasterEntries,
-                    changedUuid = change.uuid,
-                    onlyChanged = true,
-                )
-            }
-            .launchIn(scope)
-    }
-
-    /** (Re)subscribe to the current show's stack FX amounts, per show like [subscribeScaler]. */
-    private fun subscribeStackFxAmounts(scope: CoroutineScope) {
-        stackFxAmountJob?.cancel()
-        val amounts = try {
-            stackFxAmountsProvider?.invoke()
-        } catch (_: Exception) {
-            null
-        } ?: return
-        // Only the controls on a stack that moved: a fader dragged at frame rate must not re-send
-        // every other stack's control its unchanged value.
-        var last = amounts.state.value
-        stackFxAmountJob = amounts.state
-            .onEach { now ->
-                val moved = (last.keys + now.keys).filterTo(HashSet()) { last[it] != now[it] }
-                last = now
-                if (moved.isNotEmpty()) resyncStackFxAmountEntries(index.get().stackFxAmountEntries.filter { it.stackId in moved })
-            }
-            .launchIn(scope)
-    }
-
-    /**
-     * (Re)subscribe to the current show's running-FX list, per show like [subscribeScaler], so an
-     * `FxSpeed` control follows its lead FX — moved by this control, the FX editor or anything else.
-     */
-    private fun subscribeFxState(scope: CoroutineScope) {
-        fxSpeedJob?.cancel()
-        if (fxSpeed == null) return
-        val flow = try {
-            fxStateProvider?.invoke()
-        } catch (_: Exception) {
-            null
-        } ?: return
-        fxSpeedJob = flow
-            .onEach { index.get().fxSpeedEntries.takeIf { it.isNotEmpty() }?.let { resyncFxSpeedEntries(it) } }
-            .launchIn(scope)
-    }
-
-    /** (Re)subscribe to the current show's locate state, per show like [subscribeScaler]. */
-    private fun subscribeLocate(scope: CoroutineScope) {
-        locateJob?.cancel()
-        val manager = try {
-            locateManagerProvider?.invoke()
-        } catch (_: Exception) {
-            null
-        } ?: return
-        locateJob = manager.activeTargets
-            .onEach { located -> resyncLocateLeds(located) }
-            .launchIn(scope)
-    }
-
-    fun stop() {
+    fun stop(): Unit = synchronized(lifecycle) {
         running = false
         jobs.forEach { it.cancel() }
         jobs.clear()
-        scalerJob?.cancel()
-        scalerJob = null
-        grandMasterJob?.cancel()
-        grandMasterJob = null
-        speedMasterJob?.cancel()
-        speedMasterJob = null
-        stackFxAmountJob?.cancel()
-        stackFxAmountJob = null
-        fanJob?.cancel()
-        fanJob = null
-        fxSpeedJob?.cancel()
-        fxSpeedJob = null
-        fxSpeedShownJob?.cancel()
-        fxSpeedShownJob = null
-        locateJob?.cancel()
-        locateJob = null
-        layersJob?.cancel()
-        layersJob = null
+        showJobs.forEach { it.cancel() }
+        showJobs.clear()
         controlStates.stop()
         publisherScope = null
         detachFromFixtures()
@@ -655,22 +343,12 @@ class SurfaceFeedbackPublisher(
         takeover.clearAll()
         attachToFixtures()
         rebuildIndex()
-        // Re-subscribe to the new show's scaler facade — the previous subscription
-        // observes the stale facade (its holder is preserved, but the facade itself is
-        // re-created on project switch).
-        publisherScope?.let {
-            subscribeScaler(it)
-            subscribeSpeedMasters(it)
-            subscribeStackFxAmounts(it)
-            subscribeFxState(it)
-            subscribeLocate(it)
-            subscribeProgrammerLayers(it)
+        synchronized(lifecycle) {
+            // A switch that lands after shutdown subscribes nothing.
+            if (!running) return
+            publisherScope?.let(::subscribeShow)
         }
-        // Push a full resync for every currently-attached device so the new show's logical
-        // values land on the hardware.
-        for (displayKey in deviceMatcher.attached.value.keys) {
-            sendFullResync(displayKey, rearmPickup = true)
-        }
+        for (displayKey in deviceMatcher.attached.value.keys) sendFullResync(displayKey, rearmPickup = true)
     }
 
     private fun attachToFixtures() {
@@ -693,29 +371,14 @@ class SurfaceFeedbackPublisher(
     override fun onTouch(displayKey: String, controlId: String, down: Boolean) {
         touchState.setTouched(displayKey, controlId, down)
         controlStates.setTouched(displayKey, controlId, down)
-        if (!down) {
-            // Motor catch-up: whatever the logical value is now, drive to it.
-            resyncControl(displayKey, controlId)
-        }
+        // Motor catch-up: whatever the function reads back as now, drive to it.
+        if (!down) index.get().byPart[SurfaceDispatch.HoldKey(displayKey, controlId, ControlPart.MAIN)]?.let { apply(it, Pass(), rearm = false) }
     }
 
-    override fun onButtonRelease(displayKey: String, controlId: String) {
-        val entry = index.get().ledsByDisplay[displayKey]?.firstOrNull {
-            it.control.controlId == controlId
-        } ?: run {
-            logger.debug("onButtonRelease: no LED entry for {}/{}", displayKey, controlId)
-            return
-        }
-        val controller = controllerLookup(displayKey) ?: return
-        val on = ledOn(entry) ?: run {
-            logger.debug("onButtonRelease: unexpected function {} for led entry", entry.binding.binding.functionId)
-            return
-        }
-        logger.debug("onButtonRelease: reasserting LED {}/{} note={} on={}", displayKey, controlId, entry.control.note, on)
-        controller.invalidateFeedbackCache(
-            MidiControlKey(entry.control.channel, MidiControlKey.Type.NOTE, entry.control.note)
-        )
-        sendLed(entry, on)
+    override fun onButtonRelease(displayKey: String, controlId: String, part: ControlPart) {
+        val entry = index.get().byPart[SurfaceDispatch.HoldKey(displayKey, controlId, part)]?.takeIf { it.light != null } ?: return
+        controllerLookup(displayKey)?.invalidateFeedbackCache(MidiControlKey(entry.ledChannel, MidiControlKey.Type.NOTE, entry.ledNote))
+        apply(entry, Pass(), rearm = false)
     }
 
     override fun acceptInboundFader(
@@ -724,39 +387,27 @@ class SurfaceFeedbackPublisher(
         controlId: String,
         value7Bit: UByte,
     ): Boolean {
-        // The physical position is a fact about the hardware whether or not the move is
-        // accepted — it is what the pickup indicator is drawn beside.
+        // The physical position is a fact about the hardware whether or not the move is taken — it
+        // is what the pickup indicator is drawn beside.
         controlStates.setPhysical(displayKey, controlId, value7Bit.toInt())
-        return takeover.acceptInboundFader(
-            displayKey, controlId, value7Bit, effectivePolicyFor(deviceTypeKey, controlId),
+        val entry = index.get().byPart[SurfaceDispatch.HoldKey(displayKey, controlId, ControlPart.MAIN)]
+        val policy = entry?.jump ?: JumpPolicy.JUMP
+        val verdict = takeover.acceptInboundFader(
+            displayKey, controlId, value7Bit, policy, touched = touchState.isTouched(displayKey, controlId),
         )
+        if (verdict == SoftTakeoverStateMachine.Verdict.RESHOW && entry != null) {
+            val shown = takeover.stateFor(displayKey, controlId).shown
+            if (shown != null) {
+                invalidateControlFeedback(displayKey, entry.control)
+                sendControlFeedback(displayKey, entry.control, shown)
+            }
+        }
+        return verdict == SoftTakeoverStateMachine.Verdict.ACCEPT
     }
 
-    /**
-     * Resolve the effective takeover policy for a control the hooks path sees — which may
-     * come from a control not in the current bank (e.g. a cross-bank fader still being
-     * wiggled by the operator). Pre-baked policy on [ContinuousEntry] is the primary path;
-     * this is the fallback for unknown / out-of-index controls.
-     */
-    internal fun effectivePolicyFor(deviceTypeKey: String, controlId: String): BindingTakeoverPolicy {
-        val attached = deviceMatcher.attached.value.values.firstOrNull { it.typeKey == deviceTypeKey }
-        val control = attached?.instance?.controls?.firstOrNull { it.controlId == controlId }
-        val classDefault = if (control is FaderDescriptor && !control.hasMotor) {
-            BindingTakeoverPolicy.PICKUP
-        } else {
-            BindingTakeoverPolicy.IMMEDIATE
-        }
-        val projectId = try {
-            projectIdProvider()
-        } catch (_: Exception) {
-            return classDefault
-        }
-        val bank = bankState.bankFor(deviceTypeKey)
-        val binding = bindingService.resolve(
-            projectId, deviceTypeKey, controlId, bank, encoderBankState.selectionFor(deviceTypeKey),
-        )
-        return binding?.takeoverPolicy ?: classDefault
-    }
+    /** The jump rule a bound continuous control is on, or null when nothing continuous is bound there. */
+    internal fun jumpPolicyFor(displayKey: String, controlId: String): JumpPolicy? =
+        index.get().byPart[SurfaceDispatch.HoldKey(displayKey, controlId, ControlPart.MAIN)]?.takeIf { it.readout != null }?.jump
 
     // --- Event handlers ---
 
@@ -776,104 +427,63 @@ class SurfaceFeedbackPublisher(
         }
     }
 
-    private fun onBankChanged(change: ActiveBankState.BankChange) {
+    /** One device's layer or encoder page moved: its controls mean something else, so pickup re-arms on it alone. */
+    private fun deviceChanged(displayKey: String) {
         rebuildIndex()
-        resyncDevicesOfType(change.deviceTypeKey)
+        if (displayKey in deviceMatcher.attached.value) sendFullResync(displayKey, rearmPickup = true)
     }
 
     /**
-     * The encoder bank moved — to another property, or to another axis of the same colour: every
-     * strip encoder on that device now reads differently, so the index is stale and pickup is re-armed — the meaning of the
-     * control changed under the operator's hand, which is exactly the case
-     * [SoftTakeoverStateMachine.forcePickup] exists for. Handled device-wide like a bank change
-     * rather than per control: it is the same staleness, and reusing the path keeps one
-     * definition of "this device's feedback is now wrong".
-     */
-    private fun onEncoderBankChanged(change: EncoderBankState.EncoderBankChange) {
-        rebuildIndex()
-        resyncDevicesOfType(change.deviceTypeKey)
-    }
-
-    private fun resyncDevicesOfType(deviceTypeKey: String) {
-        for ((displayKey, attached) in deviceMatcher.attached.value) {
-            if (attached.typeKey != deviceTypeKey) continue
-            sendFullResync(displayKey, rearmPickup = true)
-        }
-    }
-
-    /**
-     * A binding, fixture, selection or master-list change: the index is stale and every
-     * attached device is re-fed from it, **without** re-arming pickup — the operator's fader
-     * has not moved, so a non-motor fader only re-enters pickup if its value diverged
-     * ([SoftTakeoverStateMachine.setLogical]'s own rule). Attach, bank and project changes use
-     * [sendFullResync] with `rearmPickup = true` because there the physical position is stale.
+     * The index is stale and every attached device is re-fed from it, **without** re-arming pickup:
+     * the operator's faders have not moved, so an undriven one waits only if its value diverged.
      */
     private fun rebuildAndResync() {
         rebuildIndex()
-        for (displayKey in deviceMatcher.attached.value.keys) {
-            sendFullResync(displayKey, rearmPickup = false)
-        }
+        for (displayKey in deviceMatcher.attached.value.keys) sendFullResync(displayKey, rearmPickup = false)
     }
 
-    private fun onFlashChanged(change: SurfaceHolds.HoldChange) {
-        val entry = index.get().flashByBindingId[change.bindingId] ?: return
-        sendLed(entry, change.held)
+    /** Re-read every entry following [signal]; [force] sends past the transport's last-sent cache. */
+    private fun refresh(signal: Signal, force: Boolean = false) {
+        val entries = index.get().bySignal[signal] ?: return
+        val pass = Pass()
+        for (entry in entries) apply(entry, pass, rearm = false, force = force)
     }
 
-    private fun onScalerChanged(blackoutEnabled: Boolean, grandMasterEnabled: Boolean) {
-        val idx = index.get()
-        for (entry in idx.blackoutLeds) sendLed(entry, blackoutLit(entry, blackoutEnabled))
-        // Grand Master LED: "ON" = grand master engaged (normal output). Some consoles invert
-        // this; we follow the `enabled` flag so a lit button means "lights are live".
-        for (entry in idx.grandMasterLeds) sendLed(entry, grandMasterEnabled)
-    }
+    private var lastRevision = Long.MIN_VALUE
+    private var lastBlind: Boolean? = null
+    private var lastCueLayer: Any? = null
 
-    private fun resyncLocateLeds(located: Set<TargetRef>) {
-        val idx = index.get()
-        if (idx.locateLeds.isEmpty()) return
-        val on = selectionLocated(located)
-        for (entry in idx.locateLeds) sendLed(entry, on)
+    /**
+     * One tick of the readback's poll: re-read the programmer's entries when the store or the cue layer
+     * moved. It watches the store's `revision`, not its `epoch`: a put bumps the epoch before it installs
+     * the slot, so a read between the two would see the old value under the new epoch and never read
+     * again; the revision moves once more after the install.
+     */
+    private fun poll() {
+        if (index.get().bySignal[Signal.PROGRAMMER].isNullOrEmpty()) return
+        val store = runCatching { programmerStoreProvider?.invoke() }.getOrNull() ?: return
+        val cueLayer = runCatching { layerResolverProvider?.invoke()?.current }.getOrNull()
+        val revision = store.revision
+        val blind = store.blind
+        if (revision == lastRevision && blind == lastBlind && cueLayer === lastCueLayer) return
+        lastRevision = revision
+        lastBlind = blind
+        lastCueLayer = cueLayer
+        refresh(Signal.PROGRAMMER)
     }
-
-    private fun onChannelsChanged(universe: Universe, changes: Map<Int, UByte>) {
-        val byChannel = index.get().byChannel
-        if (byChannel.isEmpty()) return
-        // A multi-channel entry is indexed under each of its channels; when a tick moves several
-        // of them at once, feed it once — the value is the same computation either way, and the
-        // tracker must not see N writes for one move.
-        // By identity: the entry is a data class over a binding, a descriptor and a channel
-        // list, and structural hashing of all that per channel per tick is what this path exists
-        // to avoid. One index build yields one instance per entry, so identity is exact.
-        var seen: MutableSet<ContinuousEntry>? = null
-        for (channel in changes.keys) {
-            val entries = byChannel[packChannelKey(universe.universe, channel)] ?: continue
-            for (entry in entries) {
-                if (entry.channels.size > 1) {
-                    val s = seen ?: Collections.newSetFromMap(IdentityHashMap<ContinuousEntry, Boolean>()).also { seen = it }
-                    if (!s.add(entry)) continue
-                }
-                applyContinuous(entry, computeValue7Bit(entry), rearmPickup = false)
-            }
-        }
-    }
-
-    // --- Rebuild & resync ---
 
     internal fun rebuildIndexForTest() = rebuildIndex()
 
-    internal fun simulateChannelsChangedForTest(universe: Universe, changes: Map<Int, UByte>) =
-        onChannelsChanged(universe, changes)
+    /** One poll, as the loop makes it — tests drive the readback without waiting for the loop. */
+    internal fun pollForTest() = poll()
+
+    // --- Rebuild & resync ---
 
     /**
-     * Uuid → record, for one [rebuildIndex] pass.
-     *
-     * A Look's and a palette's uuid need no lookup at all — `appliedState` reports the record's own
-     * uuid. Only a pad and a page need the database, and
-     * [refs] is `lazy` so a desk with neither bound never touches it: a rebuild runs on every
-     * selection change, and an unconditional read there would be a query per press of a select
-     * button.
+     * What a [FeedbackSite] looks up, for one [rebuildIndex] pass: the record ids and busk refs, each
+     * read at most once, and the [Does.Level] heads, expanded once per subject.
      */
-    private inner class RecordRefResolver(private val projectId: Int) {
+    private inner class Lookups(private val projectId: Int) {
         private val refs: BuskRefs by lazy {
             try {
                 buskRefsProvider?.invoke(projectId) ?: BuskRefs.EMPTY
@@ -882,23 +492,81 @@ class SurfaceFeedbackPublisher(
                 BuskRefs.EMPTY
             }
         }
+        private val stackIds = HashMap<UUID, Int?>()
+        private val cueIds = HashMap<UUID, Int?>()
+        private val heads = HashMap<Triple<Subject, String, ColourAxis?>, LevelHeads>()
 
+        fun stackId(stack: UUID): Int? = stackIds.getOrPut(stack) {
+            runCatching { stackIdResolver?.invoke(stack.toString()) }.getOrNull()
+        }
+
+        fun cueId(cue: UUID): Int? = cueIds.getOrPut(cue) { runCatching { cueIdResolver?.invoke(cue) }.getOrNull() }
+        fun pad(pad: UUID): PadRef? = refs.pads[pad]
         fun pageId(page: UUID): Int? = refs.pageIds[page]
 
-        fun padLed(entry: LedEntry, pad: UUID?): RecordLedEntry =
-            when (val ref = pad?.let { refs.pads[it] }) {
-                is PadRef.Layer -> RecordLedEntry(
-                    entry,
-                    // A palette pad's ring is the busk view's selection-scoped fold; a Look pad's is
-                    // on or off, as an `ApplyLook` button's is (P4).
-                    if (ref.isLook) RecordLedKind.LOOK_APPLIED else RecordLedKind.COVERS_SELECTION,
-                    ref.sourceUuid,
-                )
-                is PadRef.Cue -> RecordLedEntry(entry, RecordLedKind.CUE_LIVE, null, ref.cueId)
-                is PadRef.Stack -> RecordLedEntry(entry, RecordLedKind.STACK_RUNNING, null, stack = ref.stackId)
-                // The pad is gone; health says so and the LED stays dark.
-                null -> RecordLedEntry(entry, RecordLedKind.COVERS_SELECTION, null)
+        fun levelHeads(on: Subject, attribute: String, axis: ColourAxis?): LevelHeads =
+            heads.getOrPut(Triple(on, attribute, axis)) { LevelReader(on, attribute, axis) }
+    }
+
+    private inner class Site(
+        override val displayKey: String,
+        override val hold: SurfaceDispatch.HoldKey,
+        override val control: ControlDescriptor,
+        private val lookups: Lookups,
+    ) : FeedbackSite {
+        override fun stackId(stack: UUID) = lookups.stackId(stack)
+        override fun cueId(cue: UUID) = lookups.cueId(cue)
+        override fun pad(pad: UUID) = lookups.pad(pad)
+        override fun pageId(page: UUID) = lookups.pageId(page)
+        override fun levelHeads(on: Subject, attribute: String, axis: ColourAxis?) = lookups.levelHeads(on, attribute, axis)
+    }
+
+    /** One head a level reads: its fixture, the target its key composes under and what the control stands on. */
+    private class ReadHead(val fixture: GroupableFixture, val target: FxTarget, val read: AttributeChannelResolver.AttributeRead)
+
+    /**
+     * A [Does.Level]'s heads and their reading. A named subject's heads are expanded on the first read
+     * after the index is built; the selection's again whenever the selection has moved since.
+     *
+     * With a colour [axis] named, only colour heads are kept: a slider head reads nothing on an axis,
+     * and a selection mixing the two under one name would otherwise darken the ring for the heads a
+     * turn does reach. The write skips the same heads ([AttributeChannelResolver.toAttributeValue]).
+     */
+    private inner class LevelReader(
+        private val on: Subject,
+        private val attribute: String,
+        private val axis: ColourAxis?,
+    ) : LevelHeads {
+        @Volatile
+        private var expanded: Pair<List<CueTargetDto>, List<ReadHead>>? = null
+
+        private fun heads(): List<ReadHead> {
+            val selection = if (on == Subject.Selection) deskSelection?.state?.value?.targets.orEmpty() else emptyList()
+            expanded?.let { (at, heads) -> if (at == selection) return heads }
+            val fixtures = currentFixtures ?: return emptyList()
+            val heads = Heads.of(fixtures, on, attribute) { selection }.mapNotNull { head ->
+                val read = AttributeChannelResolver.describeAttributeRead(head.fixture, attribute) ?: return@mapNotNull null
+                if (axis != null && AttributeChannelResolver.isColour(head.fixture, attribute) != true) return@mapNotNull null
+                val target = AttributeChannelResolver.composedTarget(head.fixture, attribute) ?: return@mapNotNull null
+                ReadHead(head.fixture, target, read)
             }
+            expanded = selection to heads
+            return heads
+        }
+
+        /** The one value the heads agree on ([AttributeChannelResolver.commonValue]); mixed when they do not. */
+        override fun read(): Reading {
+            val heads = heads()
+            if (heads.isEmpty()) return Reading.Nothing
+            val resolver = runCatching { layerResolverProvider?.invoke() }.getOrNull() ?: return Reading.Nothing
+            val values = ArrayList<AttributeChannelResolver.HeadValue>(heads.size)
+            for (head in heads) {
+                val value = resolver.localOver(head.target, head.fixture, head.fixture.targetKey)
+                values += AttributeChannelResolver.readHead(head.read, value, axis) ?: return Reading.Mixed
+            }
+            val common = AttributeChannelResolver.commonValue(values) ?: return Reading.Mixed
+            return Reading.Value(common, values.maxOf { it.tolerance })
+        }
     }
 
     private fun rebuildIndex() {
@@ -908,417 +576,138 @@ class SurfaceFeedbackPublisher(
             index.set(Index.EMPTY)
             return
         }
-        val fixtures = currentFixtures
-        val attached = deviceMatcher.attached.value
         val profilesByKey = types().associateBy { it.typeKey }
-        val byChannel = HashMap<Long, MutableList<ContinuousEntry>>()
-        val continuousByDisplay = HashMap<String, MutableList<ContinuousEntry>>()
-        val ledsByDisplay = HashMap<String, MutableList<LedEntry>>()
-        val flashByBindingId = HashMap<Int, LedEntry>()
-        val blackoutLeds = mutableListOf<LedEntry>()
-        val grandMasterLeds = mutableListOf<LedEntry>()
-        val selectLeds = mutableListOf<LedEntry>()
-        val locateLeds = mutableListOf<LedEntry>()
-        val encoderBankLeds = mutableListOf<LedEntry>()
-        val recordLeds = mutableListOf<RecordLedEntry>()
-        val buskPageLeds = mutableListOf<Pair<LedEntry, Int?>>()
-        val speedMasterEntries = mutableListOf<SpeedMasterEntry>()
-        val grandMasterEntries = mutableListOf<GrandMasterEntry>()
-        val stackFxAmountEntries = mutableListOf<StackFxAmountEntry>()
-        val fanEntries = mutableListOf<FanEntry>()
-        val fxSpeedEntries = mutableListOf<FxSpeedEntry>()
-        // Every record and page uuid a bound button on an attached device names, resolved in one
-        // batch below rather than one lookup per button.
-        val recordRefs = RecordRefResolver(projectId)
-        // Expanded once per rebuild, not once per bound control.
-        val selection: () -> List<CueTargetDto> = { deskSelection?.state?.value?.targets.orEmpty() }
-
-        for ((displayKey, a) in attached) {
-            val profile = profilesByKey[a.typeKey] ?: continue
-            val bank = bankState.bankFor(a.typeKey)
-            // Read once per device: it decides what every strip encoder on it resolves to.
-            val encoderBank = encoderBankState.selectionFor(a.typeKey)
+        val lookups = Lookups(projectId)
+        val entries = ArrayList<Entry>()
+        for ((displayKey, attached) in deviceMatcher.attached.value) {
+            val profile = profilesByKey[attached.typeKey] ?: continue
+            val layer = bankState.bankFor(displayKey)
+            val page = encoderBankState.selectionFor(displayKey)
             for (control in profile.controls) {
-                val binding = bindingService
-                    .resolve(projectId, a.typeKey, control.controlId, bank, encoderBank) ?: continue
-                if (control is FaderDescriptor || control is EncoderDescriptor) {
-                    val classDefault = if (control is FaderDescriptor && !control.hasMotor) {
-                        BindingTakeoverPolicy.PICKUP
-                    } else {
-                        BindingTakeoverPolicy.IMMEDIATE
-                    }
-                    val does = binding.binding.does
-                    val on = binding.binding.on
-                    (does as? Does.Tempo)?.takeIf { it.bpm == null }?.let { tempo ->
-                        speedMasterEntries += SpeedMasterEntry(
-                            displayKey = displayKey,
-                            control = control,
-                            masterUuid = on.recordUuid(RecordKind.MASTER),
-                            minBpm = tempo.minBpm,
-                            maxBpm = tempo.maxBpm,
-                            policy = binding.takeoverPolicy ?: classDefault,
-                        )
-                    }
-                    if (does is Does.GrandMaster && does.level == null) {
-                        grandMasterEntries += GrandMasterEntry(
-                            displayKey = displayKey,
-                            control = control,
-                            policy = binding.takeoverPolicy ?: classDefault,
-                        )
-                    }
-                    (does as? Does.Fan)?.let { fan ->
-                        fanEntries += FanEntry(displayKey, control, fan.axis, binding.takeoverPolicy ?: classDefault)
-                    }
-                    if (does == Does.FxSpeed) {
-                        fxSpeedEntries += FxSpeedEntry(displayKey, control, binding.takeoverPolicy ?: classDefault)
-                    }
-                    if (does == Does.FxAmount) {
-                        stackFxAmountEntries += StackFxAmountEntry(
-                            displayKey = displayKey,
-                            control = control,
-                            stackId = on.recordUuid(RecordKind.STACK)?.let { resolveStackUuid(it.toString()) },
-                            policy = binding.takeoverPolicy ?: classDefault,
-                        )
-                    }
-                    val axis = (does as? Does.Level)?.axis
-                    val heads = fixtures?.let { findHeads(it, binding.binding, selection, axis) }
-                    if (heads != null) {
-                        val entry = ContinuousEntry(
-                            displayKey = displayKey,
-                            deviceTypeKey = a.typeKey,
-                            control = control,
-                            binding = binding,
-                            heads = heads,
-                            policy = binding.takeoverPolicy ?: classDefault,
-                            axis = axis,
-                        )
-                        for (pc in entry.channels) {
-                            byChannel.getOrPut(packChannelKey(pc.universe.universe, pc.channel)) { mutableListOf() }
-                                .add(entry)
+                for (part in ControlPart.entries) {
+                    val input = control.inputFor(part) ?: continue
+                    val binding = bindingService.resolve(projectId, attached.typeKey, control.controlId, layer, page, part) ?: continue
+                    val hold = SurfaceDispatch.HoldKey(displayKey, control.controlId, part)
+                    val site = Site(displayKey, hold, control, lookups)
+                    val entry = when (input) {
+                        ControlKind.CONTINUOUS -> binding.binding.does.read(binding.binding, site)?.let { readout ->
+                            Entry(displayKey, control, part, binding, readout = readout, jump = JumpPolicy.of(control, binding.takeoverPolicy))
                         }
-                        continuousByDisplay.getOrPut(displayKey) { mutableListOf() }.add(entry)
-                    }
-                }
-                if (control is ButtonDescriptor && control.ledFeedback != LedFeedback.NONE) {
-                    val does = binding.binding.does
-                    val on = binding.binding.on
-                    val entry = LedEntry(displayKey, control, binding)
-                    val listed = when (does) {
-                        is Does.Flash -> { flashByBindingId[binding.id] = entry; true }
-                        Does.Blackout -> { blackoutLeds += entry; true }
-                        is Does.GrandMaster -> if (does.level == null) { grandMasterLeds += entry; true } else false
-                        Does.Select -> { selectLeds += entry; true }
-                        Does.Locate -> { locateLeds += entry; true }
-                        is Does.EncoderPage -> { encoderBankLeds += entry; true }
-                        // The record and page arms, and the one place in this class where an
-                        // omission is silent rather than a compile error: this `when` and [ledOn]
-                        // both end in `else`, so a function with no arm here is simply never
-                        // indexed and never lit, on hardware no browser can show. Session 2 puts
-                        // the LED on the function.
-                        // Lit while the Look is on, whichever way the button presses it.
-                        Does.Look -> {
-                            recordLeds += RecordLedEntry(entry, RecordLedKind.LOOK_APPLIED, on.recordUuid(RecordKind.LOOK))
-                            true
+                        ControlKind.BUTTON -> {
+                            val (channel, note) = ledAt(control, part) ?: continue
+                            (binding.binding.does.led(binding.binding, site) as? Led.Light)?.let { light ->
+                                Entry(displayKey, control, part, binding, light = light, ledChannel = channel, ledNote = note)
+                            }
                         }
-                        is Does.Palette -> {
-                            recordLeds += RecordLedEntry(entry, RecordLedKind.COVERS_SELECTION, does.palette)
-                            true
-                        }
-                        Does.Pad -> {
-                            recordLeds += recordRefs.padLed(entry, on.recordUuid(RecordKind.PAD))
-                            true
-                        }
-                        is Does.BuskPage -> on.recordUuid(RecordKind.PAGE)?.let { page ->
-                            buskPageLeds += entry to recordRefs.pageId(page)
-                            true
-                        } ?: false
-                        else -> false
-                    }
-                    if (listed) ledsByDisplay.getOrPut(displayKey) { mutableListOf() }.add(entry)
+                    } ?: continue
+                    entries += entry
                 }
             }
         }
-        @Suppress("UNCHECKED_CAST")
+        val bySignal = HashMap<Signal, MutableList<Entry>>()
+        for (entry in entries) for (signal in entry.signals) bySignal.getOrPut(signal) { ArrayList() } += entry
         index.set(
             Index(
-                byChannel = byChannel as Map<Long, List<ContinuousEntry>>,
-                continuousByDisplay = continuousByDisplay as Map<String, List<ContinuousEntry>>,
-                ledsByDisplay = ledsByDisplay as Map<String, List<LedEntry>>,
-                flashByBindingId = flashByBindingId,
-                blackoutLeds = blackoutLeds,
-                grandMasterLeds = grandMasterLeds,
-                selectLeds = selectLeds,
-                locateLeds = locateLeds,
-                encoderBankLeds = encoderBankLeds,
-                recordLeds = recordLeds,
-                recordLedByBindingId = recordLeds.associateBy { it.entry.binding.id },
-                buskPageLeds = buskPageLeds,
-                buskPageIdByBindingId = buskPageLeds.associate { (entry, pageId) -> entry.binding.id to pageId },
-                speedMasterEntries = speedMasterEntries,
-                grandMasterEntries = grandMasterEntries,
-                stackFxAmountEntries = stackFxAmountEntries,
-                fanEntries = fanEntries,
-                fxSpeedEntries = fxSpeedEntries,
-            )
+                bySignal = bySignal,
+                byDisplay = entries.groupBy { it.displayKey },
+                byPart = entries.associateBy { SurfaceDispatch.HoldKey(it.displayKey, it.controlId, it.part) },
+            ),
         )
-        // Seed takeover state so a PICKUP encoder knows where the tempo already sits before
-        // the operator's first touch, rather than only after the first tempo change.
-        resyncSpeedMasterEntries(speedMasterEntries)
-        resyncGrandMasterEntries(grandMasterEntries)
-        resyncStackFxAmountEntries(stackFxAmountEntries)
-        resyncFanEntries(fanEntries)
-        resyncFxSpeedEntries(fxSpeedEntries)
     }
 
-    private fun resolveStackUuid(stackUuid: String): Int? = try {
-        stackIdResolver?.invoke(stackUuid)
-    } catch (e: Exception) {
-        logger.debug("Stack uuid {} unresolved: {}", stackUuid, e.message)
-        null
+    /** Where a button part's LED is sent, or null when it has none: a button's own note, an encoder's push note. */
+    private fun ledAt(control: ControlDescriptor, part: ControlPart): Pair<Int, Int>? = when (control) {
+        is ButtonDescriptor -> if (part == ControlPart.MAIN && control.ledFeedback != LedFeedback.NONE) control.channel to control.note else null
+        is EncoderDescriptor -> control.pushNote?.takeIf { part == ControlPart.PUSH && control.pushLed != LedFeedback.NONE }?.let { control.channel to it }
+        else -> null
     }
 
     /**
-     * The heads a continuous target's feedback reads — null when the target is not a DMX
-     * property or does not resolve, so no entry is built. A selection target always resolves
-     * (to nothing when nothing is selected), because "no selection" is a state the control
-     * shows rather than the absence of a binding.
-     *
-     * Every arm takes the **whole** [AttributeChannelResolver.AttributeRead]. Each used to take the
-     * first channel of the flat description, so a colour binding stood on red alone and a
-     * red-and-yellow selection read as uniform (`FU-MIDI-SELECTION-COLOUR-RED-ONLY`).
-     *
-     * With a colour [axis] named, only **colour** heads are kept. [computeValue7Bit] answers null
-     * for the whole entry when any head reads null, and a slider head reads null on an axis — so
-     * a selection mixing a colour head and a slider head under one property name would otherwise
-     * darken the ring for the heads the move does reach. The write skips those heads
-     * ([AttributeChannelResolver.toAttributeValue]); the read has to skip the same ones.
-     */
-    private fun findHeads(
-        fixtures: Fixtures,
-        binding: Binding,
-        selection: () -> List<CueTargetDto>,
-        axis: ColourAxis?,
-    ): List<AttributeChannelResolver.AttributeRead>? {
-        val level = binding.does as? Does.Level ?: return null
-        val reads = Heads.of(fixtures, binding.on, level.attribute, selection).mapNotNull { head ->
-            val read = AttributeChannelResolver.describeAttributeRead(head.fixture, level.attribute) ?: return@mapNotNull null
-            if (axis != null && AttributeChannelResolver.isColour(head.fixture, level.attribute) != true) return@mapNotNull null
-            read
-        }
-        return if (binding.on == Subject.Selection) reads else reads.takeIf { it.isNotEmpty() }
-    }
-
-    /** Resync one specific control — motor catch-up on touch-off. */
-    private fun resyncControl(displayKey: String, controlId: String) {
-        val idx = index.get()
-        resyncGrandMasterEntries(
-            idx.grandMasterEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId },
-        )
-        resyncStackFxAmountEntries(
-            idx.stackFxAmountEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId },
-        )
-        resyncFanEntries(idx.fanEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId })
-        resyncFxSpeedEntries(idx.fxSpeedEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId })
-        val entries = idx.continuousByDisplay[displayKey] ?: return
-        for (entry in entries) {
-            if (entry.control.controlId != controlId) continue
-            applyContinuous(entry, computeValue7Bit(entry), rearmPickup = false)
-        }
-    }
-
-    /**
-     * Full resync: drive motors / rings / LEDs for every bound control on a device, and publish
-     * the device's whole [ControlStateTracker] snapshot afterwards. With [rearmPickup] every
-     * PICKUP fader is forced back into pickup (the physical position is stale: attach, bank
-     * change, project change); without it takeover follows [SoftTakeoverStateMachine.setLogical]'s
-     * divergence rule.
-     *
-     * [rearmPickup] also drops the transport's delta cache for the whole device. That cache
-     * records what we last *sent*, not what the hardware *holds*, and the two diverge exactly
-     * when this flag is set — so without the invalidation a resync is a no-op for every control
-     * whose recomputed value happens to match the last one sent, and a surface reset behind the
-     * desk's back keeps whatever it reset to. `MidiController.invalidateAllFeedback` is the
-     * device-wide form of the `invalidateFeedbackCache` that [onButtonRelease] already does for
-     * one LED, for the same reason.
+     * Full resync: drive motors, rings and LEDs for every bound control part on a device, and publish
+     * the device's whole [ControlStateTracker] snapshot afterwards. With [rearmPickup] every undriven
+     * fader waits to pick up again (the physical position is stale: attach, a layer, encoder-page or
+     * project change), and the transport's delta cache for the device is dropped: it records what we
+     * last *sent*, not what the hardware *holds*, and those diverge exactly then.
      */
     private fun sendFullResync(displayKey: String, rearmPickup: Boolean) {
         if (rearmPickup) controllerLookup(displayKey)?.invalidateAllFeedback()
         val profile = deviceMatcher.attached.value[displayKey]?.typeKey
             ?.let { typeKey -> types().firstOrNull { it.typeKey == typeKey } }
-        // Seed every profile control at "unbound" first, so a control that lost its binding
-        // reads as such in the snapshot rather than keeping its last value.
+        // Every profile control at "unbound" first, so a control that lost its binding reads as such.
         if (profile != null) controlStates.reset(displayKey, profile.controls.map { it.controlId })
-        val idx = index.get()
-        // DMX-backed entries need the show; tempo entries and LEDs do not, so a surface that
-        // attaches before the show is up still gets its bank, scaler and select state.
-        if (currentFixtures != null) {
-            for (entry in idx.continuousByDisplay[displayKey].orEmpty()) {
-                applyContinuous(entry, computeValue7Bit(entry), rearmPickup)
-            }
-        }
-        // Tempo-bound encoders are not ContinuousEntries (they have no channel), so the reset
-        // above wiped their rows: re-feed them here or the stream reports a lit ring as unbound.
-        resyncSpeedMasterEntries(idx.speedMasterEntries.filter { it.displayKey == displayKey })
-        resyncGrandMasterEntries(idx.grandMasterEntries.filter { it.displayKey == displayKey })
-        resyncStackFxAmountEntries(idx.stackFxAmountEntries.filter { it.displayKey == displayKey })
-        resyncFanEntries(idx.fanEntries.filter { it.displayKey == displayKey })
-        resyncFxSpeedEntries(idx.fxSpeedEntries.filter { it.displayKey == displayKey })
-        // Folded once for the whole device resync rather than once per record-button LED in it.
-        val applied = appliedSources()
-        for (entry in idx.ledsByDisplay[displayKey].orEmpty()) {
-            sendLed(entry, ledOn(entry, applied) ?: false)
-        }
+        val pass = Pass()
+        for (entry in index.get().byDisplay[displayKey].orEmpty()) apply(entry, pass, rearmPickup)
         controlStates.publishSnapshot(displayKey)
     }
 
-    /**
-     * The LED state a discrete binding should show right now, read from *current state* rather
-     * than edge events — so a Flash held at the moment a device attaches lights up immediately.
-     * Null for a target that carries no LED semantics.
-     */
-    private fun ledOn(entry: LedEntry, applied: List<AppliedSource>? = null): Boolean? = when (val does = entry.binding.binding.does) {
-        is Does.Flash -> holds.isHeldBinding(entry.binding.id)
-        // The scaler facade is per show; before the show is up there is nothing to read.
-        Does.Blackout -> runCatching { blackoutLit(entry, globalScalerStateProvider().blackoutEnabled.value) }
-            .getOrDefault(entry.binding.binding.how == How.OFF)
-        is Does.GrandMaster -> if (does.level != null) null
-            else runCatching { globalScalerStateProvider().grandMasterEnabled.value }.getOrDefault(false)
-        Does.Select -> entry.binding.binding.on.asTarget()?.let { deskSelection?.covers(it) } ?: false
-        Does.Locate -> selectionLocated(
-            runCatching { locateManagerProvider?.invoke()?.activeTargets?.value }.getOrNull().orEmpty(),
-        )
-        // Both halves, through the effective axis: a hue button and a saturation button on one
-        // colour property are two pages, and (rgbColour, null) is the same page as (rgbColour, HUE).
-        is Does.EncoderPage -> encoderBankState.selectionFor(entry.binding.deviceTypeKey).let {
-            it.attribute == does.attribute && it.colourAxis.effective == does.axis.effective
-        }
-        // Answered from the *index*, which carries each button's record already resolved: this
-        // function has only the binding, and a uuid → record lookup here would be a database read
-        // per LED per resync.
-        Does.Look, is Does.Palette, Does.Pad,
-            -> index.get().recordLedByBindingId[entry.binding.id]
-                ?.let { recordLedOn(it, applied ?: appliedSources()) }
-        is Does.BuskPage -> {
-            val pageId = index.get().buskPageIdByBindingId[entry.binding.id]
-            pageId != null && buskPageState?.pageId?.value == pageId
-        }
-        else -> null
-    }
-
-    /** A blackout button is lit while blackout is in the state it sets: on for a toggle or On, off for Off. */
-    private fun blackoutLit(entry: LedEntry, blackoutEnabled: Boolean): Boolean =
-        if (entry.binding.binding.how == How.OFF) !blackoutEnabled else blackoutEnabled
-
-    /**
-     * A record button's LED, read from the state the busk view's ring reads.
-     *
-     * A Look — an `ApplyLook` button or a Look pad — is deliberately **not** folded over the
-     * selection: it lands whole, so "is a layer of this Look on" is the whole question (P4). A
-     * palette is the selection-scoped fold, and dark on an empty selection is right: that is also
-     * when the press is dropped.
-     */
-    private fun recordLedOn(record: RecordLedEntry, applied: List<AppliedSource>): Boolean = when (record.kind) {
-        RecordLedKind.CUE_LIVE -> record.cue?.let { cueId ->
-            runCatching { cueLooseHeldProvider?.invoke(cueId) }.getOrNull() == true
-        } ?: false
-        RecordLedKind.STACK_RUNNING -> record.stack?.let { stackId ->
-            runCatching { stackRunningProvider?.invoke(stackId) }.getOrNull() == true
-        } ?: false
-        RecordLedKind.LOOK_APPLIED -> {
-            val uuid = record.layerUuid
-            uuid != null && applied.any { it.source.uuid == uuid }
-        }
-        RecordLedKind.COVERS_SELECTION -> {
-            val uuid = record.layerUuid
-            val selected = deskSelection?.state?.value?.targets.orEmpty()
-            if (uuid == null || selected.isEmpty()) false else {
-                val entry = applied.firstOrNull { it.source.uuid == uuid }
-                // "Covers every selected target" — the same fold `paletteLayerPresence` makes in the
-                // client, and the same `all`/`some` vocabulary, so a pad and its button agree.
-                entry != null && selected.all { target ->
-                    entry.targets.any {
-                        it.target.type == target.type && it.target.key == target.key &&
-                            it.extent == AppliedExtent.ALL
-                    }
-                }
-            }
-        }
-    }
-
-    private fun appliedSources() =
-        runCatching { programmerLayerStackProvider?.invoke()?.appliedState() }.getOrNull().orEmpty()
-
-    /** True when the selection is non-empty and every target in it is located. */
-    private fun selectionLocated(located: Set<TargetRef>): Boolean {
-        val targets = deskSelection?.state?.value?.targets.orEmpty()
-        if (targets.isEmpty()) return false
-        return targets.all { TargetRef.ofOrNull(it.type, it.key)?.let { ref -> ref in located } ?: false }
-    }
-
-    /**
-     * Feedback position for a bound continuous control: always the live composed DMX value on
-     * the binding's channels, scaled through each channel's own `min..max`. Until sweep item D1
-     * there was a second source — an open `cueEdit` session's own Layer 4 assignment took
-     * precedence, so a fader showed the cue being edited rather than the stage. With that
-     * family retired a cue is read-only from a surface, and the stage is the only thing
-     * feedback can mean.
-     *
-     * Null when the heads disagree (a divergent group, a mixed selection), when one of them has
-     * no position to report (a colour with no hue, a black with no saturation), or when there
-     * are none (nothing selected): the control has no one value to show. What "agree" means —
-     * exact for a slider, within a head's own quantisation on a colour axis, and every pair
-     * rather than each against the first — is [AttributeChannelResolver.commonValue]'s.
-     */
-    private fun computeValue7Bit(entry: ContinuousEntry): UByte? {
-        val fixtures = currentFixtures ?: return null
-        if (entry.heads.isEmpty()) return null
-        val read = AttributeChannelResolver.channelReader(fixtures)
-        val reads = ArrayList<AttributeChannelResolver.HeadValue>(entry.heads.size)
-        for (head in entry.heads) {
-            reads += AttributeChannelResolver.readHead(head, read, entry.axis) ?: return null
-        }
-        return AttributeChannelResolver.commonValue(reads)
-    }
-
-    /**
-     * One continuous entry, one value, everywhere it has to land: the hardware, the takeover
-     * machine and the control-state tracker. Null is the mixed / no-selection state — nothing
-     * to the motor, the ring darkened, takeover disarmed so the next move writes through.
-     */
-    private fun applyContinuous(entry: ContinuousEntry, value7Bit: UByte?, rearmPickup: Boolean) {
-        val displayKey = entry.displayKey
-        val controlId = entry.control.controlId
-        if (value7Bit == null) {
-            if (logger.isDebugEnabled) {
-                logger.debug(
-                    "surface-out: control={} channels={} -> mixed / none, ring off",
-                    controlId, entry.channels.size,
-                )
-            }
-            sendRingOff(displayKey, entry.control)
-            takeover.disarm(displayKey, controlId)
+    private fun apply(entry: Entry, pass: Pass, rearm: Boolean, force: Boolean = false) {
+        entry.light?.let { light ->
+            sendLed(entry, runCatching { light.lit(pass) }.getOrDefault(false))
             return
         }
-        sendContinuousFeedback(entry, value7Bit)
-        if (rearmPickup && entry.policy == BindingTakeoverPolicy.PICKUP) {
-            takeover.forcePickup(displayKey, controlId, value7Bit)
+        val readout = entry.readout ?: return
+        val reading = try {
+            readout.read(pass)
+        } catch (e: Exception) {
+            logger.debug("Feedback read on {}/{} failed: {}", entry.displayKey, entry.controlId, e.message)
+            Reading.Nothing
+        }
+        val value = (reading as? Reading.Value)?.value7Bit
+        // A forced re-show is the function correcting the device, so it shows the function's value
+        // rather than the position the control was last moved to.
+        val shown = takeover.setLogical(
+            entry.displayKey, entry.controlId, value, entry.jump,
+            tolerance = (reading as? Reading.Value)?.tolerance ?: 0, rearm = rearm, reshow = force,
+        )
+        if (shown == null) {
+            sendRingOff(entry.displayKey, entry.control)
         } else {
-            takeover.setLogical(displayKey, controlId, value7Bit, entry.policy)
+            if (force) invalidateControlFeedback(entry.displayKey, entry.control)
+            sendControlFeedback(entry.displayKey, entry.control, shown)
         }
     }
 
+    /** The live state for one pass, each source read at most once. */
+    private inner class Pass : FeedbackPass {
+        override val selection: List<CueTargetDto> by lazy { deskSelection?.state?.value?.targets.orEmpty() }
+        private val appliedState by lazy { runCatching { programmerLayerStackProvider?.invoke()?.appliedState() }.getOrNull().orEmpty() }
+        private val locatedState by lazy { runCatching { locateManagerProvider?.invoke()?.activeTargets?.value }.getOrNull().orEmpty() }
+        private val scaler by lazy { runCatching { globalScalerStateProvider() }.getOrNull() }
+
+        override fun covers(target: CueTargetDto): Boolean = deskSelection?.covers(target) ?: false
+        override fun located(): Set<TargetRef> = locatedState
+        override fun applied(): List<AppliedSource> = appliedState
+        override fun blackout(): Boolean = scaler?.blackoutEnabled?.value ?: false
+        override fun grandMasterEnabled(): Boolean = scaler?.grandMasterEnabled?.value ?: false
+        override fun grandMasterLevel(): Double? = scaler?.grandMasterLevel?.value
+
+        override fun tempo(master: UUID?): Double? {
+            val states = runCatching { speedMasterBankProvider?.invoke()?.masterStates() }.getOrNull() ?: return null
+            // Master 1 by *index*: once the bank has loaded, slot 0 carries its persisted row's uuid.
+            return (if (master == null) states.firstOrNull { it.index == 1 } else states.firstOrNull { it.uuid == master })?.bpm
+        }
+
+        override fun stackRunning(stackId: Int): Boolean = runCatching { stackRunningProvider?.invoke(stackId) }.getOrNull() == true
+        override fun stackFxAmount(stackId: Int): Double? = runCatching { stackFxAmountsProvider?.invoke()?.of(stackId) }.getOrNull()
+        override fun cueLooseHeld(cueId: Int): Boolean = runCatching { cueLooseHeldProvider?.invoke(cueId) }.getOrNull() == true
+        override fun buskPage(): Int? = buskPageState?.pageId?.value
+        override fun held(key: SurfaceDispatch.HoldKey): Boolean = holds.isHeld(key)
+        override fun encoderPage(displayKey: String): EncoderBankSelection = encoderBankState.selectionFor(displayKey)
+        override fun fanAmount(axis: FanAxis): Int? = selectionFan?.amountFor(axis)
+        override fun fxLeadSpeed(): Double? = runCatching { fxSpeed?.leadSpeed() }.getOrNull()
+    }
+
     /**
-     * Resolve a control's feedback CC and write [value7Bit] to it. Shared by the DMX-backed
-     * and tempo-backed paths, which differ only in where the value comes from. The tracker is
-     * written **before** the early returns: a non-motor fader is never driven, and a touched
-     * motor is spared, but both still have a value the screen shows.
+     * Write [value7Bit] to a control's motor or ring. The tracker is written **before** the early
+     * returns: a non-motor fader is never driven, and a touched motor is spared, but both still have a
+     * value the screen shows.
      */
     private fun sendControlFeedback(displayKey: String, control: ControlDescriptor, value7Bit: UByte) {
         controlStates.setValue(displayKey, control.controlId, value7Bit.toInt(), ringFor(control, lit = true))
         val controller = controllerLookup(displayKey) ?: return
         val (channel, cc) = when (control) {
             is FaderDescriptor -> {
-                if (!control.hasMotor) return  // Non-motor: no feedback, just takeover tracking.
+                if (!control.hasMotor) return
                 if (touchState.isTouched(displayKey, control.controlId)) return
                 control.channel to (control.motorCc ?: control.cc)
             }
@@ -1349,106 +738,6 @@ class SurfaceFeedbackPublisher(
         else -> RingState.OFF
     }
 
-    /**
-     * Push the current tempo of each entry's master onto its control, and record it as the
-     * logical value so PICKUP can arm. Called on every bank change and after each rebuild.
-     */
-    private fun resyncSpeedMasterEntries(entries: List<SpeedMasterEntry>, changedUuid: UUID? = null, onlyChanged: Boolean = false) {
-        if (entries.isEmpty()) return
-        val bank = try {
-            speedMasterBankProvider?.invoke()
-        } catch (_: Exception) {
-            null
-        } ?: return
-        val states = bank.masterStates()
-        // A null uuid means master 1, and must be resolved by *index* rather than by
-        // matching uuids: `load()` replaces the synthetic slot-0 entry with the persisted
-        // row, so `masterStates()[0].uuid` is a real uuid from then on and `uuid == null`
-        // matches nothing. Comparing uuids directly here meant the default (unkeyed,
-        // master-1) binding — the common case — got no feedback and never armed PICKUP.
-        fun stateFor(masterUuid: UUID?) =
-            if (masterUuid == null) states.firstOrNull { it.index == 1 }
-            else states.firstOrNull { it.uuid == masterUuid }
-
-        val changedState = if (onlyChanged) stateFor(changedUuid) else null
-        for (entry in entries) {
-            val state = stateFor(entry.masterUuid) ?: continue
-            // Compare resolved masters, not raw uuids, so a null-uuid entry still matches a
-            // change event that carries master 1's real uuid.
-            if (onlyChanged && state.index != changedState?.index) continue
-            val bpm = state.bpm
-            val span = entry.maxBpm - entry.minBpm
-            val value7Bit = if (span <= 0.0) 0u else {
-                (((bpm - entry.minBpm) / span) * 127.0).roundToInt().coerceIn(0, 127).toUByte()
-            }
-            sendControlFeedback(entry.displayKey, entry.control, value7Bit)
-            takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
-        }
-    }
-
-    /** Push the grand master's level onto each entry's control, and record it for PICKUP. */
-    private fun resyncGrandMasterEntries(entries: List<GrandMasterEntry>) {
-        if (entries.isEmpty()) return
-        val level = runCatching { globalScalerStateProvider().grandMasterLevel.value }.getOrNull() ?: return
-        val value7Bit = grandMasterLevelTo7Bit(level)
-        for (entry in entries) {
-            sendControlFeedback(entry.displayKey, entry.control, value7Bit)
-            takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
-        }
-    }
-
-    /** Push each entry's stack's FX amount onto its control, and record it for PICKUP. */
-    private fun resyncStackFxAmountEntries(entries: List<StackFxAmountEntry>) {
-        if (entries.isEmpty()) return
-        val amounts = runCatching { stackFxAmountsProvider?.invoke() }.getOrNull() ?: return
-        for (entry in entries) {
-            val stackId = entry.stackId ?: continue
-            val value7Bit = stackFxAmountTo7Bit(amounts.of(stackId))
-            sendControlFeedback(entry.displayKey, entry.control, value7Bit)
-            takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
-        }
-    }
-
-    /** Push the fan's amount on each entry's axis onto its control — 64 at no fan — and record it for PICKUP. */
-    private fun resyncFanEntries(entries: List<FanEntry>) {
-        val fan = selectionFan ?: return
-        for (entry in entries) {
-            val value7Bit = SelectionFan.amountTo7Bit(entry.axis, fan.amountFor(entry.axis)).toUByte()
-            sendControlFeedback(entry.displayKey, entry.control, value7Bit)
-            takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
-        }
-    }
-
-    /**
-     * Push the lead FX's Speed onto each entry's control and record it for PICKUP; with no Local FX on
-     * the selection the control reads nothing (a dark ring), as a selection control with nothing
-     * selected does. A fader already standing where it says the lead's Speed — its own write echoing
-     * back, snapped or rounded to whole ticks — keeps its position as the logical value, so the echo
-     * never re-arms its pickup. [force] sends past the transport's last-sent cache, for a ring the
-     * device is known not to hold.
-     */
-    private fun resyncFxSpeedEntries(entries: List<FxSpeedEntry>, force: Boolean = false) {
-        val ring = fxSpeed ?: return
-        if (entries.isEmpty()) return
-        val lead = runCatching { ring.leadSpeed() }.getOrNull()
-        for (entry in entries) {
-            if (lead == null) {
-                sendRingOff(entry.displayKey, entry.control)
-                continue
-            }
-            val position = if (entry.control is EncoderDescriptor) {
-                FxSpeed.ringPosition(lead)
-            } else {
-                val physical = takeover.stateFor(entry.displayKey, entry.control.controlId).lastPhysical?.toInt()
-                if (physical != null && FxSpeed.faderSays(physical, lead)) physical else FxSpeed.faderPosition(lead)
-            }
-            val value7Bit = position.toUByte()
-            if (force) invalidateControlFeedback(entry.displayKey, entry.control)
-            sendControlFeedback(entry.displayKey, entry.control, value7Bit)
-            takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
-        }
-    }
-
     /** Drop the transport's last-sent bytes for [control]'s feedback, so the next send goes out. */
     private fun invalidateControlFeedback(displayKey: String, control: ControlDescriptor) {
         val controller = controllerLookup(displayKey) ?: return
@@ -1460,26 +749,13 @@ class SurfaceFeedbackPublisher(
         controller.invalidateFeedbackCache(MidiControlKey(channel, MidiControlKey.Type.CC, cc))
     }
 
-    private fun sendContinuousFeedback(entry: ContinuousEntry, value7Bit: UByte) {
-        if (logger.isDebugEnabled) {
-            val pc = entry.channels.firstOrNull()
-            val dmx = pc?.let { runCatching { currentFixtures?.controller(it.universe)?.getValue(it.channel) }.getOrNull() }
-            logger.debug(
-                "surface-out: control={} channels={} dmxCh={} dmx={} min={} max={} -> value7Bit={}",
-                entry.control.controlId, entry.channels.size, pc?.channel, dmx?.toInt(),
-                pc?.min?.toInt(), pc?.max?.toInt(), value7Bit.toInt(),
-            )
-        }
-        sendControlFeedback(entry.displayKey, entry.control, value7Bit)
-    }
-
-    private fun sendLed(entry: LedEntry, on: Boolean) {
-        controlStates.setLed(entry.displayKey, entry.control.controlId, if (on) LedState.ON else LedState.OFF)
+    private fun sendLed(entry: Entry, on: Boolean) {
+        controlStates.setLed(entry.displayKey, entry.controlId, if (on) LedState.ON else LedState.OFF)
         val controller = controllerLookup(entry.displayKey) ?: return
         val msg = if (on) {
-            MidiFeedbackMessage.NoteOnFeedback(entry.control.channel, entry.control.note, 127u)
+            MidiFeedbackMessage.NoteOnFeedback(entry.ledChannel, entry.ledNote, 127u)
         } else {
-            MidiFeedbackMessage.NoteOffFeedback(entry.control.channel, entry.control.note, 0u)
+            MidiFeedbackMessage.NoteOffFeedback(entry.ledChannel, entry.ledNote, 0u)
         }
         latencyTracker.measure(MidiLatencyStage.EGRESS_LED) { controller.sendFeedback(msg) }
     }
@@ -1502,14 +778,11 @@ data class BuskRefs(
 }
 
 /**
- * What one busk pad presses, as much of it as an LED needs.
- *
- * One arm per place the ring is read from: a template's or a Look's from the programmer's applied
- * state, a cue's from its loose hold, and a stack's from whether the stack runs. That is the whole
- * reason `PressPad`'s LED is not simply "read `appliedState`".
+ * What one busk pad presses, as much of it as an LED needs: a palette's or a Look's ring is read from
+ * the programmer's applied state, a cue's from its loose hold, a stack's from whether it runs.
  */
 sealed interface PadRef {
-    /** A template or a Look, by the uuid `ProgrammerLayerStack.appliedState` reports. */
+    /** A palette or a Look, by the uuid `ProgrammerLayerStack.appliedState` reports. */
     data class Layer(val sourceUuid: UUID, val isLook: Boolean) : PadRef
 
     /** A cue pad's cue; its LED is the cue's loose hold. */

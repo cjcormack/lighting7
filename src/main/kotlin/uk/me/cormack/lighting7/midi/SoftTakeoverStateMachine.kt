@@ -11,22 +11,44 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 
 /**
- * Per-device, per-control soft-takeover state machine. Non-motor faders enter a "pickup"
- * state when the logical (application-side) value diverges from their last-known physical
- * position — inbound fader events are ignored until the physical value crosses the logical
- * value, at which point the fader re-engages and subsequent events write live.
+ * How one continuous control takes a move (surface-setup plan D7) — one rule for every fader and ring.
  *
- * Motor faders don't need soft takeover: the motor drives the fader back to match the
- * logical value automatically, so [BindingTakeoverPolicy.IMMEDIATE] applies. Non-motor
- * faders default to [BindingTakeoverPolicy.PICKUP], with per-binding override supported via
- * the persisted takeover policy column.
+ * - [DRIVEN]: the desk can put the control where the function stands — a motor fader, an encoder with
+ *   a ring. A move within [SoftTakeoverStateMachine.JUMP_STEPS] of what it shows, or one made while it
+ *   is touched, is taken; any other is ignored and the control is shown its value again, so a stale
+ *   position the device held (a ring not yet fed, a fast flick) cannot jump the function.
+ * - [UNDRIVEN]: a fader the desk cannot move picks up when it crosses the value it shows.
+ * - [JUMP]: every move is taken: the binding asked for it (`takeover_policy` IMMEDIATE).
+ */
+enum class JumpPolicy {
+    DRIVEN, UNDRIVEN, JUMP;
+
+    companion object {
+        /** [control]'s policy under [takeover]: PICKUP (the default) is driven or undriven by what the control is. */
+        fun of(control: ControlDescriptor, takeover: BindingTakeoverPolicy?): JumpPolicy = when {
+            takeover == BindingTakeoverPolicy.IMMEDIATE -> JUMP
+            control is FaderDescriptor && control.hasMotor -> DRIVEN
+            control is EncoderDescriptor && control.ringCc != null -> DRIVEN
+            else -> UNDRIVEN
+        }
+    }
+}
+
+/**
+ * The jump rule's state, per device and control ([JumpPolicy] says which arm a control is on).
  *
- * Keyed by `(displayKey, controlId)`. Thread-safety is provided by [ConcurrentHashMap];
- * transitions are not strictly atomic across two operations but the window is narrow and
- * any race would at worst suppress one fader event that was already about to be processed.
+ * The desk records what each control **shows** ([setLogical]) and judges each inbound move against it
+ * ([acceptInboundFader]). A mixed or absent value shows nothing, and then any move is taken: it is
+ * meant to write every head and make them agree. After a move is taken, what the control shows stays
+ * the physical position it was moved to while the function reads back to it — within the reading's
+ * tolerance — so a motor never chases its own write rounded through the function and back.
  *
- * Emits [PickupStateChange] on [changes] so WebSocket consumers can surface a pickup
- * indicator on the frontend — the `/surfaces` view and operator badges.
+ * An undriven fader enters [State.AWAITING_PICKUP] when the value it shows diverges from where it
+ * physically is, and leaves it when it crosses that value; [changes] reports those transitions so the
+ * `/surfaces` view can draw a pickup indicator.
+ *
+ * Keyed by `(displayKey, controlId)`. Thread-safety is [ConcurrentHashMap]'s; a race between two
+ * operations would at worst misjudge one move that was already in flight.
  */
 class SoftTakeoverStateMachine {
 
@@ -40,8 +62,12 @@ class SoftTakeoverStateMachine {
         val state: State,
         /** Last-known physical (MIDI 7-bit) value from inbound events, or null if unknown. */
         val lastPhysical: UByte?,
-        /** Target logical value to cross in AWAITING_PICKUP state. Null when ENGAGED. */
+        /** The value an undriven fader must cross in [State.AWAITING_PICKUP]. Null when ENGAGED. */
         val target: UByte?,
+        /** What the control shows now; null for a mixed or absent value. */
+        val shown: UByte? = null,
+        /** The position of the last move taken, held while the function reads back to it. */
+        val echo: UByte? = null,
     )
 
     data class PickupStateChange(
@@ -50,6 +76,18 @@ class SoftTakeoverStateMachine {
         val state: State,
         val target: UByte?,
     )
+
+    /** What [acceptInboundFader] decided. */
+    enum class Verdict {
+        /** Take the move. */
+        ACCEPT,
+
+        /** Drop it: an undriven fader still waiting to cross. */
+        IGNORE,
+
+        /** Drop it and show the control its value again: a driven control moved from a position the desk did not show it. */
+        RESHOW,
+    }
 
     private val entries = ConcurrentHashMap<String, Entry>()
 
@@ -66,115 +104,78 @@ class SoftTakeoverStateMachine {
     fun stateFor(displayKey: String, controlId: String): Entry =
         entries[key(displayKey, controlId)] ?: DEFAULT
 
-    /**
-     * Called by the router on every inbound fader event. Returns true if the value should be
-     * applied (ENGAGED) or false if pickup has not yet occurred (AWAITING_PICKUP).
-     *
-     * Always updates `lastPhysical` so subsequent calls to [setLogical] can detect
-     * divergence correctly.
-     */
+    /** Judge one inbound move at [value] under [policy]; [touched] for a touch-sensing control held by a finger. */
     fun acceptInboundFader(
         displayKey: String,
         controlId: String,
         value: UByte,
-        policy: BindingTakeoverPolicy = BindingTakeoverPolicy.IMMEDIATE,
-    ): Boolean {
-        if (policy == BindingTakeoverPolicy.IMMEDIATE) {
-            entries[key(displayKey, controlId)] = Entry(State.ENGAGED, value, null)
-            return true
-        }
+        policy: JumpPolicy,
+        touched: Boolean = false,
+    ): Verdict {
         val k = key(displayKey, controlId)
         val current = entries[k] ?: DEFAULT
-        return when (current.state) {
-            State.ENGAGED -> {
-                entries[k] = current.copy(lastPhysical = value)
-                true
+        val taken = Entry(State.ENGAGED, value, null, shown = value, echo = value)
+        val verdict = when (policy) {
+            JumpPolicy.JUMP -> Verdict.ACCEPT
+            JumpPolicy.DRIVEN -> {
+                val shown = current.shown
+                if (shown == null || touched || abs(value.toInt() - shown.toInt()) <= JUMP_STEPS) Verdict.ACCEPT
+                else Verdict.RESHOW
             }
-            State.AWAITING_PICKUP -> {
+            JumpPolicy.UNDRIVEN -> {
                 val target = current.target
-                if (target != null && crossed(current.lastPhysical, value, target)) {
-                    entries[k] = Entry(State.ENGAGED, value, null)
-                    _changes.tryEmit(PickupStateChange(displayKey, controlId, State.ENGAGED, null))
-                    true
+                if (current.state == State.ENGAGED || (target != null && crossed(current.lastPhysical, value, target))) {
+                    Verdict.ACCEPT
                 } else {
-                    entries[k] = current.copy(lastPhysical = value)
-                    false
+                    Verdict.IGNORE
                 }
             }
         }
+        entries[k] = if (verdict == Verdict.ACCEPT) taken else current.copy(lastPhysical = value)
+        if (verdict == Verdict.ACCEPT && current.state != State.ENGAGED) {
+            _changes.tryEmit(PickupStateChange(displayKey, controlId, State.ENGAGED, null))
+        }
+        return verdict
     }
 
     /**
-     * Record the logical value the control is bound to. If the physical position is unknown
-     * or differs from the logical by more than one step (tolerance for MIDI jitter), enter
-     * [State.AWAITING_PICKUP] when [policy] is [BindingTakeoverPolicy.PICKUP]. Otherwise the
-     * control is [State.ENGAGED].
-     *
-     * On [BindingTakeoverPolicy.IMMEDIATE] the motor drives to the logical value; the stored
-     * `lastPhysical` stays at its prior reading (the motor itself will update the physical
-     * position before the next inbound event, so no assumption is made here).
-     *
-     * No-ops when the resulting entry equals what's already stored — avoids allocation and
-     * spurious emissions on every DMX tick when the logical value hasn't moved.
+     * Record what the function reads back as, [value] null for mixed or nothing, within [tolerance];
+     * answers what the control should be shown. A reading within tolerance of the last move taken
+     * shows that move's position. Otherwise it shows [value], and an undriven fader whose physical
+     * position diverges by more than a step waits to pick it up — always, with [rearm], since then
+     * the physical position is stale (attach, a layer or project change). [reshow] shows [value]
+     * whatever was last moved: the function is correcting the device.
      */
     fun setLogical(
         displayKey: String,
         controlId: String,
-        value: UByte,
-        policy: BindingTakeoverPolicy = BindingTakeoverPolicy.IMMEDIATE,
-    ) {
+        value: UByte?,
+        policy: JumpPolicy,
+        tolerance: Int = 0,
+        rearm: Boolean = false,
+        reshow: Boolean = false,
+    ): UByte? {
         val k = key(displayKey, controlId)
         val current = entries[k] ?: DEFAULT
-        val next = if (policy == BindingTakeoverPolicy.IMMEDIATE) {
-            Entry(State.ENGAGED, current.lastPhysical, null)
-        } else {
-            val physical = current.lastPhysical
-            val diverges = physical == null || abs(physical.toInt() - value.toInt()) > 1
-            if (diverges) Entry(State.AWAITING_PICKUP, physical, value)
-            else Entry(State.ENGAGED, physical, null)
+        val echo = current.echo
+        val next = when {
+            value == null -> Entry(State.ENGAGED, current.lastPhysical, null)
+            !rearm && !reshow && echo != null && abs(echo.toInt() - value.toInt()) <= maxOf(1, tolerance) -> current.copy(shown = echo)
+            policy != JumpPolicy.UNDRIVEN -> Entry(State.ENGAGED, current.lastPhysical, null, shown = value)
+            else -> {
+                val physical = current.lastPhysical
+                val diverges = rearm || physical == null || abs(physical.toInt() - value.toInt()) > 1
+                if (diverges) Entry(State.AWAITING_PICKUP, physical, value, shown = value)
+                else Entry(State.ENGAGED, physical, null, shown = value)
+            }
         }
-        if (current == next) return
-        entries[k] = next
-        if (current.state != next.state || current.target != next.target) {
-            _changes.tryEmit(PickupStateChange(displayKey, controlId, next.state, next.target))
+        if (current != next) {
+            entries[k] = next
+            if (current.state != next.state || current.target != next.target) {
+                _changes.tryEmit(PickupStateChange(displayKey, controlId, next.state, next.target))
+            }
         }
-    }
-
-    /**
-     * Force the control into [State.AWAITING_PICKUP] regardless of current physical position.
-     * Used on bank switch — bindings in the new bank start uncertain until the user moves
-     * the fader across the new logical value.
-     */
-    fun forcePickup(
-        displayKey: String,
-        controlId: String,
-        target: UByte,
-    ) {
-        val k = key(displayKey, controlId)
-        val current = entries[k] ?: DEFAULT
-        val next = Entry(State.AWAITING_PICKUP, current.lastPhysical, target)
-        entries[k] = next
-        if (current.state != State.AWAITING_PICKUP || current.target != target) {
-            _changes.tryEmit(PickupStateChange(displayKey, controlId, State.AWAITING_PICKUP, target))
-        }
-    }
-
-    /**
-     * Drop the control's pickup target: [State.ENGAGED] with no target, so the next move writes
-     * straight through. The publisher calls this when a selection-relative or group control has
-     * **no uniform value to arm against** — a mixed selection, or an empty one — because a move
-     * there is meant to write every head and make them agree, not to wait for a crossing that
-     * has nothing to cross. Emits a [PickupStateChange] so the pickup indicator shows no target.
-     */
-    fun disarm(displayKey: String, controlId: String) {
-        val k = key(displayKey, controlId)
-        val current = entries[k] ?: DEFAULT
-        val next = Entry(State.ENGAGED, current.lastPhysical, null)
-        if (current == next) return
-        entries[k] = next
-        if (current.state != next.state || current.target != null) {
-            _changes.tryEmit(PickupStateChange(displayKey, controlId, State.ENGAGED, null))
-        }
+        return next.shown
     }
 
     fun clearDevice(displayKey: String) {
@@ -198,5 +199,8 @@ class SoftTakeoverStateMachine {
 
     companion object {
         private val DEFAULT = Entry(State.ENGAGED, null, null)
+
+        /** How far a driven control may move from what it shows and still be taken: a fast turn's few detents. */
+        const val JUMP_STEPS = 8
     }
 }

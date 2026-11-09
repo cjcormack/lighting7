@@ -699,8 +699,9 @@ broadcast because the programmer is shared desk state.
 | `surfaceLearn.begin` | `projectId: Int`, `deviceTypeKey?` | `surfaceLearn.started` |
 | `surfaceLearn.cancel` | `sessionId: String` | `surfaceLearn.cancelled` \| `surfaceLearn.error` |
 | `surfaceLearn.commit` | `sessionId`, `bank?`, `binding?: Binding` or `target?` (the screens' old shape, translated), `takeoverPolicy?` | `surfaceLearn.committed` \| `surfaceLearn.error` |
-| `surfaceBank.set` | `deviceTypeKey: String`, `bank: String?` | none — `surfaceBank.changed`/`.state` broadcast |
+| `surfaceBank.set` | `displayKey: String`, `bank: String?` — the attached device to switch (D16: each device keeps its own layer) | none — `surfaceBank.changed`/`.state` broadcast |
 | `surfaceBank.state` | — | `surfaceBank.state` |
+| `surfaceEncoderBank.set` | `displayKey: String`, `attribute: String`, `colourAxis?` — the attached device whose strip encoders move | none — `surfaceEncoderBank.state` broadcast |
 | `surfaceScaler.state` | — | `surfaceScaler.state` |
 | `surfaceScaler.setBlackout` | `enabled: Boolean` | none — `surfaceScaler.state` follows |
 | `surfaceScaler.setGrandMaster` | `enabled: Boolean` | none — `surfaceScaler.state` follows. `false` takes the grand master to 0, `true` back to its last level above 0 |
@@ -1318,11 +1319,12 @@ refetch.
 | `surfaceLearn.cancelled` | `sessionId`, `reason` (`cancelled` \| `timeout`) | Owning connection only |
 | `surfaceLearn.error` | `sessionId?`, `message` | Unicast reply |
 | `surfaceBank.bindingsChanged` | `projectId`, `changeType: added\|updated\|removed\|reloaded`, `bindingId?` | Broadcast |
-| `surfaceBank.state` | `activeBanks: {deviceTypeKey: bank}` (null values elided) | Connect snapshot + broadcast |
-| `surfaceBank.changed` | `deviceTypeKey`, `previousBank?`, `newBank?` | Broadcast delta |
+| `surfaceBank.state` | `activeBanks: {displayKey: bank}` (null values elided), per attached device | Connect snapshot + broadcast |
+| `surfaceBank.changed` | `displayKey`, `deviceTypeKey?` (null once the device has detached), `previousBank?`, `newBank?` | Broadcast delta |
+| `surfaceEncoderBank.state` | `attributes: {displayKey: {attribute, colourAxis?}}`, per attached device; a device absent is on `dimmer` | Connect snapshot + broadcast (one `StateFlow`) |
 | `surfaceScaler.state` | `blackoutEnabled`, `grandMasterEnabled` (the grand master's level read as `> 0`) | Connect snapshot + broadcast |
 | `surfacePickup.changed` | `displayKey`, `controlId`, `state`, `target?` | Broadcast — soft-takeover pickup indicator |
-| `surfaceDevices.state` | `devices: [{displayKey, displayName, typeKey?, isMatched, hasInputPort, hasOutputPort, activeBank?}]` | Connect snapshot + broadcast |
+| `surfaceDevices.state` | `devices: [{displayKey, displayName, typeKey?, isMatched, hasInputPort, hasOutputPort, activeBank?}]`, `activeBank` the device's own | Connect snapshot + broadcast |
 | `surfaceControls.state` | `displayKey`, `controls: {controlId: {value?, physical?, touched, led: on\|off\|none, ring: on\|off\|none}}` | Connect snapshot (one per attached device, explicit `sendSnapshot`) + broadcast after every full resync; an empty `controls` map is a detach |
 | `surfaceControls.changed` | `displayKey`, `controls: {controlId: …}` (only the controls that changed, at their current state) | Broadcast delta, conflated to at most one frame per device per 50 ms |
 

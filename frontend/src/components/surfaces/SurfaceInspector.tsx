@@ -56,6 +56,8 @@ import { surfaceSpeedWords } from "@/lib/fxSpeed"
 
 export interface SurfaceInspectorProps {
   projectId: number
+  /** The attached device shown, whose encoder page a strip expands at. */
+  displayKey?: string
   profile: ControlSurfaceType
   controlId: string
   index: SurfaceBindingIndex
@@ -69,6 +71,7 @@ export interface SurfaceInspectorProps {
 
 export function SurfaceInspector({
   projectId,
+  displayKey,
   profile,
   controlId,
   index,
@@ -149,7 +152,7 @@ export function SurfaceInspector({
             size="sm"
             variant="outline"
             title="Replace this strip with the four single bindings it was deriving"
-            onClick={() => expandBinding({ projectId, bindingId: resolved.binding.id })}
+            onClick={() => expandBinding({ projectId, bindingId: resolved.binding.id, displayKey })}
           >
             Fader only…
           </Button>

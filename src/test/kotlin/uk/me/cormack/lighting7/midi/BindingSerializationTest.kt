@@ -9,6 +9,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The stored binding (surface-setup plan D1, P3): every function round-trips, and every function has a spec. */
@@ -81,6 +83,76 @@ class BindingSerializationTest {
             binding.how?.let { assertTrue(it in spec.hows, "${binding.functionId} takes ${binding.how}") }
             if (binding.does != Does.Strip) assertTrue(spec.inputs.isNotEmpty(), "${binding.functionId} takes some input")
             spec.defaultHow?.let { assertTrue(ControlKind.BUTTON in spec.inputs, "a default How is a button's") }
+        }
+    }
+
+    /** A site that resolves every record, so a light is built on what it reads rather than on a dead lookup. */
+    private fun site(control: ControlDescriptor) = object : FeedbackSite {
+        override val displayKey = "x-touch"
+        override val hold = SurfaceDispatch.HoldKey("x-touch", control.controlId, ControlPart.MAIN)
+        override val control = control
+        override fun stackId(stack: UUID) = 7
+        override fun cueId(cue: UUID) = 8
+        override fun pad(pad: UUID): PadRef = PadRef.Stack(7)
+        override fun pageId(page: UUID) = 9
+        override fun levelHeads(on: Subject, attribute: String, axis: ColourAxis?) = LevelHeads { Reading.Value(64u) }
+    }
+
+    /** A desk with nothing on: nothing selected, located, held or running. */
+    private val idle = object : FeedbackPass {
+        override val selection = emptyList<uk.me.cormack.lighting7.models.CueTargetDto>()
+        override fun covers(target: uk.me.cormack.lighting7.models.CueTargetDto) = false
+        override fun located() = emptySet<uk.me.cormack.lighting7.models.TargetRef>()
+        override fun applied() = emptyList<uk.me.cormack.lighting7.fx.AppliedSource>()
+        override fun blackout() = false
+        override fun grandMasterEnabled() = true
+        override fun grandMasterLevel() = 100.0
+        override fun tempo(master: UUID?) = 120.0
+        override fun stackRunning(stackId: Int) = false
+        override fun stackFxAmount(stackId: Int) = 1.0
+        override fun cueLooseHeld(cueId: Int) = false
+        override fun buskPage(): Int? = null
+        override fun held(key: SurfaceDispatch.HoldKey) = false
+        override fun encoderPage(displayKey: String) = EncoderBankState.DEFAULT
+        override fun fanAmount(axis: FanAxis) = 0
+        override fun fxLeadSpeed() = 1.0
+    }
+
+    /** The functions whose button shows a state (P3); every other one declares it has none. */
+    private val lit = setOf(
+        Does.Flash::class, Does.Select::class, Does.Locate::class, Does.Palette::class, Does.Look::class,
+        Does.Cue::class, Does.Pad::class, Does.Go::class, Does.Blackout::class, Does.GrandMaster::class,
+        Does.EncoderPage::class, Does.BuskPage::class,
+    )
+
+    @Test
+    fun `every function declares its LED, and every continuous one what it reads`() {
+        val button = ButtonDescriptor("btn-1", "Button 1", note = 16)
+        val encoder = EncoderDescriptor("enc-1", "Encoder 1", cc = 10, ringCc = 10)
+        val all = samples + Binding(Does.Unknown("future", "{}"))
+        for (binding in all) {
+            val led = binding.does.led(binding, site(button))
+            val light = when (val does = binding.does) {
+                is Does.GrandMaster -> does.level == null
+                is Does.BuskPage -> binding.on !is Subject.None
+                else -> does::class in lit
+            }
+            if (light) {
+                val l = assertIs<Led.Light>(led, "${binding.functionId} on ${binding.on} shows a state")
+                assertTrue(l.signals.isNotEmpty(), "${binding.functionId}'s light follows something")
+                l.lit(idle)
+            } else {
+                assertEquals(Led.None, led, "${binding.functionId} on ${binding.on} has no state to show")
+            }
+
+            val readout = binding.does.read(binding, site(encoder))
+            if (ControlKind.CONTINUOUS in binding.does.spec.inputs) {
+                val r = assertNotNull(readout, "${binding.functionId} takes a turn, so it says what the ring shows")
+                assertTrue(r.signals.isNotEmpty(), "${binding.functionId}'s readout follows something")
+                assertIs<Reading.Value>(r.read(idle), "${binding.functionId} on an idle desk")
+            } else {
+                assertNull(readout, "${binding.functionId} takes no turn, so it reads nothing")
+            }
         }
     }
 
