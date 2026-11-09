@@ -170,7 +170,6 @@ internal fun removeEntries(state: State, project: DaoProject, entries: List<DaoC
     if (entries.isEmpty()) return EntryRemoval.NONE
     val current = project.id == state.projectManager.currentProject.id
     val stacks = entries.map { it.stack }.distinctBy { it.id.value }
-    val before = stacks.associate { it.id.value to cueEntryIds(it) }
     val lists = stacks.associate { it.id.value to entriesOf(it) }
     val removed = entries.mapTo(HashSet()) { it.id.value }
     var anchors = 0
@@ -183,7 +182,7 @@ internal fun removeEntries(state: State, project: DaoProject, entries: List<DaoC
         }
         entry.delete()
     }
-    stacks.forEach { renumberAutoEntries(it, before.getValue(it.id.value)) }
+    stacks.forEach { renumberAutoEntries(it) }
     return EntryRemoval(
         entryIds = entries.mapTo(HashSet()) { it.id.value },
         cueIds = entries.mapNotNullTo(HashSet()) { it.cueId },

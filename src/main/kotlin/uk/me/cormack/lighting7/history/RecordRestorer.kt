@@ -13,9 +13,6 @@ import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStackEntries
 import uk.me.cormack.lighting7.models.DaoCueStacks
-import uk.me.cormack.lighting7.routes.cueEntriesInOrder
-import uk.me.cormack.lighting7.routes.flushPendingEntryWrites
-import uk.me.cormack.lighting7.routes.renumberAsArchived
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.routes.EntryRemoval
@@ -103,14 +100,11 @@ internal class RecordRestorer(private val state: State) {
                     if (targets.isEmpty()) return@transaction Outcome.Empty(false)
                     attempted = targets
                     if (!scriptsAllowed && targets.keys.any { it.tableName in SCRIPT_FOLDERS }) return@transaction Outcome.ScriptsRefused
-                    // A stack's entries come too, so its renumber reads their numbers and the check sees it.
                     val folders = targets.keys.mapTo(HashSet()) { it.tableName }
-                        .also { if (RecordFolders.CUE_STACKS in it) it += RecordFolders.CUE_STACK_ENTRIES }
                     val before = exportFolders(projectId, folders)
                     val stageBefore = if (current) heldStage(project, targets) else emptyMap()
                     val clashesBefore = venueClashes(project, targets)
                     ProjectImporter(state).restore(project, targets, keepRowIds = false)
-                    renumberAsWritten(project, targets) { before[it] }
                     TransactionManager.current().flushCache()
                     newClash(project, targets, clashesBefore)?.let { throw BlockedException(it) }
                     val after = exportFolders(projectId, folders)
@@ -221,7 +215,6 @@ internal class RecordRestorer(private val state: State) {
                     )
                     val clashesBefore = venueClashes(project, ready.targets)
                     ProjectImporter(state).restore(project, ready.targets)
-                    renumberAsWritten(project, ready.targets)
                     TransactionManager.current().flushCache()
                     newClash(project, ready.targets, clashesBefore)?.let { throw BlockedException(it) }
                     verify(projectId, ready.targets)?.let { throw BlockedException(it) }
@@ -270,33 +263,6 @@ internal class RecordRestorer(private val state: State) {
     private suspend fun runEffects(projectId: Int, current: Boolean, effectsOrigin: WriteOrigin, done: Applied) {
         withContext(effectsOrigin) {
             KindEffects.afterRestore(state, projectId, current, done.before, done.targets, done.removal, done.stageChanged)
-        }
-    }
-
-    /**
-     * Every stack whose entries [targets] touch, renumbered so each auto entry holds the number its
-     * export says: one whose image carries a number (an auto number no reader could derive) takes it,
-     * and every other is derived from its neighbours, as an import derives it ([renumberAsArchived]).
-     * The write being undone renumbered by position, which a restore cannot replay.
-     */
-    private fun renumberAsWritten(
-        project: DaoProject,
-        targets: Map<RecordKey, RecordImage?>,
-        recordOf: (RecordKey) -> RecordImage? = { state.history.recordOf(project.id.value, it) },
-    ) {
-        val entryKeys = targets.keys.filter { it.tableName == RecordFolders.CUE_STACK_ENTRIES }
-        val stackUuids = entryKeys.flatMap { listOfNotNull(targets[it], recordOf(it)) }
-            .mapNotNull { it.jsonObjectOrNull()?.string("cueStackUuid")?.let(::uuidOrNull) }
-            .toSet() + targets.keys.filter { it.tableName == RecordFolders.CUE_STACKS && targets[it] != null }.map { it.uuid }
-        for (uuid in stackUuids) {
-            val stack = DaoCueStack.find { DaoCueStacks.uuid eq uuid }.firstOrNull { it.project.id == project.id } ?: continue
-            flushPendingEntryWrites()
-            val held = cueEntriesInOrder(stack).mapNotNull { entry ->
-                val key = RecordKey(RecordFolders.CUE_STACK_ENTRIES, entry.uuid)
-                val image = if (key in targets) targets[key] else recordOf(key)
-                image?.jsonObjectOrNull()?.string("cueNumber")?.let { entry.id.value to it }
-            }.toMap()
-            renumberAsArchived(stack, held)
         }
     }
 

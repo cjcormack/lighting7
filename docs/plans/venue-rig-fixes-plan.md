@@ -402,8 +402,8 @@ run `./gradlew compileTestKotlin` and the touched packages' tests where they tou
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | OSC sender ranges and the address list | in review | `claude/magical-ritchie-84882h` | | |
-| 2 | Auto numbers from position | planned | | | |
+| 1 | OSC sender ranges and the address list | in review | `claude/magical-ritchie-84882h` | [#410](https://github.com/cjcormack/lighting7/pull/410) | `7296801` |
+| 2 | Auto numbers from position | in review | `claude/gallant-meitner-7xk6a8` | | |
 | 3 | The Show view follows the show | planned | | | |
 | 4 | Include, and Record's cue list and placement | planned | | | |
 | 5 | One colour editor for FX | planned | | | |
@@ -488,6 +488,21 @@ D6–D9.
   `docs/sync-engineering.md` (version 54); root `CLAUDE.md` §Database (step 16) and §"Cue Stack Run Endpoints"'
   *Cue numbers are numbers* line (auto numbers).
 - Local: the full `./gradlew test` and `npm run check`.
+- *As built*: step 16 and sync 54 were still free. `AutoNumberInput` went with `keep`:
+  `computeAutoCueNumbers` takes each entry's typed number or null, and `cueEntryIds` went with the
+  `before` snapshots. `renumberAsArchived` and `RecordRestorer.renumberAsWritten` went too: the restore's
+  `removeEntries` and `ProjectImporter.restore` already run `renumberAutoEntries` on every stack an
+  entry joins or leaves, and the images carry typed numbers only. An auto entry given the number it
+  shows becomes typed at it (`planEntryNumberEdit`), since an auto number moves with later inserts. Step 11
+  (`CueNumberMigration`) now derives the stacks it touches from scratch as well; step 16 would anyway.
+  Where the first typed number reads out of place and a later one is in place, the run before the
+  later one counts up from 1 or down from it by that one's fit, through the first (38 autos, a typed
+  30, an auto, a typed 50 read 1–29, 31–39, 30, 41, 50). A run between a typed number and the next is
+  bounded by it even with no room, so a cue there stays blank and the cue after the next counts on
+  from it. The tests that pinned D11's kept numbers now pin D6–D7's: `CueNumberingTest`,
+  `CueNumberingRouteTest`, `EntryNumberingTest`, `CueStackEntrySyncTest` and `CueModelMigrationTest`
+  (whose blank cue step 16 now numbers); `ExportGoldenTest`'s hashes moved with `formatVersion.json`
+  alone. The frontend needed no change: `detectOutOfOrder` reads the stored numbers.
 
 ### Session 3 — The Show view follows the show
 

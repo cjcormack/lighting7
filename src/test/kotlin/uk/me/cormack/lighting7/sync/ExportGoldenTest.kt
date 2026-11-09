@@ -54,9 +54,9 @@ class ExportGoldenTest {
     }
 
     private companion object {
-        const val RICH_PROJECT_HASH = "828ad9b94d628084d66d7dc020f5ba56dacd53eb751e6c0f4e5e7535d3785be3"
+        const val RICH_PROJECT_HASH = "533c04120eb815f3fe876503b2dd740db03fdc18352a867f8ae6a82e813cb78f"
         const val RICH_PROJECT_FILES = 108
-        const val SHOW_ON_VENUE_HASH = "184d769c6f1503c20b32953a46aaea523fb7e97fca8cbb649daade16c5bb0b2d"
+        const val SHOW_ON_VENUE_HASH = "28b336144be8fa8359d77e500a48067523d533e358e3154570e8d2b1893b60f2"
         const val SHOW_ON_VENUE_FILES = 97
 
         const val REFINEMENT_ROUNDS = 4

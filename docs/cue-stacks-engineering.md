@@ -86,9 +86,8 @@ From `formatVersion` 32 (cue model plan session 3, `docs/sync-engineering.md` §
 entry is its own record, `cueStackEntries/{uuid}.json`: its stack, its cue (or `kind: MARKER` and a
 label), its ordinal, its follow, and its number when explicit — every reader derives the auto
 numbers from position, so a drag is one changed file and a renumber touches only the entries whose
-written number moved. An auto number a reader could not derive, one D11 holds beside an explicit
-renumber waiting for *Fix Order*, is written too and read back as explicit (`heldAutoNumbers`), so a
-pull or a clone shows the labels this desk does. An anchor names its entry. A cue file says nothing about where the cue sits.
+written number moved. From v54 the archive carries no auto number at all (§"Auto Numbering"). An
+anchor names its entry. A cue file says nothing about where the cue sits.
 
 A v5–v31 archive still imports: each cue becomes one entry in its stack, named with **its cue's
 uuid** at its 0-based place, and a MARKER cue a marker entry; a cue with no stack is loose. The
@@ -165,56 +164,54 @@ starting from the first selected cue's whole number or the digit typed at the gr
 
 ### Auto Numbering
 
-A cue entry with no explicit number is given one derived from its position, flagged with
-`cue_number_auto`. `renumberAutoEntries(stack, before)` recomputes them and is called from every handler
+A cue entry with no typed number is given one derived from its position, flagged with
+`cue_number_auto`. `renumberAutoEntries(stack)` recomputes them and is called from every handler
 that changes a stack's membership, order or numbers: cue create / delete / copy, `reorder`,
 `add-cue`, Remove from stack (each stack an entry left), `sort-by-cue-number`, `renumber`, the marker
-routes, Record's new cue, the AI's `build_cue_stack` (once, after it has placed every cue), and the
-entry `PATCH` when it changes a number. Marker entries take no number and are not an auto
-cue's neighbours.
+routes, Record's new cue, the AI's `build_cue_stack` (once, after it has placed every cue), the entry
+`PATCH` when it changes a number, an import and an undo's restore. Marker entries take no number and
+are not an auto cue's neighbours.
 
-**An auto number stays put while its cue does** (venue-visit plan D11). Each handler takes
-`cueEntryIds(stack)` *before* it changes the list and hands it to `renumberAutoEntries`; an auto cue
-still at the same index keeps the number it holds (unless an explicit number has claimed it), and
-only the cues that are new, moved, or shifted by an insert or a delete are labelled again. A number
-edit moves nothing, so it passes the order as it stands and no other auto cue changes: in five auto
-cues, cue 2 set to `4.5` reads 1, 4.5, 3, 4, 5, the frontend's out-of-order check sees the descent
-and offers *Fix Order*, and *Fix Order* moves that cue rather than renumbering anything — the cues it
-passed take numbers from where they land (1, 2, 3, 4.5, 5). Cue 3 set to `10` reads 1, 2, 10, 4, 5
-and sorts to 1, 2, 3, 4, 10; cue 3 set to `1` takes cue 1's number, so cue 1 — released by
-`releaseAutoNumber` — takes the highest free whole number below its neighbour and the stack reads
-0, 2, 1, 4, 5, sorting to 0, 1, 2, 4, 5. `CueNumberingTest` pins the three on the rule and
-`CueNumberingRouteTest` through the routes; `EntryNumberingTest` runs them again with a marker in
-the list (cue-model plan D14).
+**Every auto number is derived from position and the typed numbers alone**, on every stack write
+(venue-rig-fixes plan D6). An auto entry's stored number is never read, so a list always reads the
+same however it got there: typing a number moves the auto numbers after it (a typed Q30 is followed
+by Q31, and in five auto cues the second typed `4.5` reads 1, 4.5, 5, 6, 7). Typed numbers are never
+touched. **A number the show calls should be typed**: an auto number moves when a number before it is
+typed or a cue before it comes or goes.
 
-The cues that do need a label are labelled in maximal runs, each from the nearest preceding *fixed*
-number — an explicit one, or an auto one being kept — with **whole numbers**:
+A typed number **is in place** when it is above the previous typed number in place; the first is in
+place when the cues before it fit the free whole numbers below it, counting from 1 or else from 0
+(D7). The cues between are labelled in maximal runs from the typed numbers in place either side, with
+**whole numbers**:
 
-- The whole numbers after it that are free in the stack and below the next fixed number: `3` →
+- The whole numbers after the one before that are free in the stack and below the one after: `3` →
   `4`, `5`.
 - Only the cues there are not enough of those for take **decimals**, between the last whole number
-  and the next fixed one, evenly spaced in the fewest places that fit (exact first, so a midpoint is a
+  and the next typed one, evenly spaced in the fewest places that fit (exact first, so a midpoint is a
   midpoint): one cue between `3` and `4` is `3.5`, one between `3` and `3.5` is `3.25`, two between
   `3` and `4` are `3.3` and `3.7`, three between `1` and `4` are `2`, `3` and `3.5`. This is the point
   cue Eos and MagicQ give an insert between consecutive numbers.
 
-**An explicit number that reads out of order against the auto numbers beside it** — the nearest one
-before it is not below it, or the nearest one after it is not above it — **neither anchors nor bounds
-a run**: the run passes through it, counting its place. It is a renumber waiting for *Fix Order*, and
-anchoring on it would relabel the cues around it the next time anything in the stack changed, which
-is D11's relabelling one gesture later. Two explicit numbers out of order against each other still
-anchor, as they always did.
+A run with nothing in place before it **counts up from 1** where that fits below the cue that follows
+(two cues before `30` are `1` and `2`), else takes the highest free whole numbers below it (a lone cue
+before `1`, or before `0.5`, is `0`). With nothing in place either side the run counts up from 1, so a
+fresh stack numbers `1`, `2`, `3`. A cue with no room even in four places (between `3` and `3.0001`)
+stays blank.
 
-A run with nothing fixed before it takes the highest free whole numbers below the following cue:
-two cues before `3` are `1` and `2`, and a lone cue before `1` is `0`. With nothing either side the
-run is starting the series, so a fresh stack numbers `1`, `2`, `3`. A cue with no room even in four
-places (between `3` and `3.0001`) stays blank.
+**A typed number out of place neither anchors nor bounds a run**: the run counts through it, taking
+its step but never its number (numbers are unique in a stack), and the frontend's out-of-order check
+offers *Fix Order*. So 38 auto cues before a typed `30` read 1–29 and 31–39, the 30 out of place, and
+the auto cue after it 41; two auto cues before a typed `1` read 2, 3. A typed number too low for the
+cues before it reads out of order rather than renumbering them. `CueNumberingTest` pins the rule,
+`CueNumberingRouteTest` and `EntryNumberingTest` (a marker in the list) through the routes.
 
-**An import derives auto numbers from scratch**: the archive carries only explicit numbers (sync v32,
-P5) and the auto numbers a reader could not derive (`heldAutoNumbers`), so the importer — a pull, a
-clone, an import — numbers every stack's auto entries from position once its entries are in, and every
-desk reading one archive numbers it alike. `copy_to_project` stores `cue_number` and `cue_number_auto`
-as they are.
+**An import derives auto numbers from scratch**: the archive carries typed numbers only (sync v54), so
+the importer — a pull, a clone, an import — numbers every stack's auto entries from position once its
+entries are in, and every desk reading one archive numbers it alike. A v53-or-older archive could also
+carry an auto number its writer held in place, which nothing tells apart from a typed one, so every
+number an archive carries imports as typed; the Cue # cell's Clear hands a stray one back.
+`copy_to_project` stores `cue_number` and `cue_number_auto` as they are. Database step 16
+(`state/AutoNumberTidyMigration.kt`) derived every stack's auto numbers once, when this rule arrived.
 
 Typing an explicit number releases that value from any auto sibling holding it (`releaseAutoNumber`)
 so the edit can't be rejected by `uq_entry_number_per_stack`; clearing the field hands the cue back to
@@ -938,9 +935,8 @@ lands.
 ### `sort-by-cue-number`
 
 Sorts the numbered cue entries by number among the places numbered cue entries already occupy
-(`numericCueOrder`), so markers and unnumbered cues never move. Afterwards the cues the sort moved
-take auto numbers from where they landed and the rest keep theirs (§"Auto Numbering", D11), so *Fix
-Order* moves a renumbered cue rather than relabelling its neighbours.
+(`numericCueOrder`), so markers and unnumbered cues never move. Afterwards every auto number is
+derived again from where the cues landed (§"Auto Numbering").
 
 Response: `{ updatedCues: [...], pinnedCount, nullNumberCount }` — `pinnedCount` counts numbers that
 are not numbers, left in place (none since step 11). No longer returns 400 when nothing was eligible; a stack that

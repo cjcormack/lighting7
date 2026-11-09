@@ -22,7 +22,6 @@ import uk.me.cormack.lighting7.models.entriesOf
 import uk.me.cormack.lighting7.models.entriesOfCue
 import uk.me.cormack.lighting7.models.planEntryOrdinals
 import uk.me.cormack.lighting7.models.writeEntryOrder
-import uk.me.cormack.lighting7.routes.cueEntryIds
 import uk.me.cormack.lighting7.routes.renumberAutoEntries
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
@@ -197,66 +196,78 @@ class CueStackEntrySyncTest {
             // What the reorder route does with a drag: the new order written, the auto numbers derived.
             val entry = DaoCueStackEntry.find { DaoCueStackEntries.uuid eq entries[5] }.single()
             val stack = entry.stack
-            val before = cueEntryIds(stack)
             val others = entriesOf(stack).filter { it.id != entry.id }
             writeEntryOrder(others.take(1) + entry + others.drop(1))
-            renumberAutoEntries(stack, before)
+            renumberAutoEntries(stack)
         }
         assertNotEquals(autoBefore, numbersOf(projectId), "test sanity: the drag relabelled the desk's auto numbers")
         val b = export(projectId)
         assertEquals(setOf("cueStackEntries/${entries[5]}.json"), changedFiles(a, b))
 
-        // Type an explicit number on the third entry (1, 2, 3, 3.5, 4, 5 after the drag). Its file
-        // changes, and so does the fourth's: D11 holds its 3.5, which a reader anchoring on the new
-        // 2.5 would derive as 3, so the archive now writes it (P5, as amended 2026-10-16).
+        // Type a number on the third entry (1, 2, 3, 3.5, 4, 5 after the drag): only its file changes,
+        // though the auto numbers after it move on the desk (1, 2, 2.5, 3, 4, 5).
         transaction(state.database) {
             val stack = DaoCueStack.find { DaoCueStacks.project eq projectId }.single()
-            val before = cueEntryIds(stack)
             val third = entriesOf(stack)[2]
             third.cueNumber = "2.5"
             third.cueNumberAuto = false
-            renumberAutoEntries(stack, before)
+            renumberAutoEntries(stack)
         }
         val c = export(projectId)
-        val (third, fourth) = transaction(state.database) {
-            entriesOf(DaoCueStack.find { DaoCueStacks.project eq projectId }.single()).let { it[2].uuid to it[3].uuid }
-        }
-        assertEquals(setOf("cueStackEntries/$third.json", "cueStackEntries/$fourth.json"), changedFiles(b, c))
-        assertEquals("3.5", canonicalDecode(CueStackEntryJson.serializer(), c.getValue("cueStackEntries/$fourth.json")).cueNumber)
+        val third = transaction(state.database) { entriesOf(DaoCueStack.find { DaoCueStacks.project eq projectId }.single())[2].uuid }
+        assertEquals(setOf("cueStackEntries/$third.json"), changedFiles(b, c))
+    }
+
+    private fun labels(id: Int) = transaction(state.database) {
+        entriesOf(DaoCueStack.find { DaoCueStacks.project eq id }.single()).map { it.cueNumber }
+    }
+
+    private fun typedFlags(id: Int) = transaction(state.database) {
+        entriesOf(DaoCueStack.find { DaoCueStacks.project eq id }.single()).map { !it.cueNumberAuto }
+    }
+
+    /** v54 (venue-rig-fixes plan D8): every auto number is derivable, so an archive carries typed numbers only. */
+    @Test
+    fun `a v54 archive carries no auto number, and a reader derives them alike`() {
+        val projectId = seedMinimalProject(state)
+        seedStack(projectId, "Act 1", listOf(null, "4.5", null, null, null))
+        assertEquals(listOf("1", "4.5", "5", "6", "7"), labels(projectId))
+
+        val files = export(projectId)
+        assertEquals(54, canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")).formatVersion)
+        val written = files.filterKeys { it.startsWith("cueStackEntries/") }
+            .values.mapNotNull { canonicalDecode(CueStackEntryJson.serializer(), it).cueNumber }
+        assertEquals(listOf("4.5"), written)
+
+        // A clone is that export imported again — what a pull does to this desk's own rows.
+        val cloned = ProjectCloner(state).clone(projectId, "Derived", description = null).projectId
+        assertEquals(listOf("1", "4.5", "5", "6", "7"), labels(cloned))
+        assertEquals(listOf(false, true, false, false, false), typedFlags(cloned))
     }
 
     /**
-     * An auto number D11 held in place survives an import (P5, as amended 2026-10-16): an explicit
-     * renumber waiting for *Fix Order* keeps its neighbours' labels on this desk, a reader deriving
-     * from position alone would not, so the archive writes them — and a pull or a clone shows the
-     * labels this desk does.
+     * A v53 archive may carry an auto number its writer held in place (venue-visit plan D11), which
+     * nothing tells apart from a typed one, so every number it carries imports as typed (D8).
      */
     @Test
-    fun `an auto number held by an explicit renumber survives an import`() {
+    fun `a v53 archive's carried numbers import as typed`() {
         val projectId = seedMinimalProject(state)
-        seedStack(projectId, "Act 1", listOf(null, null, null, null, null))
-        transaction(state.database) {
-            val stack = DaoCueStack.find { DaoCueStacks.project eq projectId }.single()
-            val before = cueEntryIds(stack)
-            val second = entriesOf(stack)[1]
-            second.cueNumber = "4.5"
-            second.cueNumberAuto = false
-            renumberAutoEntries(stack, before)
-        }
-        fun labels(id: Int) = transaction(state.database) {
-            entriesOf(DaoCueStack.find { DaoCueStacks.project eq id }.single()).map { it.cueNumber }
-        }
-        assertEquals(listOf("1", "4.5", "3", "4", "5"), labels(projectId), "test sanity: D11 held the neighbours")
-
-        val dir = Files.createTempDirectory(scratchRoot, "held-")
+        val entries = seedStack(projectId, "Act 1", listOf(null, "4.5", null, null, null))
+        val dir = Files.createTempDirectory(scratchRoot, "v53-")
         ProjectExporter(state).export(projectId, dir)
-        val written = readExportFiles(dir).filterKeys { it.startsWith("cueStackEntries/") }
-            .values.map { canonicalDecode(CueStackEntryJson.serializer(), it).cueNumber }
-        assertEquals(setOf("1", "4.5", "3", "4", "5"), written.filterNotNull().toSet(), "a reader would not derive them")
+        write(dir, "formatVersion.json", """{"formatVersion":53,"minReader":53}""")
+        val projectUuid = transaction(state.database) { DaoProject[projectId].uuid.toString() }
+        write(dir, "project.json", Files.readString(dir.resolve("project.json")).replace(projectUuid, UUID.randomUUID().toString()))
+        // What a v53 desk wrote for 1, 4.5, 3, 4, 5: the held 3, 4 and 5 beside the typed 4.5.
+        for ((index, number) in listOf(2 to "3", 3 to "4", 4 to "5")) {
+            val rel = "cueStackEntries/${entries[index]}.json"
+            val json = canonicalDecode(CueStackEntryJson.serializer(), Files.readString(dir.resolve(rel)))
+            write(dir, rel, canonicalEncode(CueStackEntryJson.serializer(), json.copy(cueNumber = number)))
+        }
 
-        // A clone is that export imported again — what a pull does to this desk's own rows.
-        val cloned = ProjectCloner(state).clone(projectId, "Held", description = null).projectId
-        assertEquals(listOf("1", "4.5", "3", "4", "5"), labels(cloned))
+        val imported = ProjectImporter(state).import(dir, nameOverride = "From v53").projectId
+        assertEquals(listOf("1", "4.5", "3", "4", "5"), labels(imported))
+        assertEquals(listOf(false, true, true, true, true), typedFlags(imported))
     }
 
     @Test
@@ -408,7 +419,7 @@ class CueStackEntrySyncTest {
                 cueNumber = number
             }
         }
-        renumberAutoEntries(stack, emptyList())
+        renumberAutoEntries(stack)
         entries.map { it.uuid }
     }
 

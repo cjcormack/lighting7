@@ -210,7 +210,8 @@ class CueModelMigrationTest {
                 // (`CueEntryUuidMigration.kt`, sync v32) makes each its 0-based position, what a v31
                 // archive's sortOrder said, so every desk writes the same entry file.
                 cueEntry(1, 0.0),
-                cueEntry(2, 1.0),
+                // Blank in the fixture; step 16 numbers it from its place.
+                cueEntry(2, 1.0).copy(cueNumber = "2", cueNumberAuto = true),
                 cueEntry(4, 2.0),
                 markerEntry(1, "Interval", 3.0),
                 cueEntry(5, 4.0),
@@ -267,6 +268,10 @@ class CueModelMigrationTest {
                 statement.executeUpdate("PRAGMA user_version = 0")
             }
         }
+        // The moved entry renumbers its stack again, and a second backup within the second would collide.
+        Files.list(Path.of(IntegrationTestDb.path).parent).use { files ->
+            files.filter { it.name.startsWith("${Path.of(IntegrationTestDb.path).name}.pre-auto-numbers-") }.toList()
+        }.forEach(Files::delete)
         startDesk()
         stopDesk()
         fun ordinal(id: Int) = (rows("SELECT ordinal FROM cue_stack_entries WHERE id = $id").single()["ordinal"] as Number).toDouble()
