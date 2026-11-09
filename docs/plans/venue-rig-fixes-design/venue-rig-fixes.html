@@ -1,0 +1,430 @@
+<title>After the Rig Session</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one reading column; each issue is a section with its problem, the change, a dark desk mock-up and its edges.
+     Colour carries meaning: green = live, blue = next, amber = the unlocked-while-running wash, violet = what this design adds. */
+  :root {
+    --bg:#f3f3f0; --panel:#ffffff; --fg:#1a1c1e; --muted:#5e6469; --line:#d8dad5; --soft:#e9eae5;
+    --add:#6a3fc0; --warn:#9a6200; --live:#1d8146; --next:#2a63c9; --no:#b8432b;
+    --sans:"Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#111315; --panel:#181b1e; --fg:#eceeec; --muted:#9ba1a3; --line:#2c3134; --soft:#1f2326;
+    --add:#bf9cf6; --warn:#f0bb52; --live:#5fd38a; --next:#80aaff; --no:#ff8f78; color-scheme:dark; } }
+  :root[data-theme="dark"] {
+    --bg:#111315; --panel:#181b1e; --fg:#eceeec; --muted:#9ba1a3; --line:#2c3134; --soft:#1f2326;
+    --add:#bf9cf6; --warn:#f0bb52; --live:#5fd38a; --next:#80aaff; --no:#ff8f78; color-scheme:dark; }
+
+  body { background:var(--bg); color:var(--fg); font-family:var(--sans); font-size:15.5px; line-height:1.55; }
+  .wrap { max-width:1060px; margin:0 auto; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:32px 72px; display:flex; flex-direction:column; gap:48px; }
+  header { display:flex; flex-direction:column; gap:12px; }
+  .eyebrow { font:500 11px var(--mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 16px; }
+  .eyebrow .status { color:var(--warn); }
+  h1 { margin:0; font-size:clamp(30px, 5vw, 46px); line-height:1.06; font-weight:700; letter-spacing:-0.02em; text-wrap:balance; max-width:22ch; }
+  .lede { margin:0; max-width:68ch; color:var(--muted); font-size:17px; }
+  body::before { content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top, 0px); z-index:10; background:var(--bg); }
+  nav.toc { position:sticky; top:env(safe-area-inset-top, 0px); z-index:3; background:var(--bg); border-bottom:1px solid var(--line); padding-block:10px; display:flex; flex-wrap:wrap; gap:6px; margin-top:-24px; }
+  nav.toc a { font-size:13px; font-weight:500; color:var(--fg); text-decoration:none; border:1px solid var(--line); border-radius:6px; padding:3px 10px; background:var(--panel); }
+  nav.toc a:hover, nav.toc a:focus-visible { border-color:var(--add); outline:none; }
+
+  section { display:flex; flex-direction:column; gap:14px; scroll-margin-top:64px; }
+  h2 { margin:0; font-size:25px; line-height:1.2; font-weight:700; letter-spacing:-0.01em; text-wrap:balance; display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; }
+  h2 .n { font:500 13px var(--mono); color:var(--add); border:1px solid currentColor; border-radius:5px; padding:1px 7px; }
+  h3 { margin:6px 0 0; font-size:16px; font-weight:600; }
+  p { margin:0; max-width:72ch; }
+  .muted { color:var(--muted); }
+  code { font-family:var(--mono); font-size:0.82em; background:var(--soft); border-radius:4px; padding:1px 4px; overflow-wrap:anywhere; }
+  ul.plain { margin:0; padding-left:20px; max-width:74ch; display:flex; flex-direction:column; gap:6px; }
+  kbd { font:500 11px var(--mono); border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; background:var(--panel); }
+  .ask { color:var(--warn); font-weight:600; }
+
+  .two { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:12px; }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; min-width:0; font-size:14.5px; display:flex; flex-direction:column; gap:6px; }
+  .box b { font-weight:600; }
+  .box .where { font:11px var(--mono); color:var(--muted); overflow-wrap:anywhere; }
+  .box.now b { color:var(--no); } .box.then b { color:var(--add); }
+
+  .tablebox { overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:9px 12px; border-bottom:1px solid var(--line); }
+  tr:last-child td { border-bottom:none; }
+  th { font:500 11px var(--mono); letter-spacing:0.05em; text-transform:uppercase; color:var(--muted); background:var(--soft); white-space:nowrap; }
+  td.n { font:500 12px var(--mono); color:var(--muted); white-space:nowrap; }
+  td.d { min-width:260px; }
+  td.k { font:500 11.5px var(--mono); white-space:nowrap; }
+  td.k.yes { color:var(--live); } td.k.no { color:var(--no); } td.k.new { color:var(--add); }
+
+  figure { margin:0; display:flex; flex-direction:column; gap:8px; }
+  figcaption { font-size:13.5px; color:var(--muted); max-width:74ch; }
+
+  /* ── mock-ups: the desk is dark, so the screens are dark in both page themes ── */
+  .screenbox { overflow-x:auto; border-radius:10px; border:1px solid var(--line); }
+  .screen { --s-bg:#0e0e11; --s-page:#121216; --s-card:#1b1b20; --s-row:#16161a; --s-bd:#2a2a31; --s-fg:#f4f4f5; --s-mfg:#a1a1aa;
+    --s-live:#4ade80; --s-next:#60a5fa; --s-amber:#f5c04a; --s-pri:#3b82f6; --s-add:#c4a1ff; --s-head:#1d4ed8;
+    background:var(--s-bg); color:var(--s-fg); font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; font-size:12.5px; line-height:1.35; min-width:900px; display:flex; flex-direction:column; position:relative; }
+  .screen .m { font-family:ui-monospace, Menlo, Consolas, monospace; font-variant-numeric:tabular-nums; }
+  .screen .dim { color:var(--s-mfg); }
+  .screen .row { display:flex; align-items:center; gap:8px; }
+  .screen .sp { flex:1; }
+  .screen .btn { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 9px; border:1px solid var(--s-bd); border-radius:6px; background:var(--s-card); font-size:12px; white-space:nowrap; color:var(--s-fg); }
+  .screen .btn.on { background:#2a2350; border-color:#6d55c9; color:var(--s-add); }
+  .screen .btn.ghost { background:transparent; border-color:transparent; }
+  .screen .btn.pri { background:var(--s-pri); border-color:var(--s-pri); color:#fff; }
+  .screen .seg { display:inline-flex; border:1px solid var(--s-bd); border-radius:6px; overflow:hidden; }
+  .screen .seg span { padding:4px 9px; font-size:11.5px; color:var(--s-mfg); }
+  .screen .seg span.on { background:#27272a; color:var(--s-fg); }
+  .screen .lbl { font-size:9.5px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--s-mfg); }
+  .screen .chip { display:inline-flex; align-items:center; gap:4px; height:19px; padding:0 7px; border-radius:999px; border:1px solid var(--s-bd); font-size:10.5px; color:var(--s-mfg); white-space:nowrap; }
+  .screen .chip.add { color:var(--s-add); border-color:rgba(196,161,255,0.5); }
+  .screen .chip.amber { color:var(--s-amber); border-color:rgba(245,192,74,0.5); background:rgba(245,192,74,0.08); }
+  .screen .top { height:40px; display:flex; align-items:center; gap:10px; padding:0 12px; border-bottom:1px solid var(--s-bd); background:var(--s-page); }
+  .screen .top.amber { background:rgba(245,192,74,0.13); border-bottom-color:rgba(245,192,74,0.5); }
+  .screen .bar { height:42px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--s-bd); background:var(--s-page); }
+  .screen .grid { display:grid; border-bottom:1px solid #222228; align-items:center; }
+  .screen .grid > div { padding:0 10px; height:34px; display:flex; align-items:center; border-right:1px solid #1f1f25; min-width:0; white-space:nowrap; overflow:hidden; }
+  .screen .grid.h > div { height:28px; font-size:10px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--s-mfg); background:var(--s-row); }
+  .screen .grid.live { background:rgba(74,222,128,0.07); box-shadow:inset 3px 0 0 var(--s-live); }
+  .screen .grid.next { background:rgba(96,165,250,0.07); box-shadow:inset 3px 0 0 var(--s-next); }
+  .screen .grid.selrow { box-shadow:inset 3px 0 0 var(--s-pri); background:rgba(59,130,246,0.08); }
+  .screen .cellsel { outline:2px solid var(--s-pri); outline-offset:-2px; background:rgba(59,130,246,0.14); }
+  .screen .pip { width:20px; height:20px; border-radius:50%; display:grid; place-items:center; background:#27272a; border:1px solid var(--s-bd); flex:none; }
+  .screen .pip i { width:7px; height:7px; border-radius:50%; background:#52525b; display:block; }
+  .screen .pip.live { background:#052e16; border-color:#14532d; box-shadow:0 0 8px rgba(74,222,128,0.4); }
+  .screen .pip.live i { width:0; height:0; border-radius:0; background:none; border-left:7px solid var(--s-live); border-top:4.5px solid transparent; border-bottom:4.5px solid transparent; margin-left:2px; }
+  .screen .pip.next { background:#172554; border-color:#1e3a8a; } .screen .pip.next i { background:#93c5fd; width:5px; height:5px; }
+  .screen .pip.hover { outline:2px solid var(--s-next); outline-offset:1px; }
+  .screen .grip { color:#52525b; font-size:13px; letter-spacing:-2px; width:12px; flex:none; }
+  .screen .auto { color:var(--s-mfg); font-weight:400; }
+  .screen .pop { position:absolute; background:#1c1c22; border:1px solid #3a3a44; border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.55); padding:12px; display:flex; flex-direction:column; gap:9px; z-index:2; }
+  .screen .field { height:28px; border:1px solid #3f3f46; border-radius:6px; background:#0f0f12; display:flex; align-items:center; padding:0 8px; font-family:ui-monospace, Menlo, monospace; }
+  .screen .field.focus { border-color:var(--s-pri); box-shadow:0 0 0 2px rgba(59,130,246,0.35); }
+  .screen .tip { position:absolute; background:#fafafa; color:#18181b; border-radius:6px; padding:5px 9px; font-size:11.5px; box-shadow:0 8px 24px rgba(0,0,0,0.4); white-space:nowrap; z-index:2; }
+  .screen .pane { border-top:1px solid var(--s-bd); background:var(--s-bg); }
+  .screen .grip-row { height:14px; display:grid; place-items:center; border-top:1px solid var(--s-bd); background:#141418; }
+  .screen .grip-row i { width:36px; height:4px; border-radius:2px; background:#3f3f46; display:block; }
+  .screen .empty { height:150px; display:grid; place-items:center; text-align:center; color:var(--s-mfg); font-size:12.5px; }
+  .screen .empty b { color:var(--s-fg); font-weight:600; display:block; margin-bottom:4px; font-size:13px; }
+  .screen .tabs { display:flex; gap:2px; padding:0 12px; border-bottom:1px solid var(--s-bd); height:32px; align-items:flex-end; }
+  .screen .tabs span { padding:6px 10px; font-size:12px; color:var(--s-mfg); }
+  .screen .tabs span.on { color:var(--s-fg); box-shadow:inset 0 -2px 0 var(--s-pri); }
+  .screen .switch { width:30px; height:17px; border-radius:999px; background:#3f3f46; position:relative; flex:none; }
+  .screen .switch::after { content:""; position:absolute; top:2px; left:2px; width:13px; height:13px; border-radius:50%; background:#e4e4e7; }
+  .screen .switch.on { background:var(--s-pri); } .screen .switch.on::after { left:15px; }
+  .screen .card { border:1px solid var(--s-bd); border-radius:8px; background:var(--s-card); padding:14px; display:flex; flex-direction:column; gap:12px; }
+  .screen .ring { position:absolute; border:2px dashed rgba(196,161,255,0.75); border-radius:8px; pointer-events:none; }
+  .screen .note { position:absolute; font-size:10.5px; color:var(--s-add); font-weight:600; letter-spacing:0.02em; white-space:nowrap; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
+</style>
+<div class="wrap">
+<header>
+  <div class="eyebrow"><span>Lighting7 · design record</span><span class="status">Agreed 2026-11-09</span><span>9 sessions</span></div>
+  <h1>After the rig session</h1>
+  <p class="lede">Fifteen notes from an evening programming a show on a venue's rig (thirteen written down, two added after), covering OSC, the programmer, FX, fixtures, patching, the Show view and the Prompt Book. Each section says what the code does now, with the file it was read from (<code>main</code> at <code>29dd61c</code>), then the change. The calls and Chris's answers are in <a href="#decisions">Decisions</a>.</p>
+</header>
+
+<nav class="toc" aria-label="Sections">
+  <a href="#summary">Summary</a><a href="#osc">OSC</a><a href="#numbers">Auto numbers</a><a href="#show">Show view</a><a href="#programmer">Programmer</a><a href="#colour">FX colours</a><a href="#size">Path size</a><a href="#dark">Blinders</a><a href="#name">Venue names</a><a href="#book">Prompt Book</a><a href="#decisions">Decisions</a><a href="#plan">Plan</a>
+</nav>
+
+<section id="summary">
+  <h2>Summary</h2>
+  <div class="tablebox"><table>
+    <thead><tr><th>#</th><th>The note</th><th>The change</th><th>Session</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td class="d">OSC should take slash addresses (<code>192.168.0.1/24</code>).</td><td class="d">A sender's address may be a <b>range</b>. An exact address wins over a range, and a narrower range over a wider one.</td><td class="n">1</td></tr>
+      <tr><td class="n">2</td><td class="d">The OSC cheat sheet is print-only.</td><td class="d">An <b>Addresses</b> section in the OSC tab, with a filter, sections, copy buttons and the problem lists. Print goes.</td><td class="n">1</td></tr>
+      <tr><td class="n">3</td><td class="d">Include from the Show view leaves multi-element fixtures expanded in the programmer.</td><td class="d">Include <b>selects the fixture</b> when all its heads came in. A partial landing expands the fixture for that landing only.</td><td class="n">4</td></tr>
+      <tr><td class="n">4</td><td class="d">Record's existing-cue list ignores show order.</td><td class="d">The list runs in <b>show order</b> under stack dividers, loose cues last, with the live or included cue preselected.</td><td class="n">4</td></tr>
+      <tr><td class="n">5</td><td class="d">Position FX want one size slider.</td><td class="d">Path gets a <b>Size</b> slider that scales pan and tilt together. The two separate sizes move under More.</td><td class="n">6</td></tr>
+      <tr><td class="n">6</td><td class="d">The FX colour pickers lack the programmer's R/G/B fields.</td><td class="d">FX colour parameters mount <b>the programmer's ColourEditor</b>.</td><td class="n">5</td></tr>
+      <tr><td class="n">7</td><td class="d">Blinders warn <i>Dark too briefly before a follow</i>.</td><td class="d">Rows with nothing to travel (LED mixes, programs, speeds) are <b>set the instant the head goes dark</b>, so they are never too quick.</td><td class="n">7</td></tr>
+      <tr><td class="n">8</td><td class="d">Shehds show no W in their colour pickers.</td><td class="d">The FX editor reads W, A and UV from the heads' <b>elements</b>, where a Shehds keeps them.</td><td class="n">5</td></tr>
+      <tr><td class="n">9</td><td class="d">A show can't rename a venue fixture.</td><td class="d">A new <b>Name</b> facet, beside Address, Position, Focus and Media. The key stays the venue's.</td><td class="n">8</td></tr>
+      <tr><td class="n">10</td><td class="d">Clicking through cues doesn't scroll the show's list, and entering the show doesn't find the live cue.</td><td class="d">All three views <b>follow GO and arming</b>, and centre the live cue on entry. Following pauses after a hand scroll.</td><td class="n">3</td></tr>
+      <tr><td class="n">11</td><td class="d">Auto numbers lag the order (a typed Q30 followed by an auto Q40).</td><td class="d">Auto numbers are <b>always derived from position</b>, and a one-time startup step tidies existing stacks.</td><td class="n">2</td></tr>
+      <tr><td class="n">12</td><td class="d">Duplicate reloads the page and turns the Editor pane on.</td><td class="d">Duplicate <b>stays put</b>: the copies are selected and scrolled into view, and the pane is left as it was.</td><td class="n">3</td></tr>
+      <tr><td class="n">13</td><td class="d">The Prompt Book can't select text while a show plays out of production.</td><td class="d">Reproduce first. Suspected cause: the live-cue follow scroll. While a selection is held, the follow waits.</td><td class="n">9</td></tr>
+      <tr><td class="n">14</td><td class="d">In Safari, scrolling over the Show view's header, or past the end of the cue list, scrolls the whole page into blank space.</td><td class="d">The app shell is <b>one fixed screen</b>: nothing on it overflows the window, the root never scrolls, and inner scrollers stop handing a scroll to the page.</td><td class="n">3</td></tr>
+      <tr><td class="n">15</td><td class="d">Record's <i>A new cue after Q13</i> appends to the end of the stack.</td><td class="d">It lands <b>directly after Q13's place</b>, named by entry, and the menu says so.</td><td class="n">4</td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted">Shehds' W (8) and the FX colour pickers (6) are separate notes but one surface, fixed in one session.</p>
+</section>
+
+<!-- ───────────── OSC ───────────── -->
+<section id="osc">
+  <h2><span class="n">1–2</span>OSC: sender ranges and an address list</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>A sender is one IP literal, stored canonical, and matched against a packet's source by exact string: a <code>Map&lt;address, sender&gt;</code> lookup for UDP and on every TCP frame. <code>ipLiteral</code> refuses <code>192.168.0.1/24</code> as "not an IP address". Nothing in the codebase parses CIDR.</p>
+      <span class="where">osc/OscService.kt:178–193, 302, 480 · OscReceiver.kt:77–82 · OscTcpListener.kt:67, 93, 150, 160</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>An address is an IP <b>or a range</b> (<code>a.b.c.d/n</code>, IPv6 <code>/n</code>). A range is stored as its network, so <code>192.168.0.1/24</code> is saved and shown as <code>192.168.0.0/24</code>, with a hint saying so. Matching is one resolver, <code>OscSenderMatcher</code>: an exact address first, then the longest matching prefix. It serves UDP, TCP accept, every frame and the removed-sender sweep. Replies are unaffected, because they already go to the packet's source. The refused list drops any address a new range now covers. A log row carries the packet's source address too, so a message through a range still says which machine sent it.</p>
+      <span class="where">new osc/OscSenderMatcher.kt · OscPanel.tsx SettingsCard</span>
+    </div>
+  </div>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p><i>Print cheat sheet</i> opens a blank window, writes a whole HTML document into it as strings and calls <code>print()</code>. No route or component shows the addresses on screen, and the sheet says "UDP" though TCP is served too.</p>
+      <span class="where">lib/oscCheatSheet.ts · OscPanel.tsx CheatSheetCard ~300–335</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>The OSC tab gains an <b>Addresses</b> section for the current project, drawn from <code>GET /osc/addresses</code>. It has a filter (address, name or what it does), sections in the cheat sheet's order, and per row the address, its args, what it reaches and a copy button, which falls back to selecting the address where the browser refuses the clipboard. <i>Ambiguous</i> and <i>No address</i> lists follow, each row naming the record and why. The section header gives the port, UDP and TCP. The cheat sheet's section classifier moves into <code>lib/oscAddresses.ts</code>; the rest of <code>oscCheatSheet.ts</code> and its print button are deleted.</p>
+      <span class="where">new components/osc/OscAddressList.tsx over lib/oscAddresses.ts</span>
+    </div>
+  </div>
+  <figure>
+    <div class="screenbox"><div class="screen" style="min-width:760px">
+      <div class="bar"><span class="lbl">Senders</span><span class="sp"></span><span class="btn">+ Sender</span></div>
+      <div class="grid h" style="grid-template-columns:200px 220px 90px 1fr"><div>Name</div><div>Address</div><div>Replies</div><div></div></div>
+      <div class="grid" style="grid-template-columns:200px 220px 90px 1fr"><div>QLab Mac</div><div class="m">192.168.0.20</div><div><span class="switch on"></span></div><div class="dim">exact</div></div>
+      <div class="grid" style="grid-template-columns:200px 220px 90px 1fr"><div>Show network</div><div class="m">192.168.0.0/24</div><div><span class="switch"></span></div><div><span class="chip add">range · 256 addresses</span></div></div>
+      <div class="bar" style="margin-top:10px"><span class="lbl">Addresses · Cinderella</span><span class="dim m">port 8415 · UDP and TCP</span><span class="sp"></span><span class="field" style="width:240px">Filter</span></div>
+      <div class="grid h" style="grid-template-columns:330px 90px 1fr 60px"><div>Address</div><div>Args</div><div>Reaches</div><div></div></div>
+      <div class="grid" style="grid-template-columns:330px 90px 1fr 60px"><div class="m">/lighting7/stack/act-1/go</div><div class="dim">—</div><div>GO on Act 1</div><div class="dim">Copy</div></div>
+      <div class="grid" style="grid-template-columns:330px 90px 1fr 60px"><div class="m">/lighting7/stack/act-1/cue/5/go</div><div class="dim">—</div><div>GO TO Q5 · Ballroom</div><div class="dim">Copy</div></div>
+      <div class="grid" style="grid-template-columns:330px 90px 1fr 60px"><div class="m">/lighting7/look/haze-fill/on</div><div class="dim">—</div><div>Haze fill on</div><div class="dim">Copy</div></div>
+      <div class="grid" style="grid-template-columns:330px 90px 1fr 60px"><div class="m">/lighting7/tempo/2</div><div class="m dim">bpm</div><div>M2 · Chase</div><div class="dim">Copy</div></div>
+    </div></div>
+    <figcaption>The OSC tab with a range sender, and the new Addresses section under it. Names are illustrative.</figcaption>
+  </figure>
+</section>
+
+<!-- ───────────── Auto numbers ───────────── -->
+<section id="numbers">
+  <h2><span class="n">11</span>Auto numbers from position</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>An auto number is <b>stored</b>, not computed on read. After any stack write, <code>renumberAutoEntries(stack, before)</code> relabels the auto cues. The exception is an auto cue at the same index as before the write: it <b>keeps</b> its number, and kept numbers act as fixed points (venue-visit plan D11). So a typed or <i>Renumber…</i> number changes the cue before an unmoved auto cue without moving that cue's number. That is how a typed Q30 ends up followed by an auto Q40. A typed number also reads out of order against the autos (1, 4.5, 3, 4, 5) until <i>Fix Order</i>. A stack written before the cue-number migration may carry such gaps from the start.</p>
+      <span class="where">routes/cueNumbering.kt:149–231, 433–460 · AutoNumberInput.keep</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p><b>Every auto number is derived from position on every stack write.</b> The <code>keep</code> flag and the <code>before</code> snapshot go. Typed numbers are never touched, and a run between two typed numbers takes the free whole numbers after the first, then decimals only where they run out, as today. What reads <b>out of order</b> is now judged against the typed numbers and the cues before it, never the autos' stored numbers: a typed number is out of order when it is not above the previous typed number that is in order, or, for the first, when the auto cues before it fit neither the whole numbers from 1 below it nor those from 0. So a run with nothing typed before it <b>counts up from 1</b> where it fits (a lone cue before a typed 1 is still 0), and a typed number too low for the cues before it is flagged with <i>Fix Order</i> rather than squeezing them. A <b>startup step</b> (database step 16) relabels every stack once, logging each change and backing up first if it changes anything. The derivation changes, so sync goes to <b>54</b>, as it did at v48. A number that reached a desk from an older archive arrived as typed and stays typed.</p>
+      <span class="where">computeAutoCueNumbers · new state/AutoNumberTidyMigration.kt</span>
+    </div>
+  </div>
+  <div class="tablebox"><table>
+    <thead><tr><th>Stack</th><th>Today</th><th>After</th></tr></thead>
+    <tbody>
+      <tr><td>Q30 typed, then an auto cue that was Q40</td><td class="m">30, 40</td><td class="m">30, 31</td></tr>
+      <tr><td>Five auto cues, the second typed 4.5</td><td class="m">1, 4.5, 3, 4, 5</td><td class="m">1, 4.5, 5, 6, 7</td></tr>
+      <tr><td>Two auto cues before a typed 30</td><td class="m">28, 29, 30</td><td class="m">1, 2, 30</td></tr>
+      <tr><td>Typed 3 and 4 with one auto cue between</td><td class="m">3, 3.5, 4</td><td class="m">3, 3.5, 4</td></tr>
+      <tr><td>38 auto cues before a typed 30, then one auto cue</td><td class="m">0–29, 29.1–29.4, 29.6–29.9, 30, 31</td><td class="m">1–29, 31–39, 30 flagged, 41</td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted">The cost, accepted: typing one number moves the auto numbers after it, so a cue the prompt book calls by its auto number can change. A number you call should be typed.</p>
+</section>
+
+<!-- ───────────── Show view ───────────── -->
+<section id="show">
+  <h2><span class="n">10, 12</span>The Show view follows the show, and Duplicate stays put</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>Only the Cards view scrolls to the live cue, on mount and on GO, through a <code>listRef</code> the Table never attaches. The Table and the Timeline scroll only for the <code>?cue=</code> link and the editor pane's row. Arming never scrolls. The Table is virtualised, so <code>scrollIntoView</code> on a row cannot work there.</p>
+      <span class="where">runner/StackDetail.tsx:161–179 · CueSheet.tsx:736–784 · StackTimeline.tsx:697 · SheetTable.tsx:231</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>One hook, <code>useFollowShow</code>, on all three views. Entering a stack whose show runs <b>centres the live cue</b>. Each GO, GO back, GO to or arm brings the live or next cue into view only if it is off screen, through <code>sheet.scrollTo</code> on the Table and Timeline and the list ref on Cards. A hand scroll <b>pauses following for 10 s</b>. It is told by its input (a wheel, a touch, the scrollbar, a scrolling key), so the sheets' own scrolls, such as the editor pane keeping its row in view, never pause it. A <code>?cue=</code> link wins over centring on entry. A click selects a row that is already in view, so nothing moves under the pointer.</p>
+      <span class="where">new runner/useFollowShow.ts</span>
+    </div>
+  </div>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>Only the Cues library's <code>host="table"</code> stays put after a duplicate. The cue sheet's bar passes <code>host="bar"</code>, so one copy navigates (a history push) to the bare stack path with <code>?cue=&amp;entry=</code>. That path is a sibling route of <code>/table</code>, so <code>ShowPage</code> remounts and redirects. The remounted deep-link effect then calls <code>cuePaneOpenStore.set(true)</code>, which overrides an Editor toggle you had turned off.</p>
+      <span class="where">runner/CueActions.tsx:242–272 · CueSheet.tsx:758–772 · ShowPage.tsx:422</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>Duplicate never navigates from the Show view. The copies, one or several, are <b>selected and scrolled into view</b> in the view you are in (Cards, which has no selection, only scrolls), and a toast says how many. Each copy is its own history entry, so ⌘Z takes them back one at a time. The pane keeps its toggle: if it is on, it shows the copy (or the several-cues state); if it is off, it stays off. The <code>?cue=</code> link still turns the pane on when it comes from elsewhere, such as the Prompt Book's <i>Edit cue</i>.</p>
+      <span class="where">CueActions duplicate · onDuplicated, handled by CueSheet and StackTimeline</span>
+    </div>
+  </div>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>The shell is a <code>flex h-dvh</code> box (<code>Layout.tsx:130</code>). Nothing in the app sets <code>overscroll-behavior</code>, and <code>html</code> and <code>body</code> may scroll. A wheel over something that does not scroll, such as the Show header, goes to the root. So does a wheel past the end of the cue list, which chains outward. Safari then scrolls or bounces the whole page. "A lot of blank space" says the document is also taller than the window somewhere, which a bounce alone would not show. Not yet measured.</p>
+      <span class="where">Layout.tsx:130 · index.css (no overscroll rule)</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>First measure: on the Show view's Cards, Table and Timeline, compare <code>document.scrollingElement.scrollHeight</code> with the window, and name the element that overflows. Fix that element. Then make the desk's shell a fixed screen: while <code>Layout</code> is mounted it puts a class on <code>html</code> that holds <code>html</code>, <code>body</code> and <code>#root</code> at full height with <code>overflow: hidden</code> and <code>overscroll-behavior: none</code>. Onboarding and the QR reset pages, which scroll the document on a phone, sit outside <code>Layout</code> and are untouched. Every scroller the kit owns (the sheet table, the cards list, the Timeline, the side sheets) gets <code>overscroll-behavior: contain</code>. A test asserts the shell class is on while <code>Layout</code> is mounted and absent on the reset page; the overflow itself is measured once in a browser and recorded in the plan. Safari itself is an operator check, since only Chromium is installed here.</p>
+      <span class="where">index.css · Layout.tsx · SheetTable.tsx · StackDetail.tsx</span>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── Programmer ───────────── -->
+<section id="programmer">
+  <h2><span class="n">3–4</span>Programmer: Include lands on the fixture, Record lists in show order</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>Include answers the keys it loaded, and a head's row answers an <b>element</b> key. A Shehds' colour lives on its zones, so most cues give element keys. The grid's landing then calls <code>setExpandedFixtures(add(parent))</code>, and the expansion is kept in <code>sessionStorage</code> per window and project. It stays open until closed by hand.</p>
+      <span class="where">routes/programmerInclude.kt:124, 155 · FixturesListContainer.tsx:1337–1394 · lib/listExpansion.ts</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>The landing <b>folds</b> the keys first: a fixture all of whose heads came in is selected as the fixture's own row, collapsed. When only some of a fixture's heads came in, they are selected and the fixture is opened <b>for this landing only</b>. The opened state is not saved, so the next visit draws it as you left it. A shared pure function, <code>foldLandingKeys</code>, serves both <code>landTargets</code> and the Include landing.</p>
+      <span class="where">fixtures-list/landing.ts (new) · FixturesListContainer.tsx</span>
+    </div>
+  </div>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p><code>RecordCuePicker</code> lists every cue by name, then id (<code>cuePickerRows.ts:53</code>), from <code>GET /cues</code>, which also sorts by name. Each cue already carries its places, <code>entries[]</code> with stack and position.</p>
+      <span class="where">programmer/RecordCuePicker.tsx · cuePickerRows.ts · api/cuesApi.ts:320</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p><b>Show order.</b> Running-order stacks in show order, then busk stacks, each under a divider. Each cue appears once, at its first place in that order, and its row still lists all its places. Loose cues come last, by name. The filter is unchanged and keeps dividers only for stacks with a match. The included cue is preselected on Merge if it is a cue, else the playhead stack's live cue. The order is <code>cuesInShowOrder</code> in <code>lib/runningOrder.ts</code>, so other lists can use it.</p>
+      <span class="where">cuePickerRows.ts · lib/runningOrder.ts</span>
+    </div>
+  </div>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>Record ▾'s <i>A new cue after Q13</i> opens Record with only <code>defaultCueStackId</code>, and its subtitle reads <i>Act 1 · appended</i>. The cue lands at the end of the stack. The desk's Record already takes a position (<code>sortOrder</code>, through <code>placeCueInStack</code>); the menu never sends one.</p>
+      <span class="where">programmer/ProgrammerActionBar.tsx:405–414 · routes/programmerRoutes.kt:63 · programmerRecord.kt:146</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p><code>ProgrammerRecordRequest</code> gains <code>afterEntryId</code>, the included cue's place, resolved inside the transaction (400 if it is not an entry of that stack). A stale index cannot misplace the cue, and <code>sortOrder</code> stays for its other callers. The menu item passes it, and RecordSheet shows <i>After Q13 in Act 1</i> beside the stack select, with the option to append instead. The new cue takes an auto number from its place under session 2's rule. The subtitle reads <i>Act 1 · directly after Q13</i>.</p>
+      <span class="where">ProgrammerRecordRequest.afterEntryId · RecordSheet · ProgrammerActionBar</span>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── FX colours ───────────── -->
+<section id="colour">
+  <h2><span class="n">6, 8</span>One colour editor, and the Shehds' white</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>The FX side, <code>FxColourPicker</code> and <code>FxColourListPicker</code>, renders <code>fx/ColourEditorBody</code>: a hex wheel, presets, the palettes row, recent values and W/A/UV sliders, but no R/G/B fields and no Pick. The programmer's <code>editor/ColourEditor</code> has R/G/B/W/A/UV fields and Pick beside its own palettes and recent values. The FX scope finds extended channels with <code>detectExtendedChannels(fixtures.map(f =&gt; f.attributes))</code>, which never reads <code>elements[]</code>. A Shehds 24-channel keeps its colour and white on its zones, so the FX editor offers it no W. A palette's FX passes <code>extendedChannels={undefined}</code> and never offers W, A or UV.</p>
+      <span class="where">fx/ColourEditorBody.tsx · editor/ColourEditor.tsx · fx/useFxScope.ts:65 · fx/colourUtils.ts:154 · PaletteEditor.tsx:723 · ShehdsLed19RgbwFixture.kt:82–142</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>The FX colour parameters mount <b>ColourEditor</b>, and <code>ColourEditorBody</code> is deleted. ColourEditor gains the FX's two needs: a <code>pal:</code> reference as a value (its palette row picks a reference, not literals) and <i>Save as palette…</i>, both from <code>FxColourPaletteRow</code>. A colour list still edits one entry at a time, in the same editor. Extended channels are read from the heads (<code>emitterHeadCounts</code>, which already walks elements) on every host. A palette's FX offers the emitters any patched head has. The programmer's colour cell and popover on a collapsed Shehds row are checked by test: the cell resolves to the heads' descriptors, which carry <code>whiteChannel</code>.</p>
+      <span class="where">FxColourPicker.tsx · FxColourListPicker.tsx · useFxScope.ts · PaletteEditor.tsx</span>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── Path size ───────────── -->
+<section id="size">
+  <h2><span class="n">5</span>A Size slider for Path</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>Path has <code>panSize</code> and <code>tiltSize</code>, each a DMX distance (default 64) shown for Circle, Figure 8 and Random. The editor draws every parameter from the desk's metadata, and the only combined control is a <code>pair</code>, a two-thumb low/high range. That is the wrong shape here, and <code>levelPairOf</code> reads any ubyte pair as a level.</p>
+      <span class="where">resources/fx/position/Path.fx.kts:35–54 · FxFields.tsx:133–166, 1862 · fx/ParameterMetadata.kt:76</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>A new frontmatter list, <code>controls:</code>, beside <code>parameters:</code>: here one <code>size</code> control, <code>label: Size</code>, <code>scales: [panSize, tiltSize]</code>. The desk validates it beside <code>pair</code>: two or more numbers of one type, each in one group. The editor draws <b>one Size slider</b>, whose value is the largest of the group. Moving it scales every member by the same factor from their values at the start of the gesture, so dragging through small values and back keeps the ratio (both 0 sets them equal), clamped to each one's range. The members fold under More. Stored FX are unchanged, because Size writes the same two parameters. MCP and scripts see the same parameters as before.</p>
+      <span class="where">Path.fx.kts · ParameterMetadata.kt · fxEditorModel.ts paramView · FxFields.tsx</span>
+    </div>
+  </div>
+  <figure>
+    <div class="screenbox"><div class="screen" style="min-width:560px">
+      <div class="bar"><span class="lbl">Path</span><span class="seg"><span class="on">Circle</span><span>Figure 8</span><span>Line</span><span>Random</span></span></div>
+      <div class="bar" style="height:46px"><span style="width:70px">Size</span><span style="flex:1;height:6px;border-radius:3px;background:linear-gradient(90deg,#3b82f6 38%,#27272a 38%)"></span><span class="field" style="width:56px">96</span></div>
+      <div class="bar"><span class="dim">More · pan size 96, tilt size 48</span></div>
+    </div></div>
+    <figcaption>Size reads 96, the larger of pan 96 and tilt 48. Dragging it to 48 sets pan 48 and tilt 24.</figcaption>
+  </figure>
+</section>
+
+<!-- ───────────── Blinders ───────────── -->
+<section id="dark">
+  <h2><span class="n">7</span>Move in dark: instant rows</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>The China 2-cell blinder (<code>kind = BLINDER</code>) has a parent dimmer, strobe, a built-in program and its speed. Each cell has warm and cold white, plus a Warmth mix. Because the parent has a dimmer, its cells' colour does not count as intensity. So Warmth and white are COLOUR moves, and the program and speed are BEAM moves. Stacks move every family by default, and a head dark for less than delay plus time (1 + 2 s) before a follow reads <code>TOO_QUICK</code>. Nothing asks whether a row has anything to travel.</p>
+      <span class="where">fixture/dmx/China2CellLedBlinderFixture.kt · fx/MoveInDarkPlanner.kt:231, 303–317 · models/moveInDark.kt:38–48</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>A row is <b>instant</b> when nothing in the head travels to make it:</p>
+      <ul class="plain">
+        <li>a mixed colour value, white or amber;</li>
+        <li>a speed on a head with nothing that travels, such as a blinder program's speed;</li>
+        <li>a setting or <code>OTHER</code> that is not a wheel, a media slot or a framing control.</li>
+      </ul>
+      <p>A head whose rows are <b>all instant</b> is set <b>the moment it goes dark</b>: no delay, no move time. So it can never be too quick, and the static plan's <i>live</i> list stops naming it. A head with any travelling row (position, any wheel, including colour wheels declared as colour settings, gobos, prisms, zoom, focus, iris, frost, shutters) moves everything as now, with the stack's delay and time. A speed travels with them on such a head, since on a mover it is the pan/tilt speed. The planner and <code>MoveInDarkService</code> share one predicate, <code>isInstant(row, head)</code>.</p>
+      <span class="where">fx/MoveInDarkPlanner.kt · fx/MoveInDarkService.kt</span>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── Venue names ───────────── -->
+<section id="name">
+  <h2><span class="n">9</span>A show's name for a venue fixture</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>A show can take four facets of a venue patch: Address, Position, Focus and Media (<code>PatchFacet</code>). <code>EffectivePatch</code> reads <code>displayName</code>, <code>key</code>, head and type straight from the venue's row. The Patch sheet draws a venue row's name as plain text, and the venue panel says "A show can hide this fixture, not rename or retype it". A display name is checked for uniqueness nowhere, unlike a key.</p>
+      <span class="where">models/showOverrides.kt:49 · models/patchFacets.kt:229–266 · VenuePatchPanel.tsx:92–105 · PatchSheet.tsx:1185</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p>A fifth facet, <b>NAME</b>: <code>NameFacet(displayName)</code>, laid over the version's patch by <code>RigScope.effective</code>, with the same base, drift, <i>Keep mine</i> and <i>Take venue's</i> as the others. The venue diff's identity change on a name becomes drift for a show that holds the name. The key, head and type stay the venue's, so nothing that names the fixture by key moves. The Patch sheet's name cell on a venue row edits it, writing the facet, not <code>VENUE_OWNED</code>. The venue panel gains a Name card. MCP's <code>override_venue_fixtures</code> takes <code>NAME</code>. Detach carries the name into the copy; Attach pairs a renamed patch as a Name override. A name change reloads the live rig, as Address and Media do, and the readers that take a name straight off the venue's row (the patch list's own data first, then the busk rig, group members, cue events, the venue hold and the trigger and command guards) read the show's. Sync goes to <b>55</b>, because an older desk would refuse the enum value in <code>showOverrides/</code>.</p>
+      <span class="where">PatchFacet.NAME · patchFacets.kt · VenueFacetCard · ai/VenueFixtureTools.kt · sync 55</span>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── Prompt Book ───────────── -->
+<section id="book">
+  <h2><span class="n">13</span>Selecting text in the Prompt Book while the show plays</h2>
+  <div class="two">
+    <div class="box now"><b>Now</b>
+      <p>Not in production, the lock is <code>!canEdit</code>, and <code>canEdit</code> is "this is the current project". So the lock is not the cause. Two things do disturb a selection while a stack runs:</p>
+      <ul class="plain">
+        <li>On every change of the live sequence's head (a GO; a follow keeps the head and does not scroll), the page smooth-scrolls to the live cue (<code>jumpToLiveUnlessLinked</code>).</li>
+        <li>Pages outside the render window unmount, which collapses a selection inside them and clears the anchor toolbar through <code>selectionchange</code>.</li>
+      </ul>
+      <p>Neither is confirmed: this needs a browser.</p>
+      <span class="where">routes/PromptBookPage.tsx:310–323 · promptbook/ScriptViewer.tsx:378–400, 488–528</span>
+    </div>
+    <div class="box then"><b>Change</b>
+      <p><b>Reproduce first</b> with Playwright against a running stack with follows, not in production. Then fix what it shows. The expected fix: while a text selection or an anchor toolbar is open, or the pointer is down in the text, the follow scroll <b>waits</b>, and runs once the selection is used or dropped. A page holding the selection stays mounted. If the reproduction shows something else, the session fixes that and records it in the plan.</p>
+      <span class="where">PromptBookPage.tsx · ScriptViewer.tsx</span>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── Decisions ───────────── -->
+<section id="decisions">
+  <h2>Decisions</h2>
+  <p>Asked and answered by Chris on 2026-11-09, in three rounds.</p>
+  <div class="tablebox"><table>
+    <thead><tr><th>#</th><th>Question</th><th>Answer</th><th>Declined</th></tr></thead>
+    <tbody>
+      <tr><td class="n">Q1</td><td class="d">What went wrong with auto numbers?</td><td class="d">A typed Q30 followed by an auto Q40, possibly a stack from before the recent changes.</td><td class="d">—</td></tr>
+      <tr><td class="n">Q2</td><td class="d">The fix for it?</td><td class="d"><b>Always from position</b>, with a startup tidy-up.</td><td class="d">The same without the tidy-up; closing gaps only after a typed number.</td></tr>
+      <tr><td class="n">Q3</td><td class="d">What may a show change of a venue fixture?</td><td class="d"><b>Its display name only</b>, as a facet.</td><td class="d">Name and key.</td></tr>
+      <tr><td class="n">Q4</td><td class="d">Blinders' "too quick"?</td><td class="d"><b>Instant rows snap in the dark.</b></td><td class="d">Never moving them in the dark; hiding the warning only.</td></tr>
+      <tr><td class="n">Q5</td><td class="d">Where does the OSC address list live?</td><td class="d"><b>In the OSC settings tab.</b></td><td class="d">Its own project page; a sheet from anywhere.</td></tr>
+      <tr><td class="n">Q6</td><td class="d">What does Include do to multi-head fixtures?</td><td class="d"><b>Selects the fixture</b> when all its heads came in; opens it for that landing only when some did.</td><td class="d">Never expanding; expanding but forgetting on leave.</td></tr>
+      <tr><td class="n">Q7</td><td class="d">Record's existing-cue order?</td><td class="d"><b>Show order, one row a cue.</b></td><td class="d">A shared cue listed under every place.</td></tr>
+      <tr><td class="n">Q8</td><td class="d">Path's single size?</td><td class="d"><b>Size scales both</b>, the two under More.</td><td class="d">Size and Aspect; a link toggle.</td></tr>
+      <tr><td class="n">Q9</td><td class="d">When does the show's list scroll?</td><td class="d"><b>On entry, GO and arm</b>, pausing 10 s after a hand scroll.</td><td class="d">Always centring the live cue; only on entry.</td></tr>
+      <tr><td class="n">Q10</td><td class="d">After Duplicate?</td><td class="d"><b>Stay put and select the copies.</b></td><td class="d">Stay put, keeping the selection on the sources.</td></tr>
+      <tr><td class="n">Q11</td><td class="d">FX colour pickers?</td><td class="d"><b>One editor</b>, the programmer's.</td><td class="d">R/G/B fields added to the FX body.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ───────────── Plan ───────────── -->
+<section id="plan">
+  <h2>Plan</h2>
+  <p>Nine sessions, one PR each, run in order by <code>/next-session</code> from <a href="../venue-rig-fixes-plan.md"><code>docs/plans/venue-rig-fixes-plan.md</code></a>, which wins where it and this page differ. Sessions 2 and 8 run the full suites locally (a data step, a sync bump). The others run the touched packages' tests and <code>npm run check:quick</code>.</p>
+  <div class="tablebox"><table>
+    <thead><tr><th>Session</th><th>What</th><th>Side</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td class="d">OSC sender ranges and the Addresses section.</td><td class="n">both</td></tr>
+      <tr><td class="n">2</td><td class="d">Auto numbers from position, database step 16, sync 54.</td><td class="n">backend</td></tr>
+      <tr><td class="n">3</td><td class="d">The Show view follows GO and arm; Duplicate stays put; the shell never scrolls (Safari).</td><td class="n">frontend</td></tr>
+      <tr><td class="n">4</td><td class="d">Include lands on the fixture; Record lists cues in show order and <i>A new cue after</i> lands there.</td><td class="n">both</td></tr>
+      <tr><td class="n">5</td><td class="d">One colour editor for FX, with emitters read from elements.</td><td class="n">frontend</td></tr>
+      <tr><td class="n">6</td><td class="d">Path's Size: <code>scales</code> metadata and the slider.</td><td class="n">both</td></tr>
+      <tr><td class="n">7</td><td class="d">Move in dark's instant rows.</td><td class="n">backend</td></tr>
+      <tr><td class="n">8</td><td class="d">The Name facet, sync 55.</td><td class="n">both</td></tr>
+      <tr><td class="n">9</td><td class="d">Prompt Book selection while the show plays: reproduce, then fix.</td><td class="n">frontend</td></tr>
+    </tbody>
+  </table></div>
+</section>
+</div>
