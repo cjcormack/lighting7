@@ -1,0 +1,1405 @@
+<title>Surface Setup Concepts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a long-form proposal in one 1080px column; mockups break out to full column width and
+   sit on the app's own surface-panel tokens so they read as Lighting7, not as illustrations. */
+:root {
+  --bg: oklch(0.985 0.002 286);
+  --fg: oklch(0.141 0.005 285.8);
+  --muted: oklch(0.552 0.016 285.9);
+  --line: oklch(0.92 0.004 286.3);
+  --card: oklch(1 0 0);
+  --sunk: oklch(0.967 0.002 286.4);
+  --accent: oklch(0.546 0.245 262.9);
+  --accent-soft: oklch(0.93 0.04 262.9);
+  --accent-fg: oklch(0.985 0 0);
+  --warn: oklch(0.68 0.16 70);
+  --warn-soft: oklch(0.95 0.05 80);
+  --bad: oklch(0.577 0.245 27.3);
+  --bad-soft: oklch(0.95 0.04 27);
+  --good: oklch(0.58 0.14 150);
+  --good-soft: oklch(0.94 0.05 150);
+  --panel: oklch(0.955 0.003 286);
+  --panel-edge: oklch(0.88 0.004 286);
+  --knob: oklch(0.32 0.01 286);
+  --knob-edge: oklch(0.22 0.01 286);
+  --cap: oklch(0.3 0.01 286);
+  --cap-line: oklch(0.85 0.005 286);
+  --track: oklch(0.8 0.006 286);
+  --led: oklch(0.72 0.17 60);
+  --led-off: oklch(0.86 0.006 286);
+  --tag-red: #dc2626; --tag-orange: #ea580c; --tag-yellow: #ca8a04; --tag-lime: #65a30d;
+  --tag-green: #16a34a; --tag-cyan: #0891b2; --tag-pink: #db2777; --tag-brown: #92400e;
+  --tag-white: #71717a; --tag-grey: #3f3f46;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: oklch(0.141 0.005 285.8); --fg: oklch(0.985 0 0); --muted: oklch(0.705 0.015 286.1);
+    --line: oklch(0.274 0.006 286); --card: oklch(0.18 0.006 285.9); --sunk: oklch(0.21 0.006 285.9);
+    --accent: oklch(0.623 0.214 259.8); --accent-soft: oklch(0.3 0.08 262); --accent-fg: oklch(0.15 0.01 286);
+    --warn: oklch(0.78 0.15 75); --warn-soft: oklch(0.3 0.06 75); --bad: oklch(0.704 0.191 22.2);
+    --bad-soft: oklch(0.3 0.07 25); --good: oklch(0.72 0.14 150); --good-soft: oklch(0.28 0.05 150);
+    --panel: oklch(0.21 0.006 286); --panel-edge: oklch(0.3 0.006 286); --knob: oklch(0.12 0.005 286);
+    --knob-edge: oklch(0.36 0.008 286); --cap: oklch(0.4 0.01 286); --cap-line: oklch(0.75 0.005 286);
+    --track: oklch(0.33 0.006 286); --led: oklch(0.78 0.16 65); --led-off: oklch(0.32 0.006 286);
+    --tag-red: #f87171; --tag-orange: #fb923c; --tag-yellow: #facc15; --tag-lime: #a3e635;
+    --tag-green: #4ade80; --tag-cyan: #22d3ee; --tag-pink: #f472b6; --tag-brown: #d6a26b;
+    --tag-white: #e4e4e7; --tag-grey: #a1a1aa;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: oklch(0.141 0.005 285.8); --fg: oklch(0.985 0 0); --muted: oklch(0.705 0.015 286.1);
+  --line: oklch(0.274 0.006 286); --card: oklch(0.18 0.006 285.9); --sunk: oklch(0.21 0.006 285.9);
+  --accent: oklch(0.623 0.214 259.8); --accent-soft: oklch(0.3 0.08 262); --accent-fg: oklch(0.15 0.01 286);
+  --warn: oklch(0.78 0.15 75); --warn-soft: oklch(0.3 0.06 75); --bad: oklch(0.704 0.191 22.2);
+  --bad-soft: oklch(0.3 0.07 25); --good: oklch(0.72 0.14 150); --good-soft: oklch(0.28 0.05 150);
+  --panel: oklch(0.21 0.006 286); --panel-edge: oklch(0.3 0.006 286); --knob: oklch(0.12 0.005 286);
+  --knob-edge: oklch(0.36 0.008 286); --cap: oklch(0.4 0.01 286); --cap-line: oklch(0.75 0.005 286);
+  --track: oklch(0.33 0.006 286); --led: oklch(0.78 0.16 65); --led-off: oklch(0.32 0.006 286);
+  --tag-red: #f87171; --tag-orange: #fb923c; --tag-yellow: #facc15; --tag-lime: #a3e635;
+  --tag-green: #4ade80; --tag-cyan: #22d3ee; --tag-pink: #f472b6; --tag-brown: #d6a26b;
+  --tag-white: #e4e4e7; --tag-grey: #a1a1aa;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--f-body); -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 96px; }
+h1, h2, h3, h4 { font-family: var(--f-display); font-weight: 600; line-height: 1.15; text-wrap: balance; margin: 0; letter-spacing: 0.005em; }
+h1 { font-size: clamp(34px, 5vw, 52px); font-weight: 700; }
+h2 { font-size: 30px; }
+h3 { font-size: 21px; }
+h4 { font-size: 16px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+p + p { margin-top: 10px; }
+a { color: var(--accent); }
+code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+code { background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
+.eyebrow { font: 600 12px/1 var(--f-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 18px; line-height: 1.55; max-width: 64ch; color: var(--fg); }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+section.block { margin-top: 72px; display: grid; gap: 18px; }
+section.block > header { display: grid; gap: 8px; }
+.hr { height: 1px; background: var(--line); margin: 0; border: 0; }
+
+/* top */
+.top { display: grid; gap: 18px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+.meta b { color: var(--fg); font-weight: 500; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.toc a { font: 500 13px/1 var(--f-body); color: var(--fg); text-decoration: none; padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); }
+.toc a:hover, .toc a:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+
+/* findings */
+.findings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.finding { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.finding .q { font-family: var(--f-display); font-size: 19px; font-weight: 600; line-height: 1.2; }
+.finding ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+.finding li { max-width: none; }
+.cite { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); }
+@media (max-width: 860px) { .findings { grid-template-columns: 1fr; } }
+
+/* tables */
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); background: var(--card); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 11.5px/1.2 var(--f-display); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); background: var(--sunk); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 600; white-space: nowrap; }
+
+/* pills / chips */
+.pill { display: inline-flex; align-items: center; gap: 5px; font: 500 12px/1 var(--f-body); padding: 4px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); white-space: nowrap; }
+.pill.prog { background: var(--accent-soft); border-color: transparent; color: var(--fg); }
+.pill.out { background: var(--warn-soft); border-color: transparent; }
+.pill.desk { background: var(--sunk); }
+.pill.play { background: var(--good-soft); border-color: transparent; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+
+/* matrix */
+.matrix-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--card); }
+.seg button { font: 500 13px/1 var(--f-body); padding: 8px 12px; border: 0; background: transparent; color: var(--fg); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.mx td, .mx th { text-align: center; }
+.mx td:first-child, .mx th:first-child { text-align: left; }
+.mx td.fam { text-align: left; font: 600 11px/1 var(--f-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); background: var(--sunk); padding-block: 7px; }
+.cell { display: inline-grid; place-items: center; min-width: 30px; height: 24px; padding: 0 6px; border-radius: 6px; font: 600 12px/1 var(--f-body); }
+.c-yes { background: var(--good-soft); color: var(--good); }
+.c-no { background: var(--bad-soft); color: var(--bad); }
+.c-part { background: var(--warn-soft); color: var(--warn); }
+.c-na { color: var(--muted); font-weight: 400; }
+.c-new { background: var(--accent-soft); color: var(--accent); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12.5px; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+
+/* the layer diagram */
+.layers { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .layers { grid-template-columns: 1fr; } }
+.stack { display: grid; gap: 6px; }
+.tier { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); font-size: 13.5px; }
+.tier b { font-family: var(--f-display); font-size: 15px; font-weight: 600; }
+.tier .who { display: flex; flex-wrap: wrap; gap: 5px; }
+.tier.hl { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.tier.post { border-style: dashed; }
+.arrow { font: 500 12px/1 var(--f-mono); color: var(--muted); padding-left: 122px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: grid; gap: 10px; min-width: 0; }
+.card.rule { border-color: var(--accent); }
+.rule-text { font-family: var(--f-display); font-size: 22px; line-height: 1.2; font-weight: 600; }
+
+/* concepts */
+.concept { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.concept > .chead { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 16px; padding: 20px 22px; border-bottom: 1px solid var(--line); align-items: baseline; }
+.concept .letter { font: 700 40px/0.9 var(--f-display); color: var(--accent); grid-row: span 2; }
+.concept .chead p { color: var(--muted); }
+.concept .cbody { padding: 18px 22px 22px; display: grid; gap: 16px; }
+.proscons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; font-size: 13.5px; }
+.proscons div { min-width: 0; }
+.proscons ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+@media (max-width: 760px) { .proscons { grid-template-columns: 1fr; } }
+
+/* app chrome mock */
+.app { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); }
+.app-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--card); font-size: 12.5px; }
+.app-bar .dev { display: inline-flex; gap: 6px; align-items: center; padding: 4px 8px; border-radius: 6px; background: var(--sunk); font-weight: 500; }
+.app-bar .sp { flex: 1; }
+.app-main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; min-height: 420px; }
+.app-main.wide { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 980px) { .app-main { grid-template-columns: minmax(0, 1fr); } }
+.app-canvas { padding: 12px; overflow-x: auto; min-width: 0; }
+.app-side { border-left: 1px solid var(--line); background: var(--card); padding: 14px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+@media (max-width: 980px) { .app-side { border-left: 0; border-top: 1px solid var(--line); } }
+.btn { font: 500 12.5px/1 var(--f-body); padding: 7px 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* the X-Touch */
+.xt { display: inline-grid; grid-template-columns: auto auto auto; gap: 10px; padding: 10px; background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 12px; }
+.xt-strips { display: grid; grid-template-columns: repeat(8, 54px); gap: 6px; }
+.xt-col { display: grid; grid-template-rows: 58px 32px 32px 32px 188px 32px; gap: 6px; border-radius: 8px; padding: 4px 2px; position: relative; }
+.xt-col.striphl { background: color-mix(in oklch, var(--accent) 12%, transparent); outline: 1.5px dashed var(--accent); }
+.xt-right { display: grid; grid-template-columns: repeat(2, 54px); grid-template-rows: repeat(4, 58px) repeat(3, 32px); gap: 6px; align-content: start; padding-top: 4px; }
+.xt-master { display: grid; grid-template-rows: 32px 32px 188px 32px; gap: 6px; padding-top: 4px; align-content: start; width: 54px; }
+.xt-master .gap { height: 0; }
+.ctl { position: relative; display: grid; place-items: center; border: 0; padding: 0; margin: 0; background: transparent; cursor: pointer; color: var(--fg); font: inherit; min-width: 0; border-radius: 8px; }
+.ctl:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ctl.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ctl.dim { opacity: 0.28; cursor: not-allowed; }
+.ctl.flash { animation: flash 0.9s ease-out; }
+@keyframes flash { 0% { box-shadow: 0 0 0 6px color-mix(in oklch, var(--led) 70%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .ctl.flash { animation: none; outline: 2px solid var(--led); } }
+.lbl { display: block; width: 52px; font: 600 10.5px/1.15 var(--f-display); text-align: center; letter-spacing: 0.01em; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-top: 3px solid transparent; padding-top: 2px; }
+.lbl.none { color: var(--muted); font-weight: 500; }
+.knob { width: 30px; height: 30px; border-radius: 50%; background: var(--knob); border: 2px solid var(--knob-edge); position: relative; box-shadow: 0 0 0 3px var(--led-off); }
+.knob.ring { box-shadow: 0 0 0 3px var(--led); }
+.knob::after { content: ""; position: absolute; left: 50%; top: 3px; width: 2px; height: 9px; background: var(--cap-line); transform: translateX(-50%); border-radius: 1px; }
+.enc { grid-template-rows: 32px auto; gap: 2px; align-content: start; }
+.fad .lbl, .enc .lbl { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.key { width: 46px; height: 17px; border-radius: 4px; background: var(--cap); position: relative; }
+.key::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 18px; height: 3px; border-radius: 2px; background: var(--led-off); transform: translateX(-50%); }
+.key.on::after { background: var(--led); box-shadow: 0 0 6px var(--led); }
+.kbtn { grid-template-rows: 18px auto; gap: 2px; }
+.fad { grid-template-rows: 1fr auto; gap: 4px; height: 100%; }
+.slot { width: 8px; height: 140px; border-radius: 4px; background: var(--track); position: relative; }
+.cap { position: absolute; left: 50%; width: 28px; height: 18px; border-radius: 3px; background: var(--cap); transform: translate(-50%, 50%); border-top: 2px solid var(--cap-line); }
+.bankkey { grid-template-rows: 18px auto; gap: 2px; }
+.bankkey .key { background: var(--knob); }
+.bankkey .key.on::after { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.xt-cap { font: 600 10px/1 var(--f-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+
+/* inspector (concept A) */
+.ins-h { display: grid; gap: 4px; }
+.ins-h .ctl-name { font: 600 22px/1.1 var(--f-display); }
+.ins-h .sub { font-size: 12px; color: var(--muted); }
+.sentence { display: grid; gap: 10px; padding: 12px; border-radius: 10px; background: var(--sunk); }
+.srow { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; align-items: center; font-size: 13px; }
+.srow > span { color: var(--muted); font: 600 11px/1 var(--f-display); letter-spacing: 0.08em; text-transform: uppercase; }
+select, input[type="text"], input[type="number"] { font: 14px/1.2 var(--f-body); padding: 7px 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--fg); width: 100%; min-width: 0; }
+select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { font: 500 12.5px/1 var(--f-body); padding: 6px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.readback { font-size: 13px; display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.readback .line { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.readback .line > span:first-child { min-width: 72px; color: var(--muted); font: 600 11px/1 var(--f-display); letter-spacing: 0.08em; text-transform: uppercase; }
+.say { font: 600 17px/1.3 var(--f-display); }
+.part { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.part:first-of-type { border-top: 0; padding-top: 0; }
+.parthead { display: flex; align-items: center; gap: 8px; font: 600 12px/1 var(--f-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.parthead .pill { text-transform: none; letter-spacing: 0; }
+.toast { font-size: 12.5px; padding: 8px 10px; border-radius: 8px; background: var(--fg); color: var(--bg); }
+.note { font-size: 12.5px; color: var(--muted); }
+
+/* concept B */
+.roles { display: grid; gap: 10px; }
+.role { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); align-items: start; }
+.role.on { border-color: var(--accent); }
+@media (max-width: 640px) { .role { grid-template-columns: 1fr; } }
+.role .rname { font: 600 15px/1.2 var(--f-display); }
+.role .rname small { display: block; font: 400 12px/1.3 var(--f-body); color: var(--muted); margin-top: 3px; }
+.order { display: flex; flex-wrap: wrap; gap: 5px; }
+.order .chip { cursor: grab; }
+.order .num { font: 600 10.5px/1 var(--f-mono); color: var(--muted); margin-right: 4px; }
+
+/* concept C sheet */
+.sheet td, .sheet th { padding: 0 10px; height: 34px; vertical-align: middle; white-space: nowrap; }
+.sheet td.sc { cursor: cell; }
+.sheet td.sc[aria-selected="true"] { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.sheet td.name { font-weight: 600; position: sticky; left: 0; background: var(--card); }
+.sheet tr.div td { background: var(--sunk); font: 600 11px/1 var(--f-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); height: 26px; }
+.sheet .sub { color: var(--muted); font-weight: 400; padding-left: 14px; }
+.sheet .band { display: inline-block; width: 3px; height: 14px; border-radius: 2px; vertical-align: -2px; margin-right: 6px; }
+.selbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); font-size: 13px; }
+.selbar .count { font-weight: 600; }
+
+/* concept D */
+.dflow { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 900px) { .dflow { grid-template-columns: 1fr; } }
+.step { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.step .n { font: 700 13px/1 var(--f-display); color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; }
+.menu { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 6px; display: grid; gap: 2px; font-size: 13.5px; box-shadow: 0 8px 24px -12px color-mix(in oklch, var(--fg) 30%, transparent); }
+.menu div { padding: 7px 10px; border-radius: 6px; }
+.menu .hot { background: var(--accent-soft); font-weight: 600; }
+.menu .sepm { height: 1px; background: var(--line); padding: 0; margin: 3px 0; }
+.stackcard { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 12px; display: grid; gap: 6px; }
+.stackcard .t { font: 600 16px/1.1 var(--f-display); }
+.wait { border: 1px dashed var(--accent); border-radius: 10px; padding: 14px; display: grid; gap: 8px; background: color-mix(in oklch, var(--accent) 6%, var(--card)); }
+.mini { transform-origin: top left; }
+
+/* recommendation */
+.rec { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 760px) { .rec { grid-template-columns: 1fr; } }
+.qs { counter-reset: q; display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.qs li { counter-increment: q; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.qs li::before { content: counter(q); font: 700 22px/1 var(--f-display); color: var(--accent); }
+.qs li p { max-width: none; }
+.qs .opts { margin-top: 6px; font-size: 13.5px; color: var(--muted); }
+.qs .opts b { color: var(--fg); font-weight: 600; }
+.foot { margin-top: 64px; font-size: 12.5px; color: var(--muted); }
+</style>
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow">Lighting7 · Settings › Surfaces · design proposal</div>
+  <h1>Setting up a surface without dragging</h1>
+  <p class="lede">The current Surfaces view has three problems. Making a binding means dragging from a library that doesn't reach everything. A fixture, a group and the selection can each do things the others can't. And controls disagree about which value they read back. This page proposes one grammar for every binding and one rule for where it applies, then four ways to edit them. You can click and change things in each of the four mockups.</p>
+  <div class="meta"><span><b>8 Nov 2026</b></span><span>Status: <b>agreed 8 Nov 2026</b></span><span>Reviewed: <a href="https://claude.ai/artifact/JfaaYXomTpAfPcJSVpM9n3">Surface Code Review</a></span><span>Next: the plan</span></div>
+  <nav class="toc" aria-label="Sections">
+    <a href="#today">What's wrong today</a>
+    <a href="#prior-art">How other desks do it</a>
+    <a href="#grammar">One grammar</a>
+    <a href="#layer">One layer rule</a>
+    <a href="#concept-a">A · Touch, then say</a>
+    <a href="#concept-b">B · Give each part a job</a>
+    <a href="#concept-c">C · The mapping sheet</a>
+    <a href="#concept-d">D · Assign from the thing</a>
+    <a href="#recommend">Six sessions</a>
+    <a href="#questions">Decisions</a>
+  </nav>
+</header>
+
+<!-- ───────────────────────────── TODAY ───────────────────────────── -->
+<section class="block" id="today">
+  <header>
+    <div class="eyebrow">Research · the current view and the code behind it</div>
+    <h2>What's wrong today</h2>
+    <p>One card for each of your three points, with what the code does. References are to <code>frontend/src</code> and <code>src/main/kotlin/…/lighting7</code>.</p>
+  </header>
+  <div class="findings">
+    <article class="finding">
+      <div class="q">The drag library is the only quick way in, and it doesn't reach everything</div>
+      <ul>
+        <li>For tempo, the library offers master 1 only, fixed at 60–180 BPM. Any other master or range means drag, then <i>Change target</i>, then a form: about ten gestures. <span class="cite">SurfaceLibrary.tsx:683</span></li>
+        <li>Flash, fire trigger, grand-master level, set tempo and pick up pad exist only in the form. A <b>fixture</b> flash can't be made there: the flash starts on a group attribute with no way to switch it. <span class="cite">BindingTargetPicker.tsx:1270</span></li>
+        <li>MIDI Learn works only on a control that already has a binding, and then it copies that binding to whichever control you move. <span class="cite">SurfaceInspector.tsx:227</span></li>
+        <li>An encoder's turn and its push share one binding, so a GO dropped on an encoder replaces what the turn did.</li>
+        <li>Below tablet width there is no picture and no library, and the table there can't see strip bindings. A strip's fader reads "unbound", and its + creates an override.</li>
+        <li>The A/B buttons in the header switch the hardware's layer, so looking at layer B changes the desk.</li>
+      </ul>
+    </article>
+    <article class="finding">
+      <div class="q">The selection can do things a fixture or group can't, and the other way round</div>
+      <ul>
+        <li><b>Selection only:</b> Locate, Fan, FX speed, Press palette, Press pad. No binding locates or fans a named group. <span class="cite">midi/BindingTarget.kt</span></li>
+        <li><b>Named only:</b> Flash (the selection can't flash), Fire trigger (a fixture, not a group) and Strip (no strip follows the selection).</li>
+        <li>The encoder bank reaches only strip encoders. No selection encoder follows it. <span class="cite">StripDerivation.kt:29</span></li>
+        <li><b>Missing everywhere:</b> Clear, Blind, Release a target. Undo is the only programmer-wide verb.</li>
+        <li><b>Press-only, no explicit on or off:</b> Locate, Press palette, Press pad. Cue stack <i>Pause</i> only cancels the follow; nothing resumes it. <span class="cite">fx/CueStackManager.kt:724</span></li>
+        <li>"Bank" means two things on one screen: the device's A/B layers, and the encoder bank.</li>
+      </ul>
+    </article>
+    <article class="finding">
+      <div class="q">Every control writes the programmer, but they read back different things, and pan and tilt use the wrong key</div>
+      <ul>
+        <li>A level, colour or pan control writes the programmer, but reads back the <b>stage</b>: the composed value, before the grand master. So pickup arms against a cue's moving value, and in Blind the control keeps showing the stage while it edits the staged programmer. <span class="cite">SurfaceFeedbackPublisher.kt:1319</span></li>
+        <li>The fan moves from the <b>programmer's</b> value, falling back to the stage, and shows its own amount. FX speed shows the lead FX. <span class="cite">routes/programmerFan.kt:495</span></li>
+        <li>Pan and tilt write their own <code>pan</code> / <code>tilt</code> keys. Position FX, palettes and the fan use <code>position</code>, and a <code>pan</code> entry doesn't hold back a position FX. Under a Circle, the write is stored but the stage keeps circling. A dimmer write in the same spot wins. <span class="cite">fx/FxSuppression.kt:73 · fx/FxTarget.kt:719</span></li>
+        <li>The fixture sheet had this exact bug and fixed it by writing <code>setPosition</code> (fixture-fx-sheets D8). The surface never got the fix.</li>
+        <li>There are six different jump and pickup rules. A strip encoder has no jump guard, and pushing it sends the attribute to full.</li>
+      </ul>
+    </article>
+  </div>
+</section>
+
+<!-- ───────────────────────────── PRIOR ART ───────────────────────────── -->
+<section class="block" id="prior-art">
+  <header>
+    <div class="eyebrow">Research · consoles and mapping tools</div>
+    <h2>How other desks do it</h2>
+    <p>No console treats dragging as the way in. Most select the control, then say what it does, often by touching the hardware itself. Several also let you assign from the object: start from the cue list, sub or group, then press the control.</p>
+  </header>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Product</th><th>How a mapping is made</th><th>How scope is chosen</th><th>Worth taking</th></tr></thead>
+      <tbody>
+        <tr><td class="k">grandMA3</td><td>Press <i>Assign</i>, tap the object, press the executor key. Or select the executor first. Functions that don't fit the object and control are greyed out.</td><td>The object on the executor; <i>Selected masters</i> act on the selected sequence; encoders act on the selected fixtures.</td><td>Function lists filtered by control kind. Saved <i>Executor Configurations</i>, reusable layouts of what each part does.</td></tr>
+        <tr><td class="k">ETC Eos</td><td><code>[Sub] [5] [Load]</code>: put the object on the command line, press the fader. The Fader Configuration tab goes Unassigned → target type → options.</td><td>Encoders always act on the selected channels.</td><td>Settings belong to the record (<i>Default</i>), with a per-fader override (<i>Local</i>). Faders coloured by function.</td></tr>
+        <tr><td class="k">ChamSys MagicQ</td><td>Lay items out in the Execute window, then MIDI Learn onto the selected item. Per stack, "Fader controls" HTP, LTP, FX size or FX speed.</td><td>Per item, with Intensity Master and Group Master modes for a whole wing.</td><td>Modes that set up a whole wing at once.</td></tr>
+        <tr><td class="k">Avolites Titan</td><td>Objects on handles. A MIDI Mapping window: press Learn, move the control.</td><td>A group on a fader is its intensity master.</td><td><i>Key Profiles</i>, reusable button behaviours (Flash, Latch, Swop).</td></tr>
+        <tr><td class="k">Hog 4</td><td>MIDI Map Editor: select a row, then press the Hog key you want it to act as.</td><td>The function you pressed.</td><td>Learn the <b>target</b> too, not only the source. Defaults per control kind: relative encoders, absolute faders, binary keys.</td></tr>
+        <tr><td class="k">ReaLearn</td><td>A mapping table. Each row has <i>Learn source</i> (touch the hardware) and <i>Learn target</i> (touch the parameter).</td><td>Conditions and groups per mapping.</td><td>A table as the overview, with both learns on every row.</td></tr>
+        <tr><td class="k">Resolume</td><td>Map mode on a clip or layer.</td><td>Every shortcut names its <i>Target</i>: by position, this clip, or selected.</td><td>Say which kind a binding is. Users are surprised when a position binding doesn't follow a reordered layer.</td></tr>
+        <tr><td class="k">Companion, Stream Deck</td><td>A grid that mirrors the device. Drag a preset onto a key, then edit it below.</td><td>Per key, with pages.</td><td>Ready-made presets, edited after. The drag works because their action lists are short and every key is the same.</td></tr>
+        <tr><td class="k">Ableton, Bitwig</td><td>Map mode highlights every mappable thing: click it, move a control.</td><td>Per parameter.</td><td>A mappings browser that lists every mapping, beside the picture.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="rec">
+    <div class="card">
+      <h4>Patterns to borrow</h4>
+      <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:5px">
+        <li>Select the control, by touching it or clicking it, then say what it does.</li>
+        <li>A vocabulary of object × function, filtered by what the control is, with options that don't fit greyed out and the reason given.</li>
+        <li>Scope as an explicit choice: this group, or the selection.</li>
+        <li>Whole-wing setups, edited per control afterwards.</li>
+        <li>Start from the record: assign a cue stack to a button from the stack itself.</li>
+        <li>The picture for "what does this do", a table for "what is everything doing".</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Anti-patterns to avoid</h4>
+      <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:5px">
+        <li>A drag library across hundreds of targets (today's view).</li>
+        <li>Learn that only works for some control kinds (Lightkey can't learn a fader; today's Learn can't start on an unbound control).</li>
+        <li>Labels that don't come from the binding, or that show ids (<i>Go · stack 3</i>, uuid prefixes).</li>
+        <li>Settings behind hidden gestures (MagicQ's triple-click), and defaults nobody can find (takeover reads <i>Immediate</i> where the desk uses pickup).</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">Menu names come from search summaries of the vendors' pages. The MA and ChamSys manual sites couldn't be reached from this session, so check exact wording before quoting it in UI copy.</p>
+</section>
+
+<!-- ───────────────────────────── GRAMMAR ───────────────────────────── -->
+<section class="block" id="grammar">
+  <header>
+    <div class="eyebrow">Proposal 1 · independent of which editor wins</div>
+    <h2>One grammar: does, on, how</h2>
+    <p>Every binding answers three questions, and every editor below asks them in the same order:</p>
+  </header>
+  <div class="rec">
+    <div class="card">
+      <div class="rule-text">Does · On · How</div>
+      <p class="small"><b>Does</b> is the function: Level, Colour, Fan, Flash, Locate, GO, Tap and so on. The list is filtered by what the control is: a fader, an encoder's turn, an encoder's push, or a button.</p>
+      <p class="small"><b>On</b> is the subject: the selection, a group, a fixture, a record (cue stack, cue, Look, palette, pad, speed master), or nothing for a desk function.</p>
+      <p class="small"><b>How</b> is the behaviour. A button is Toggle, While held, On or Off. A select is Toggle, hold to replace. A fader or ring picks up or jumps. A binding also says which layer it applies on.</p>
+    </div>
+    <div class="card">
+      <h4>What changes in the model</h4>
+      <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:5px">
+        <li>Every fixture function takes all three subjects: the selection, a group, a fixture. <i>Selection attribute</i>, <i>Group attribute</i> and <i>Fixture attribute</i> become one function with a subject.</li>
+        <li>A toggle gets its explicit On and Off forms as a <i>How</i>, rather than a separate target each (<i>Look set</i>, <i>Blackout set</i>, <i>Loose cue set</i> today).</li>
+        <li>An encoder's push is its own binding, separate from its turn.</li>
+        <li>New: Clear, Blind, Release, Record, Update, and Locate, Fan and FX speed on a group or fixture. Fire stays fixture only.</li>
+        <li>The A/B layers keep the name the device prints on them. The encoder bank becomes the <b>encoder page</b>.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="matrix-tools">
+    <div class="seg" role="group" aria-label="Show coverage">
+      <button type="button" id="mx-today" aria-pressed="true">Today</button>
+      <button type="button" id="mx-prop" aria-pressed="false">Proposed</button>
+    </div>
+    <div class="legend">
+      <span><span class="cell c-yes">✓</span> works</span>
+      <span><span class="cell c-part">½</span> works with a catch (hover)</span>
+      <span><span class="cell c-no">✕</span> missing</span>
+      <span><span class="cell c-new">+</span> added by the proposal</span>
+      <span><span class="cell c-na">—</span> doesn't apply</span>
+    </div>
+  </div>
+  <div class="tbl-wrap">
+    <table class="mx" id="matrix"></table>
+  </div>
+  <p class="note">With no subject at all: Undo, Redo and the programmer's Undo exist today. Clear, Blind, Record and Update don't; the agreed model adds all four.</p>
+</section>
+
+<!-- ───────────────────────────── LAYER ───────────────────────────── -->
+<section class="block" id="layer">
+  <header>
+    <div class="eyebrow">Proposal 2 · the layer a control works on</div>
+    <h2>One layer rule</h2>
+    <p>Moving every control onto the output would break the composition model, and they all write the programmer already. What should change is what they read back, and which key they write.</p>
+  </header>
+  <div class="layers">
+    <div class="stack" aria-label="Where surface functions write, top tier first">
+      <div class="tier post"><b>Park</b><div class="who"><span class="muted small">Nothing on a surface parks</span></div></div>
+      <div class="tier hl"><b>Programmer</b><div class="who"><span class="pill prog">Level</span><span class="pill prog">Colour</span><span class="pill prog">Beam</span><span class="pill prog">Position</span><span class="pill prog">Fan</span><span class="pill prog">Flash</span><span class="pill prog">Locate</span><span class="pill prog">Palette</span><span class="pill prog">Look</span><span class="pill prog">Release</span><span class="pill prog">Clear</span><span class="pill prog">Blind</span></div></div>
+      <div class="tier"><b>FX</b><div class="who"><span class="pill prog">FX speed</span><span class="muted small">edits a Local FX</span></div></div>
+      <div class="tier"><b>Cues</b><div class="who"><span class="pill play">GO</span><span class="pill play">Back</span><span class="pill play">Stop</span><span class="pill play">Cue</span><span class="pill play">Stack FX amount</span></div></div>
+      <div class="tier"><b>Baseline</b><div class="who"><span class="muted small">—</span></div></div>
+      <div class="arrow">↓ composed output</div>
+      <div class="tier post"><b>Masters</b><div class="who"><span class="pill out">Grand master</span><span class="pill out">Blackout</span><span class="muted small">scale what's composed; a parked channel passes untouched</span></div></div>
+      <div class="tier post"><b>Beside</b><div class="who"><span class="pill desk">Tempo</span><span class="pill desk">Selection</span><span class="pill desk">Layers</span><span class="pill desk">Pages</span><span class="pill desk">Undo</span></div></div>
+    </div>
+    <div class="card rule">
+      <div class="eyebrow">The rule</div>
+      <div class="rule-text">A fixture control writes Local on the attribute's own key. It shows, and moves from, what Local holds there, or the cue layer beneath where Local holds nothing.</div>
+      <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:6px">
+        <li><b>Pan and tilt write <code>position</code></b>, keeping the other axis, as the fixture sheet does. They then hold back a position FX, as a level holds back a dimmer FX.</li>
+        <li><b>The readback is Local first.</b> A motor won't chase a programmer FX playing on top of your value, Blind shows the value you're editing, and pickup arms against your value instead of a moving cue. Where Local holds nothing, it shows the cue layer beneath, without FX, so a running FX doesn't drag a motor either. It looks beneath a held flash and ignores park.</li>
+        <li><b>One jump rule</b> for every fader and ring: a move far from what's shown is ignored until it comes back, as the fan already does.</li>
+        <li><b>Every binding names its layer in one word:</b> <span class="pill prog">Local</span> <span class="pill play">Playback</span> <span class="pill out">Master</span> <span class="pill desk">Tempo</span> <span class="pill desk">Desk</span>. Local is the fixture sheet's word for the programmer's own values.</li>
+      </ul>
+      <p class="note">The alternative is to show the stage everywhere, which is today's rule for sliders. It's simpler, but it keeps the Blind mismatch and the motor chasing a programmer FX. The masters (grand master, blackout) stay where they are: after composition, under park.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────── CONCEPT A ───────────────────────────── -->
+<section class="block" id="concept-a">
+  <header>
+    <div class="eyebrow">Proposal 3 · four editors over that one model</div>
+    <h2>Four ways to edit it</h2>
+    <p>All four edit the same bindings. A, C and D below share one set, so a change in one shows in the others. The sample rig is a small theatre show: eight groups on the strips, palettes on button row 2, encoder pages on row 3, selection wheels on the right.</p>
+  </header>
+  <div class="concept">
+    <div class="chead">
+      <div class="letter">A</div>
+      <h3>Touch it, then say what it does <span class="pill prog">Session 3</span></h3>
+      <p>Click a control, or touch it on the desk, and the panel asks Does · On · How for each of its parts. This replaces the library, the edit mode and the form. Try Encoder 11, Strip 3's fader, or the hardware button below.</p>
+    </div>
+    <div class="cbody">
+      <div class="app">
+        <div class="app-bar">
+          <span class="dev">X-Touch Compact <span class="muted">in · out</span></span>
+          <span class="muted">Viewing</span>
+          <div class="seg" role="group" aria-label="Layer to view">
+            <button type="button" data-layer="A" aria-pressed="true">Layer A</button>
+            <button type="button" data-layer="B" aria-pressed="false">Layer B</button>
+          </div>
+          <span class="muted small">Viewing a layer here doesn't switch the desk.</span>
+          <span class="sp"></span>
+          <button type="button" class="btn" id="a-sim">Simulate: touch Encoder 11 on the desk</button>
+        </div>
+        <div class="app-main">
+          <div class="app-canvas"><div id="dev-a"></div></div>
+          <aside class="app-side" id="ins-a" aria-live="polite"></aside>
+        </div>
+      </div>
+      <div class="proscons">
+        <div><h4>Good at</h4><ul><li>One door reaches every function. Nothing is form-only or drag-only.</li><li>Touching the hardware finds the control, the way MagicQ, Avolites and Hog do.</li><li>Works the same at phone width, with the picture swapped for a list.</li></ul></div>
+        <div><h4>Costs</h4><ul><li>Setting up 39 buttons is 39 visits.</li><li>The Does list is long, so it needs grouping and search.</li></ul></div>
+        <div><h4>Replaces</h4><ul><li><code>SurfaceLibrary</code>, edit mode and drag-and-drop.</li><li><code>BindingTargetPicker</code>'s 40-kind list.</li><li>Learn as a separate overlay.</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="concept" id="concept-b">
+    <div class="chead">
+      <div class="letter">B</div>
+      <h3>Give each part of the desk a job <span class="pill prog">Session 5</span></h3>
+      <p>Pick a job for a whole region, then order its items: eight groups as channel strips, the selection's wheels on the right, palettes on a row. The picture fills in. Per-control changes go through A afterwards. MagicQ's wing modes and grandMA3's executor configurations work this way.</p>
+    </div>
+    <div class="cbody">
+      <div class="app">
+        <div class="app-bar">
+          <span class="dev">X-Touch Compact</span>
+          <span class="muted small">A job either stays live or is written once as ordinary bindings (question 2 below).</span>
+          <span class="sp"></span>
+          <div class="seg" role="group" aria-label="How a job is kept">
+            <button type="button" data-keep="live" aria-pressed="true">Stays live</button>
+            <button type="button" data-keep="once" aria-pressed="false">Written once</button>
+          </div>
+        </div>
+        <div class="app-main">
+          <div class="app-canvas"><div id="dev-b"></div></div>
+          <aside class="app-side"><div class="roles" id="roles-b"></div></aside>
+        </div>
+      </div>
+      <div class="proscons">
+        <div><h4>Good at</h4><ul><li>A useful desk in six choices.</li><li>Reordering the groups re-points the strips, as a strip binding does today.</li><li>A job can follow live state: <i>the busk page that's showing</i>, or <i>one head per strip</i> of the selection.</li></ul></div>
+        <div><h4>Costs</h4><ul><li>Each device profile needs its regions named.</li><li>A job kept live has to say what happens when one of its controls is bound by hand: the hand wins, as direct beats strip today.</li></ul></div>
+        <div><h4>Builds on</h4><ul><li>Strips are already a job for one column. This widens the idea to whole regions.</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="concept" id="concept-c">
+    <div class="chead">
+      <div class="letter">C</div>
+      <h3>The mapping sheet <span class="pill prog">Session 3</span></h3>
+      <p>Every control part as a row on the sheet kit the patch list and the cue sheet already use. Shift-click a run of cells in <b>On</b>, then fill them in order. This sheet reads the same bindings as A, so a change here shows on A's picture.</p>
+    </div>
+    <div class="cbody">
+      <div class="selbar" id="c-bar"></div>
+      <div class="tbl-wrap"><table class="sheet" id="sheet-c"></table></div>
+      <div class="proscons">
+        <div><h4>Good at</h4><ul><li>The whole desk at a glance, on any screen width. It replaces <code>BindingMatrix</code>, which can't see strips.</li><li>Bulk edits: fill, clear, copy layer A to B.</li><li>Dead bindings sort and filter like any column.</li></ul></div>
+        <div><h4>Costs</h4><ul><li>Doesn't show where a control physically sits.</li><li>Five columns of choices per row is dense for a first-time setup.</li></ul></div>
+        <div><h4>Reuses</h4><ul><li><code>components/sheet/</code>: the marquee, the batch editor, Clear, and the selection bar.</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="concept" id="concept-d">
+    <div class="chead">
+      <div class="letter">D</div>
+      <h3>Assign from the thing itself <span class="pill prog">Session 6</span></h3>
+      <p>Every record that can go on a surface gets <i>Assign to surface…</i> in its menu: cue stacks, cues, Looks, palettes, groups, fixtures, speed masters, pads, busk pages. You press a control on the desk, and the app offers the functions that fit. This is Eos's <code>[Sub] 5 [Load]</code> and grandMA3's Assign, from the object's side.</p>
+    </div>
+    <div class="cbody">
+      <div class="dflow" id="flow-d"></div>
+      <div class="proscons">
+        <div><h4>Good at</h4><ul><li>Starts where the operator already is: the stack card, the speed master sheet, the group.</li><li>The record shows where it's bound (<i>GO on Button 36 · A</i>). Today only fixtures and groups do.</li></ul></div>
+        <div><h4>Costs</h4><ul><li>Needs the desk attached, or a picture to click on instead.</li><li>One menu item on about nine kinds of record.</li></ul></div>
+        <div><h4>Not on its own</h4><ul><li>It can't make a selection binding or a desk function. It's an entry point into A, not a replacement for it.</li></ul></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────── RECOMMEND ───────────────────────────── -->
+<section class="block" id="recommend">
+  <header>
+    <div class="eyebrow">Plan</div>
+    <h2>Six sessions</h2>
+    <p>The order comes from the <a href="https://claude.ai/artifact/JfaaYXomTpAfPcJSVpM9n3">code review</a>. The binding and its migration go first, because every later session builds on them. A session that touches both sides of the wire is one PR, as the repo's rules ask.</p>
+  </header>
+  <ol class="qs">
+    <li><div><p><b>The binding and its migration.</b> Builds the grammar: one <code>Binding(does, on, how)</code> with a part for an encoder's turn and push, a spec per function, and one dispatch. Pan and tilt write <code>position</code>. One expansion of a subject's heads reaches elements and white-mix colour. Records are named by uuid only. Flash is stored as a percentage.</p>
+      <p class="opts">Database step 15 and an archive translate, sync <code>formatVersion</code> 53 with <code>minReader</code> 53. OSC moves onto the new grammar with its addresses unchanged. Strip rows carry across as they are. Operators notice three things: a strip encoder's push stops sending full, flash levels change on heads whose range ends below 255, and a pan nudge holds tilt.</p></div></li>
+    <li><div><p><b>Feedback.</b> Builds the layer rule's readback: Local over the cue layer, without FX, looking beneath a held flash and ignoring park, read by a loop off the ArtNet thread. One jump rule for every fader and ring. One entry type, with each function's LED declared on it, including new LEDs for GO, a cue held loose and encoder pushes. Layer, encoder page and held flashes per device.</p></div></li>
+    <li><div><p><b>The served picture, and editors A and C.</b> The desk serves each control's resolved binding and one function catalogue, takes a write by slot, and has an identify mode that captures a touch without firing it. Builds <a href="#concept-a">A</a>, the inspector, and <a href="#concept-c">C</a>, the mapping table. Viewing a layer stops switching the hardware.</p>
+      <p class="opts">Removes the library, the target form, <code>BindingMatrix</code> and the Learn overlay (below).</p></div></li>
+    <li><div><p><b>New functions.</b> Clear, Blind, Release, Record (a new cue on a named stack, with the Record sheet's defaults) and Update (refused when nothing is included). Locate, Fan and FX speed on a group or a fixture. Flash and "follow the encoder page" on the selection.</p></div></li>
+    <li><div><p><b>Jobs.</b> Job regions with ordered slots in each device profile, the stored jobs and their sync folder, live derivation, and strip rows turned into jobs with their own database step. Builds <a href="#concept-b">B</a>.</p></div></li>
+    <li><div><p><b>Assign from the thing.</b> <i>Assign to surface…</i> on cue stacks, cues, Looks, palettes, groups, fixtures, speed masters, busk pads and busk pages, and each record showing where it's bound. Builds <a href="#concept-d">D</a>.</p></div></li>
+  </ol>
+  <div class="rec">
+    <div class="card">
+      <h4>Removed in session 3</h4>
+      <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:6px">
+        <li>The drag library, edit mode and their drop rules (<code>SurfaceLibrary</code>, <code>lib/surfaceDrop.ts</code>'s drag half).</li>
+        <li>The 40-kind target form. A's panel takes its place everywhere it opens.</li>
+        <li>Learn as an overlay that copies a binding. Touching a control selects it, and the panel's own <i>Learn</i> fills a subject from the screen.</li>
+        <li>The header's bank buttons as a way of viewing. Viewing a layer stops moving the hardware.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Where each part of this design lands</h4>
+      <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:6px">
+        <li><b>The grammar:</b> session 1, with its new functions and subjects in session 4.</li>
+        <li><b>The layer rule:</b> the <code>position</code> key in session 1, the readback in session 2.</li>
+        <li><b>A and C:</b> session 3. <b>B:</b> session 5. <b>D:</b> session 6.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────── QUESTIONS ───────────────────────────── -->
+<section class="block" id="questions">
+  <header>
+    <div class="eyebrow">Agreed</div>
+    <h2>Decisions</h2>
+    <p>Chris's answers, 8 Nov 2026. The code review measures the surface code against these.</p>
+  </header>
+  <ol class="qs">
+    <li><div><p><b>The readback: Local first.</b> A fixture control shows and moves from what Local holds for its attribute, or the stage where Local holds nothing. In Blind that is the staged value.</p></div></li>
+    <li><div><p><b>Jobs stay live.</b> A region's job is stored, as a strip is today. Reorder its items and the controls move with them. A control bound by hand leaves the job.</p></div></li>
+    <li><div><p><b>All four editors, now.</b> A is the editor, B sets up regions, C is the overview and the phone view in place of <code>BindingMatrix</code>, and D puts <i>Assign to surface…</i> on the records. The drag library and the 40-kind form go.</p></div></li>
+    <li><div><p><b>Programmer verbs: Clear, Blind, Release and Record.</b> Release takes the selection, a group or a fixture as its subject.</p></div></li>
+    <li><div><p><b>Record is two functions.</b> <i>Record</i> names a cue stack and appends a new cue with every touched value, all attributes, with nothing to answer. <i>Update</i> writes back to whatever Include loaded, as the programmer's Update does.</p></div></li>
+    <li><div><p><b>An encoder's push is its own binding</b>, and does nothing until one is made.</p></div></li>
+    <li><div><p><b>Flash</b> takes its level as a percentage of each head's range, as a fader scales, and takes the selection as a subject like every other fixture function.</p></div></li>
+    <li><div><p><b>Words:</b> <i>Layer A / B</i> for the device's layers, <i>Encoder page</i> for the encoder bank, and <i>Writes to Local</i> on a fixture binding, matching the fixture sheet.</p></div></li>
+  </ol>
+  <h3 style="margin-top:10px">From the code review</h3>
+  <ol class="qs" start="9">
+    <li><div><p><b>"The stage" in the readback is the cue layer under Local, without FX.</b> A running FX doesn't drag a motor or re-arm pickup; a GO still moves un-held faders as it fades. The readback looks beneath a held flash and ignores park.</p></div></li>
+    <li><div><p><b>Identify mode captures without firing.</b> While the app waits for a touch (A or D), the next press is captured and not dispatched: one press, a banner, a 30 s timeout.</p></div></li>
+    <li><div><p><b>The desk serves each control's resolved binding and one function catalogue.</b> The browser keeps no copies of the backend's rules, and a fixture shared by Kotlin and TypeScript guards the wire.</p></div></li>
+    <li><div><p><b>Bindings per device type, live state per device.</b> Two identical surfaces share bindings, but each keeps its own layer, encoder page and held flashes.</p></div></li>
+    <li><div><p><b>Fire stays fixture only</b>, and <b><code>minReader</code> 53 is accepted</b>: an older desk refuses a newer show rather than losing its bindings.</p></div></li>
+  </ol>
+  <p class="note">Next: the plan for the six sessions above, in <code>docs/plans/</code>.</p>
+</section>
+
+<p class="foot">Mockups are illustrative: names, levels and the sample rig are invented. The research used three passes over the code (backend targets, frontend doors) and one web pass over the consoles above.</p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // ── tiny DOM helper ────────────────────────────────────────────
+  function h(tag, attrs) {
+    var e = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      var v = attrs[k];
+      if (v == null || v === false) continue;
+      if (k === "class") e.className = v;
+      else if (k === "text") e.textContent = v;
+      else if (k === "html") e.innerHTML = v;
+      else if (k.slice(0, 2) === "on") e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v === true ? "" : v);
+    }
+    for (var i = 2; i < arguments.length; i++) {
+      var c = arguments[i];
+      if (c == null || c === false) continue;
+      if (Array.isArray(c)) c.forEach(function (x) { if (x != null && x !== false) e.append(x); });
+      else e.append(c);
+    }
+    return e;
+  }
+
+  // ── the device ────────────────────────────────────────────────
+  var CTL = {};
+  function add(id, kind, label) { CTL[id] = { id: id, kind: kind, label: label }; }
+  for (var i = 1; i <= 9; i++) add("fader-" + i, "fader", i === 9 ? "Master fader" : "Fader " + i);
+  for (i = 1; i <= 16; i++) add("enc-" + i, "enc", "Encoder " + i);
+  for (i = 1; i <= 39; i++) add("btn-" + i, "btn", "Button " + i);
+  add("bank-a", "bank", "Layer A key"); add("bank-b", "bank", "Layer B key");
+  var STRIPS = [];
+  for (i = 1; i <= 8; i++) STRIPS.push({ id: "strip-" + i, n: i, fader: "fader-" + i, select: "btn-" + (24 + i), encoder: "enc-" + i, flash: "btn-" + i });
+  function stripOf(id) { return STRIPS.find(function (s) { return s.fader === id || s.select === id || s.encoder === id || s.flash === id; }) || null; }
+  function roleIn(strip, id) { return strip.fader === id ? "fader" : strip.select === id ? "select" : strip.encoder === id ? "encoder" : "flash"; }
+  var PARTS = { fader: ["move"], enc: ["turn", "push"], btn: ["press"], bank: [] };
+  var PART_NAME = { move: "Move", turn: "Turn", push: "Push", press: "Press" };
+  var FADER_POS = [0.82, 0.64, 0.5, 0.5, 0.3, 0.72, 0.9, 0.15, 1];
+
+  // ── the sample rig ─────────────────────────────────────────────
+  var GROUPS = [["Front wash", "cyan"], ["Back wash", "orange"], ["Side SL", "green"], ["Side SR", "lime"], ["Movers", "pink"], ["LED bars", "yellow"], ["Cyc", "red"], ["Specials", "brown"]];
+  var GCOL = {}; GROUPS.forEach(function (g) { GCOL[g[0]] = g[1]; });
+  var FIXTURES = ["Mac 250 1", "Mac 250 2", "Mac 250 3", "Mac 250 4", "Hex 1", "Hex 2", "Hex 3", "Twin Shot"];
+  var STACKS = ["Act 1", "Act 2", "Busk", "Encore"];
+  var MASTERS = ["M1 · Main", "M2 · Chase", "M3 · Movers"];
+  var PALETTES = ["Red", "Amber", "Steel blue", "Lavender", "Warm white", "Cool white", "DSR focus", "Ballyhoo"];
+  var LOOKS = ["Preshow", "Haze fill", "Storm"];
+  var CUES = ["Q5 Sunrise", "Q12 Storm", "Q20 Bows"];
+  var PADS = ["Storm pads · 1", "Storm pads · 2", "Storm pads · 3"];
+  var SUBJECTS = {
+    sel: { name: "The selection", items: null },
+    group: { name: "A group", items: GROUPS.map(function (g) { return g[0]; }) },
+    fixture: { name: "A fixture", items: FIXTURES },
+    strip: { name: "This strip's group", items: null },
+    stack: { name: "Cue stack", items: STACKS },
+    master: { name: "Speed master", items: MASTERS },
+    look: { name: "Look", items: LOOKS },
+    cue: { name: "Cue", items: CUES },
+    pad: { name: "Busk pad", items: PADS }
+  };
+  var W = { local: ["Local", "prog"], play: ["Playback", "play"], master: ["Master", "out"], tempo: ["Tempo", "desk"], desk: ["Desk", "desk"] };
+  var FX3 = ["sel", "group", "fixture", "strip"];
+  var FN = [
+    // continuous
+    { id: "level", k: "c", g: "On fixtures", name: "Level", subj: FX3, w: "local" },
+    { id: "colour", k: "c", g: "On fixtures", name: "Colour", opt: ["Axis", ["Hue", "Hue fine", "Saturation", "Brightness"]], subj: FX3, w: "local" },
+    { id: "attr", k: "c", g: "On fixtures", name: "Beam or emitter", opt: ["Attribute", ["Zoom", "Iris", "Focus", "Frost", "White", "Amber", "UV"]], subj: FX3, w: "local" },
+    { id: "pan", k: "c", g: "On fixtures", name: "Pan", subj: FX3, w: "local" },
+    { id: "tilt", k: "c", g: "On fixtures", name: "Tilt", subj: FX3, w: "local" },
+    { id: "fan", k: "c", g: "On fixtures", name: "Fan", opt: ["Across", ["Pan", "Tilt", "The stage, side to side", "The stage, front to back"]], subj: ["sel", "group", "strip"], w: "local", isNew: "group" },
+    { id: "page", k: "c", g: "On fixtures", name: "Whatever the encoder page says", subj: FX3, w: "local", only: "enc" },
+    { id: "fxspeed", k: "c", g: "On fixtures", name: "FX speed", subj: FX3, w: "local" },
+    { id: "stackfx", k: "c", g: "Playback", name: "Stack FX amount", subj: ["stack"], w: "play" },
+    { id: "tempo", k: "c", g: "Tempo", name: "Tempo", opt: ["Range", ["60–180 BPM", "90–150 BPM", "20–300 BPM"]], subj: ["master"], w: "tempo" },
+    { id: "gm", k: "c", g: "Desk", name: "Grand master", subj: [], w: "master" },
+    // buttons
+    { id: "select", k: "b", g: "On fixtures", name: "Select", subj: ["group", "fixture", "strip"], w: "desk", how: ["Toggle, hold to replace", "Toggle", "Replace"] },
+    { id: "flash", k: "b", g: "On fixtures", name: "Flash", opt: ["Level", ["Full", "75 %", "50 %"]], subj: FX3, w: "local", how: ["While held"] },
+    { id: "locate", k: "b", g: "On fixtures", name: "Locate", subj: ["sel", "group", "fixture", "strip"], w: "local", how: ["Toggle", "On", "Off"] },
+    { id: "release", k: "b", g: "On fixtures", name: "Release from Local", subj: ["sel", "group", "fixture", "strip"], w: "local" },
+    { id: "palette", k: "b", g: "On fixtures", name: "Press a palette", opt: ["Palette", PALETTES], subj: ["sel", "group", "fixture"], w: "local", how: ["Toggle", "On", "Off"] },
+    { id: "trigger", k: "b", g: "On fixtures", name: "Fire a cannon", subj: ["fixture"], w: "play" },
+    { id: "look", k: "b", g: "Playback", name: "Look", subj: ["look"], w: "local", how: ["Toggle", "On", "Off"] },
+    { id: "go", k: "b", g: "Playback", name: "GO", subj: ["stack"], w: "play" },
+    { id: "back", k: "b", g: "Playback", name: "Back", subj: ["stack"], w: "play" },
+    { id: "stop", k: "b", g: "Playback", name: "Stop", subj: ["stack"], w: "play" },
+    { id: "pause", k: "b", g: "Playback", name: "Pause follow", subj: ["stack"], w: "play", how: ["Toggle", "On", "Off"] },
+    { id: "cue", k: "b", g: "Playback", name: "Cue, held loose", subj: ["cue"], w: "play", how: ["Toggle", "On", "Off"] },
+    { id: "pad", k: "b", g: "Playback", name: "Busk pad", subj: ["pad"], w: "local" },
+    { id: "tap", k: "b", g: "Tempo", name: "Tap", subj: ["master"], w: "tempo" },
+    { id: "scale", k: "b", g: "Tempo", name: "Halve or double", subj: ["master"], w: "tempo", how: ["×½", "×2"] },
+    { id: "blackout", k: "b", g: "Desk", name: "Blackout", subj: [], w: "master", how: ["Toggle", "On", "Off"] },
+    { id: "clear", k: "b", g: "Desk", name: "Clear Local", subj: [], w: "local" },
+    { id: "blind", k: "b", g: "Desk", name: "Blind", subj: [], w: "local", how: ["Toggle", "While held"] },
+    { id: "undo", k: "b", g: "Desk", name: "Undo", subj: [], w: "desk", how: ["Undo", "Redo"] },
+    { id: "epage", k: "b", g: "Desk", name: "Encoder page", opt: ["Page", ["Level", "Colour", "Beam", "Position", "Fan", "FX speed"]], subj: [], w: "desk" },
+    { id: "layer", k: "b", g: "Desk", name: "Switch layer", opt: ["Layer", ["A", "B"]], subj: [], w: "desk" },
+    { id: "clearsel", k: "b", g: "Desk", name: "Clear the selection", subj: [], w: "desk" },
+    { id: "step", k: "b", g: "Desk", name: "Step the selection", opt: ["Step", ["Next", "Previous", "Odd", "Even", "All"]], subj: [], w: "desk" },
+    { id: "bpage", k: "b", g: "Desk", name: "Busk page", opt: ["Page", ["Next", "Previous", "Storm pads", "Dance pads"]], subj: [], w: "desk" }
+  ];
+  var FNI = {}; FN.forEach(function (f) { FNI[f.id] = f; });
+  var PAGE_NOW = "Level";
+
+  // ── bindings: B[layer][control][part]; strip rows in S[layer][strip] ──
+  var B = { all: {}, A: {}, B: {} };
+  var S = { all: {}, A: {}, B: {} };
+  function put(layer, id, part, fn, on, opt, how) {
+    (B[layer][id] = B[layer][id] || {})[part] = { fn: fn, on: on || null, opt: opt || null, how: how || null };
+  }
+  GROUPS.forEach(function (g, ix) { S.all["strip-" + (ix + 1)] = { on: "group:" + g[0] }; });
+  ["Red", "Amber", "Steel blue", "Lavender", "Warm white", "Cool white", "DSR focus", "Ballyhoo"].forEach(function (p, ix) { put("all", "btn-" + (9 + ix), "press", "palette", "sel", p, "Toggle"); });
+  ["Level", "Colour", "Beam", "Position", "Fan", "FX speed"].forEach(function (p, ix) { put("all", "btn-" + (17 + ix), "press", "epage", null, p); });
+  put("all", "btn-23", "press", "layer", null, "A"); put("all", "btn-24", "press", "layer", null, "B");
+  put("all", "enc-9", "turn", "level", "sel"); put("all", "enc-9", "push", "release", "sel");
+  put("all", "enc-10", "turn", "colour", "sel", "Hue");
+  put("all", "enc-11", "turn", "colour", "sel", "Saturation");
+  put("all", "enc-12", "turn", "attr", "sel", "Zoom");
+  put("all", "enc-13", "turn", "fan", "sel", "Pan");
+  put("all", "enc-14", "turn", "fan", "sel", "Tilt");
+  put("all", "enc-15", "turn", "fxspeed", "sel");
+  put("all", "enc-16", "turn", "tempo", "master:M1 · Main", "60–180 BPM"); put("all", "enc-16", "push", "tap", "master:M1 · Main");
+  put("all", "btn-34", "press", "go", "stack:Act 1"); put("all", "btn-35", "press", "back", "stack:Act 1");
+  put("all", "btn-36", "press", "stop", "stack:Act 1"); put("all", "btn-37", "press", "tap", "master:M1 · Main");
+  put("all", "btn-38", "press", "locate", "sel", null, "Toggle"); put("all", "btn-39", "press", "clearsel");
+  put("all", "fader-9", "move", "gm"); put("all", "btn-33", "press", "blackout", null, null, "Toggle");
+  // Layer B: strips 1–4 are playbacks for four stacks.
+  STACKS.forEach(function (s, ix) {
+    var n = ix + 1;
+    put("B", "fader-" + n, "move", "stackfx", "stack:" + s);
+    put("B", "btn-" + n, "press", "go", "stack:" + s);
+    put("B", "btn-" + (24 + n), "press", "back", "stack:" + s);
+    put("B", "enc-" + n, "turn", "none");
+  });
+
+  var view = { layer: "A", sel: null };
+
+  function own(layer, id, part) { var x = B[layer][id]; return x && x[part]; }
+  function stripRow(layer, sid) { return S[layer][sid] || S.all[sid] || null; }
+  function stripLayerOf(sid) { return S[view.layer][sid] ? view.layer : S.all[sid] ? "all" : null; }
+  // Resolution mirrors the desk's: the control's own row on both layer levels, then its strip's.
+  function resolve(id, part, layer) {
+    layer = layer || view.layer;
+    var b = own(layer, id, part) || own("all", id, part);
+    if (b) return b.fn === "none" ? null : Object.assign({ src: own(layer, id, part) ? layer : "all", ctx: stripOf(id) }, b);
+    var st = stripOf(id);
+    if (st && part !== "push") {
+      var row = stripRow(layer, st.id);
+      if (row) {
+        var role = roleIn(st, id);
+        var fn = role === "fader" ? "level" : role === "select" ? "select" : role === "encoder" ? "page" : "flash";
+        return { fn: fn, on: row.on, opt: role === "flash" ? "Full" : null, how: role === "select" ? "Toggle, hold to replace" : role === "flash" ? "While held" : null, strip: st, src: S[layer][st.id] ? layer : "all" };
+      }
+    }
+    return null;
+  }
+  function subjName(on, strip) {
+    if (!on) return "";
+    if (on === "sel") return "the selection";
+    if (on === "strip") return strip ? stripGroupName(strip) : "this strip's group";
+    return on.slice(on.indexOf(":") + 1);
+  }
+  function stripGroupName(strip) { var r = stripRow(view.layer, strip.id); return r ? subjName(r.on) : "nothing"; }
+  function shortSubj(on, strip) {
+    if (on === "sel") return "Sel";
+    var n = subjName(on, strip);
+    return n.replace(" · Main", "").replace(" · Chase", "").replace(" · Movers", "");
+  }
+  function colourOf(on, strip) {
+    var n = subjName(on, strip);
+    return GCOL[n] || null;
+  }
+  var AX = { "Hue": "hue", "Hue fine": "fine", "Saturation": "sat", "Brightness": "bright" };
+  function shortLabel(b, ctlId) {
+    if (!b) return "";
+    var st = b.strip, s = shortSubj(b.on, st || b.ctx), f = b.fn;
+    if (st) { var role = roleIn(st, ctlId); return role === "fader" ? s : role === "select" ? "Select" : role === "encoder" ? PAGE_NOW : "Flash"; }
+    switch (f) {
+      case "level": return b.on === "sel" ? "Sel level" : s;
+      case "colour": return (b.on === "sel" ? "Sel " : s + " ") + (AX[b.opt] || "hue");
+      case "attr": return (b.on === "sel" ? "Sel " : s + " ") + String(b.opt || "").toLowerCase();
+      case "pan": case "tilt": return (b.on === "sel" ? "Sel " : s + " ") + f;
+      case "fan": return "Fan " + ({ "Pan": "pan", "Tilt": "tilt", "The stage, side to side": "across", "The stage, front to back": "depth" }[b.opt] || "pan");
+      case "page": return "Page: " + PAGE_NOW;
+      case "fxspeed": return "FX speed";
+      case "stackfx": return s + " FX";
+      case "tempo": return s + " BPM";
+      case "gm": return "Grand master";
+      case "select": return "Sel " + s;
+      case "flash": return "Flash " + s;
+      case "locate": return b.on === "sel" ? "Locate" : "Loc " + s;
+      case "release": return b.on === "sel" ? "Release" : "Rel " + s;
+      case "palette": return b.on === "sel" ? (b.opt || "Palette") : (b.opt || "Pal") + " " + s;
+      case "trigger": return "Fire " + s;
+      case "look": case "cue": case "pad": return s;
+      case "go": return "GO " + s; case "back": return "Back " + s; case "stop": return "Stop " + s; case "pause": return "Pause " + s;
+      case "tap": return "Tap " + s; case "scale": return (b.how || "×2") + " " + s;
+      case "blackout": return "Blackout"; case "clear": return "Clear"; case "blind": return "Blind";
+      case "undo": return b.how === "Redo" ? "Redo" : "Undo";
+      case "epage": return b.opt || "Page"; case "layer": return "Layer " + (b.opt || "A");
+      case "clearsel": return "Clear sel"; case "step": return (b.opt || "Next") + " sel"; case "bpage": return "Busk " + String(b.opt || "next").toLowerCase();
+    }
+    return FNI[f] ? FNI[f].name : f;
+  }
+  function labelFor(id) {
+    var c = CTL[id];
+    if (c.kind === "bank") return { text: id === "bank-a" ? "Layer A" : "Layer B", led: (id === "bank-a") === (view.layer === "A") };
+    var main = resolve(id, PARTS[c.kind][0]);
+    if (!main && c.kind === "enc") { var p = resolve(id, "push"); if (p) return { text: "Push: " + shortLabel(p, id), colour: null }; }
+    if (!main) return { text: "—", none: true };
+    var led = false;
+    if (main.fn === "epage" && main.opt === PAGE_NOW) led = true;
+    if (main.fn === "palette" && main.opt === "Amber") led = true;
+    if (main.fn === "layer" && main.opt === view.layer) led = true;
+    if (main.fn === "select" && main.strip && main.strip.n === 2) led = true;
+    return { text: shortLabel(main, id), colour: colourOf(main.on, main.strip || main.ctx), led: led, ring: c.kind === "enc" };
+  }
+
+  function drawDevice(host, opts) {
+    opts = opts || {};
+    var lf = opts.labelFor || labelFor;
+    host.innerHTML = "";
+    function cell(id) {
+      var c = CTL[id], L = lf(id) || { text: "—", none: true };
+      var cls = "ctl " + (c.kind === "enc" ? "enc" : c.kind === "fader" ? "fad" : c.kind === "bank" ? "bankkey" : "kbtn");
+      if (opts.selected === id) cls += " sel";
+      if (opts.eligible && !opts.eligible(id)) cls += " dim";
+      var face;
+      if (c.kind === "enc") face = h("span", { class: "knob" + (L.ring && !L.none ? " ring" : "") });
+      else if (c.kind === "fader") {
+        var n = Number(id.split("-")[1]);
+        var cap = h("span", { class: "cap" }); cap.style.bottom = (FADER_POS[n - 1] * 100) + "%";
+        face = h("span", { class: "slot" }, cap);
+      } else face = h("span", { class: "key" + (L.led ? " on" : "") });
+      var lbl = h("span", { class: "lbl" + (L.none ? " none" : ""), text: L.text });
+      if (L.colour) lbl.style.borderTopColor = "var(--tag-" + L.colour + ")";
+      var b = h("button", { type: "button", class: cls, "data-id": id, "aria-label": c.label + ": " + (L.none ? "nothing" : L.text), title: c.label + " · " + (L.none ? "nothing" : L.text) }, face, lbl);
+      if (opts.eligible && !opts.eligible(id)) b.setAttribute("aria-disabled", "true");
+      b.addEventListener("click", function () {
+        if (opts.eligible && !opts.eligible(id)) return;
+        if (opts.onPick) opts.onPick(id);
+      });
+      return b;
+    }
+    var strips = h("div", { class: "xt-strips" });
+    STRIPS.forEach(function (s) {
+      var col = h("div", { class: "xt-col" + (opts.highlightStrip === s.id ? " striphl" : ""), "data-strip": s.id });
+      [s.encoder, s.flash, "btn-" + (8 + s.n), "btn-" + (16 + s.n), s.fader, s.select].forEach(function (id) { col.append(cell(id)); });
+      strips.append(col);
+    });
+    var right = h("div", { class: "xt-right" });
+    for (var e = 9; e <= 16; e++) right.append(cell("enc-" + e));
+    for (var bb = 34; bb <= 39; bb++) right.append(cell("btn-" + bb));
+    var master = h("div", { class: "xt-master" }, cell("bank-a"), cell("bank-b"), cell("fader-9"), cell("btn-33"));
+    host.append(h("div", { class: "xt", role: "group", "aria-label": "X-Touch Compact" }, strips, right, master));
+  }
+
+  // ── concept A: the inspector ───────────────────────────────────
+  var devA = document.getElementById("dev-a"), insA = document.getElementById("ins-a");
+  function fnFits(f, ctlKind, part) {
+    var want = (ctlKind === "btn" || part === "push") ? "b" : "c";
+    if (f.k !== want) return false;
+    if (f.only && f.only !== ctlKind) return false;
+    return true;
+  }
+  function subjOptions(f, strip) {
+    var out = [];
+    (f.subj || []).forEach(function (k) {
+      if (k === "strip" && !strip) return;
+      var S0 = SUBJECTS[k];
+      if (!S0.items) out.push([k === "strip" ? "strip" : "sel", S0.name + (k === "strip" ? " (" + stripGroupName(strip) + ")" : "")]);
+      else out.push([S0.name, S0.items.map(function (it) { return [k + ":" + it, it]; })]);
+    });
+    return out;
+  }
+  function select(id, value, options, onChange, label) {
+    var s = h("select", { id: id, "aria-label": label });
+    options.forEach(function (o) {
+      if (Array.isArray(o[1])) {
+        var g = h("optgroup", { label: o[0] });
+        o[1].forEach(function (x) { g.append(h("option", { value: x[0], text: x[1] })); });
+        s.append(g);
+      } else s.append(h("option", { value: o[0], text: o[1] }));
+    });
+    s.value = value == null ? "" : value;
+    s.addEventListener("change", function () { onChange(s.value); });
+    return s;
+  }
+  function writesPill(b) {
+    if (!b) return null;
+    var f = FNI[b.fn]; if (!f) return null;
+    var w = W[f.w];
+    return h("span", { class: "pill " + w[1], text: "Writes to " + w[0] });
+  }
+  function showsText(b, ctlKind) {
+    if (!b) return "";
+    var f = b.fn, s = subjName(b.on, b.strip || b.ctx);
+    var cont = { level: "level", colour: (b.opt || "hue").toLowerCase(), attr: (b.opt || "").toLowerCase(), pan: "pan", tilt: "tilt", page: PAGE_NOW.toLowerCase() };
+    if (cont[f] != null) {
+      var what = (ctlKind === "fader" ? "The motor shows " : "The ring shows ");
+      return what + "what Local holds for " + s + "'s " + cont[f] + ", or the stage where Local holds nothing." + (b.on === "sel" ? " It goes dark while the selected heads differ." : "");
+    }
+    switch (f) {
+      case "fan": return "The ring shows the fan amount. The centre is no fan.";
+      case "fxspeed": return "The ring shows the speed of the first Local FX on " + s + ".";
+      case "stackfx": return "Shows " + s + "'s FX amount.";
+      case "tempo": return "Shows " + s + "'s tempo across " + (b.opt || "60–180 BPM") + ".";
+      case "gm": return "Shows the grand master.";
+      case "select": return "Lit while all of " + s + " is selected." + (b.how === "Toggle, hold to replace" ? " Hold for half a second to select only it." : "");
+      case "flash": return "Lit while held. Lets go to whatever was under it.";
+      case "locate": return "Lit while " + s + " is located.";
+      case "release": return "Takes " + s + " out of Local. No light.";
+      case "palette": return "Lit while " + (b.opt || "the palette") + " covers " + s + ".";
+      case "look": return "Lit while " + s + " is on.";
+      case "go": return "Lit while " + s + " is running.";
+      case "cue": return "Lit while a press holds " + s + ".";
+      case "blackout": return "Lit while blackout is on.";
+      case "blind": return "Lit while blind.";
+      case "epage": return "Lit while " + (b.opt || "it") + " is the encoder page.";
+      case "layer": return "Lit while the desk is on layer " + (b.opt || "A") + ".";
+    }
+    return "No light.";
+  }
+  function setOwn(layer, id, part, val) {
+    if (val == null) { if (B[layer][id]) { delete B[layer][id][part]; if (!Object.keys(B[layer][id]).length) delete B[layer][id]; } return; }
+    (B[layer][id] = B[layer][id] || {})[part] = val;
+  }
+  function defaultsFor(fid, strip) {
+    var f = FNI[fid];
+    var on = null;
+    if (f.subj && f.subj.length) {
+      var k = f.subj[0];
+      on = (k === "sel") ? "sel" : (k === "strip") ? "strip" : k + ":" + SUBJECTS[k].items[0];
+      if (strip && f.subj.indexOf("strip") >= 0) on = "strip";
+    }
+    return { fn: fid, on: on, opt: f.opt ? f.opt[1][0] : null, how: f.how ? f.how[0] : null };
+  }
+
+  function renderA() {
+    drawDevice(devA, { selected: view.sel, highlightStrip: view.sel && stripOf(view.sel) ? stripOf(view.sel).id : null, onPick: function (id) { view.sel = id; renderAll(); } });
+    insA.innerHTML = "";
+    if (!view.sel) {
+      insA.append(h("div", { class: "ins-h" }, h("div", { class: "eyebrow", text: "Nothing selected" }), h("div", { class: "ctl-name", text: "Click a control, or touch it on the desk" })),
+        h("p", { class: "note", text: "Every part of the control gets one line of Does · On · How. There's no edit mode: the panel is the editor." }));
+      return;
+    }
+    var id = view.sel, c = CTL[id], strip = stripOf(id);
+    if (c.kind === "bank") {
+      insA.append(h("div", { class: "ins-h" }, h("div", { class: "eyebrow", text: "Layer key" }), h("div", { class: "ctl-name", text: c.label })),
+        h("p", { class: "note", text: "The device switches layers itself, so this key takes no binding. Any button can switch layer with Desk › Switch layer." }));
+      return;
+    }
+    var head = h("div", { class: "ins-h" },
+      h("div", { class: "eyebrow", text: c.kind === "fader" ? "Motor fader" : c.kind === "enc" ? "Encoder with ring and push" : "Lit button" }),
+      h("div", { class: "ctl-name", text: c.label }),
+      strip ? h("div", { class: "sub", text: "Part of strip " + strip.n + ", which follows " + stripGroupName(strip) + " · this is its " + roleIn(strip, id) + "." }) : null);
+    insA.append(head);
+    PARTS[c.kind].forEach(function (part) {
+      var ownLayer = own(view.layer, id, part) ? view.layer : own("all", id, part) ? "all" : null;
+      var b = resolve(id, part);
+      var wrap = h("div", { class: "part" });
+      var ph = h("div", { class: "parthead" }, h("span", { text: PART_NAME[part] }), writesPill(b));
+      wrap.append(ph);
+      if (b && b.strip && !ownLayer) {
+        var desc = { level: "Level of ", select: "Select ", page: "The encoder page (" + PAGE_NOW + ") on ", flash: "Flash " }[b.fn] + stripGroupName(strip);
+        wrap.append(h("div", { class: "sentence" },
+          h("div", { class: "say", text: desc }),
+          h("div", { class: "note", text: "From strip " + strip.n + ". Change the strip's group to move all four of its controls together." }),
+          h("div", { class: "chips" },
+            h("button", { type: "button", class: "btn", text: "Make this control its own", onclick: function () { setOwn(view.layer === "A" ? "all" : view.layer, id, part, { fn: b.fn, on: b.on === "strip" ? b.on : b.on, opt: b.opt, how: b.how }); renderAll(); } }),
+            select("a-strip-" + id, (stripRow(view.layer, strip.id) || {}).on, [["Groups", GROUPS.map(function (g) { return ["group:" + g[0], g[0]]; })], ["Fixtures", FIXTURES.map(function (x) { return ["fixture:" + x, x]; })]], function (v) { var L = stripLayerOf(strip.id) || "all"; S[L][strip.id] = { on: v }; renderAll(); }, "Strip " + strip.n + " follows"))));
+        wrap.append(h("p", { class: "note", text: showsText(b, c.kind) }));
+        insA.append(wrap);
+        return;
+      }
+      var cur = b || { fn: "" };
+      var fnOpts = [["", "Nothing"]];
+      var groups = {};
+      FN.forEach(function (f) { if (!fnFits(f, c.kind, part)) return; (groups[f.g] = groups[f.g] || []).push([f.id, f.name]); });
+      Object.keys(groups).forEach(function (g) { fnOpts.push([g, groups[g]]); });
+      var sent = h("div", { class: "sentence" });
+      sent.append(h("div", { class: "srow" }, h("span", { text: "Does" }), select("a-fn-" + id + part, cur.fn, fnOpts, function (v) {
+        var L = ownLayer || (view.layer === "A" ? "all" : view.layer);
+        setOwn(L, id, part, v ? defaultsFor(v, strip) : (strip && part !== "push" ? { fn: "none" } : null));
+        renderAll();
+      }, PART_NAME[part] + " does")));
+      if (b) {
+        var f = FNI[b.fn];
+        if (f && f.opt) sent.append(h("div", { class: "srow" }, h("span", { text: f.opt[0] }), select("a-opt-" + id + part, b.opt, f.opt[1].map(function (x) { return [x, x]; }), function (v) { var L = ownLayer || "all"; var x = own(L, id, part); if (x) { x.opt = v; renderAll(); } }, f.opt[0])));
+        if (f && f.subj && f.subj.length) sent.append(h("div", { class: "srow" }, h("span", { text: "On" }), select("a-on-" + id + part, b.on, subjOptions(f, strip), function (v) { var L = ownLayer || "all"; var x = own(L, id, part); if (x) { x.on = v; renderAll(); } }, "On")));
+        var hows = f && f.how ? f.how : (f && f.k === "c" ? (c.kind === "fader" ? null : ["Pick up", "Jump"]) : null);
+        if (hows) {
+          var chips = h("div", { class: "chips", role: "group", "aria-label": "How" });
+          hows.forEach(function (x) {
+            var pressed = (b.how || hows[0]) === x;
+            chips.append(h("button", { type: "button", class: "chip", "aria-pressed": pressed ? "true" : "false", text: x, onclick: function () { var L = ownLayer || "all"; var o = own(L, id, part); if (o) { o.how = x; renderAll(); } } }));
+          });
+          sent.append(h("div", { class: "srow" }, h("span", { text: "How" }), chips));
+        } else if (f && f.k === "c") {
+          sent.append(h("div", { class: "srow" }, h("span", { text: "How" }), h("span", { class: "note", text: "The motor follows; it holds still while touched." })));
+        }
+        var layerChips = h("div", { class: "chips", role: "group", "aria-label": "Applies on" });
+        [["all", "Both layers"], ["A", "A only"], ["B", "B only"]].forEach(function (pair) {
+          layerChips.append(h("button", { type: "button", class: "chip", "aria-pressed": (ownLayer || "all") === pair[0] ? "true" : "false", text: pair[1], onclick: function () {
+            var from = ownLayer || "all"; var x = own(from, id, part); if (!x || from === pair[0]) return;
+            setOwn(from, id, part, null); setOwn(pair[0], id, part, x);
+            if (pair[0] !== "all" && pair[0] !== view.layer) { view.layer = pair[0]; syncLayerSeg(); }
+            renderAll();
+          } }));
+        });
+        sent.append(h("div", { class: "srow" }, h("span", { text: "Layer" }), layerChips));
+      }
+      wrap.append(sent);
+      if (b) wrap.append(h("p", { class: "note", text: showsText(b, c.kind) }));
+      insA.append(wrap);
+    });
+    insA.append(h("div", { class: "chips" },
+      h("button", { type: "button", class: "btn", text: "Learn the subject from the screen", title: "Then click a group, fixture, stack or palette anywhere in the app", onclick: function () { flashToast("In the app: click a group, a fixture, a cue stack or a palette and it fills On."); } }),
+      h("button", { type: "button", class: "btn ghost", text: "Remove", onclick: function () { PARTS[c.kind].forEach(function (p) { setOwn("all", id, p, null); setOwn("A", id, p, null); setOwn("B", id, p, null); if (strip && p !== "push") setOwn(view.layer === "A" ? "all" : view.layer, id, p, { fn: "none" }); }); renderAll(); } })));
+  }
+  function flashToast(msg) {
+    var old = document.getElementById("a-toast"); if (old) old.remove();
+    var t = h("div", { class: "toast", id: "a-toast", role: "status", text: msg });
+    insA.append(t);
+    setTimeout(function () { if (t.parentNode) t.remove(); }, 4200);
+  }
+  document.getElementById("a-sim").addEventListener("click", function () {
+    view.sel = "enc-11"; renderAll();
+    var el = devA.querySelector('[data-id="enc-11"]');
+    if (el) { el.classList.add("flash"); setTimeout(function () { el.classList.remove("flash"); }, 1000); }
+    flashToast("Found Encoder 11: you touched it on the desk.");
+  });
+  function syncLayerSeg() {
+    document.querySelectorAll("[data-layer]").forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-layer") === view.layer ? "true" : "false"); });
+  }
+  document.querySelectorAll("[data-layer]").forEach(function (b) {
+    b.addEventListener("click", function () { view.layer = b.getAttribute("data-layer"); syncLayerSeg(); renderAll(); });
+  });
+
+  // ── concept B: jobs ────────────────────────────────────────────
+  var GN = GROUPS.map(function (g) { return g[0]; });
+  var REGIONS = [
+    { id: "strips", name: "Strips 1–8", sub: "Fader, select, encoder and flash in each column", jobs: [
+      { id: "groups", name: "Groups as channel strips", list: GN, pick: 8 },
+      { id: "fixtures", name: "Fixtures as channel strips", list: FIXTURES, pick: 8 },
+      { id: "heads", name: "The selection, one head per strip", note: "The first eight selected heads, in rig order. A select button narrows the selection to that head." },
+      { id: "stacks", name: "Cue stacks as playbacks", list: STACKS, pick: 8, note: "Fader is the stack's FX amount, flash is GO, select is Back." },
+      { id: "masters", name: "Speed masters", list: MASTERS, pick: 8, note: "Fader is tempo across 20–300 BPM, flash is Tap." },
+      { id: "none", name: "Nothing: bind each control yourself" } ] },
+    { id: "right", name: "Encoders 9–16", sub: "The right-hand block", jobs: [
+      { id: "wheels", name: "Wheels on the selection", list: ["Level", "Hue", "Saturation", "Zoom", "Fan pan", "Fan tilt", "FX speed", "M1 tempo", "Pan", "Tilt", "Iris"], pick: 8 },
+      { id: "paged", name: "Wheels on the selection, by encoder page", note: "Buttons 17–22 pick the page. Each page names up to eight attributes." },
+      { id: "none", name: "Nothing" } ] },
+    { id: "row2", name: "Buttons 9–16", sub: "Second row above the faders", jobs: [
+      { id: "palettes", name: "Palettes onto the selection", list: PALETTES, pick: 8 },
+      { id: "pads", name: "The busk page that's showing", note: "Its first eight pads. A page button moves it, and the row follows." },
+      { id: "gos", name: "GO for each cue stack", list: STACKS, pick: 8 },
+      { id: "none", name: "Nothing" } ] },
+    { id: "row3", name: "Buttons 17–24", sub: "Third row above the faders", jobs: [
+      { id: "pages", name: "Encoder pages", list: ["Level", "Colour", "Beam", "Position", "Fan", "FX speed", "Tempo"], pick: 8 },
+      { id: "looks", name: "Looks", list: LOOKS, pick: 8 },
+      { id: "none", name: "Nothing" } ] },
+    { id: "transport", name: "Buttons 34–39", sub: "The right-hand keys", jobs: [
+      { id: "transport", name: "Transport for one stack", list: STACKS, pick: 1, note: "GO, Back, Stop, Pause, Tap M1, Clear." },
+      { id: "prog", name: "Programmer keys", note: "Clear, Blind, Undo, Release, Locate, Clear selection, all on the selection." },
+      { id: "none", name: "Nothing" } ] },
+    { id: "master", name: "Master strip", sub: "Fader 9 and Button 33", jobs: [
+      { id: "gm", name: "Grand master and blackout" },
+      { id: "none", name: "Nothing" } ] }
+  ];
+  var JOB = { strips: { job: "groups", items: GN.slice() }, right: { job: "wheels", items: ["Level", "Hue", "Saturation", "Zoom", "Fan pan", "Fan tilt", "FX speed", "M1 tempo"] }, row2: { job: "palettes", items: PALETTES.slice() }, row3: { job: "pages", items: ["Level", "Colour", "Beam", "Position", "Fan", "FX speed"] }, transport: { job: "transport", items: ["Act 1"] }, master: { job: "gm", items: [] } };
+  var keepLive = true;
+  function jobLabels() {
+    var L = {};
+    var j = JOB.strips, k;
+    for (k = 1; k <= 8; k++) {
+      var enc = "enc-" + k, fl = "btn-" + k, fa = "fader-" + k, se = "btn-" + (24 + k), it = j.items[k - 1];
+      if (j.job === "groups" || j.job === "fixtures") { if (it) { L[fa] = { text: it, colour: GCOL[it] }; L[enc] = { text: "Page", ring: true }; L[fl] = { text: "Flash" }; L[se] = { text: "Select" }; } }
+      else if (j.job === "heads") { L[fa] = { text: "Head " + k }; L[enc] = { text: "Page", ring: true }; L[fl] = { text: "Flash" }; L[se] = { text: "Only " + k }; }
+      else if (j.job === "stacks") { if (it) { L[fa] = { text: it + " FX" }; L[fl] = { text: "GO " + it }; L[se] = { text: "Back " + it }; } }
+      else if (j.job === "masters") { if (it) { var m = it.split(" · ")[0]; L[fa] = { text: m + " BPM" }; L[fl] = { text: "Tap " + m }; } }
+    }
+    var r = JOB.right;
+    for (k = 0; k < 8; k++) {
+      var eid = "enc-" + (9 + k);
+      if (r.job === "wheels" && r.items[k]) L[eid] = { text: r.items[k].indexOf("M1") === 0 ? r.items[k] : "Sel " + r.items[k].toLowerCase(), ring: true };
+      else if (r.job === "paged") L[eid] = { text: "Page " + (k + 1), ring: true };
+    }
+    var r2 = JOB.row2;
+    for (k = 0; k < 8; k++) {
+      var bid = "btn-" + (9 + k);
+      if (r2.job === "palettes" && r2.items[k]) L[bid] = { text: r2.items[k], led: r2.items[k] === "Amber" };
+      else if (r2.job === "pads") L[bid] = { text: "Pad " + (k + 1) };
+      else if (r2.job === "gos" && r2.items[k]) L[bid] = { text: "GO " + r2.items[k] };
+    }
+    var r3 = JOB.row3;
+    for (k = 0; k < 8; k++) {
+      var b3 = "btn-" + (17 + k);
+      if (r3.job === "pages" && r3.items[k]) L[b3] = { text: r3.items[k], led: k === 0 };
+      else if (r3.job === "looks" && r3.items[k]) L[b3] = { text: r3.items[k] };
+    }
+    var t = JOB.transport, st = t.items[0] || "Act 1";
+    var tl = t.job === "transport" ? ["GO " + st, "Back " + st, "Stop " + st, "Pause " + st, "Tap M1", "Clear"] : t.job === "prog" ? ["Clear", "Blind", "Undo", "Release", "Locate", "Clear sel"] : [];
+    tl.forEach(function (x, ix) { L["btn-" + (34 + ix)] = { text: x }; });
+    if (JOB.master.job === "gm") { L["fader-9"] = { text: "Grand master" }; L["btn-33"] = { text: "Blackout" }; }
+    return function (id) {
+      if (CTL[id].kind === "bank") return { text: id === "bank-a" ? "Layer A" : "Layer B", led: id === "bank-a" };
+      return L[id] || { text: "—", none: true };
+    };
+  }
+  var devB = document.getElementById("dev-b"), rolesB = document.getElementById("roles-b");
+  function renderB() {
+    drawDevice(devB, { labelFor: jobLabels(), onPick: function (id) {
+      var reg = REGIONS.find(function (R) { return regionOf(id) === R.id; });
+      if (reg) { var el = document.getElementById("role-" + reg.id); if (el) el.querySelector("select").focus(); }
+    } });
+    rolesB.innerHTML = "";
+    REGIONS.forEach(function (R) {
+      var st = JOB[R.id], job = R.jobs.find(function (x) { return x.id === st.job; });
+      var body = h("div", { style: "display:grid;gap:8px;min-width:0" });
+      body.append(select("job-" + R.id, st.job, R.jobs.map(function (x) { return [x.id, x.name]; }), function (v) {
+        var nj = R.jobs.find(function (x) { return x.id === v; });
+        JOB[R.id] = { job: v, items: nj.list ? nj.list.slice(0, nj.pick) : [] };
+        renderB();
+      }, R.name + " job"));
+      if (job.note) body.append(h("div", { class: "note", text: job.note }));
+      if (job.list) {
+        var order = h("div", { class: "order", "aria-label": "In order" });
+        st.items.forEach(function (it, ix) {
+          order.append(h("button", { type: "button", class: "chip", "aria-pressed": "true", title: "Remove " + it, onclick: function () { st.items.splice(ix, 1); renderB(); } }, h("span", { class: "num", text: String(ix + 1) }), it));
+        });
+        body.append(order);
+        var rest = job.list.filter(function (x) { return st.items.indexOf(x) < 0; });
+        if (rest.length && st.items.length < job.pick) {
+          var addRow = h("div", { class: "chips" }, h("span", { class: "note", text: "Add:" }));
+          rest.forEach(function (x) { addRow.append(h("button", { type: "button", class: "chip", text: "+ " + x, onclick: function () { st.items.push(x); renderB(); } })); });
+          body.append(addRow);
+        }
+      }
+      rolesB.append(h("div", { class: "role" + (st.job !== "none" ? " on" : ""), id: "role-" + R.id }, h("div", { class: "rname" }, R.name, h("small", { text: R.sub })), body));
+    });
+    rolesB.append(h("p", { class: "note", text: keepLive ? "Stays live: reorder the groups and the strips move with them. Bind one control by hand in A and that control leaves the job." : "Written once: the job writes ordinary bindings and is then forgotten. Reordering later means doing it again." }));
+  }
+  function regionOf(id) {
+    var n = Number(id.split("-")[1]);
+    if (id.indexOf("fader-") === 0) return n === 9 ? "master" : "strips";
+    if (id.indexOf("enc-") === 0) return n <= 8 ? "strips" : "right";
+    if (id.indexOf("btn-") === 0) { if (n <= 8 || (n >= 25 && n <= 32)) return "strips"; if (n <= 16) return "row2"; if (n <= 24) return "row3"; if (n === 33) return "master"; return "transport"; }
+    return null;
+  }
+  document.querySelectorAll("[data-keep]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      keepLive = b.getAttribute("data-keep") === "live";
+      document.querySelectorAll("[data-keep]").forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+      renderB();
+    });
+  });
+
+  // ── concept C: the mapping sheet ──────────────────────────────
+  var sheetC = document.getElementById("sheet-c"), barC = document.getElementById("c-bar");
+  var cSel = []; var cAnchor = null; var cMsg = "";
+  function cRows() {
+    var rows = [];
+    rows.push({ div: "Strips 1–8" });
+    STRIPS.forEach(function (s) { rows.push({ strip: s, name: "Strip " + s.n, sub: "fader · select · encoder · flash" }); });
+    rows.push({ div: "Encoders 9–16" });
+    for (var e = 9; e <= 16; e++) { rows.push({ id: "enc-" + e, part: "turn", name: "Encoder " + e }); rows.push({ id: "enc-" + e, part: "push", name: "Encoder " + e, sub: "push" }); }
+    rows.push({ div: "Right-hand keys" });
+    for (var b = 34; b <= 39; b++) rows.push({ id: "btn-" + b, part: "press", name: "Button " + b });
+    rows.push({ div: "Master" });
+    rows.push({ id: "fader-9", part: "move", name: "Master fader" }); rows.push({ id: "btn-33", part: "press", name: "Button 33" });
+    var ix = 0; rows.forEach(function (r) { if (!r.div) r.ix = ix++; });
+    return rows;
+  }
+  function renderC() {
+    var rows = cRows();
+    sheetC.innerHTML = "";
+    sheetC.append(h("thead", null, h("tr", null, ["Control", "Layer", "Does", "On", "How", "Writes to", "Shows"].map(function (x) { return h("th", { scope: "col", text: x }); }))));
+    var tb = h("tbody");
+    rows.forEach(function (r) {
+      if (r.div) { tb.append(h("tr", { class: "div" }, h("td", { colspan: "7", text: r.div }))); return; }
+      var doesT, onT, howT, wPill, shows, layerT, colour = null;
+      if (r.strip) {
+        var row = stripRow(view.layer, r.strip.id), L = stripLayerOf(r.strip.id);
+        doesT = row ? "Channel strip" : "Nothing";
+        onT = row ? subjName(row.on) : "";
+        colour = row ? GCOL[subjName(row.on)] : null;
+        howT = row ? "Level · select · page · flash" : "";
+        wPill = row ? h("span", { class: "pill prog", text: "Local" }) : "";
+        shows = row ? "Motor: Local, else the stage" : "";
+        layerT = L === "all" ? "Both" : L || "";
+      } else {
+        var b = resolve(r.id, r.part);
+        var f = b ? FNI[b.fn] : null;
+        doesT = b ? f.name + (b.opt ? " · " + b.opt : "") : "Nothing";
+        onT = b ? (b.on ? (b.on === "sel" ? "The selection" : subjName(b.on)) : "—") : "";
+        colour = b ? GCOL[subjName(b.on)] : null;
+        howT = b ? (b.how || (f.k === "c" ? (r.id.indexOf("fader") === 0 ? "Motor follows" : "Pick up") : "Press")) : "";
+        wPill = b ? h("span", { class: "pill " + W[f.w][1], text: W[f.w][0] }) : "";
+        shows = b ? (f.k === "c" ? (["fan", "fxspeed", "tempo", "gm", "stackfx"].indexOf(f.id) >= 0 ? "Its own value" : "Ring: Local, else the stage") : (showsText(b, "btn").indexOf("Lit") === 0 ? "LED" : "No light")) : "";
+        var src = b ? b.src : null;
+        layerT = src === "all" ? "Both" : src || "";
+      }
+      var sel = cSel.indexOf(r.ix) >= 0;
+      var onCell = h("td", { class: "sc", "aria-selected": sel ? "true" : "false", tabindex: "0", "data-ix": String(r.ix) });
+      if (colour) onCell.append(h("span", { class: "band", style: "background:var(--tag-" + colour + ")" }));
+      onCell.append(onT || h("span", { class: "muted", text: "·" }));
+      onCell.addEventListener("click", function (ev) { pickCell(r.ix, ev.shiftKey, ev.metaKey || ev.ctrlKey); });
+      onCell.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pickCell(r.ix, ev.shiftKey, false); } });
+      tb.append(h("tr", null,
+        h("td", { class: "name" }, r.name, r.sub ? h("span", { class: "sub", text: r.sub }) : null),
+        h("td", { text: layerT }), h("td", { text: doesT }), onCell, h("td", { class: "muted", text: howT }), h("td", null, wPill), h("td", { class: "muted", text: shows })));
+    });
+    sheetC.append(tb);
+    renderBarC(rows);
+  }
+  function pickCell(ix, range, toggle) {
+    if (range && cAnchor != null) { cSel = []; var a = Math.min(cAnchor, ix), z = Math.max(cAnchor, ix); for (var k = a; k <= z; k++) cSel.push(k); }
+    else if (toggle) { var at = cSel.indexOf(ix); if (at >= 0) cSel.splice(at, 1); else cSel.push(ix); cAnchor = ix; }
+    else { cSel = cSel.length === 1 && cSel[0] === ix ? [] : [ix]; cAnchor = ix; }
+    cMsg = ""; renderC();
+  }
+  function renderBarC(rows) {
+    barC.innerHTML = "";
+    if (!cSel.length) { barC.append(h("span", { class: "muted", text: "Click a cell in On, then shift-click to take a run of them. Try Strips 1 to 8, or Encoders 9 to 12." })); if (cMsg) barC.append(h("span", { class: "note", text: cMsg })); return; }
+    var list = select("c-list", "group", [["group", "Groups, in order"], ["fixture", "Fixtures, in order"], ["stack", "Cue stacks, in order"], ["master", "Speed masters, in order"], ["sel", "The selection"]], function () {}, "Fill with");
+    list.style.width = "auto";
+    barC.append(h("span", { class: "count", text: cSel.length + (cSel.length === 1 ? " cell" : " cells") }), h("span", { class: "muted", text: "in On" }), list,
+      h("button", { type: "button", class: "btn primary", text: "Fill", onclick: function () { fillC(rows, list.value); } }),
+      h("button", { type: "button", class: "btn ghost", text: "Deselect", onclick: function () { cSel = []; cMsg = ""; renderC(); } }));
+    if (cMsg) barC.append(h("span", { class: "note", text: cMsg }));
+  }
+  function fillC(rows, kind) {
+    var items = kind === "sel" ? null : SUBJECTS[kind].items;
+    var done = 0, skipped = [];
+    var picked = rows.filter(function (r) { return !r.div && cSel.indexOf(r.ix) >= 0; }).sort(function (a, b) { return a.ix - b.ix; });
+    var n = 0;
+    picked.forEach(function (r) {
+      var value = kind === "sel" ? "sel" : items[n % items.length] ? kind + ":" + items[n % items.length] : null;
+      if (r.strip) {
+        if (kind !== "group" && kind !== "fixture") { skipped.push(r.name + " takes a group or fixture"); return; }
+        var L = stripLayerOf(r.strip.id) || "all"; S[L][r.strip.id] = { on: value }; n++; done++; return;
+      }
+      var b = resolve(r.id, r.part);
+      if (!b) { skipped.push(r.name + (r.sub ? " " + r.sub : "") + " does nothing yet"); return; }
+      var f = FNI[b.fn];
+      if (f.subj.indexOf(kind) < 0) { skipped.push(r.name + (r.sub ? " " + r.sub : "") + " (" + f.name + ") can't take " + (kind === "sel" ? "the selection" : SUBJECTS[kind].name.toLowerCase())); return; }
+      var x = own(b.src, r.id, r.part) || own("all", r.id, r.part);
+      if (x) { x.on = value; n++; done++; }
+    });
+    cMsg = "Filled " + done + "." + (skipped.length ? " Skipped " + skipped.length + ": " + skipped.slice(0, 2).join("; ") + (skipped.length > 2 ? "…" : ".") : "");
+    renderAll();
+  }
+
+  // ── concept D: assign from the thing ──────────────────────────
+  var flowD = document.getElementById("flow-d");
+  var D = { step: 0, ctl: null, fn: "go", layer: "all", done: null };
+  function eligibleD(id) { var k = CTL[id].kind; return k === "btn" || k === "fader" || k === "enc"; }
+  function renderD() {
+    flowD.innerHTML = "";
+    var stackCard = h("div", { class: "stackcard" },
+      h("div", { class: "t", text: "Act 2" }), h("div", { class: "note", text: "Cue stack · 14 cues · in the running order" }),
+      D.done ? h("span", { class: "pill play", text: D.done }) : h("span", { class: "note", text: "Not on a surface" }));
+    var menu = h("div", { class: "menu", role: "menu", "aria-label": "Act 2 menu" },
+      h("div", { text: "Rename" }), h("div", { text: "Run settings…" }), h("div", { text: "Move in dark…" }), h("div", { class: "sepm" }),
+      h("div", { class: "hot", text: "Assign to surface…" }), h("div", { class: "sepm" }), h("div", { text: "Delete stack" }));
+    var s1 = h("div", { class: "step" }, h("div", { class: "n", text: "1 · From the stack" }), stackCard, menu,
+      h("button", { type: "button", class: "btn primary", text: D.step === 0 ? "Assign to surface…" : "Start again", onclick: function () { D.step = 1; D.ctl = null; renderD(); } }));
+    var s2 = h("div", { class: "step" }, h("div", { class: "n", text: "2 · Press a control on the desk" }));
+    if (D.step >= 1) {
+      var mini = h("div", { style: "overflow-x:auto;max-width:100%" });
+      var inner = h("div", { class: "mini" });
+      mini.append(inner);
+      s2.append(h("div", { class: "wait" }, h("div", { class: "say", text: D.step === 1 ? "Waiting for a press…" : "Got " + CTL[D.ctl].label }), h("div", { class: "note", text: "Any button takes GO, Back, Stop or Pause. A fader or encoder takes the stack's FX amount. Or click one in the picture." })), mini);
+      drawDevice(inner, { selected: D.ctl, eligible: eligibleD, onPick: function (id) { D.ctl = id; D.step = 2; var k = CTL[id].kind; D.fn = k === "btn" ? "go" : "stackfx"; renderD(); } });
+      inner.style.zoom = "0.6";
+    } else s2.append(h("p", { class: "note", text: "The desk waits for the next control you touch, as MIDI Learn does today, but from the stack's side." }));
+    var s3 = h("div", { class: "step" }, h("div", { class: "n", text: "3 · Say what it does" }));
+    if (D.step >= 2 && D.ctl) {
+      var k = CTL[D.ctl].kind, part = k === "btn" ? "press" : k === "enc" ? "turn" : "move";
+      var fns = k === "btn" ? [["go", "GO"], ["back", "Back"], ["stop", "Stop"], ["pause", "Pause follow"]] : [["stackfx", "FX amount"]];
+      var existing = resolve(D.ctl, part);
+      var chips = h("div", { class: "chips" });
+      fns.forEach(function (p) { chips.append(h("button", { type: "button", class: "chip", "aria-pressed": D.fn === p[0] ? "true" : "false", text: p[1], onclick: function () { D.fn = p[0]; renderD(); } })); });
+      var lchips = h("div", { class: "chips" });
+      [["all", "Both layers"], ["A", "A only"], ["B", "B only"]].forEach(function (p) { lchips.append(h("button", { type: "button", class: "chip", "aria-pressed": D.layer === p[0] ? "true" : "false", text: p[1], onclick: function () { D.layer = p[0]; renderD(); } })); });
+      var name = { go: "GO", back: "Back", stop: "Stop", pause: "Pause follow", stackfx: "FX amount" }[D.fn];
+      s3.append(h("div", { class: "sentence" },
+        h("div", { class: "say", text: CTL[D.ctl].label + " · " + name + " · Act 2" }),
+        h("div", { class: "srow" }, h("span", { text: "Does" }), chips),
+        h("div", { class: "srow" }, h("span", { text: "Layer" }), lchips),
+        existing ? h("div", { class: "note", text: "Replaces " + shortLabel(existing, D.ctl) + " on this control." }) : null),
+        h("div", { class: "chips" },
+          h("button", { type: "button", class: "btn primary", text: "Assign", onclick: function () {
+            setOwn(D.layer, D.ctl, part, { fn: D.fn, on: "stack:Act 2", opt: null, how: D.fn === "pause" ? "Toggle" : null });
+            D.done = name + " on " + CTL[D.ctl].label + (D.layer === "all" ? "" : " · " + D.layer);
+            D.step = 0; view.sel = D.ctl; renderAll();
+          } }),
+          h("button", { type: "button", class: "btn ghost", text: "Open in the Surfaces panel", onclick: function () { view.sel = D.ctl; renderAll(); document.getElementById("concept-a").scrollIntoView({ behavior: "smooth", block: "start" }); } })));
+    } else s3.append(h("p", { class: "note", text: "The functions offered depend on the control you pressed. The control's current binding is named before it's replaced." }));
+    flowD.append(s1, s2, s3);
+  }
+
+  // ── the coverage matrix ───────────────────────────────────────
+  var MX = [
+    { fam: "On a fader or an encoder" },
+    { n: "Level", t: ["y", "y", "y", "y"], p: ["y", "y", "y", "y"] },
+    { n: "Colour: hue, fine, saturation, brightness", t: ["y", "y", "y", "y"], p: ["y", "y", "y", "y"], why: { 3: "On a strip, through the encoder bank" } },
+    { n: "White, amber, UV and beam attributes", t: ["y", "y", "y", "y"], p: ["y", "y", "y", "y"] },
+    { n: "Pan, tilt", t: ["p", "p", "p", "p"], p: ["y", "y", "y", "y"], why: { 0: "Written on pan / tilt, so a position FX keeps painting over it", 1: "Written on pan / tilt, so a position FX keeps painting over it", 2: "Written on pan / tilt, so a position FX keeps painting over it", 3: "Written on pan / tilt, so a position FX keeps painting over it" } },
+    { n: "Fan: pan, tilt, across or front to back", t: ["na", "n", "y", "n"], p: ["na", "+", "y", "+"], why: { 0: "A fan needs more than one head" } },
+    { n: "FX speed", t: ["n", "n", "y", "n"], p: ["+", "+", "y", "+"] },
+    { n: "Follow the encoder page", t: ["p", "p", "n", "y"], p: ["+", "+", "+", "y"], why: { 0: "Only as part of a strip", 1: "Only as part of a strip", 2: "No selection encoder follows the bank" } },
+    { fam: "On a button" },
+    { n: "Select", t: ["y", "y", "na", "y"], p: ["y", "y", "na", "y"] },
+    { n: "Flash, while held", t: ["p", "y", "n", "y"], p: ["y", "y", "+", "y"], why: { 0: "No door makes one: the form's flash has no fixture option" } },
+    { n: "Locate", t: ["n", "n", "y", "n"], p: ["+", "+", "y", "+"] },
+    { n: "Release from Local", t: ["n", "n", "n", "n"], p: ["+", "+", "+", "+"] },
+    { n: "Press a palette onto it", t: ["n", "n", "y", "na"], p: ["+", "+", "y", "na"] },
+    { n: "Fire a cannon", t: ["y", "n", "na", "na"], p: ["y", "na", "na", "na"], why: { 1: "Fixture only, by decision: one press fires one tube" } }
+  ];
+  var CELL = { y: ["c-yes", "✓", "Works"], p: ["c-part", "½", "Works with a catch"], n: ["c-no", "✕", "Missing"], na: ["c-na", "—", "Doesn't apply"], "+": ["c-new", "+", "Added by the proposal"] };
+  var mxMode = "t";
+  function renderMatrix() {
+    var t = document.getElementById("matrix");
+    t.innerHTML = "";
+    t.append(h("thead", null, h("tr", null, h("th", { scope: "col", text: "Function" }), ["A fixture", "A group", "The selection", "A strip"].map(function (x) { return h("th", { scope: "col", text: x }); }))));
+    var tb = h("tbody");
+    MX.forEach(function (r) {
+      if (r.fam) { tb.append(h("tr", null, h("td", { class: "fam", colspan: "5", text: r.fam }))); return; }
+      var tr = h("tr", null, h("td", { text: r.n }));
+      r[mxMode].forEach(function (v, ix) {
+        var c = CELL[v], why = (mxMode === "t" && r.why && r.why[ix]) || (mxMode === "p" && v === "na" && r.why && r.why[ix]) || "";
+        tr.append(h("td", null, h("span", { class: "cell " + c[0], title: why || c[2], "aria-label": c[2] + (why ? ": " + why : "") , text: c[1] })));
+      });
+      tb.append(tr);
+    });
+    t.append(tb);
+  }
+  function setMx(m) {
+    mxMode = m;
+    document.getElementById("mx-today").setAttribute("aria-pressed", m === "t" ? "true" : "false");
+    document.getElementById("mx-prop").setAttribute("aria-pressed", m === "p" ? "true" : "false");
+    renderMatrix();
+  }
+  document.getElementById("mx-today").addEventListener("click", function () { setMx("t"); });
+  document.getElementById("mx-prop").addEventListener("click", function () { setMx("p"); });
+
+  function renderAll() { renderA(); renderC(); renderD(); }
+  view.sel = "enc-11";
+  renderMatrix(); renderAll(); renderB();
+})();
+</script>

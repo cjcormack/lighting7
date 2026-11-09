@@ -1,0 +1,549 @@
+<title>Surface Code Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a long-form proposal in one 1080px column; mockups break out to full column width and
+   sit on the app's own surface-panel tokens so they read as Lighting7, not as illustrations. */
+:root {
+  --bg: oklch(0.985 0.002 286);
+  --fg: oklch(0.141 0.005 285.8);
+  --muted: oklch(0.552 0.016 285.9);
+  --line: oklch(0.92 0.004 286.3);
+  --card: oklch(1 0 0);
+  --sunk: oklch(0.967 0.002 286.4);
+  --accent: oklch(0.546 0.245 262.9);
+  --accent-soft: oklch(0.93 0.04 262.9);
+  --accent-fg: oklch(0.985 0 0);
+  --warn: oklch(0.68 0.16 70);
+  --warn-soft: oklch(0.95 0.05 80);
+  --bad: oklch(0.577 0.245 27.3);
+  --bad-soft: oklch(0.95 0.04 27);
+  --good: oklch(0.58 0.14 150);
+  --good-soft: oklch(0.94 0.05 150);
+  --panel: oklch(0.955 0.003 286);
+  --panel-edge: oklch(0.88 0.004 286);
+  --knob: oklch(0.32 0.01 286);
+  --knob-edge: oklch(0.22 0.01 286);
+  --cap: oklch(0.3 0.01 286);
+  --cap-line: oklch(0.85 0.005 286);
+  --track: oklch(0.8 0.006 286);
+  --led: oklch(0.72 0.17 60);
+  --led-off: oklch(0.86 0.006 286);
+  --tag-red: #dc2626; --tag-orange: #ea580c; --tag-yellow: #ca8a04; --tag-lime: #65a30d;
+  --tag-green: #16a34a; --tag-cyan: #0891b2; --tag-pink: #db2777; --tag-brown: #92400e;
+  --tag-white: #71717a; --tag-grey: #3f3f46;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: oklch(0.141 0.005 285.8); --fg: oklch(0.985 0 0); --muted: oklch(0.705 0.015 286.1);
+    --line: oklch(0.274 0.006 286); --card: oklch(0.18 0.006 285.9); --sunk: oklch(0.21 0.006 285.9);
+    --accent: oklch(0.623 0.214 259.8); --accent-soft: oklch(0.3 0.08 262); --accent-fg: oklch(0.15 0.01 286);
+    --warn: oklch(0.78 0.15 75); --warn-soft: oklch(0.3 0.06 75); --bad: oklch(0.704 0.191 22.2);
+    --bad-soft: oklch(0.3 0.07 25); --good: oklch(0.72 0.14 150); --good-soft: oklch(0.28 0.05 150);
+    --panel: oklch(0.21 0.006 286); --panel-edge: oklch(0.3 0.006 286); --knob: oklch(0.12 0.005 286);
+    --knob-edge: oklch(0.36 0.008 286); --cap: oklch(0.4 0.01 286); --cap-line: oklch(0.75 0.005 286);
+    --track: oklch(0.33 0.006 286); --led: oklch(0.78 0.16 65); --led-off: oklch(0.32 0.006 286);
+    --tag-red: #f87171; --tag-orange: #fb923c; --tag-yellow: #facc15; --tag-lime: #a3e635;
+    --tag-green: #4ade80; --tag-cyan: #22d3ee; --tag-pink: #f472b6; --tag-brown: #d6a26b;
+    --tag-white: #e4e4e7; --tag-grey: #a1a1aa;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: oklch(0.141 0.005 285.8); --fg: oklch(0.985 0 0); --muted: oklch(0.705 0.015 286.1);
+  --line: oklch(0.274 0.006 286); --card: oklch(0.18 0.006 285.9); --sunk: oklch(0.21 0.006 285.9);
+  --accent: oklch(0.623 0.214 259.8); --accent-soft: oklch(0.3 0.08 262); --accent-fg: oklch(0.15 0.01 286);
+  --warn: oklch(0.78 0.15 75); --warn-soft: oklch(0.3 0.06 75); --bad: oklch(0.704 0.191 22.2);
+  --bad-soft: oklch(0.3 0.07 25); --good: oklch(0.72 0.14 150); --good-soft: oklch(0.28 0.05 150);
+  --panel: oklch(0.21 0.006 286); --panel-edge: oklch(0.3 0.006 286); --knob: oklch(0.12 0.005 286);
+  --knob-edge: oklch(0.36 0.008 286); --cap: oklch(0.4 0.01 286); --cap-line: oklch(0.75 0.005 286);
+  --track: oklch(0.33 0.006 286); --led: oklch(0.78 0.16 65); --led-off: oklch(0.32 0.006 286);
+  --tag-red: #f87171; --tag-orange: #fb923c; --tag-yellow: #facc15; --tag-lime: #a3e635;
+  --tag-green: #4ade80; --tag-cyan: #22d3ee; --tag-pink: #f472b6; --tag-brown: #d6a26b;
+  --tag-white: #e4e4e7; --tag-grey: #a1a1aa;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--f-body); -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 96px; }
+h1, h2, h3, h4 { font-family: var(--f-display); font-weight: 600; line-height: 1.15; text-wrap: balance; margin: 0; letter-spacing: 0.005em; }
+h1 { font-size: clamp(34px, 5vw, 52px); font-weight: 700; }
+h2 { font-size: 30px; }
+h3 { font-size: 21px; }
+h4 { font-size: 16px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+p + p { margin-top: 10px; }
+a { color: var(--accent); }
+code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+code { background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
+.eyebrow { font: 600 12px/1 var(--f-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 18px; line-height: 1.55; max-width: 64ch; color: var(--fg); }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+section.block { margin-top: 72px; display: grid; gap: 18px; }
+section.block > header { display: grid; gap: 8px; }
+.hr { height: 1px; background: var(--line); margin: 0; border: 0; }
+
+/* top */
+.top { display: grid; gap: 18px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+.meta b { color: var(--fg); font-weight: 500; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.toc a { font: 500 13px/1 var(--f-body); color: var(--fg); text-decoration: none; padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); }
+.toc a:hover, .toc a:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+
+/* findings */
+.findings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.finding { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.finding .q { font-family: var(--f-display); font-size: 19px; font-weight: 600; line-height: 1.2; }
+.finding ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+.finding li { max-width: none; }
+.cite { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); }
+@media (max-width: 860px) { .findings { grid-template-columns: 1fr; } }
+
+/* tables */
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); background: var(--card); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 11.5px/1.2 var(--f-display); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); background: var(--sunk); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 600; white-space: nowrap; }
+
+/* pills / chips */
+.pill { display: inline-flex; align-items: center; gap: 5px; font: 500 12px/1 var(--f-body); padding: 4px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); white-space: nowrap; }
+.pill.prog { background: var(--accent-soft); border-color: transparent; color: var(--fg); }
+.pill.out { background: var(--warn-soft); border-color: transparent; }
+.pill.desk { background: var(--sunk); }
+.pill.play { background: var(--good-soft); border-color: transparent; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+
+/* matrix */
+.matrix-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--card); }
+.seg button { font: 500 13px/1 var(--f-body); padding: 8px 12px; border: 0; background: transparent; color: var(--fg); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.mx td, .mx th { text-align: center; }
+.mx td:first-child, .mx th:first-child { text-align: left; }
+.mx td.fam { text-align: left; font: 600 11px/1 var(--f-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); background: var(--sunk); padding-block: 7px; }
+.cell { display: inline-grid; place-items: center; min-width: 30px; height: 24px; padding: 0 6px; border-radius: 6px; font: 600 12px/1 var(--f-body); }
+.c-yes { background: var(--good-soft); color: var(--good); }
+.c-no { background: var(--bad-soft); color: var(--bad); }
+.c-part { background: var(--warn-soft); color: var(--warn); }
+.c-na { color: var(--muted); font-weight: 400; }
+.c-new { background: var(--accent-soft); color: var(--accent); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12.5px; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+
+/* the layer diagram */
+.layers { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .layers { grid-template-columns: 1fr; } }
+.stack { display: grid; gap: 6px; }
+.tier { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); font-size: 13.5px; }
+.tier b { font-family: var(--f-display); font-size: 15px; font-weight: 600; }
+.tier .who { display: flex; flex-wrap: wrap; gap: 5px; }
+.tier.hl { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.tier.post { border-style: dashed; }
+.arrow { font: 500 12px/1 var(--f-mono); color: var(--muted); padding-left: 122px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: grid; gap: 10px; min-width: 0; }
+.card.rule { border-color: var(--accent); }
+.rule-text { font-family: var(--f-display); font-size: 22px; line-height: 1.2; font-weight: 600; }
+
+/* concepts */
+.concept { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.concept > .chead { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 16px; padding: 20px 22px; border-bottom: 1px solid var(--line); align-items: baseline; }
+.concept .letter { font: 700 40px/0.9 var(--f-display); color: var(--accent); grid-row: span 2; }
+.concept .chead p { color: var(--muted); }
+.concept .cbody { padding: 18px 22px 22px; display: grid; gap: 16px; }
+.proscons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; font-size: 13.5px; }
+.proscons div { min-width: 0; }
+.proscons ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+@media (max-width: 760px) { .proscons { grid-template-columns: 1fr; } }
+
+/* app chrome mock */
+.app { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); }
+.app-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--card); font-size: 12.5px; }
+.app-bar .dev { display: inline-flex; gap: 6px; align-items: center; padding: 4px 8px; border-radius: 6px; background: var(--sunk); font-weight: 500; }
+.app-bar .sp { flex: 1; }
+.app-main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; min-height: 420px; }
+.app-main.wide { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 980px) { .app-main { grid-template-columns: minmax(0, 1fr); } }
+.app-canvas { padding: 12px; overflow-x: auto; min-width: 0; }
+.app-side { border-left: 1px solid var(--line); background: var(--card); padding: 14px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+@media (max-width: 980px) { .app-side { border-left: 0; border-top: 1px solid var(--line); } }
+.btn { font: 500 12.5px/1 var(--f-body); padding: 7px 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* the X-Touch */
+.xt { display: inline-grid; grid-template-columns: auto auto auto; gap: 10px; padding: 10px; background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 12px; }
+.xt-strips { display: grid; grid-template-columns: repeat(8, 54px); gap: 6px; }
+.xt-col { display: grid; grid-template-rows: 58px 32px 32px 32px 188px 32px; gap: 6px; border-radius: 8px; padding: 4px 2px; position: relative; }
+.xt-col.striphl { background: color-mix(in oklch, var(--accent) 12%, transparent); outline: 1.5px dashed var(--accent); }
+.xt-right { display: grid; grid-template-columns: repeat(2, 54px); grid-template-rows: repeat(4, 58px) repeat(3, 32px); gap: 6px; align-content: start; padding-top: 4px; }
+.xt-master { display: grid; grid-template-rows: 32px 32px 188px 32px; gap: 6px; padding-top: 4px; align-content: start; width: 54px; }
+.xt-master .gap { height: 0; }
+.ctl { position: relative; display: grid; place-items: center; border: 0; padding: 0; margin: 0; background: transparent; cursor: pointer; color: var(--fg); font: inherit; min-width: 0; border-radius: 8px; }
+.ctl:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ctl.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ctl.dim { opacity: 0.28; cursor: not-allowed; }
+.ctl.flash { animation: flash 0.9s ease-out; }
+@keyframes flash { 0% { box-shadow: 0 0 0 6px color-mix(in oklch, var(--led) 70%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .ctl.flash { animation: none; outline: 2px solid var(--led); } }
+.lbl { display: block; width: 52px; font: 600 10.5px/1.15 var(--f-display); text-align: center; letter-spacing: 0.01em; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-top: 3px solid transparent; padding-top: 2px; }
+.lbl.none { color: var(--muted); font-weight: 500; }
+.knob { width: 30px; height: 30px; border-radius: 50%; background: var(--knob); border: 2px solid var(--knob-edge); position: relative; box-shadow: 0 0 0 3px var(--led-off); }
+.knob.ring { box-shadow: 0 0 0 3px var(--led); }
+.knob::after { content: ""; position: absolute; left: 50%; top: 3px; width: 2px; height: 9px; background: var(--cap-line); transform: translateX(-50%); border-radius: 1px; }
+.enc { grid-template-rows: 32px auto; gap: 2px; align-content: start; }
+.fad .lbl, .enc .lbl { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.key { width: 46px; height: 17px; border-radius: 4px; background: var(--cap); position: relative; }
+.key::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 18px; height: 3px; border-radius: 2px; background: var(--led-off); transform: translateX(-50%); }
+.key.on::after { background: var(--led); box-shadow: 0 0 6px var(--led); }
+.kbtn { grid-template-rows: 18px auto; gap: 2px; }
+.fad { grid-template-rows: 1fr auto; gap: 4px; height: 100%; }
+.slot { width: 8px; height: 140px; border-radius: 4px; background: var(--track); position: relative; }
+.cap { position: absolute; left: 50%; width: 28px; height: 18px; border-radius: 3px; background: var(--cap); transform: translate(-50%, 50%); border-top: 2px solid var(--cap-line); }
+.bankkey { grid-template-rows: 18px auto; gap: 2px; }
+.bankkey .key { background: var(--knob); }
+.bankkey .key.on::after { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.xt-cap { font: 600 10px/1 var(--f-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+
+/* inspector (concept A) */
+.ins-h { display: grid; gap: 4px; }
+.ins-h .ctl-name { font: 600 22px/1.1 var(--f-display); }
+.ins-h .sub { font-size: 12px; color: var(--muted); }
+.sentence { display: grid; gap: 10px; padding: 12px; border-radius: 10px; background: var(--sunk); }
+.srow { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; align-items: center; font-size: 13px; }
+.srow > span { color: var(--muted); font: 600 11px/1 var(--f-display); letter-spacing: 0.08em; text-transform: uppercase; }
+select, input[type="text"], input[type="number"] { font: 14px/1.2 var(--f-body); padding: 7px 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--fg); width: 100%; min-width: 0; }
+select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { font: 500 12.5px/1 var(--f-body); padding: 6px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.readback { font-size: 13px; display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.readback .line { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.readback .line > span:first-child { min-width: 72px; color: var(--muted); font: 600 11px/1 var(--f-display); letter-spacing: 0.08em; text-transform: uppercase; }
+.say { font: 600 17px/1.3 var(--f-display); }
+.part { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.part:first-of-type { border-top: 0; padding-top: 0; }
+.parthead { display: flex; align-items: center; gap: 8px; font: 600 12px/1 var(--f-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.parthead .pill { text-transform: none; letter-spacing: 0; }
+.toast { font-size: 12.5px; padding: 8px 10px; border-radius: 8px; background: var(--fg); color: var(--bg); }
+.note { font-size: 12.5px; color: var(--muted); }
+
+/* concept B */
+.roles { display: grid; gap: 10px; }
+.role { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); align-items: start; }
+.role.on { border-color: var(--accent); }
+@media (max-width: 640px) { .role { grid-template-columns: 1fr; } }
+.role .rname { font: 600 15px/1.2 var(--f-display); }
+.role .rname small { display: block; font: 400 12px/1.3 var(--f-body); color: var(--muted); margin-top: 3px; }
+.order { display: flex; flex-wrap: wrap; gap: 5px; }
+.order .chip { cursor: grab; }
+.order .num { font: 600 10.5px/1 var(--f-mono); color: var(--muted); margin-right: 4px; }
+
+/* concept C sheet */
+.sheet td, .sheet th { padding: 0 10px; height: 34px; vertical-align: middle; white-space: nowrap; }
+.sheet td.sc { cursor: cell; }
+.sheet td.sc[aria-selected="true"] { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.sheet td.name { font-weight: 600; position: sticky; left: 0; background: var(--card); }
+.sheet tr.div td { background: var(--sunk); font: 600 11px/1 var(--f-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); height: 26px; }
+.sheet .sub { color: var(--muted); font-weight: 400; padding-left: 14px; }
+.sheet .band { display: inline-block; width: 3px; height: 14px; border-radius: 2px; vertical-align: -2px; margin-right: 6px; }
+.selbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); font-size: 13px; }
+.selbar .count { font-weight: 600; }
+
+/* concept D */
+.dflow { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 900px) { .dflow { grid-template-columns: 1fr; } }
+.step { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.step .n { font: 700 13px/1 var(--f-display); color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; }
+.menu { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 6px; display: grid; gap: 2px; font-size: 13.5px; box-shadow: 0 8px 24px -12px color-mix(in oklch, var(--fg) 30%, transparent); }
+.menu div { padding: 7px 10px; border-radius: 6px; }
+.menu .hot { background: var(--accent-soft); font-weight: 600; }
+.menu .sepm { height: 1px; background: var(--line); padding: 0; margin: 3px 0; }
+.stackcard { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 12px; display: grid; gap: 6px; }
+.stackcard .t { font: 600 16px/1.1 var(--f-display); }
+.wait { border: 1px dashed var(--accent); border-radius: 10px; padding: 14px; display: grid; gap: 8px; background: color-mix(in oklch, var(--accent) 6%, var(--card)); }
+.mini { transform-origin: top left; }
+
+/* recommendation */
+.rec { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 760px) { .rec { grid-template-columns: 1fr; } }
+.qs { counter-reset: q; display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.qs li { counter-increment: q; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.qs li::before { content: counter(q); font: 700 22px/1 var(--f-display); color: var(--accent); }
+.qs li p { max-width: none; }
+.qs .opts { margin-top: 6px; font-size: 13.5px; color: var(--muted); }
+.qs .opts b { color: var(--fg); font-weight: 600; }
+.foot { margin-top: 64px; font-size: 12.5px; color: var(--muted); }
+
+pre.code { margin: 0; overflow-x: auto; background: var(--sunk); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; font: 12.5px/1.55 var(--f-mono); color: var(--fg); }
+pre.code code { background: transparent; padding: 0; font-size: inherit; }
+ul.tight { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.findings .finding p.small { max-width: none; }
+</style>
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow">Lighting7 · surface code · review against the agreed model</div>
+  <h1>Surface code review</h1>
+  <p class="lede">The agreed model fits the code better than the code fits itself. The desk already resolves a direct binding before a strip, and a strip is already a small job. What makes the code large is that the subject (selection, group, fixture) is baked into the type, and each function's read, LED and jump rule live in separate hand-kept tables. This review proposes a binding with the subject as a field, a function definition that carries everything about one function, and a desk that serves the resolved picture to the browser instead of the browser re-deriving it.</p>
+  <div class="meta"><span><b>8 Nov 2026</b></span><span>Scope: <b>midi/</b> (9.5k lines), OSC and sync, <b>frontend surfaces</b> (about 7k lines)</span><span>Measured against <a href="https://claude.ai/artifact/LQQTixU717GnAoDb6fczNp">Surface Setup Concepts</a></span></div>
+  <nav class="toc" aria-label="Sections">
+    <a href="#summary">Summary</a>
+    <a href="#bugs">Bugs found on the way</a>
+    <a href="#binding">The binding</a>
+    <a href="#feedback">Feedback</a>
+    <a href="#jobs">Jobs</a>
+    <a href="#frontend">Frontend</a>
+    <a href="#fate">What goes</a>
+    <a href="#migration">Migration and sync</a>
+    <a href="#order">Order of work</a>
+    <a href="#decisions">Decisions</a>
+  </nav>
+</header>
+
+<section class="block" id="summary">
+  <header><div class="eyebrow">Summary</div><h2>Four changes carry most of the payoff</h2></header>
+  <div class="findings">
+    <article class="finding"><div class="q">1 · The subject becomes a field</div>
+      <p class="small">One <code>Binding(does, on, how)</code> replaces the Fixture / Group / Selection triplets and the separate on-off targets. The three group fan-outs become one expansion that also reaches elements. Every switch that asks "does this name a fixture, a group or a record" reads <code>binding.on</code> instead.</p></article>
+    <article class="finding"><div class="q">2 · One definition per function</div>
+      <p class="small">Each function declares what it accepts, how it writes, how it reads back, its LED and its jump rule. The seven feedback entry kinds, the LED <code>when</code> with <code>else → null</code>, the kind tables and the six jump rules collapse into it. Adding a function touches one class.</p></article>
+    <article class="finding"><div class="q">3 · Readback from Local, off the ArtNet thread</div>
+      <p class="small">A fixture control reads what <code>composeProgrammerOver</code> already composes, without its Blind gate, over the cue layer. A feedback loop polls the programmer's epoch, its Blind flag and the cue layer, instead of running on the transmit thread for every channel change.</p></article>
+    <article class="finding"><div class="q">4 · The desk serves the picture</div>
+      <p class="small">A resolved map per control part (label, where it writes, health, direct or job) and one function catalogue. The browser stops mirroring the resolver, the kind tables and the label rules, and the inspector, table and assign flow draw one form from the catalogue.</p></article>
+    <article class="finding"><div class="q">Size</div>
+      <p class="small">Frontend: about 5,500 lines out (a third of it tests), 2,000 in. Backend: about 450 out of the publisher and about 400 out of dispatch and the model, before the new functions and jobs are added. These are the reviews' estimates.</p></article>
+    <article class="finding"><div class="q">Cost</div>
+      <p class="small">A database step and sync <code>formatVersion</code> 53 with <code>minReader</code> 53: an older desk would read every binding as unknown. The OSC addresses don't change. Three behaviours operators will notice are listed under migration.</p></article>
+  </div>
+</section>
+
+<section class="block" id="bugs">
+  <header><div class="eyebrow">Found on the way</div><h2>Bugs in today's code</h2>
+    <p>Each verified line was checked in the code for this page. Each of these is fixed by the target design rather than needing its own patch, so it's listed with the change that removes it.</p></header>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>What happens</th><th>Where</th><th>Removed by</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>A pan or tilt move is stored on <code>pan</code>/<code>tilt</code>, which doesn't hold back a position FX, so under a Circle the stage keeps circling.</td><td class="cite">fx/FxSuppression.kt:73 · fx/FxTarget.kt:719</td><td>Writing <code>position</code></td><td><span class="pill play">verified</span></td></tr>
+      <tr><td>A selected cell, or a fixture's heads in a group, get no surface write. The Shehds' colour, which lives on its elements, can't be reached.</td><td class="cite">midi/SelectionWrites.kt:36, 42 · show/Fixtures.kt:305</td><td>One expansion over heads</td><td><span class="pill play">verified</span></td></tr>
+      <tr><td>A white-mix colour head (the China 2-cell blinder) drops every colour move: the write handles only <code>DmxSlider</code> and <code>DmxColour</code>.</td><td class="cite">midi/AttributeChannelResolver.kt:364</td><td>Colour judged once over heads</td><td><span class="pill play">verified</span></td></tr>
+      <tr><td>Feedback reads before the grand master, contrary to <code>GlobalScalerState</code>'s KDoc, and runs synchronously on the transmit path under the fixtures read lock.</td><td class="cite">dmx/ArtNetController.kt:229 · show/Fixtures.kt:747</td><td>Readback loop off the thread</td><td><span class="pill play">verified</span></td></tr>
+      <tr><td>In Blind a fader keeps showing the stage. A hue turn builds on the stage colour and copies the stage's white, amber and UV into the staged entry.</td><td class="cite">midi/AttributeChannelResolver.kt:134, 503</td><td>Local-first base for write and read</td><td><span class="pill play">verified</span></td></tr>
+      <tr><td>A motor or pickup fader on a key with a running FX chases the FX every tick.</td><td class="cite">midi/SurfaceFeedbackPublisher.kt:1319</td><td>Readback over the cue layer</td><td><span class="pill play">verified</span></td></tr>
+      <tr><td>Learn captures on its own collector beside dispatch, so identifying a bound control also fires it.</td><td class="cite">midi/MidiLearnSessionManager.kt:220</td><td>Identify mode</td><td><span class="pill play">verified</span></td></tr>
+      <tr><td>Learn does nothing on an unbound control. A fixture flash can't be made from any door.</td><td class="cite">SurfaceInspector.tsx:227 · BindingTargetPicker.tsx:1270</td><td>Editor A</td><td><span class="pill play">verified</span></td></tr>
+      <tr><td>The phone table can't see strips: a strip's fader reads unbound and its + creates a silent override.</td><td class="cite">BindingMatrix.tsx:77, 287</td><td>Editor C on the served map</td><td><span class="pill play">verified</span></td></tr>
+      <tr><td>A motorised tempo fader gets no catch-up when it's let go.</td><td class="cite">midi/SurfaceFeedbackPublisher.kt:1157</td><td>One entry type</td><td><span class="pill play">verified</span></td></tr>
+      <tr><td>Every incoming move resolves its binding a second time to find its takeover policy. Two LED lists are filled and never read.</td><td class="cite">SurfaceFeedbackPublisher.kt:742, 1022, 1024</td><td>One entry type</td><td><span class="pill play">verified</span></td></tr>
+      <tr><td>Labels name stacks by id (<i>Go · stack 12</i>) and cues by short uuid.</td><td class="cite">components/surfaces/targetUtils.ts:84</td><td>Served labels</td><td><span class="pill play">verified</span></td></tr>
+      <tr><td>Flash is held by binding id, and bindings are per device type, so on two identical X-Touches one device's release can clear the other's flash, and only one lights its LED.</td><td class="cite">midi/SurfaceDispatch.kt:25 · SurfaceFeedbackPublisher.kt:1018</td><td>Holds keyed by control part</td><td><span class="pill out">inferred</span></td></tr>
+      <tr><td>The X-Touch profile maps Layer A's MIDI only. If the device sends different MIDI on its own Layer B, layer B rows never match.</td><td class="cite">midi/devices/XTouchCompactStandard.kt</td><td>A check on the rig</td><td><span class="pill out">unchecked</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="block" id="binding">
+  <header><div class="eyebrow">Target design · 1</div><h2>The binding</h2>
+    <p>The 50 variants become about 36 functions plus the five new ones (Clear, Blind, Release, Record, Update). The variant count barely drops. The payoff is that the eight places that switch on a variant today (dispatch, health, kind tables, bind-time refusals, uuid fill, rename, delete guard, colour-axis check) read one definition.</p></header>
+<pre class="code"><code>@Serializable data class Binding(val does: Does, val on: Subject = Subject.None, val how: How? = null)
+// The slot key gains a part: (deviceType, controlId, part, layer). Pick up / Jump stays the takeover column.
+
+sealed interface Subject {
+  None; Selection
+  Group(key); Fixture(key)               // element keys included
+  Slot                                   // a job's template only
+  Record(kind: STACK | ENTRY | CUE | LOOK | PALETTE | PAD | BANK | PAGE | MASTER, uuid: UUID)
+}
+enum class How { TOGGLE, WHILE_HELD, ON, OFF, TOGGLE_HOLD_REPLACES, REPLACE }
+data class Spec(writesTo: LOCAL|PLAYBACK|MASTER|TEMPO|DESK, on: Set&lt;SubjectKind&gt;,
+                inputs: Set&lt;ControlKind&gt;, hows: Set&lt;How&gt;, defaultHow: How?)
+
+sealed interface Does { val spec: Spec; fun act(on: Subject, op: Op, ctx): Acted }
+// Op = Move(v7) | Set(value) | On | Off | Toggle | Replace. How becomes an Op in one dispatch.
+
+@SerialName("clear") object Clear : Does {      // a new function is one declaration
+  override val spec = Spec(LOCAL, setOf(NONE), setOf(BUTTON), setOf(ON), ON)
+  override fun act(on, op, ctx) = ctx.programmer.clear()
+}</code></pre>
+  <div class="rec">
+    <div class="card"><h4>Deleted or merged</h4><ul class="small tight">
+      <li>The fixture, group and selection write paths and the four flash methods: one <code>Heads.of(subject)</code> on <code>TargetCoverage</code> plus elements. <span class="cite">SurfaceActions.kt:307–384, 568 · SelectionWrites.kt</span></li>
+      <li>The int-id record paths and three private <code>uuidOrNull</code> copies: records by uuid only, a bad uuid decoding to <code>Unknown</code>. <span class="cite">SurfaceActions.kt:498–530 · BindingHealthEvaluator.kt:219–243</span></li>
+      <li><code>continuous / level / press / release</code>, the router's select-hold and <code>FlashStateTracker</code>: one <code>dispatch(binding, input)</code>. <code>GrandMasterLevel</code> and <code>SpeedMasterSetBpm</code> exist only for OSC and become a value taken whole. <span class="cite">SurfaceDispatch.kt:28–157</span></li>
+      <li>The strip id sharing the <code>control_id</code> column, with its slot refusals, route copy and unreachable arms. <span class="cite">ControlSurfaceBindingService.kt:613 · projectSurfaceBindings.kt:271</span></li>
+      <li>Health's 48 arms become about eight subject arms plus parameter checks. <span class="cite">BindingHealthEvaluator.kt:104–203</span></li>
+      <li>Event matching done twice (router and Learn): one event → control-part index per profile. <span class="cite">SurfaceInputRouter.kt:347 · MidiLearnSessionManager.kt:252</span></li>
+    </ul></div>
+    <div class="card"><h4>Still special, and why</h4><ul class="small tight">
+      <li><code>Unknown</code>, so a newer archive's binding survives.</li>
+      <li>Placing the hand on a bank, which drops only if the place succeeds.</li>
+      <li>The fan's anchor and FX speed's lead FX: state kept behind <code>act</code>, now taking the subject instead of reading the desk selection.</li>
+      <li>Undo, Record and Update on the serial lane, since they open transactions and reload.</li>
+      <li>Window functions, addressed by name, with health that changes as windows come and go.</li>
+      <li>Switch layer, Encoder page and Undo, which act on the device or source the press came from.</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="block" id="feedback">
+  <header><div class="eyebrow">Target design · 2</div><h2>Feedback</h2>
+    <p>The publisher has seven entry kinds with no shared base, nine LED lists, 17 subscriptions each with its own job, and hand-kept resync lists that have already drifted. In the target, each function also says what it reads and when that read changes.</p></header>
+<pre class="code"><code>interface ContinuousFn : Does { fun read(ctx, on): Reading      // Value(v7, tolerance) | Mixed | None
+                                fun signals(on): Set&lt;Signal&gt; }   // Programmer, CueLayer, Selection, Tempo(m)…
+interface ButtonFn : Does { fun led(ctx, on): Boolean? }          // abstract: a missing LED is a compile error
+
+publisher: invalidate(signal) → dirty entries → feedback loop (≈50 Hz, off the ArtNet thread)
+           → fn.read(on) → apply(entry, reading)                  // tracker, takeover, touch gate, send</code></pre>
+  <div class="rec">
+    <div class="card"><h4>Local-first readback</h4><ul class="small tight">
+      <li><b>The value:</b> <code>FxTarget.composeProgrammerOver(fixture, store, below = cue layer)</code>, which is <code>LayerResolver.fallbackFor</code> without its <code>if (blind) return below</code>. Expose it once and have <code>fallbackFor</code> call it, so output and readback can't disagree. <span class="cite">LayerResolver.kt:324 · FxTarget.kt:200</span></li>
+      <li><b>When it changes:</b> poll three cheap facts: the store's epoch (bumped on every put and clear), its Blind flag, and the identity of the cue-layer snapshot. A programmer change in Blind never reaches the wire, so channel deltas can't be the trigger.</li>
+      <li><b>Cost:</b> one compose per head per change, a few hundred on an X-Touch, off the transmit thread. The per-frame recompute during an FX goes away.</li>
+      <li><b>The write reads the same base</b>, so a colour move builds on the staged colour in Blind and a ring never shows a position a move wouldn't reproduce.</li>
+      <li>Provenance and the key stack can't be the source: one carries owners, not values, and the other is a cold per-request read.</li>
+    </ul></div>
+    <div class="card"><h4>One jump rule</h4><ul class="small tight">
+      <li><b>A driven control</b> (motor fader, ring encoder) accepts a move within J of what it shows, or while touched. Otherwise it ignores the move and shows its value again.</li>
+      <li><b>An undriven fader</b> picks up when it crosses the value.</li>
+      <li><b>Mixed</b> accepts, as today.</li>
+      <li><b>Echo:</b> after an accepted move, the shown value stays the physical one while the function reads back to it. That replaces the FX-speed fader rule and the ±1.</li>
+      <li>Replaces soft takeover's crossing, the disarm, the fan's <code>PICKUP_STEPS</code>, FX speed's <code>ENCODER_JUMP</code> and its echo rule, and the unguarded strip encoder. <span class="cite">SoftTakeoverStateMachine.kt:120 · SelectionFan.kt:226 · SelectionFxSpeed.kt:191</span></li>
+      <li>The rig has to confirm the X-Touch adopts a ring value it's sent, which FX speed already assumes.</li>
+    </ul></div>
+  </div>
+  <p class="note">The new LEDs are cheap: providers already exist for a running stack and a cue held loose, and the store has Blind. An encoder's push LED needs encoders indexed as buttons and the X-Touch's momentary LED re-asserted on release, as buttons are now. <span class="cite">SurfaceFeedbackPublisher.kt:1014, 703</span></p>
+</section>
+
+<section class="block" id="jobs">
+  <header><div class="eyebrow">Target design · 3</div><h2>Jobs</h2></header>
+  <div class="rec">
+    <div class="card"><ul class="small tight">
+      <li>The profile declares <b>job regions</b> with ordered slots and roles, generalising <code>strip()</code>. These are kept apart from the picture's layout regions: the picture must place every control, while a job region needs slots. On the X-Touch, the layout's <code>strips</code> region holds three button rows no strip claims, and <code>right</code> mixes encoders with transport keys.</li>
+      <li>A job is its own stored record, keyed by device type, layer and region. That frees the <code>control_id</code> column of strip ids.</li>
+      <li>Resolution keeps today's order exactly: a direct binding at the exact layer, a direct binding on both layers, then the job at the exact layer, then on both. <span class="cite">ControlSurfaceBindingService.kt:188–233</span></li>
+    </ul></div>
+    <div class="card"><ul class="small tight">
+      <li><code>deriveStripTarget</code> becomes <code>job.bindingFor(slot, role)</code> over a template whose subject is <code>Slot</code>.</li>
+      <li>A job that follows live state (the selection's heads, the busk page that's showing, the encoder page) re-derives only its region when that state moves, and doesn't re-arm pickup.</li>
+      <li>Today every selection change rebuilds the whole index and resyncs every device. With the selection as a signal, that becomes a region-level re-derive. <span class="cite">SurfaceFeedbackPublisher.kt:455</span></li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="block" id="frontend">
+  <header><div class="eyebrow">Target design · 4</div><h2>Frontend</h2>
+    <p>Three copies of backend rules live in the browser today, and their failures are silent: the resolver mirror, the control-kind tables, and labels re-derived from ids. A fourth catalogue, OSC's address table, lives on the desk. The target serves the answers instead.</p></header>
+<pre class="code"><code>surfaceMap.state   // StateFlow, pushed on any binding, job, encoder page, health or name change
+{ projectId, deviceTypeKey, layers: { [layer]: { [`${controlId}:${part}`]: ResolvedPart } } }
+ResolvedPart = { from: direct | job | none, bindingId?, jobId?, does?, on?, how?,
+                 label, subjectLabel?, colour?, writesTo?, health, healthText?, beats? }
+
+GET /surface-functions   // static per build: id, label, group, parts, subjects, hows, params, writesTo, help
+PUT/DELETE …/surface-bindings/slot {deviceTypeKey, controlId, part, layer, does, on, how, params}
+surfaceUses              // reverse index for D's "where it's bound"</code></pre>
+  <div class="rec">
+    <div class="card"><h4>One form, three hosts</h4><ul class="small tight">
+      <li>A generic <code>BindingForm</code> renders any function from the catalogue. The inspector (A), the table's compound Binding cell (C) and the assign flow (D) all mount it.</li>
+      <li>A new function is then one Kotlin entry and no client code. The OSC address table is the precedent: the desk serves what each address does.</li>
+      <li>A golden fixture shared by Kotlin and TypeScript catches drift in the catalogue and map, as <code>spreadShape.fixture.json</code> does.</li>
+    </ul></div>
+    <div class="card"><h4>Fit on the sheet kit (C)</h4><ul class="small tight">
+      <li><b>Fits:</b> divider rows, a layer partition chip, dead-first sort, blank dependent cells, per-row options, fill in visible order (as the patch list's Address does), the phone forms.</li>
+      <li><b>Missing:</b> a skip that depends on the value, <code>accepts(row, value)</code>, since a fill over a fader and a button differs per row. Also an intersection of options over a mixed Does selection, and two-level grouping.</li>
+      <li>Live values stay out of the table's rows, which would otherwise re-render 20 times a second.</li>
+    </ul></div>
+  </div>
+  <p class="note">D's doors already exist: the stack list, cue actions, busk pads and pages, the Look sheet, the palette editor, the speed master sheet, and the fixture and group sheets, each about three lines on <code>CopyOscAddressMenu</code>'s adapter. After the library goes, the Surfaces route no longer needs <code>DeskDndProvider</code>.</p>
+</section>
+
+<section class="block" id="fate">
+  <header><div class="eyebrow">Inventory</div><h2>What goes, what stays</h2></header>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>File</th><th>Lines</th><th>Fate</th></tr></thead>
+    <tbody>
+      <tr><td><code>SurfaceLibrary.tsx</code> + test</td><td>970 + 391</td><td>Delete</td></tr>
+      <tr><td><code>BindingTargetPicker.tsx</code> + test</td><td>1409 + 362</td><td>Delete; the catalogue form replaces it</td></tr>
+      <tr><td><code>BindingMatrix.tsx</code></td><td>466</td><td>Delete; C replaces it</td></tr>
+      <tr><td><code>LearnModeOverlay.tsx</code></td><td>199</td><td>Delete; keep its per-window session filter as a capture hook</td></tr>
+      <tr><td><code>lib/surfaceResolve.ts</code>, <code>lib/surfaceDrop.ts</code> + tests</td><td>495 + 632</td><td>Delete once the desk serves the map and catalogue</td></tr>
+      <tr><td><code>targetUtils.ts</code>, <code>recordOptions.ts</code> + test</td><td>437 + 240</td><td>Mostly delete; keep the control labels and the On picker's lists</td></tr>
+      <tr><td><code>SurfacePanel.tsx</code></td><td>797</td><td>Keep the picture; the drop zones and crosses (about 150) go</td></tr>
+      <tr><td><code>SurfaceInspector.tsx</code></td><td>662</td><td>Becomes editor A; the DMX stage line and emitter descriptors (about 195) go</td></tr>
+      <tr><td><code>Surfaces.tsx</code>, <code>BankSwitcher.tsx</code></td><td>507 + 60</td><td>Rework: no drag monitor, no edit mode, layer chips that only view</td></tr>
+      <tr><td><code>midi/SurfaceFeedbackPublisher.kt</code></td><td>1567</td><td>Rework around one entry and signals; about 450 out</td></tr>
+      <tr><td><code>midi/BindingTarget.kt</code>, <code>SurfaceDispatch.kt</code>, <code>SurfaceActions.kt</code></td><td>572 + 187 + 986</td><td>Rework onto <code>Binding</code>, <code>Does</code> and one dispatch</td></tr>
+      <tr><td><code>SelectionWrites.kt</code>, <code>StripDerivation.kt</code>, <code>BindingControlKind.kt</code></td><td>64 + 95 + 116</td><td>Delete into <code>Heads.of</code>, jobs and the specs</td></tr>
+      <tr><td><code>BindingHealthEvaluator.kt</code>, <code>ControlSurfaceBindingService.kt</code></td><td>288 + 810</td><td>Shrink: subject health, refusals from the spec, uuid-only</td></tr>
+      <tr><td>Transport, device matching, hot plug, control-state stream, touch</td><td>about 2,000</td><td>Keep as they are</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="block" id="migration">
+  <header><div class="eyebrow">Migration and sync</div><h2>What has to move, and what operators will notice</h2></header>
+  <div class="rec">
+    <div class="card"><h4>Stored rows</h4><ul class="small tight">
+      <li>Database step 15, <code>SurfaceGrammarMigration</code>, on <code>AttributeNamesMigration</code>'s pattern, backed up only when rows exist. One pure translate function is shared with <code>LegacyNames</code> for older archives, as <code>consolidateFx</code> is.</li>
+      <li>An encoder row holding a button target becomes the push part, read from the profile. Int-only cue and stack rows resolve to their uuid, or become <code>Unknown</code> and keep their bytes. Flash's raw max becomes a percentage. Strip rows carry across as they are; session 5 turns them into one job per device type, layer and region, with its own database step and <code>formatVersion</code>.</li>
+      <li>The table is rebuilt so its unique slot index includes the part, as step 14 rebuilt <code>busk_pads</code>. SQLite can't alter an index.</li>
+    </ul></div>
+    <div class="card"><h4>Sync and OSC</h4><ul class="small tight">
+      <li><code>formatVersion</code> 53 with <code>minReader</code> 53, the v39 precedent: an older reader would decode every binding as <code>Unknown</code>. Base snapshots taken before v53 are re-hashed, as <code>PreV39BaseSyncTest</code> does, or every untouched binding reads as a conflict.</li>
+      <li>A jobs folder needs its disposition, exporter, importer, coverage test, non-default fixture values and a frozen v52 archive.</li>
+      <li>OSC addresses don't change: they build targets in memory. <code>/on</code>, <code>/off</code> and <code>/press</code> map to On, Off and Toggle, and a number to a value taken whole. <code>OscAddressesTest</code> becomes an address → behaviour table, which is the proof QLab is unaffected.</li>
+    </ul></div>
+  </div>
+  <div class="card"><h4>What an operator will notice</h4><ul class="small tight">
+    <li>A strip encoder's push no longer sends its attribute to full. The push is empty until bound.</li>
+    <li>A flash on a head whose range ends below 255 lands at a different level, because flash becomes a percentage.</li>
+    <li>A pan nudge now also holds tilt against later cues, because it writes <code>position</code>. That's what lets it beat a Circle.</li>
+  </ul></div>
+</section>
+
+<section class="block" id="order">
+  <header><div class="eyebrow">Suggested order</div><h2>Six sessions</h2>
+    <p>Each is one PR across the wire where it touches both sides, as the repo's rules ask. The model and its migration go first, because every later session builds on it.</p></header>
+  <ol class="qs">
+    <li><div><p><b>The binding and its migration.</b> <code>Binding</code>, <code>Subject</code>, <code>How</code>, parts, specs and one dispatch; <code>Heads.of</code> with elements and white-mix colour; records by uuid; position key; flash stored as a percentage; database step 15, the archive translate and <code>formatVersion</code> 53; OSC onto the new grammar; strip rows carried across as they are. Behaviour is otherwise unchanged but for the three changes listed under migration.</p></div></li>
+    <li><div><p><b>Feedback.</b> One entry, signals, the readback loop off the transmit thread with Local over the cue layer, one jump rule, LEDs on the functions including encoder pushes, holds keyed by control part, and live state per device if question 5 says so.</p></div></li>
+    <li><div><p><b>Served map, catalogue and editors A and C.</b> <code>surfaceMap.state</code>, <code>/surface-functions</code>, the slot upsert and identify mode; the inspector and the mapping table; the library, picker, matrix and overlay deleted.</p></div></li>
+    <li><div><p><b>New functions.</b> Clear, Blind, Release, Record and Update; Locate, Fan and FX speed on groups and fixtures; Flash and "follow the encoder page" on the selection.</p></div></li>
+    <li><div><p><b>Jobs.</b> Job regions in the profile, the jobs record and its sync folder, live derivation, strip rows turned into jobs with their own database step; editor B.</p></div></li>
+    <li><div><p><b>Assign from the thing.</b> <i>Assign to surface…</i> on the nine record kinds, the reverse index and <i>Bound on</i> everywhere.</p></div></li>
+  </ol>
+  <p class="note">Tests: in the backend about a dozen files are rewritten (serialisation, health, dispatch, strips, selection writes, router, publisher wiring), plus a migration test over a frozen database, a v52 archive test and a pre-v53 base-sync test. In the frontend about 110 tests go with the deleted files, and new ones cover the map reducer, the catalogue form, the inspector, the table, the assign flow and the shared golden fixture.</p>
+</section>
+
+<section class="block" id="decisions">
+  <header><div class="eyebrow">Agreed</div><h2>Decisions the review raised</h2>
+    <p>These came out of the code rather than the concepts. Chris's answers, 8 Nov 2026, all as recommended.</p></header>
+  <ol class="qs" id="dq">
+    <li><div><p><b>"The stage" is the cue layer under Local, with no FX.</b> Motors and pickup stop chasing a running FX; a GO still moves un-held faders as it fades.</p></div></li>
+    <li><div><p><b>The readback looks beneath a held flash and ignores park.</b> A flash doesn't slam every fader on its key to full, and a parked dimmer's fader shows what it would take over.</p></div></li>
+    <li><div><p><b>Identify mode captures without firing.</b> While the app waits for a touch (A or D), the next press is captured and not dispatched: one press, a banner, a 30 s timeout.</p></div></li>
+    <li><div><p><b>The desk serves the map and the catalogue.</b> The browser keeps no copies of the resolver, the kind tables or the label rules, and a golden fixture guards the wire.</p></div></li>
+    <li><div><p><b>Bindings per device type, live state per device.</b> Two identical surfaces share bindings, but each keeps its own layer, encoder page and held flashes.</p></div></li>
+    <li><div><p><b>Record takes the Record sheet's defaults</b>: the programmer's FX, held scenery and held tempos. Update with nothing included does nothing and says so.</p></div></li>
+    <li><div><p><b>Fire stays fixture only.</b></p></div></li>
+    <li><div><p><b><code>minReader</code> 53 is accepted.</b> An older desk refuses a newer show rather than losing its bindings.</p></div></li>
+  </ol>
+</section>
+
+<p class="foot">Method: three read-only reviews (the binding model and write path, the feedback path, the frontend), each briefed with the agreed model. Every finding marked verified was checked in the code for this page; one reviewer claim didn't hold, that binding health goes stale in the view (<code>store/surfaces.ts:77</code> subscribes), and is left out.</p>
+</div>
