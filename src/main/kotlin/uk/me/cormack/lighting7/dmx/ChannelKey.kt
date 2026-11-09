@@ -7,8 +7,7 @@ package uk.me.cormack.lighting7.dmx
  *
  * All channel-indexed lookup maps that live on the transmit / MIDI hot paths use this encoding
  * so that callers can share indexes without re-implementing the packing contract:
- * [uk.me.cormack.lighting7.fx.ProgrammerStore], [uk.me.cormack.lighting7.midi.GlobalScalerState],
- * [uk.me.cormack.lighting7.midi.SurfaceFeedbackPublisher].
+ * [uk.me.cormack.lighting7.fx.ProgrammerStore], [uk.me.cormack.lighting7.midi.GlobalScalerState].
  */
 fun packChannelKey(universe: Int, channel: Int): Long =
     (universe.toLong() shl 20) or (channel.toLong() and 0xFFFFFL)

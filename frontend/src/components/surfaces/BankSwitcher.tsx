@@ -6,16 +6,18 @@ import { useIsDeskConnected } from "@/store/status"
 import type { BankDefinition } from "@/store/surfaces"
 
 interface BankSwitcherProps {
-  deviceTypeKey: string
+  /** The attached device whose layer this switches; its type-mates keep their own. */
+  displayKey: string
   banks: BankDefinition[]
   activeBank: string | null
 }
 
 /**
- * Bank switcher strip. Renders one button per declared bank plus a "global" option.
- * Sends `surfaceBank.set` to the server, which pushes the change back to every client.
+ * Bank switcher strip for one attached device. Renders one button per declared bank plus a
+ * "global" option. Sends `surfaceBank.set` to the server, which pushes the change back to every
+ * client.
  */
-export function BankSwitcher({ deviceTypeKey, banks, activeBank }: BankSwitcherProps) {
+export function BankSwitcher({ displayKey, banks, activeBank }: BankSwitcherProps) {
   // `surfaceBank.set` is a wire write, and the active bank paints from the server's answer — so
   // offline these buttons look live and do nothing, exactly like blackout above them.
   const connected = useIsDeskConnected()
@@ -35,7 +37,7 @@ export function BankSwitcher({ deviceTypeKey, banks, activeBank }: BankSwitcherP
       <Button
         size="sm"
         variant={activeBank == null ? "default" : "outline"}
-        onClick={() => lightingApi.surfaces.setBank(deviceTypeKey, null)}
+        onClick={() => lightingApi.surfaces.setBank(displayKey, null)}
         disabled={!connected}
         title={connected ? undefined : DESK_OFFLINE_LABEL}
       >
@@ -47,7 +49,7 @@ export function BankSwitcher({ deviceTypeKey, banks, activeBank }: BankSwitcherP
           key={bank.id}
           size="sm"
           variant={activeBank === bank.id ? "default" : "outline"}
-          onClick={() => lightingApi.surfaces.setBank(deviceTypeKey, bank.id)}
+          onClick={() => lightingApi.surfaces.setBank(displayKey, bank.id)}
           disabled={!connected}
           title={connected ? undefined : DESK_OFFLINE_LABEL}
         >

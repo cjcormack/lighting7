@@ -12,6 +12,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -33,12 +34,11 @@ class SurfaceDispatchTest {
 
     private fun record(kind: RecordKind, uuid: UUID) = Subject.Record(kind, uuid)
 
-    private fun surface(displayKey: String = "x-touch", controlId: String = "btn-1", bindingId: Int = 1) =
+    private fun surface(displayKey: String = "x-touch", controlId: String = "btn-1") =
         SurfaceDispatch.Origin(
             "x-touch-compact-standard",
             HistorySource.surface(displayKey),
             SurfaceDispatch.HoldKey(displayKey, controlId, ControlPart.MAIN),
-            bindingId,
         )
 
     private fun press(binding: Binding, origin: SurfaceDispatch.Origin = osc) =
@@ -109,10 +109,11 @@ class SurfaceDispatchTest {
     @Test
     fun `While held presses on and its release undoes exactly what the press wrote`() {
         val flash = Binding(Does.Flash("dimmer", 80), Subject.Fixture("hex-1"))
-        val origin = surface(bindingId = 7)
+        val origin = surface(controlId = "btn-7")
+        val key = SurfaceDispatch.HoldKey("x-touch", "btn-7", ControlPart.MAIN)
 
         dispatch.dispatch(flash, SurfaceDispatch.Input.Press, origin)
-        assertTrue(dispatch.holds.isHeldBinding(7))
+        assertTrue(dispatch.holds.isHeld(key))
         assertEquals(ActionOutcome.Done("held"), dispatch.dispatch(flash, SurfaceDispatch.Input.Press, origin), "a retrigger")
 
         dispatch.dispatch(flash, SurfaceDispatch.Input.Release, origin)
@@ -125,7 +126,7 @@ class SurfaceDispatchTest {
             ),
             actions.calls,
         )
-        assertFalse(dispatch.holds.isHeldBinding(7))
+        assertFalse(dispatch.holds.isHeld(key))
     }
 
     @Test
@@ -181,11 +182,24 @@ class SurfaceDispatchTest {
         val bankState = ActiveBankState()
         val encoderBankState = EncoderBankState()
         val desk = SurfaceDispatch(actions, bankState, encoderBankState)
-        desk.dispatch(Binding(Does.Layer("layer-b")), SurfaceDispatch.Input.Press, surface())
-        desk.dispatch(Binding(Does.EncoderPage("rgbColour", ColourAxis.SATURATION)), SurfaceDispatch.Input.Press, surface())
-        assertEquals("layer-b", bankState.bankFor("x-touch-compact-standard"))
-        assertEquals(EncoderBankSelection("rgbColour", ColourAxis.SATURATION), encoderBankState.selectionFor("x-touch-compact-standard"))
+        desk.dispatch(Binding(Does.Layer("layer-b")), SurfaceDispatch.Input.Press, surface("x-touch-left"))
+        desk.dispatch(Binding(Does.EncoderPage("rgbColour", ColourAxis.SATURATION)), SurfaceDispatch.Input.Press, surface("x-touch-left"))
+        assertEquals("layer-b", bankState.bankFor("x-touch-left"))
+        assertEquals(EncoderBankSelection("rgbColour", ColourAxis.SATURATION), encoderBankState.selectionFor("x-touch-left"))
+        assertNull(bankState.bankFor("x-touch-right"), "the other device of the type keeps its own layer")
+        assertNull(bankState.bankFor("x-touch-compact-standard"), "nothing is keyed by the device type")
+        assertEquals(EncoderBankState.DEFAULT, encoderBankState.selectionFor("x-touch-right"))
         assertEquals(emptyList(), actions.calls)
+    }
+
+    @Test
+    fun `an input with no device switches its device type's layer`() {
+        val bankState = ActiveBankState()
+        val desk = SurfaceDispatch(actions, bankState, EncoderBankState())
+        val origin = SurfaceDispatch.Origin("x-touch-compact-standard", HistorySource.surface("osc"))
+        assertEquals("x-touch-compact-standard", origin.displayKey)
+        desk.dispatch(Binding(Does.Layer("layer-b")), SurfaceDispatch.Input.Press, origin)
+        assertEquals("layer-b", bankState.bankFor("x-touch-compact-standard"))
     }
 
     @Test

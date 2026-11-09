@@ -125,15 +125,15 @@ class SelectionFxSpeedTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a turn far from the ring's position is a stale one, and moves nothing`() = testApplication {
+    fun `a turn far from the ring's position is taken whole, the jump rule being the publisher's`() = testApplication {
         seed()
         mountTestApp(state)
         val a = wave("d1", ticks = 96)
         state.deskSelection.set(listOf(fixture("d1")))
-        val before = speed.shown.value
+        // The publisher reshows a ring turned from a stale position (SoftTakeoverStateMachineTest), so
+        // a turn that does arrive is read as its detents: 56 of them, past ×32.
         speed.turn(120u, encoder = true)
-        assertEquals(96, ticksOf(a))
-        assertNotEquals(before, speed.shown.value, "the ring is shown again")
+        assertEquals(3, ticksOf(a), "×32, the end of the range")
     }
 
     @Test

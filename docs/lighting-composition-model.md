@@ -59,6 +59,13 @@ The console-style programmer: a sparse per-(fixture, attribute) overlay of stick
 
 Writers: web busking (`programmer.*` ops and the `updateChannel` compatibility shim), MIDI surface faders, surface flash buttons, FX preset toggles / editor previews, Locate, and the unpark hand-down.
 
+**Where a surface reads** (surface-setup plan D6): a fader or ring shows, and moves from, what this tier
+holds for its key — the staged value while Blind — else Tier 4 under it, never an FX and never park
+(`LayerResolver.localOver`). It reads beneath a held flash, so a flash press leaves its key's faders where
+they are. Output and readback are one composition: `fallbackFor` is `localOver` with the programmer left
+out in Blind and the flash included. A colour-axis turn builds on the same value, so in Blind it keeps the
+staged white, amber and UV.
+
 The AI surface is a writer here too — `set_programmer` writes plain values as `WEB`, `clear_programmer` and `set_blind` are the desk's Clear, Release and Blind, and `apply_look` and `apply_palette` (each unless `asValues`) and `create_look`'s `apply` go through `ProgrammerLayerStack.toggle` — so `get_current_state`'s `programmer` section reports the layer stack, the winning entry per (fixture, attribute), the blind flag and the include target back. A *toggle* the model cannot read is a toggle it undoes on the second attempt. The programmer's save gestures are on that surface too — `record_cue`, `record_look`, `include_into_programmer` and `update_from_programmer` — sharing the routes' orchestration (`routes/programmerSurface.kt`, `performProgrammerRecordLook`) rather than reimplementing it, since which rows an Update overwrites is decided by the include-target bookkeeping described above and not by the caller.
 
 **There is exactly one programmer, and it is shared by every client — by design, not by omission.** A second device is a second *window onto one desk*, not a second seat: whoever signs in elsewhere sees this state and may edit it, and the three broadcast frames (`provenanceState`, `programmer.includeTarget`, `programmer.layerState`) exist to keep those windows honest. Concurrent authorship is explicitly not a scenario this desk designs for, which is what spares it a merge rule: `LayerResolver.fallbackFor` returns **one** value per (fixture, attribute) because DMX is one byte per channel, so two authors would force a "whose value wins?" policy that nothing here expresses — HTP cannot be it (see the line above), and the `Slot.seq` bands are the only extensible axis. Decided 2026-08-23; the reasoning, and two places the cost of the alternative was previously misjudged, are in [`FU-PROG-PER-USER`](plans/followups.md#fu-prog-per-user).
@@ -72,6 +79,7 @@ Each (fixture, attribute) holds a small **recency-ordered stack** of per-owner s
 - **Put**: installs or refreshes the owner's slot and moves it to the top. The most recent write wins on the wire regardless of which subsystem made it — busking over a located fixture updates the output, matching console intuition (the thing you just touched is the thing that changed).
 - **Clear**: removes only the caller's own slot. If other owners still hold the attribute, it falls back to the **most recent surviving owner's value** (then Tier 4, then baseline). Releasing a Locate no longer wipes a busked dimmer level; toggling a preset off no longer destroys a locate or another preset's write on a shared attribute; releasing a flash restores the fader level underneath.
 - **Read** (`get`, on the 50 Hz FX-reset hot path) returns the top of the stack — O(1) and allocation-free.
+- **Read beneath an owner** (`beneath(owner)`): the store with one owner's slots taken out, each key's newest other slot — how a surface reads beneath `flash`.
 
 Owners: `web` (busking UI + `updateChannel` shim), `surface` (MIDI faders), `flash` (flash press/release — separate from `surface` so releasing a flash restores the fader or busked level underneath), `preset:{id}` (one per preset, previews use a synthetic negative id), `locate`, `unpark` (park-release hand-down), and `include` (cue contents loaded by [Include](#record--include--update); its slot survives underneath a later operator write, which is how Update tells an edit from an untouched include).
 

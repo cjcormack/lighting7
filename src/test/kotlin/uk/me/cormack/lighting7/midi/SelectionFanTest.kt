@@ -139,18 +139,21 @@ class SelectionFanTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a new gesture waits to pick up at the centre`() = testApplication {
+    fun `a new gesture far from the centre moves nothing and shows the centre again, and one near it starts`() = testApplication {
         seed()
         mountTestApp(state)
         place(movers, "pos:0,0")
         state.deskSelection.set(movers.map(::fixture))
         val fan = state.selectionFan
-        // A control still standing well off the centre — a touched motor fader — moves nothing.
+        val stamp = fan.shown.value.stamp
+        // A control standing where the ring last showed something else: the jump rule judges against
+        // what the publisher last showed, which a reset reaches a moment later, so the fan guards it.
         fan.turn(FanAxis.PAN, 100u)
-        assertEquals(listOf("128,128", "128,128", "128,128"), positions())
         assertEquals(0, fan.amountFor(FanAxis.PAN))
-        fan.turn(FanAxis.PAN, 66u)
-        assertEquals(listOf("124,128", "128,128", "132,128"), positions())
+        assertEquals(listOf("128,128", "128,128", "128,128"), positions(), "nothing moved")
+        assertTrue(fan.shown.value.stamp > stamp, "the ring is shown the centre again")
+        fan.turn(FanAxis.PAN, 70u)
+        assertEquals(12, fan.amountFor(FanAxis.PAN))
     }
 
     @Test

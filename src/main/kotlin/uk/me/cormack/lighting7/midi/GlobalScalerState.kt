@@ -33,8 +33,9 @@ import kotlin.math.roundToInt
  * channels pass through.
  *
  * Applied after composition and FX but before park, which wins on a parked channel. Every
- * listener on the controller — the channel stream, the Stage view, a motor fader's feedback —
- * sees the scaled output.
+ * listener on the controller — the channel stream, the Stage view — sees the scaled output. A
+ * surface's feedback does not: a fader shows what Local holds over the cue layer, before FX and
+ * this scaling (surface-setup plan D6).
  *
  * The *state* lives in a project-scoped [GlobalScalerStateHolder] supplied by construction. This
  * instance is show-scoped: it owns the channel classification and controller wiring for the
@@ -161,19 +162,6 @@ class GlobalScalerState(
         classification.set(Classification(pairs.mapTo(HashSet()) { (u, c) -> packChannelKey(u, c) }, emptySet()))
     }
 }
-
-/** A control's 0..127 as a grand-master level, 0–100 %. */
-fun grandMasterLevelOf7Bit(value7Bit: UByte): Double = value7Bit.toInt() * GRAND_MASTER_FULL / 127.0
-
-/** A grand-master level as a control's 0..127: [grandMasterLevelOf7Bit]'s inverse, rounded. */
-fun grandMasterLevelTo7Bit(level: Double): UByte =
-    (level / GRAND_MASTER_FULL * 127.0).roundToInt().coerceIn(0, 127).toUByte()
-
-/** A control's 0..127 as a stack FX amount, 0–1 (effects plan D10). */
-fun stackFxAmountOf7Bit(value7Bit: UByte): Double = value7Bit.toInt() / 127.0
-
-/** A stack FX amount as a control's 0..127: [stackFxAmountOf7Bit]'s inverse, rounded. */
-fun stackFxAmountTo7Bit(amount: Double): UByte = (amount * 127.0).roundToInt().coerceIn(0, 127).toUByte()
 
 /** [value] scaled by [level] percent, rounded. */
 internal fun scaleLevel(value: UByte, level: Double): UByte =

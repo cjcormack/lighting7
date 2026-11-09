@@ -53,6 +53,11 @@ The encoder bank it derives against is an `EncoderBankSelection` — an attribut
 leaves the field *absent* for hue (`withAxis`): that is what every pre-axis row has and what the
 server writes, and `toEqual` in the tests tells absent from `null`.
 
+Bindings are per device **type**; the active bank and the encoder bank are per attached **device**,
+keyed by its `displayKey` (`surfaceBank.state`, `surfaceEncoderBank.state`, `surfaceBank.set`), so two
+identical surfaces share their bindings and each keeps its own layer and encoder page. A view of one
+device reads that device's entry; the page's resolve is the selected device's.
+
 ## Editing: one context, two zones, one write
 
 Edit mode is **local state in `SurfacesContent`**, not a Redux slice. The busk view needs a slice

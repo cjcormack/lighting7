@@ -826,6 +826,7 @@ export interface SurfaceDeviceInfo {
   isMatched: boolean
   hasInputPort: boolean
   hasOutputPort: boolean
+  /** This device's own active bank; two devices of one type each keep their own. */
   activeBank: string | null
 }
 
@@ -915,7 +916,7 @@ export interface LearnCommittedEvent {
 export interface SurfacesWsApi {
   /** List of all attached MIDI devices (matched + unmatched). */
   subscribeDevices(fn: (devices: SurfaceDeviceInfo[]) => void): Subscription
-  /** Active bank per `deviceTypeKey`. */
+  /** Active bank per attached device, keyed by its `displayKey`. */
   subscribeBanks(fn: (banks: Record<string, string>) => void): Subscription
   /** Pickup-state transitions (non-motor fader soft takeover). */
   subscribePickup(fn: (change: PickupChange) => void): Subscription
@@ -928,7 +929,7 @@ export interface SurfacesWsApi {
    * memoized control skip the render.
    */
   subscribeControls(fn: (controls: SurfaceControlStates) => void): Subscription
-  /** What each device's strip encoders drive, `deviceTypeKey` → selection; absent is `dimmer`. */
+  /** What each device's strip encoders drive, `displayKey` → selection; absent is `dimmer`. */
   subscribeEncoderBanks(fn: (attributes: Record<string, EncoderBankSelection>) => void): Subscription
 
   // The last snapshot of each cached stream, or null before its first frame. `subscribeX`
@@ -955,8 +956,8 @@ export interface SurfacesWsApi {
   // the request messages, so add one back if a surface ever needs a re-read the socket doesn't
   // volunteer.
 
-  /** Set the active bank for a device type (pass null to clear). */
-  setBank(deviceTypeKey: string, bank: string | null): void
+  /** Set one attached device's active bank (pass null to clear). */
+  setBank(displayKey: string, bank: string | null): void
   /**
    * Start a MIDI Learn session; responses come back via `subscribeLearn`. False when the socket
    * was down, so no `started` event is coming — the caller has a spinner to take down.
@@ -992,7 +993,14 @@ export type LearnEvent =
 type InboundMessage =
   | { type: "surfaceDevices.state"; devices: SurfaceDeviceInfo[] }
   | { type: "surfaceBank.state"; activeBanks: Record<string, string> }
-  | { type: "surfaceBank.changed"; deviceTypeKey: string; previousBank: string | null; newBank: string | null }
+  | {
+      type: "surfaceBank.changed"
+      displayKey: string
+      /** The device's profile; null once it has detached. */
+      deviceTypeKey: string | null
+      previousBank: string | null
+      newBank: string | null
+    }
   | ({ type: "surfacePickup.changed" } & PickupChange)
   | { type: "surfaceControls.state"; displayKey: string; controls: Record<string, ControlState> }
   | { type: "surfaceControls.changed"; displayKey: string; controls: Record<string, ControlState> }
@@ -1053,8 +1061,8 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
         // `surfaceDevices.state` via its combine() flow so that channel
         // stays consistent independently.
         const next: Record<string, string> = { ...(lastBanks ?? {}) }
-        if (parsed.newBank == null) delete next[parsed.deviceTypeKey]
-        else next[parsed.deviceTypeKey] = parsed.newBank
+        if (parsed.newBank == null) delete next[parsed.displayKey]
+        else next[parsed.displayKey] = parsed.newBank
         lastBanks = next
         banks.notify(next)
         break
@@ -1142,8 +1150,8 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
     subscribeBindingsChanged: bindings.api.subscribe,
     subscribeLearn: learn.api.subscribe,
     subscribeScaler: subscribeCached(scaler.api, () => lastScaler),
-    setBank: (deviceTypeKey, bank) =>
-      sendGesture(conn, { type: "surfaceBank.set", deviceTypeKey, bank }),
+    setBank: (displayKey, bank) =>
+      sendGesture(conn, { type: "surfaceBank.set", displayKey, bank }),
     beginLearn: (projectId, deviceTypeKey) =>
       sendGesture(conn, {
         type: "surfaceLearn.begin",

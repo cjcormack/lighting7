@@ -168,8 +168,7 @@ class SurfaceInputRouterTest {
         val key = SurfaceDispatch.HoldKey(deviceTypeKey, "btn-2", ControlPart.MAIN)
 
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
-        assertTrue(holds.isHeld(key))
-        assertTrue(holds.isHeldBinding(1), "the binding's LED reads it")
+        assertTrue(holds.isHeld(key), "the control part's LED reads it")
         assertEquals(listOf<RecordedCall>(RecordedCall.FlashPress(hex1, "dimmer", 100)), actions.calls.toList())
 
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 17, velocity = 0u))
@@ -178,7 +177,6 @@ class SurfaceInputRouterTest {
             actions.calls.toList(),
         )
         assertFalse(holds.isHeld(key))
-        assertFalse(holds.isHeldBinding(1))
     }
 
     @Test
@@ -210,12 +208,11 @@ class SurfaceInputRouterTest {
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 17, velocity = 0u), displayKey = "x-touch-left")
         assertEquals(listOf(press, press, release), actions.calls.toList(), "the left release, once")
         assertFalse(holds.isHeld(left))
-        assertTrue(holds.isHeld(right))
-        assertTrue(holds.isHeldBinding(1), "the right-hand flash is still down, and its LED still lit")
+        assertTrue(holds.isHeld(right), "the right-hand flash is still down, and its LED still lit")
 
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 17, velocity = 0u), displayKey = "x-touch-right")
         assertEquals(listOf(press, press, release, release), actions.calls.toList())
-        assertFalse(holds.isHeldBinding(1))
+        assertFalse(holds.isHeld(right))
     }
 
     @Test
@@ -314,7 +311,7 @@ class SurfaceInputRouterTest {
             ),
             actions.calls.toList(),
         )
-        assertFalse(holds.isHeldBinding(2))
+        assertFalse(holds.isHeld(SurfaceDispatch.HoldKey(deviceTypeKey, "enc-1", ControlPart.PUSH)))
     }
 
     @Test
@@ -544,7 +541,7 @@ class SurfaceInputRouterTest {
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 0u))
         assertEquals(2, actions.calls.size)
         assertEquals(RecordedCall.FlashRelease(hex1, "dimmer"), actions.calls.last())
-        assertFalse(holds.isHeldBinding(1))
+        assertFalse(holds.isHeld(SurfaceDispatch.HoldKey(deviceTypeKey, "btn-2", ControlPart.MAIN)))
     }
 
     @Test

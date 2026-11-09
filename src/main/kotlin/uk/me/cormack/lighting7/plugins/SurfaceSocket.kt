@@ -59,7 +59,8 @@ data class SurfaceLearnCommitInMessage(
 @Serializable
 @SerialName("surfaceBank.set")
 data class SurfaceBankSetInMessage(
-    val deviceTypeKey: String,
+    /** The attached device to switch (surface-setup plan D16). */
+    val displayKey: String,
     val bank: String?,
 ) : SurfaceInMessage()
 
@@ -70,7 +71,8 @@ data object SurfaceBankStateInMessage : SurfaceInMessage()
 @Serializable
 @SerialName("surfaceEncoderBank.set")
 data class SurfaceEncoderBankSetInMessage(
-    val deviceTypeKey: String,
+    /** The attached device whose encoder page moves (D16). */
+    val displayKey: String,
     val attribute: String,
     /** Which axis of a colour property; null (and absent) is hue. See [ColourAxis]. */
     val colourAxis: ColourAxis? = null,
@@ -166,7 +168,7 @@ data class SurfaceBindingsChangedOutMessage(
 @Serializable
 @SerialName("surfaceBank.state")
 data class SurfaceBankStateOutMessage(
-    /** `deviceTypeKey` → active bank id (null values elided). */
+    /** `displayKey` → that device's active bank id (null values elided). */
     val activeBanks: Map<String, String>,
 ) : SurfaceOutMessage()
 
@@ -179,7 +181,7 @@ data class SurfaceBankStateOutMessage(
 @SerialName("surfaceEncoderBank.state")
 data class SurfaceEncoderBankStateOutMessage(
     /**
-     * `deviceTypeKey` → what its strip encoders drive: a property name and, for a colour, which
+     * `displayKey` → what that device's strip encoders drive: a property name and, for a colour, which
      * axis (absent is hue). A device absent from the map is on the default, `dimmer`.
      */
     val attributes: Map<String, EncoderBankSelection>,
@@ -188,7 +190,9 @@ data class SurfaceEncoderBankStateOutMessage(
 @Serializable
 @SerialName("surfaceBank.changed")
 data class SurfaceBankChangedOutMessage(
-    val deviceTypeKey: String,
+    val displayKey: String,
+    /** The device's profile, null when it detached before the frame went out. */
+    val deviceTypeKey: String?,
     val previousBank: String?,
     val newBank: String?,
 ) : SurfaceOutMessage()
@@ -223,7 +227,7 @@ data class SurfaceDeviceInfo(
     val isMatched: Boolean,
     val hasInputPort: Boolean,
     val hasOutputPort: Boolean,
-    /** Convenience mirror of `activeBankState` for the device's `typeKey`, or null. */
+    /** This device's own layer from `activeBankState` (keyed by `displayKey`), or null. */
     val activeBank: String?,
 )
 
@@ -291,12 +295,12 @@ suspend fun handleSurface(scope: SocketScope, message: SurfaceInMessage) {
             }
             scope.send(reply)
         }
-        is SurfaceBankSetInMessage -> state.activeBankState.setBank(message.deviceTypeKey, message.bank)
+        is SurfaceBankSetInMessage -> state.activeBankState.setBank(message.displayKey, message.bank)
         is SurfaceBankStateInMessage ->
             scope.send(SurfaceBankStateOutMessage(state.activeBankState.active.value))
         is SurfaceEncoderBankSetInMessage ->
             state.encoderBankState.set(
-                message.deviceTypeKey, EncoderBankSelection(message.attribute, message.colourAxis),
+                message.displayKey, EncoderBankSelection(message.attribute, message.colourAxis),
             )
         is SurfaceEncoderBankStateInMessage ->
             scope.send(SurfaceEncoderBankStateOutMessage(state.encoderBankState.selections.value))
@@ -378,7 +382,8 @@ fun setupSurfaceSubscriptions(scope: SocketScope) {
 
     scope.subscribe(state.activeBankState.changes) { change ->
         scope.send(SurfaceBankChangedOutMessage(
-            deviceTypeKey = change.deviceTypeKey,
+            displayKey = change.displayKey,
+            deviceTypeKey = state.deviceMatcher.attached.value[change.displayKey]?.typeKey,
             previousBank = change.previousBank,
             newBank = change.newBank,
         ))
@@ -459,7 +464,7 @@ private fun buildSurfaceDevicesStateMessage(
             isMatched = match != null,
             hasInputPort = handle.inputPort != null,
             hasOutputPort = handle.outputPort != null,
-            activeBank = match?.typeKey?.let(banks::get),
+            activeBank = if (match != null) banks[handle.displayKey] else null,
         )
     }
     return SurfaceDevicesStateOutMessage(devices = infos)

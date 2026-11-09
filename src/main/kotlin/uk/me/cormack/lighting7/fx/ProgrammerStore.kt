@@ -17,6 +17,16 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
+ * What composing the programmer over a layer reads: a key's winning slot and a channel's winning
+ * sideband slot. The store is one; [ProgrammerStore.beneath] is another, the same store with one
+ * owner's slots taken out.
+ */
+interface ProgrammerReads {
+    fun get(fixtureKey: String, attribute: String): ProgrammerStore.Slot?
+    fun getChannelSlot(universe: Int, channel: Int): ProgrammerStore.Slot?
+}
+
+/**
  * Identifies which subsystem asserted a programmer entry, so releasing one subsystem's
  * entries cannot destroy another's (see `docs/lighting-composition-model.md`
  * §"Programmer ownership").
@@ -200,7 +210,7 @@ data class IncludedTarget(
  * (the effect-suppression snapshot) can cache derived state until the store actually
  * changes. Mutations (human/MIDI rate) copy-on-write the slot stacks.
  */
-class ProgrammerStore {
+class ProgrammerStore : ProgrammerReads {
     /** One owner's entry for a property (or, in the sideband, a channel). */
     class Slot(
         val owner: ProgrammerOwner,
@@ -585,6 +595,16 @@ class ProgrammerStore {
 
     private fun bumpEpoch(): Long = epochCounter.incrementAndGet()
 
+    private val installCounter = AtomicLong(0)
+
+    /**
+     * A change signal a reader can trust: [epoch] plus a count bumped **after** each slot a put numbers
+     * is installed. A put moves it twice — once when it numbers the slot, again once the slot is in — so
+     * a reader that saw the first move and read the old value sees it move again. The surface's
+     * readback polls it.
+     */
+    val revision: Long get() = epochCounter.get() + installCounter.get()
+
     private val coverageCounter = AtomicLong(0)
 
     /**
@@ -643,6 +663,7 @@ class ProgrammerStore {
             if (holder?.top?.value is ProgrammerValue.Reference) reference = true
             withSlot(holder, slot)
         }
+        installCounter.incrementAndGet()
         if (!covered) bumpCoverage()
         if (reference) referencesMoved()
     }
@@ -670,6 +691,7 @@ class ProgrammerStore {
             val others = holder?.all().orEmpty().filter { it.owner != owner }
             if (others.isEmpty()) Single(slot) else Stack(listOf(others[0], slot) + others.drop(1))
         }
+        installCounter.incrementAndGet()
         if (!covered) bumpCoverage()
     }
 
@@ -765,8 +787,24 @@ class ProgrammerStore {
     }
 
     /** The winning (most recent) slot for a property, or null when no owner holds it. */
-    fun get(fixtureKey: String, attribute: String): Slot? =
+    override fun get(fixtureKey: String, attribute: String): Slot? =
         attributes[fixtureKey]?.get(attribute)?.top
+
+    /**
+     * The store as it reads with [owner]'s slots taken out: each key's newest slot of any other owner.
+     * A surface reads beneath [ProgrammerOwner.FLASH] this way, so a held flash does not move its
+     * key's faders. Allocates nothing per read; the view is one object.
+     */
+    fun beneath(owner: ProgrammerOwner): ProgrammerReads = object : ProgrammerReads {
+        override fun get(fixtureKey: String, attribute: String): Slot? =
+            attributes[fixtureKey]?.get(attribute)?.let { topBeneath(it, owner) }
+
+        override fun getChannelSlot(universe: Int, channel: Int): Slot? =
+            channels[packChannelKey(universe, channel)]?.let { topBeneath(it, owner) }
+    }
+
+    private fun topBeneath(holder: Holder, owner: ProgrammerOwner): Slot? =
+        if (holder.top.owner != owner) holder.top else holder.all().firstOrNull { it.owner != owner }
 
     /** All slots for a property, most recent first. Cold path — Record/state/tests. */
     fun slotsFor(fixtureKey: String, attribute: String): List<Slot> =
@@ -865,10 +903,11 @@ class ProgrammerStore {
             seq = bumpEpoch(),
         )
         channels.compute(packChannelKey(universe, channel)) { _, holder -> withSlot(holder, slot) }
+        installCounter.incrementAndGet()
     }
 
     /** The winning sideband slot at (universe, channel), or null. Hot path. */
-    fun getChannelSlot(universe: Int, channel: Int): Slot? =
+    override fun getChannelSlot(universe: Int, channel: Int): Slot? =
         channels[packChannelKey(universe, channel)]?.top
 
     /** The winning sideband value at (universe, channel), or null. Hot path. */

@@ -63,7 +63,7 @@ class ActiveBankStateTest {
                 deferred.await()
             }
         }
-        assertEquals("x-touch", change.deviceTypeKey)
+        assertEquals("x-touch", change.displayKey)
         assertNull(change.previousBank)
         assertEquals("layer-a", change.newBank)
     }

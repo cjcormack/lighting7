@@ -29,9 +29,9 @@ import java.util.concurrent.ConcurrentHashMap
  *   1. Look the event up in the device profile's [ControlInputIndex] to find the control part it
  *      addresses. Layer-button presses short-circuit straight to [ActiveBankState.setBank] — they
  *      are intentionally not user-bindable.
- *   2. For fader / encoder continuous input: consult [SurfaceFeedbackHooks] soft takeover.
- *      If pickup hasn't occurred, drop the event silently but record the physical position
- *      so subsequent events can trigger pickup.
+ *   2. For fader / encoder continuous input: consult [SurfaceFeedbackHooks]'s jump rule
+ *      ([JumpPolicy]). A move it refuses is dropped — an undriven fader waiting to pick up, or a
+ *      driven control shown its value again — with the physical position recorded.
  *   3. Resolve the binding via [ControlSurfaceBindingService.resolve] using
  *      `(deviceTypeKey, controlId, part, activeBank)`. Exact-bank wins over bank-agnostic.
  *   4. Dispatch the [Binding] through [SurfaceDispatch], which the OSC collector shares, inside its
@@ -176,16 +176,15 @@ class SurfaceInputRouter(
     private fun routeMatched(deviceTypeKey: String, displayKey: String, input: ControlInputIndex.Input) {
         when (input) {
             // Layer buttons short-circuit binding resolution — they're never user-bindable.
-            is ControlInputIndex.Input.Layer -> bankState.setBank(deviceTypeKey, input.bankId)
+            is ControlInputIndex.Input.Layer -> bankState.setBank(displayKey, input.bankId)
             is ControlInputIndex.Input.Move -> {
                 val controlId = input.control.controlId
-                // Soft-takeover check for faders / encoders. Non-motor controls may suppress
-                // the event until pickup; motor controls always pass through.
+                // The jump rule: an undriven fader waits to pick up, a driven control refuses a jump.
                 val accepted = feedbackHooks?.acceptInboundFader(
                     displayKey, deviceTypeKey, controlId, input.value7Bit,
                 ) ?: true
                 if (!accepted) return
-                val binding = resolveBinding(deviceTypeKey, controlId, ControlPart.MAIN) ?: return
+                val binding = resolveBinding(deviceTypeKey, displayKey, controlId, ControlPart.MAIN) ?: return
                 if (isDeadBinding(binding)) return
                 latencyTracker.measure(MidiLatencyStage.INGRESS_CONTINUOUS) {
                     val move = SurfaceDispatch.Input.Move(input.value7Bit, encoder = input.control is EncoderDescriptor)
@@ -197,7 +196,7 @@ class SurfaceInputRouter(
                 }
             }
             is ControlInputIndex.Input.Press -> {
-                val binding = resolveBinding(deviceTypeKey, input.control.controlId, input.part) ?: return
+                val binding = resolveBinding(deviceTypeKey, displayKey, input.control.controlId, input.part) ?: return
                 if (isDeadBinding(binding)) return
                 latencyTracker.measure(MidiLatencyStage.INGRESS_BUTTON) {
                     report(binding, dispatch.dispatch(binding.binding, SurfaceDispatch.Input.Press, origin(deviceTypeKey, displayKey, binding, input.part)))
@@ -210,7 +209,7 @@ class SurfaceInputRouter(
                 latencyTracker.measure(MidiLatencyStage.INGRESS_BUTTON) {
                     dispatch.releasePart(SurfaceDispatch.HoldKey(displayKey, controlId, input.part))
                 }
-                if (input.part == ControlPart.MAIN) feedbackHooks?.onButtonRelease(displayKey, controlId)
+                feedbackHooks?.onButtonRelease(displayKey, controlId, input.part)
             }
             is ControlInputIndex.Input.Touch -> feedbackHooks?.onTouch(displayKey, input.control.controlId, input.down)
         }
@@ -225,7 +224,6 @@ class SurfaceInputRouter(
         deviceTypeKey,
         HistorySource.surface(displayKey),
         SurfaceDispatch.HoldKey(displayKey, binding.controlId, part),
-        binding.id,
     )
 
     /** A MIDI press has no reply channel, so a press that did nothing says why in the log. */
@@ -242,6 +240,7 @@ class SurfaceInputRouter(
 
     private fun resolveBinding(
         deviceTypeKey: String,
+        displayKey: String,
         controlId: String,
         part: ControlPart,
     ): ControlSurfaceBindingService.ResolvedBinding? {
@@ -251,9 +250,9 @@ class SurfaceInputRouter(
             logger.debug("Surface route: no active project ({})", e.message)
             return null
         }
-        val bank = bankState.bankFor(deviceTypeKey)
+        val bank = bankState.bankFor(displayKey)
         return bindingService.resolve(
-            projectId, deviceTypeKey, controlId, bank, encoderBankState.selectionFor(deviceTypeKey), part,
+            projectId, deviceTypeKey, controlId, bank, encoderBankState.selectionFor(displayKey), part,
         )
     }
 

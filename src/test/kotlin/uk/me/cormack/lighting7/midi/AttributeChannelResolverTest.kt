@@ -3,7 +3,14 @@ package uk.me.cormack.lighting7.midi
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.fx.ColourTarget
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
+import uk.me.cormack.lighting7.fx.ExtendedColour
+import uk.me.cormack.lighting7.fx.FxOutput
+import uk.me.cormack.lighting7.fx.PositionTarget
+import uk.me.cormack.lighting7.fx.SliderTarget
+import uk.me.cormack.lighting7.fixture.dmx.China2CellLedBlinderFixture
+import uk.me.cormack.lighting7.fixture.dmx.ShehdsLed19RgbwFixture
 import java.awt.Color
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -16,8 +23,8 @@ import kotlin.math.abs
 
 /**
  * Unit tests for [AttributeChannelResolver]. Uses a real [HexFixture] — the resolver only
- * reads static `@FixtureAttribute` metadata + DMX channel assignments, and takes the current
- * channel values through a reader, so no controller transaction is needed.
+ * reads static `@FixtureAttribute` metadata + DMX channel assignments, and takes each head's
+ * composed value for the key as an [FxOutput], so no controller or show is needed.
  */
 class AttributeChannelResolverTest {
 
@@ -25,18 +32,11 @@ class AttributeChannelResolverTest {
     private fun hex(firstChannel: Int = 1, maxDimmerLevel: UByte = 255u): HexFixture =
         HexFixture(universe, key = "hex-1", fixtureName = "Hex 1", firstChannel = firstChannel, maxDimmerLevel = maxDimmerLevel)
 
-    /** A reader for a show with no controller: every channel unknown. */
-    private val unread: ChannelReader = { _, _ -> null }
+    /** Nothing composed for the key: no current value to build on. */
+    private val unread: FxOutput? = null
 
-    /** A reader that answers the Hex's colour channels (2, 3, 4) with [colour] and everything else with 0. */
-    private fun showing(colour: Color): ChannelReader = { _, channel ->
-        when (channel) {
-            2 -> colour.red.toUByte()
-            3 -> colour.green.toUByte()
-            4 -> colour.blue.toUByte()
-            else -> 0u
-        }
-    }
+    /** A head whose composed colour is [colour], with no white, amber or UV. */
+    private fun showing(colour: Color): FxOutput = FxOutput.Colour(colour)
 
     private fun sliderValue(v: CueAssignmentResolver.AttributeValue?): UByte =
         assertIs<CueAssignmentResolver.AttributeValue.Slider>(v).value
@@ -235,13 +235,14 @@ class AttributeChannelResolverTest {
         val dimmer = assertIs<AttributeChannelResolver.AttributeRead.Slider>(
             AttributeChannelResolver.describeAttributeRead(hex(maxDimmerLevel = 200u), "dimmer"),
         )
-        assertEquals(127u.toUByte(), AttributeChannelResolver.readHead(dimmer, { _, _ -> 200u })!!.value7Bit)
+        assertEquals(127u.toUByte(), AttributeChannelResolver.readHead(dimmer, FxOutput.Slider(200u))!!.value7Bit)
         val colour = assertIs<AttributeChannelResolver.AttributeRead.Colour>(
             AttributeChannelResolver.describeAttributeRead(hex(), "rgbColour"),
         )
         assertEquals(85u.toUByte(), AttributeChannelResolver.readHead(colour, showing(Color(0, 0, 255)))!!.value7Bit)
         assertNull(AttributeChannelResolver.readHead(colour, showing(Color(50, 50, 50))), "grey has no hue")
-        assertNull(AttributeChannelResolver.readHead(colour, unread), "a channel that cannot be read")
+        assertNull(AttributeChannelResolver.readHead(colour, FxOutput.Slider(200u)), "a value not of the head's kind")
+        assertNull(AttributeChannelResolver.readHead(dimmer, FxOutput.Colour(Color.RED)), "nor on a slider")
     }
 
     // --- Scaling helpers ---
@@ -457,23 +458,15 @@ class AttributeChannelResolverTest {
         assertNull(AttributeChannelResolver.toAttributeValue(hex(), "dimmer", 64u, unread, ColourAxis.HUE_FINE))
         assertNull(AttributeChannelResolver.toAttributeValue(hex(), "dimmer", 64u, unread, ColourAxis.HUE), "an explicit hue is still an axis a slider has not got")
         val dimmer = AttributeChannelResolver.describeAttributeRead(hex(), "dimmer")!!
-        val at100: ChannelReader = { _, _ -> 100u }
+        val at100 = FxOutput.Slider(100u)
         assertNull(AttributeChannelResolver.readHead(dimmer, at100, ColourAxis.SATURATION))
         assertNotNull(AttributeChannelResolver.readHead(dimmer, at100), "no axis: the slider reads as before")
     }
 
     @Test
     fun `a colour-axis write carries the head's current white, amber and UV, and a flash does not`() {
-        // Hex channels: 2..4 colour, 5 amber, 6 white, 7 UV.
-        val lit: ChannelReader = { _, channel ->
-            when (channel) {
-                4 -> 200u
-                5 -> 10u
-                6 -> 200u
-                7 -> 30u
-                else -> 0u
-            }
-        }
+        // The Hex bundles its amber, white and UV with its colour: the composed colour carries them.
+        val lit = FxOutput.Colour(ExtendedColour(Color(0, 0, 200), white = 200u, amber = 10u, uv = 30u))
         for (axis in ColourAxis.entries) {
             val value = assertIs<CueAssignmentResolver.AttributeValue.Colour>(
                 AttributeChannelResolver.toAttributeValue(hex(), "rgbColour", 40u, lit, axis),
@@ -485,10 +478,93 @@ class AttributeChannelResolverTest {
         val unreadValue = assertIs<CueAssignmentResolver.AttributeValue.Colour>(
             AttributeChannelResolver.toAttributeValue(hex(), "rgbColour", 40u, unread),
         ).value
-        assertEquals(0u.toUByte(), unreadValue.white, "an emitter that cannot be read is 0")
+        assertEquals(0u.toUByte(), unreadValue.white, "with nothing composed, an emitter is 0")
         val flash = assertIs<CueAssignmentResolver.AttributeValue.Colour>(
             AttributeChannelResolver.flashAttributeValue(hex(), "rgbColour", 80),
         ).value
         assertEquals(0u.toUByte(), flash.white, "a flash is a level: W/A/UV 0")
+    }
+
+    // --- The composed value: what a head reads back as and builds on ---
+
+    private fun wash() = ShehdsLed19RgbwFixture.Mode24Ch(universe, "wash", "Wash", firstChannel = 101)
+
+    @Test
+    fun `a head's key composes as position for its pan or tilt, else its own slider or colour`() {
+        val wash = wash()
+        assertEquals(PositionTarget(uk.me.cormack.lighting7.fx.FxTargetRef.fixture("wash"), "position"), AttributeChannelResolver.composedTarget(wash, "pan"))
+        assertEquals(PositionTarget(uk.me.cormack.lighting7.fx.FxTargetRef.fixture("wash"), "position"), AttributeChannelResolver.composedTarget(wash, "tilt"))
+        assertIs<SliderTarget>(AttributeChannelResolver.composedTarget(wash, "panFine"), "a fine channel is its own slider")
+        assertEquals(SliderTarget(uk.me.cormack.lighting7.fx.FxTargetRef.fixture("hex-1"), "dimmer"), AttributeChannelResolver.composedTarget(hex(), "dimmer"))
+        assertEquals(ColourTarget(uk.me.cormack.lighting7.fx.FxTargetRef.fixture("hex-1"), "rgbColour"), AttributeChannelResolver.composedTarget(hex(), "rgbColour"))
+        val cell = China2CellLedBlinderFixture(universe, "blinder", "Blinder", firstChannel = 1).elements.first()
+        assertIs<ColourTarget>(AttributeChannelResolver.composedTarget(cell, "rgbColour"), "a white-mix is a colour")
+        assertNull(AttributeChannelResolver.composedTarget(hex(), "mode"), "a setting is not continuous")
+        assertNull(AttributeChannelResolver.composedTarget(hex(), "nonesuch"))
+    }
+
+    @Test
+    fun `readHead reads a pan or tilt from the head's composed position`() {
+        val wash = wash()
+        val pan = assertIs<AttributeChannelResolver.AttributeRead.Slider>(AttributeChannelResolver.describeAttributeRead(wash, "pan"))
+        val tilt = assertIs<AttributeChannelResolver.AttributeRead.Slider>(AttributeChannelResolver.describeAttributeRead(wash, "tilt"))
+        assertEquals(AttributeChannelResolver.PositionAxis.PAN, pan.positionAxis)
+        assertEquals(AttributeChannelResolver.PositionAxis.TILT, tilt.positionAxis)
+        val at = FxOutput.Position(pan = 255u, tilt = 0u)
+        assertEquals(127u.toUByte(), AttributeChannelResolver.readHead(pan, at)!!.value7Bit)
+        assertEquals(0u.toUByte(), AttributeChannelResolver.readHead(tilt, at)!!.value7Bit)
+        assertNull(AttributeChannelResolver.readHead(pan, FxOutput.Slider(255u)), "a pan reads its position, never a slider value")
+        val panFine = assertIs<AttributeChannelResolver.AttributeRead.Slider>(AttributeChannelResolver.describeAttributeRead(wash, "panFine"))
+        assertNull(panFine.positionAxis)
+        assertEquals(127u.toUByte(), AttributeChannelResolver.readHead(panFine, FxOutput.Slider(255u))!!.value7Bit)
+    }
+
+    @Test
+    fun `readHead reads a white-mix cell's composed colour on each axis`() {
+        val cell = China2CellLedBlinderFixture(universe, "blinder", "Blinder", firstChannel = 1).elements.first()
+        val read = assertIs<AttributeChannelResolver.AttributeRead.WhiteMix>(AttributeChannelResolver.describeAttributeRead(cell, "rgbColour"))
+        val warm = China2CellLedBlinderFixture.WHITE_MIX.colourOf(255u, 0u)
+        val composed = FxOutput.Colour(warm)
+        assertEquals(
+            AttributeChannelResolver.brightnessRead(warm.red.toUByte(), warm.green.toUByte(), warm.blue.toUByte()),
+            AttributeChannelResolver.readHead(read, composed, ColourAxis.BRIGHTNESS),
+        )
+        assertEquals(
+            AttributeChannelResolver.hueRead(warm.red.toUByte(), warm.green.toUByte(), warm.blue.toUByte()),
+            AttributeChannelResolver.readHead(read, composed),
+        )
+        assertNull(AttributeChannelResolver.readHead(read, FxOutput.Slider(10u)))
+    }
+
+    @Test
+    fun `a pan or tilt move writes position, the other axis kept from the composed position`() {
+        val wash = wash()
+        assertEquals(
+            AttributeChannelResolver.SurfaceWrite("position", CueAssignmentResolver.AttributeValue.Position(255u, 77u)),
+            AttributeChannelResolver.surfaceWrite(wash, "pan", 127u, FxOutput.Position(200u, 77u)),
+        )
+        assertEquals(
+            AttributeChannelResolver.SurfaceWrite("position", CueAssignmentResolver.AttributeValue.Position(200u, 0u)),
+            AttributeChannelResolver.surfaceWrite(wash, "tilt", 0u, FxOutput.Position(200u, 77u)),
+        )
+        assertEquals(
+            AttributeChannelResolver.SurfaceWrite("position", CueAssignmentResolver.AttributeValue.Position(255u, 0u)),
+            AttributeChannelResolver.surfaceWrite(wash, "pan", 127u, null),
+            "with nothing composed the other axis is its minimum",
+        )
+    }
+
+    @Test
+    fun `a colour-axis write keeps the composed white, amber and UV only where the head carries them`() {
+        val held = FxOutput.Colour(ExtendedColour(Color(0, 0, 200), white = 90u, amber = 40u, uv = 7u))
+        // The Shehds' zone bundles a white and nothing else.
+        val zone = wash().elements.first()
+        val written = assertIs<CueAssignmentResolver.AttributeValue.Colour>(
+            AttributeChannelResolver.toAttributeValue(zone, "rgbColour", 0u, held, ColourAxis.HUE),
+        ).value
+        assertEquals(Color(200, 0, 0), written.color, "the hue moves on the composed colour")
+        assertEquals(90u.toUByte(), written.white)
+        assertEquals(0u.toUByte(), written.amber, "an emitter the head lacks is 0")
+        assertEquals(0u.toUByte(), written.uv)
     }
 }

@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.state
 
+import uk.me.cormack.lighting7.models.DaoCues
+import uk.me.cormack.lighting7.models.DaoCue
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.server.config.*
@@ -1000,6 +1002,8 @@ class State(val config: ApplicationConfig) {
             projectIdProvider = { projectManager.currentProject.id.value },
             fixturesProvider = { show.fixtures },
             globalScalerStateProvider = { show.globalScalerState },
+            programmerStoreProvider = { show.programmerStore },
+            layerResolverProvider = { show.layerResolver },
             speedMasterBankProvider = { show.speedMasterBank },
             deskSelection = deskSelection,
             locateManagerProvider = { show.locateManager },
@@ -1008,6 +1012,12 @@ class State(val config: ApplicationConfig) {
             windowRegistry = windowRegistry,
             cueLooseHeldProvider = { cueId ->
                 runCatching { show.cueStackManager.holds.looseHeld(cueId) }.getOrDefault(false)
+            },
+            cueIdResolver = { cue ->
+                val projectId = projectManager.currentProject.id.value
+                transaction(database) {
+                    DaoCue.find { (DaoCues.uuid eq cue) and (DaoCues.project eq projectId) }.firstOrNull()?.id?.value
+                }
             },
             stackRunningProvider = { stackId ->
                 runCatching { show.cueStackManager.isStackActive(stackId) }.getOrDefault(false)

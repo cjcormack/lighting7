@@ -92,17 +92,6 @@ object FxSpeed {
         return (min(1.0, max(0.0, p)) * 127).roundToInt()
     }
 
-    /**
-     * Whether a fader standing at [value7Bit] already says [speed]: the Speed it sets lands within
-     * [FADER_SAME_OCTAVES] of it, which covers a stick and whole-tick rounding. A fader's own write
-     * echoes back this way, and must not re-arm its pickup.
-     */
-    fun faderSays(value7Bit: Int, speed: Double): Boolean =
-        speed > 0.0 && abs(log2(faderSpeed(value7Bit)) - log2(speed)) <= FADER_SAME_OCTAVES
-
-    /** About five fader steps, in octaves: past a stick's reach from a step and whole-tick rounding at ×4. */
-    private const val FADER_SAME_OCTAVES = 0.15
-
     /** The ring's position at ×1. */
     const val RING_CENTRE = 64
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useDndMonitor } from "@dnd-kit/core"
 import { useSearchParams } from "react-router"
 import { Button } from "@/components/ui/button"
@@ -106,11 +106,20 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
     if (first) setSelectedDisplayKey(first.displayKey)
   }, [devices, selectedDisplayKey])
 
+  // Read, not a dependency: the link is consumed once, and the device shown only breaks a tie.
+  const selectedDisplayKeyRef = useRef(selectedDisplayKey)
+  useEffect(() => {
+    selectedDisplayKeyRef.current = selectedDisplayKey
+  }, [selectedDisplayKey])
+
   useEffect(() => {
     if (!highlightBindingId || !bindings) return
     const binding = bindings.find((b) => b.id === highlightBindingId)
     if (!binding) return
-    const device = devices.find((d) => d.typeKey === binding.deviceTypeKey)
+    // The device already shown when it is of the binding's type, so a second identical surface is not switched.
+    const shown = devices.find((d) => d.displayKey === selectedDisplayKeyRef.current)
+    const device =
+      shown?.typeKey === binding.deviceTypeKey ? shown : devices.find((d) => d.typeKey === binding.deviceTypeKey)
     if (device) setSelectedDisplayKey(device.displayKey)
     // A strip row's `controlId` is the *strip* id, which is in no profile's `controls` — so
     // handing it straight to the inspector renders nothing at all. Land on the strip's fader
@@ -120,8 +129,8 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
     const linkProfile = (types ?? []).find((t) => t.typeKey === binding.deviceTypeKey)
     const strip = linkProfile?.strips?.find((s) => s.id === binding.controlId)
     setSelectedControlId(strip ? strip.fader : binding.controlId)
-    if (binding.bank != null && binding.deviceTypeKey) {
-      lightingApi.surfaces.setBank(binding.deviceTypeKey, binding.bank)
+    if (device && binding.bank != null) {
+      lightingApi.surfaces.setBank(device.displayKey, binding.bank)
     }
     // Clear the param after we've consumed it so back-nav doesn't re-trigger.
     const params = new URLSearchParams(searchParams)
@@ -139,9 +148,9 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
     [bindings],
   )
 
-  const activeBank = selectedDevice?.typeKey ? (banks[selectedDevice.typeKey] ?? null) : null
-  const encoderBank = selectedDevice?.typeKey
-    ? (encoderBanks[selectedDevice.typeKey] ?? DEFAULT_ENCODER_BANK)
+  const activeBank = selectedDevice ? (banks[selectedDevice.displayKey] ?? null) : null
+  const encoderBank = selectedDevice
+    ? (encoderBanks[selectedDevice.displayKey] ?? DEFAULT_ENCODER_BANK)
     : DEFAULT_ENCODER_BANK
 
   const index = useMemo(
@@ -250,9 +259,9 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
           </Badge>
         )}
         <div className="ml-auto flex items-center gap-2">
-          {selectedProfile && (
+          {selectedDevice && selectedProfile && (
             <BankSwitcher
-              deviceTypeKey={selectedProfile.typeKey}
+              displayKey={selectedDevice.displayKey}
               banks={selectedProfile.banks}
               activeBank={activeBank}
             />
@@ -361,6 +370,7 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
               selectedControlId && (
                 <SurfaceInspector
                   projectId={projectId}
+                  displayKey={selectedDevice?.displayKey}
                   profile={selectedProfile}
                   controlId={selectedControlId}
                   index={index}

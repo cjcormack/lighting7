@@ -324,21 +324,21 @@ class SocketMessageWireFormatTest {
 
     @Test
     fun `surface domain — SurfaceBankSetInMessage routes via SurfaceInMessage`() {
-        val raw = """{"type":"surfaceBank.set","deviceTypeKey":"akai-mini","bank":"A"}"""
+        val raw = """{"type":"surfaceBank.set","displayKey":"akai-mini","bank":"A"}"""
         val decoded = json.decodeFromString<InMessage>(raw)
         assertIs<SurfaceInMessage>(decoded)
         val leaf = assertIs<SurfaceBankSetInMessage>(decoded)
-        assertEquals("akai-mini", leaf.deviceTypeKey)
+        assertEquals("akai-mini", leaf.displayKey)
         assertEquals("A", leaf.bank)
     }
 
     @Test
     fun `surface domain — surfaceEncoderBank set and state cross the wire`() {
-        val raw = """{"type":"surfaceEncoderBank.set","deviceTypeKey":"akai-mini","attribute":"colour"}"""
+        val raw = """{"type":"surfaceEncoderBank.set","displayKey":"akai-mini","attribute":"colour"}"""
         val decoded = json.decodeFromString<InMessage>(raw)
         assertIs<SurfaceInMessage>(decoded)
         val leaf = assertIs<SurfaceEncoderBankSetInMessage>(decoded)
-        assertEquals("akai-mini", leaf.deviceTypeKey)
+        assertEquals("akai-mini", leaf.displayKey)
         assertEquals("colour", leaf.attribute)
 
         assertIs<SurfaceEncoderBankStateInMessage>(
@@ -358,13 +358,24 @@ class SocketMessageWireFormatTest {
     @Test
     fun `surface domain — surfaceEncoderBank set carries a colour axis, and defaults to none`() {
         val withAxis = json.decodeFromString<InMessage>(
-            """{"type":"surfaceEncoderBank.set","deviceTypeKey":"x-touch","attribute":"rgbColour","colourAxis":"hueFine"}""",
+            """{"type":"surfaceEncoderBank.set","displayKey":"x-touch","attribute":"rgbColour","colourAxis":"hueFine"}""",
         )
         assertEquals(ColourAxis.HUE_FINE, assertIs<SurfaceEncoderBankSetInMessage>(withAxis).colourAxis)
         val without = json.decodeFromString<InMessage>(
-            """{"type":"surfaceEncoderBank.set","deviceTypeKey":"x-touch","attribute":"rgbColour"}""",
+            """{"type":"surfaceEncoderBank.set","displayKey":"x-touch","attribute":"rgbColour"}""",
         )
         assertEquals(null, assertIs<SurfaceEncoderBankSetInMessage>(without).colourAxis)
+    }
+
+    @Test
+    fun `surface domain — surfaceBank changed names the device and its profile`() {
+        val encoded = json.encodeToString<OutMessage>(
+            SurfaceBankChangedOutMessage(displayKey = "x-touch-2", deviceTypeKey = "x-touch-compact-standard", previousBank = null, newBank = "layer-b"),
+        )
+        assertTrue(encoded.contains(""""type":"surfaceBank.changed""""), encoded)
+        assertTrue(encoded.contains(""""displayKey":"x-touch-2""""), encoded)
+        assertTrue(encoded.contains(""""deviceTypeKey":"x-touch-compact-standard""""), encoded)
+        assertTrue(encoded.contains(""""newBank":"layer-b""""), encoded)
     }
 
     @Test

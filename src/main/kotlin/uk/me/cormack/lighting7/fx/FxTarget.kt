@@ -214,7 +214,7 @@ sealed class FxTarget {
      */
     abstract fun composeProgrammerOver(
         fixture: GroupableFixture,
-        store: ProgrammerStore,
+        store: ProgrammerReads,
         below: FxOutput,
     ): FxOutput
 
@@ -304,7 +304,7 @@ data class SliderTarget(
 
     override fun composeProgrammerOver(
         fixture: GroupableFixture,
-        store: ProgrammerStore,
+        store: ProgrammerReads,
         below: FxOutput,
     ): FxOutput {
         // Up to three programmer sources can cover a slider: its own property entry, a
@@ -351,7 +351,7 @@ data class SliderTarget(
      */
     private fun bundledComponentFromColourEntry(
         fixture: GroupableFixture,
-        store: ProgrammerStore,
+        store: ProgrammerReads,
     ): Pair<Long, UByte>? {
         val catalogue = FixtureAttributeCatalogue.of(fixture::class)
         val prop = catalogue.byName[attribute] ?: return null
@@ -482,7 +482,7 @@ data class ColourTarget(
 
     override fun composeProgrammerOver(
         fixture: GroupableFixture,
-        store: ProgrammerStore,
+        store: ProgrammerReads,
         below: FxOutput,
     ): FxOutput {
         // Compose per component, arbitrating each by write recency across the granularities
@@ -560,7 +560,7 @@ data class ColourTarget(
         category: AttributeCategory,
         entryComponent: UByte?,
         colourSeq: Long,
-        store: ProgrammerStore,
+        store: ProgrammerReads,
     ): UByte? {
         val prop = bundledAttribute(fixture, category) ?: return entryComponent
         var bestSeq = if (entryComponent != null) colourSeq else Long.MIN_VALUE
@@ -718,7 +718,7 @@ data class PositionTarget(
 
     override fun composeProgrammerOver(
         fixture: GroupableFixture,
-        store: ProgrammerStore,
+        store: ProgrammerReads,
         below: FxOutput,
     ): FxOutput {
         // Per-axis recency arbitration between a Position property entry and the axis's
@@ -841,7 +841,7 @@ data class SettingTarget(
 
     override fun composeProgrammerOver(
         fixture: GroupableFixture,
-        store: ProgrammerStore,
+        store: ProgrammerReads,
         below: FxOutput,
     ): FxOutput {
         var bestSeq = Long.MIN_VALUE

@@ -410,4 +410,16 @@ class ProgrammerStoreTest {
             "the busk won, so the layer is no longer the winner",
         )
     }
+
+    @Test
+    fun `a put moves the revision again once its slot is in, so a reader that saw the epoch move sees it move again`() {
+        val store = ProgrammerStore()
+        val before = store.revision
+        store.put(ProgrammerOwner.WEB, "hex-1", "dimmer", CueAssignmentResolver.AttributeValue.Slider(200u))
+        assertEquals(before + 2, store.revision, "once for the slot's number, once for its install")
+        store.putChannel(ProgrammerOwner.WEB, 0, 1, 40u)
+        assertEquals(before + 4, store.revision)
+        store.clear(ProgrammerOwner.WEB, "hex-1", "dimmer")
+        assertEquals(before + 5, store.revision, "a clear moves it once, after it has cleared")
+    }
 }

@@ -55,8 +55,8 @@ interface MidiController {
      * Called by `SurfaceFeedbackPublisher.sendFullResync` when it is re-arming pickup: that
      * flag already means "the physical position is stale", and a resync that trusted the
      * delta cache would leave every unchanged control where the hardware happens to have it.
-     * Delta suppression itself stays — it is load-bearing on the DMX-driven feedback path,
-     * where a bound channel can move at frame rate.
+     * Delta suppression itself stays — it is load-bearing on the feedback poll, which re-reads
+     * every programmer control at 50 Hz while a cue fades.
      */
     fun invalidateAllFeedback()
 

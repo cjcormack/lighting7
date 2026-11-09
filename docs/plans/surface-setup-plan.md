@@ -278,8 +278,8 @@ and its row marked *in review* with its branch. A session's PR is titled
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The binding and its migration | in review | `claude/hopeful-hamilton-eancf5` | | |
-| 2 | Feedback | planned | | | |
+| 1 | The binding and its migration | in review | `claude/hopeful-hamilton-eancf5` | [#407](https://github.com/cjcormack/lighting7/pull/407) | bd866bb |
+| 2 | Feedback | in review | `claude/happy-heisenberg-vh2hqw` | | |
 | 3 | The served picture, and editors A and C | planned | | | |
 | 4 | New functions | planned | | | |
 | 5 | Jobs | planned | | | |
@@ -425,6 +425,19 @@ session 2, and the screens keep today's shape until session 3.
   (the per-device frames); `FU-MANUAL-SURFACE-SETUP-S2`.
 - **Local:** `./gradlew compileTestKotlin`, then `./gradlew test` for the `midi`, `fx`, `plugins` and
   `routes` packages; `npm run check:quick`.
+
+- **As built** (corrections to the above, from the code): the plan's line numbers in
+  `SurfaceFeedbackPublisher.kt` are from before session 1, which had already folded the seven entry
+  kinds' targets into `Does`. The signals are one enum, `Signal`, not parameterised: a signal re-reads
+  every entry that follows it, and the parameterised ones (`Tempo(master)`, `StackFx(stack)`,
+  `EncoderPage(device)`) are operator rate, where re-reading a handful of controls costs nothing. A
+  reading with nothing to show is `Reading.Nothing`. The takeover column's PICKUP, the default, is now
+  driven or undriven by the control: a motor fader, which defaulted to IMMEDIATE, is driven (a move
+  within eight steps, or while touched). The poll watches the store's `revision`, not its `epoch`: a put
+  bumps the epoch before it installs the slot, so the epoch alone could leave a fader on the old value;
+  the revision moves again after the install. A new fan gesture keeps a guard of its own (an input more
+  than eight steps from the centre shows the centre again), because the jump rule judges against what
+  the ring was last shown, which a reset reaches a moment later.
 
 ### Session 3 — The served picture, and editors A and C
 

@@ -31,7 +31,7 @@ vi.mock('@/store/surfaces', async (importOriginal) => {
     ...actual,
     useSurfaceDevices: () => devices,
     useActiveBanks: () => activeBanks,
-    useEncoderBanks: () => ({ xtc: { attribute: 'colour' } }),
+    useEncoderBanks: () => ({ xtouch: { attribute: 'colour' } }),
     useSurfaceControls: () => controls,
     usePickupStates: () => ({}),
     useControlSurfaceTypeListQuery: () => ({ data: [profile] }),
@@ -277,7 +277,7 @@ describe('Surfaces', () => {
     renderPage('/?binding=7')
     // The inspector's own heading, not the panel's cell.
     expect(screen.getByRole('heading', { name: /Fader 1/ })).toBeInTheDocument()
-    expect(setBank).toHaveBeenCalledWith('xtc', 'layer-a')
+    expect(setBank).toHaveBeenCalledWith('xtouch', 'layer-a')
   })
 
   // A strip row's `controlId` is a strip id, which is in no profile's `controls` — so following
@@ -303,6 +303,21 @@ describe('Surfaces', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
     expect(screen.queryByTestId('surface-library')).toBeNull()
     expect(screen.getByRole('heading', { name: /Fader 1/ })).toBeInTheDocument()
+  })
+
+  // Two identical surfaces share their type's bindings, but each is on its own layer (D16): the
+  // page shows and switches the selected device's, never its type-mate's.
+  it('shows and switches each device’s own layer when two share a type', () => {
+    const second: SurfaceDeviceInfo = { ...matched, displayKey: 'xtouch-2', displayName: 'Second X-Touch' }
+    devices = [matched, second]
+    activeBanks = { 'xtouch-2': 'layer-a' }
+    renderPage()
+    expect(screen.getByText('Behringer · X-Touch Compact · Global')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Second X-Touch'))
+    expect(screen.getByText('Behringer · X-Touch Compact · Bank layer-a')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Global/ }))
+    expect(setBank).toHaveBeenCalledWith('xtouch-2', null)
   })
 
   /**
@@ -344,7 +359,7 @@ describe('Surfaces', () => {
    */
   it('crosses off a bank-agnostic strip while a bank is active', () => {
     bindings = [binding(8, 'strip-1', { type: 'strip', target: { type: 'group', key: 'Movers' } })]
-    activeBanks = { xtc: 'layer-a' }
+    activeBanks = { xtouch: 'layer-a' }
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'Edit bindings' }))
     expect(screen.getByLabelText('Remove the strip-1 binding')).toBeInTheDocument()
@@ -363,7 +378,7 @@ describe('Surfaces', () => {
       },
       binding(9, 'fader-1', { type: 'groupAttribute', groupName: 'Hexes', attribute: 'dimmer' }),
     ]
-    activeBanks = { xtc: 'layer-a' }
+    activeBanks = { xtouch: 'layer-a' }
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'Edit bindings' }))
     // Bank A is showing: the bank-B strip is not, but a bank-agnostic control binding is in force
