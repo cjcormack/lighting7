@@ -1,4 +1,3 @@
-import { useMemo } from "react"
 import { useNavigate, useParams } from "react-router"
 import { Sliders } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -9,14 +8,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { useSurfaceBindingsQuery, useControlSurfaceTypeListQuery } from "@/store/surfaces"
+import { useControlSurfaceTypeListQuery } from "@/store/surfaces"
 import type { ControlSurfaceBinding } from "@/store/surfaces"
-import { controlLabel, matchesBindingTarget, shortDeviceLabel, type BindingTargetMatcher } from "./targetUtils"
+import { controlLabel, shortDeviceLabel } from "./targetUtils"
 
 interface BoundControlBadgeProps {
-  match: BindingTargetMatcher
-  /** Pre-filtered bindings for this match. If provided, skips the global filter pass. */
-  preFiltered?: ControlSurfaceBinding[]
+  bindings: readonly ControlSurfaceBinding[]
   className?: string
 }
 
@@ -24,20 +21,11 @@ interface BoundControlBadgeProps {
  * Small chip that renders when a control surface binding maps to this element.
  * Clicking it navigates to `/surfaces` with the binding pre-selected.
  */
-export function BoundControlBadge({ match, preFiltered, className }: BoundControlBadgeProps) {
+export function BoundControlBadge({ bindings: matched, className }: BoundControlBadgeProps) {
   const { projectId } = useParams()
   const navigate = useNavigate()
   const projectIdNum = Number(projectId)
-  const skipQuery = !projectIdNum || preFiltered != null
-  const { data: bindings } = useSurfaceBindingsQuery(projectIdNum, { skip: skipQuery })
   const { data: types } = useControlSurfaceTypeListQuery()
-
-  const matched = useMemo(
-    () =>
-      preFiltered ??
-      (bindings ?? []).filter((b) => matchesBindingTarget(b.target, match)),
-    [preFiltered, bindings, match],
-  )
   if (matched.length === 0) return null
 
   return (
@@ -72,7 +60,7 @@ export function BoundControlBadge({ match, preFiltered, className }: BoundContro
                   <div>{binding.deviceTypeKey}</div>
                   <div className="text-muted-foreground">
                     {binding.controlId}
-                    {binding.bank ? ` · bank ${binding.bank}` : " · global"}
+                    {binding.bank ? ` · Layer ${(types ?? []).find((t) => t.typeKey === binding.deviceTypeKey)?.banks.find((b) => b.id === binding.bank)?.name ?? binding.bank}` : " · both layers"}
                   </div>
                 </div>
               </TooltipContent>

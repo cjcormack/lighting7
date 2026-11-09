@@ -1,131 +1,106 @@
 # The Surfaces view — engineering notes
 
-`/projects/:id/settings/surfaces` (`routes/Surfaces.tsx`). A picture of the attached MIDI desk, an
-inspector for whichever control you click, and — under *Edit bindings* — a library you drag onto it.
+`/projects/:id/settings/surfaces` (`routes/Surfaces.tsx`). The attached MIDI desk as a picture, with
+an inspector for whichever control you click or touch on the desk (**editor A**), or the same bindings
+as a table (**editor C**), the only view below tablet width.
 
-The plan and the decisions are `docs/plans/completed/midi-surface-plan.md`; the layout authority is
-`docs/plans/completed/midi-surface-design/` (`Main.dc.html` run mode, `Edit.dc.html` edit mode,
-`Legend.dc.html` the control-state vocabulary). The backend contract is
-`docs/midi-control-surface-engineering.md`. This file is the client half: the things that
-will bite.
+The plan is `docs/plans/surface-setup-plan.md` (sessions 1–3 here; jobs, new functions and *Assign to
+surface…* come later) and its record `docs/plans/surface-setup-design/`; the earlier picture's layout
+authority is `docs/plans/completed/midi-surface-design/`. The backend contract is
+`docs/midi-control-surface-engineering.md`. This file is the client half: the things that will bite.
 
-## The binding grammar, and what these screens still read
+## The desk is the only resolver (P5)
 
-Since surface-setup plan session 1 every row the desk answers carries `binding` — a `SurfaceBinding`,
-`{does, on, how}` (`api/surfacesApi.ts`, mirroring `midi/Binding.kt`) — and `part`, `MAIN` or an
-encoder's `PUSH`, beside `target`, the old `BindingTarget` union. **These screens read and send only
-`target`**: the desk translates it both ways (`midi/SurfaceGrammar.kt`), because the old union names
-stacks and cues by int id and only the desk can map those to the uuids a binding names. A control with
-two parts shows its main part, else its push (`bindingsForScreens`, applied to the bindings query), so an
-encoder's GO moved to its push still shows. This is a bridge: session 3 replaces these screens with
-editors that read the desk's served map and catalogue, and deletes both halves.
+A binding is `{does, on, how}` at a slot `(device type, control, part, layer)` — `SurfaceBinding` in
+`api/surfacesApi.ts`, mirroring `midi/Binding.kt`. **Nothing on this side resolves one.** Three things
+the desk serves replace what the client used to compute:
+
+- **`surfaceMap.state`** (`store/surfaces.ts`' `surfaceMaps` / `useSurfaceMap`): per device type, per
+  layer, per control part (`"btn-36:MAIN"`), what the part resolves to — `from` (`DIRECT`, `STRIP`,
+  `NONE`), the row's `bindingId` and `bank`, `does` / `on` / `how`, the catalogue `entry`, the
+  `label` (records by name: *GO · Act 1*), `subjectLabel`, `colour`, `writesTo`, the `shows` sentence,
+  `health` and `healthText`. Only the current project's maps are sent; the Surfaces tab is on the rig
+  only.
+- **`GET /surface-functions`** (`useSurfaceFunctionsQuery`): the function catalogue, read from the
+  desk's specs — each entry's id, label, group, the inputs and subjects it takes, its Hows, its
+  parameters with their options, where it writes and a line of help. The form draws any function from
+  it, so a new function needs no screen work. An entry is what the operator picks; two functions are two
+  entries each (a grand master with a level, a tempo with a BPM), and the map's `entry` says which a
+  stored binding is, so the client never matches a binding to an entry itself.
+- **The slot write** (`useWriteSurfaceSlotMutation`, `useClearSurfaceSlotMutation`): `PUT` / `DELETE
+  …/surface-bindings/slot` with the slot in the body. Whatever the slot holds becomes the binding, and
+  the desk refuses what the function's spec does not admit. Nothing patches a cache: the map comes back
+  on the socket.
+
+`src/test/resources/surfaces/catalogue.fixture.json` and `map.fixture.json` are the desk's answers,
+pinned by lighting7's `SurfaceCatalogueTest` and read here (`components/surfaces/surfaceFixtures.ts`)
+by every surface test, so a change to the wire fails on both sides.
+
+Gone with that: the drag library (`SurfaceLibrary`), the 48-kind form (`BindingTargetPicker`), the
+phone table (`BindingMatrix`), the Learn overlay, `lib/surfaceResolve.ts` and `lib/surfaceDrop.ts`
+(the resolve order and the kind tables), `lib/healthDescriptor.ts`, `lib/colourAxis.ts`, the old
+union's types, the label and colour helpers that read it, and edit mode with its drag-and-drop.
 
 ## The picture is data, and the state is what the hardware was told
 
 `SurfacePanel` draws `ControlSurfaceType.layout` — named regions and a grid cell per control — so a
-second device is one `.kt` file in lighting7 and no component here. Every state it shows comes from
-the `surfaceControls` stream, which is what `SurfaceFeedbackPublisher` *sent*, never a
-recomputation from DMX. **If the picture and the desk disagree, the publisher is wrong**, and that
-is the bug worth finding rather than papering over here.
+second device is one `.kt` file in lighting7 and no component here. What a control *does* is the map's,
+for the layer being viewed: its main part's label, else *Push · …* for an encoder bound only on its
+push. Every live state comes from the `surfaceControls` stream, which is what `SurfaceFeedbackPublisher`
+*sent*, never a recomputation from DMX. **If the picture and the desk disagree, the publisher is
+wrong.**
 
-`strips` and `layout` are **optional client-side**: a desk on a pre-strip build serves neither, and
-this client talks to whatever desk it is pointed at. Without a layout the page falls back to
-`BindingMatrix`, which is also the rendering below `md`.
+`ControlCell` is memoized: a `surfaceControls.changed` delta names only the controls that moved and the
+WS layer merges rather than rebuilds, so an untouched control keeps its identity at 20 Hz. A map frame
+arrives at operator rate.
 
-The one place the panel reads DMX is the inspector's **stage value** line, and deliberately: the
-other three live lines answer "what is the desk doing with this control" and that one answers "and
-what came of it". A fader at 66% over a dimmer reading 0 is a bound control writing into a park.
+## Layer A / B, viewed (D13, D17)
 
-## `lib/surfaceResolve.ts` is a mirror, and its failure is silent
+The header's chips (`BankSwitcher`) say *Layer A* and *Layer B* — always with the letter — and **view**
+a layer in both editors. They send nothing: the desk changes layer on its own key, or on a *Switch
+layer* binding. While the viewed layer is not the one the device is on, the picture's live state is
+drawn faint (`data-live-dimmed`) and a line says so. A device starts on **no layer** after a desk
+restart, where only the bindings on both layers fire: the tab then views the map's `""` entry, a *No
+layer* chip carries the device's dot, and a line says the desk's own layer key switches it. The
+`?binding=` link minted by the fixture and group sheets' badges views its binding's layer too, and moves
+nothing on the hardware.
 
-The wire carries raw binding rows. `ControlSurfaceBindingService.resolve` and `deriveStripTarget`
-are what turn those into "what is this control actually doing", and neither is exposed — so the
-panel, which labels every control, re-derives both. A precedence read the wrong way round paints a
-plausible label for a control the desk drives differently, and no rig check reaches the browser
-copy. `surfaceResolve.test.ts` replays the Kotlin cases; keep it in step with
-`midi/ControlSurfaceBindingService.kt` and `midi/StripDerivation.kt`.
+## Editor A: the inspector
 
-The order is **the control's own row across both bank levels, then its strip's** — direct before
-strip at *both* levels, which an "obvious" bank-first reading gets backwards.
+`SurfaceInspector` is the per-part editor: one block per part (*Move*, *Turn* and *Push*, *Press*),
+each a `BindingForm` over the part's slot, its *Writes to* word, its layer chips (*Both layers*, *A
+only*, *B only*) and the map's `shows` line; a dead part says why. A control a strip derives says
+*From strip 3* and offers **Make this control its own**, which writes the strip's derived binding at the
+control's own slot on the viewed layer; the strip's subject is a *Strip 3 follows* select. Moving a
+binding between layers writes the new slot first and clears the old one only once that landed.
+**Remove** names what it takes off — *Remove from both layers*, *Remove from Layer B only* — from the
+banks of the rows it clears, and a clear the desk refuses is toasted, in both editors.
 
-The encoder bank it derives against is an `EncoderBankSelection` — an attribute and, for a colour, a
-`colourAxis` — and the axis goes on the strip's **encoder** and nowhere else. `attributeTarget`
-leaves the field *absent* for hue (`withAxis`): that is what every pre-axis row has and what the
-server writes, and `toEqual` in the tests tells absent from `null`.
+`BindingForm` asks **Does · On · How** in that order: Does is the catalogue, grouped and searchable,
+filtered to the part's input; then its parameters; On from the visible groups and fixtures, the
+selection, and the records of each kind (`recordOptions.ts`, `useBindingChoices`); How from the entry's
+own Hows, or *Pick up · Jump* on a continuous part (a motor fader's is a sentence). A function picked
+without a subject it can fill is held as a draft — *Choose what it acts on to bind it.* — and written
+only once whole. Every binding names where it writes in one word, *Writes to Local* and its four
+siblings (D8).
 
-Bindings are per device **type**; the active bank and the encoder bank are per attached **device**,
-keyed by its `displayKey` (`surfaceBank.state`, `surfaceEncoderBank.state`, `surfaceBank.set`), so two
-identical surfaces share their bindings and each keeps its own layer and encoder page. A view of one
-device reads that device's entry; the page's resolve is the selected device's.
+**Identify mode** (D14) is *Touch a control on the desk*: `useIdentify` sends `surfaceIdentify.begin`,
+draws the banner while the desk waits, and selects the control the `surfaceIdentify.captured` frame
+names. The desk captures that touch **without dispatching it** — a bound GO is not fired — and sends it
+to this window only; 30 s without a touch ends the wait.
 
-## Editing: one context, two zones, one write
+## Editor C: the mapping sheet
 
-Edit mode is **local state in `SurfacesContent`**, not a Redux slice. The busk view needs a slice
-because the cue-slot overlay is a *sibling* of the routed page; here the library and the picture are
-both inside this route.
-
-Dnd is the app's single `DndContext` (`components/dnd/DeskDndProvider.tsx`), joined with
-`useDndMonitor` and **never nested** — the busk page's rule, and the reason `SurfacesContent` must
-be rendered inside that provider (`Layout.tsx` mounts it; the tests mount their own). Ghosts go
-through `dnd/dragOverlayRegistry.ts`, registered at module scope.
-
-Four things are load-bearing:
-
-- **Droppables sit on the grid-cell wrapper, never inside `ControlCell`** — that cell is memoized so
-  a 20 Hz `surfaceControls` delta re-renders only the controls that moved, and `useDroppable`
-  re-renders its host whenever `isOver` flips. **And the wrapper is two components, not one with a
-  `disabled` flag**: `PanelRegion` reads `controls[…]`, so it re-renders on every frame, and a
-  single wrapper would re-run `useDroppable` for every control on the device at stream rate while
-  nobody is dragging. Run mode — the state the panel spends its life in, and which has no drop
-  target at all — renders no hook.
-- **Legal targets follow the source, told twice.** A **row** lands on a strip and nothing else; a
-  **chip** lands on one kind-matching control and nothing else. Enforced by dnd-kit's own
-  `disabled` — which keeps `over`, and so the highlight, off a place the drop would refuse — *and*
-  by the pure `canLand` in `lib/surfaceDrop.ts`, which is the half a test can reach.
-- **A drop patches the control's own row at the exact bank, or creates.** `exactBindingAt`, never
-  `resolveControl` or its sibling `activeBindingAt`: those answer a strip's row for a strip's
-  control and a global row when no exact-bank one exists, and patching either moves a binding the
-  operator was not pointing at. A chip on a strip's fader must *create* a direct row — the only way
-  "direct beats strip" is reachable from the UI. A created row takes the **active bank**, because
-  that is the bank the panel is drawing.
-
-  The two lookups differ by one fallback and the split is the point: **`exactBindingAt` is the
-  write question, `activeBindingAt` the read one.** Anything saying what a slot is *doing* — a
-  label, a remove cross, the library's placement badge — must see the bank-agnostic row, which
-  really is in force on every bank.
-- **One remove cross per row, not per control.** A control's own row is crossed off on the control;
-  a strip's is crossed off on the strip's column backdrop, where one cross means one row rather than
-  four controls.
-
-### What the router will and will not dispatch
-
-`controlKinds` in `lib/surfaceDrop.ts` is read off `SurfaceInputRouter.matchEvent`, and two arms are
-surprises:
-
-- An **encoder with a push note reaches both halves** — its CC is a `Continuous` and its note a
-  `ButtonPress`, on one control id. The X-Touch declares a push on all sixteen, so an encoder
-  legitimately takes a cue chip as well as an attribute one.
-- A **bank button takes nothing at all**: `route` answers `ResolvedInput.BankButton` and switches
-  the bank *before* resolving a binding. A row there can never fire, so the library will not offer
-  one and `BankButtonCell` draws its own label whatever row sits on its id — but it draws itself
-  **dead** when one does, because the picture's promise is that it mirrors the desk and an orphaned
-  row only the inspector mentions is one nobody scanning the surface would find.
-
-A colour axis does not change which half a target reaches — `targetControlKind` switches on the kind
-alone — but it is refused on an attribute that is not a colour, by name, at the same door
-(`BINDING_AXIS_NEEDS_COLOUR`, `refuseAxisOnNonColour`). The picker shows its *Colour axis* field only
-where the named attribute is a colour, and **drops the axis whenever the attribute changes**, so a
-colour → dimmer edit cannot save a 400.
-
-`controlKinds` and `targetControlKind` are now the **mirror** of the server's rule — each
-function's `Spec.inputs` against the input a control part feeds (`inputFor`), an encoder's button
-function placed on its push (`inferPart`) — rather than the only copy: session 4 closed
-`FU-MIDI-BIND-CONTROL-KIND`, so
-`ControlSurfaceBindingService.refuseWrongKind` refuses a mismatch at the write boundary whichever
-door it comes through — MIDI Learn, a script, a hand-rolled call. The dim is still worth having: it
-keeps the operator from dropping onto a control that would answer a 400, which is a worse way to
-learn the rule. Keep the two tables in step; a divergence here only makes the palette offer or
-withhold a chip the server would judge differently.
+`SurfaceSheet` is one row per control part on the sheet kit, grouped by the picture's regions with the
+strips first: Control · Layer · Does · On · How · Writes to · Shows · Health. *Does* is the compound
+cell, editing through the same `BindingForm`. *On* takes a marquee: a subject set over many rows, each
+row taking it only where its function takes that kind of subject — the kit's `SheetColumn.accepts`,
+which drops the refused rows before `write` and names them through `refused`. **Fill in order** is the
+bar's *Fill*, a `records` plan on `SpreadPanel` beside the address plan: groups, fixtures, cue stacks or
+speed masters laid down one to a row in their order, or the selection, a row that cannot take one
+skipped and named (`planFill`). A control its strip derives has no *On* of its own: the cell reads out
+the strip's subject, and a marquee or a fill skips it. *Dead first* brings the dead rows to the top. Live values are never in
+the rows, so a fader moving never re-renders the sheet.
 
 ## The desk selection
 
@@ -133,7 +108,7 @@ One desk, one selection, server-owned — the composition model's argument for o
 verbatim. `store/selection.ts` is the cache (no REST behind it; `selection.state` is both the
 snapshot and the broadcast), and three surfaces move it: the busk view's target band
 (`useBuskingSelection`), the programmer's fixture list (`useDeskSelectionBridge`), and a
-`selectTarget` button on the surface itself.
+`select` binding on the surface itself.
 
 Read `components/fixtures-list/useDeskSelectionBridge.ts` before touching the list half. Its
 rules each fail silently, and the first is the one the plan names: **rows are published through
@@ -153,144 +128,3 @@ desk from the window this socket announced (`api/windowsApi.ts` — the name and
 chip matches by id); a MIDI write stamps
 `{kind: "surface"}`, which no chip draws any more — the desk chip is drawn only while its window is unlinked (busk-chrome plan D18) and names no mover. The long form is
 CLAUDE.md §"One selection, two shapes" and §"The desk selection has a mask".
-
-## Records on buttons
-
-Session 4 added six targets: `applyLook`, `pressPalette`, `pressPad`, and the three busk-page ones.
-All are buttons. Five things about them on this side:
-
-- **The library rows are not `TargetRowItem`s.** That component exists to mount
-  `useTargetAttributes` per group or fixture and is memoized on primitive target props for exactly
-  that reason; a palette, Look or busk page has no per-target attribute lookup, so its row is built
-  in `SurfaceLibrary`'s `rows` memo from `actionChip` beside Selection and Desk.
-- **The kind row stays at the artboard's six.** *All · Groups · Fixtures · Looks · Cues · Desk* — a
-  palette files under **Looks** (the row of named recallable records) and a busk page under
-  **Desk** (which already holds the encoder bank), rather than widening a 360px segmented control to
-  seven. *Next page* / *Prev page* sit on the Desk row **once**: they are page-agnostic, and a chip
-  repeated per page reads as page-specific.
-- **Every Look is offered, with an *Apply* chip.** `applyLook` puts a Look on whole, whatever is
-  selected (absolute-looks plan D1), and the write boundary refuses no Look binding.
-- **A palette's *Press* chip carries its family; a Look's *Apply* does not.** A palette is in
-  exactly one family, so the palette's family filter can hide it honestly; a Look spans families by
-  nature, so its chip is built by `actionChip` with `family: null` and survives every filter.
-- **`describeTarget` will not resolve a uuid, and `recordOptions.ts` is where the name comes from.**
-  Same split as `speedMasterBpm` and `useSpeedMasterDisplay`: `describeTarget` is pure and has no
-  library to ask. `useRecordBindingOptions` is the one owner of the three lists, shared by the
-  picker (which offers them) and the inspector (which resolves the choice) — without it the
-  resolution would exist twice and the two would name one uuid differently. The picker starts a
-  record field **unset**, not on the first row: an empty uuid is refused by name, where a silent
-  first-row default would save and bind the button to something nobody picked.
-
-## The selection fan
-
-Venue-visit plan S12 added one continuous target, `selectionFan {axis}` (`PAN` | `TILT`, and the stage
-axes `ACROSS` | `DEPTH`, which fan the beams' landing points a tenth of a metre a step): an encoder
-or fader that fans the desk selection's positions about their own, through the Fan panel's own
-desk resolve. `lib/surfaceDrop.ts` answers `continuous`, `describeTarget` names it *Sel · fan pan*,
-the picker's *Selection — fan* carries one *Axis* select (default Pan), and the library's Desk row
-offers *Fan pan*, *Fan tilt*, *Fan across* and *Fan depth* once — it names no target of its own. The inspector's live card
-reads it as a selection target. Everything else is the desk's: the gesture's anchor, a turn read as a
-move from what the ring was last shown, and the ring's value, 64 at no fan
-(`docs/midi-control-surface-engineering.md` in lighting7, the `SelectionFan` row). No health arm:
-an empty selection drops the turn.
-
-## Windows and the sub-selection
-
-Session 7 of the busk-further plan mirrored the five BUTTON targets its session 2 added to
-`BindingTarget` (D14): `buskFocusSet {windowName, focus}`, `buskSheetToggle {windowName}`,
-`selectionNext`, `selectionPrev`, `selectionCells {mode}`. `lib/surfaceDrop.ts` answers `button` for
-all five, `describeTarget` names them (*Busk focus · Pads · Screen 2*, *Elements · Odd*),
-`BindingHealth` gains `missingWindow` and `describeHealth` its line, and the picker offers them. Four
-things about them on this side:
-
-- **A window is addressed by its registry name, never a row id.** `windows.state`'s `id` is
-  socket-minted and changes on every reconnect; a binding has to survive one, so it carries the
-  `name` the window announced. The desk sends the command to **every** connected row of that name
-  (a duplicated name is D9's accepted case), carrying the view each row announced, so a window off
-  the busk view ignores it. The picker's *Window* field lists the names signed in now, plus the
-  binding's own name when no such window is connected, so a screen that is off tonight still reads
-  as what it is rather than as a blank.
-- **`missingWindow` is transient**, unlike every other health arm: it clears the moment a window of
-  that name announces, and the desk re-evaluates on every registry change rather than only on the
-  fixture hooks. Nothing here polls for it.
-- **The library splits them as it split the page targets.** *Focus · Split / Pads / Rig* and
-  *Sheet* are a row **per window** under *Desk* (`window:<name>`, from `useDeskWindows`, one per
-  name), because a chip per window reads as window-specific, which it is; *Next · Prev · Odd · Even ·
-  Masters* sit on the Desk row **once**, because they rewrite the one desk selection. The kind row
-  stays at six.
-- **`selectionCells` has no LED** (`FU-SURFACE-SUBSELECT-LED`): a sub-selection is not a state the
-  desk keeps. The mode's label is `SUBSELECT_MODE_LABELS` in `lib/cellsSubSelection.ts`, shared with
-  the busk band's Elements chip, so a button and the chip name one rule the same way.
-
-## The showing busk page
-
-`busk.pageState` / `busk.setPage` (`api/buskPageApi.ts`, `store/busk.ts`'s `buskShowingPage` entry)
-is the desk's own answer to "which busk page is showing", so a hardware *next page* button and a tab
-click are one gesture. `BuskingView` resolves in this order:
-
-```
-this tab's offline override  >  the desk's showing page  >  ?page=  >  the first page
-```
-
-and a tab click writes the **desk**, with the URL mirroring what comes back. Writing the URL
-directly would leave this tab on a page the desk and every other client disagreed about, which is
-what the shared state exists to prevent. `null` from the desk is not "the first page" — it means
-nothing has moved it, and each client falls back on its own.
-
-The **offline override** is the one thing that beats the desk on purpose. `setShowingBuskPage` goes
-through `sendGesture`, which drops the frame and toasts when the socket is down — so without a local
-escape hatch a tab click while offline would do nothing at all and the desk's last-known value,
-however stale, would keep winning. `onPageSelect` sets it *only* on that failure, and any change to
-`deskPageId` — a reconnect delivering the real answer, or this tab's own next successful click —
-clears it again.
-
-It is **unrelated to `busk.layoutChanged`'s echo suppression**, despite the namespace: that frame
-names pages whose *document* changed and is keyed on a page being saved. A page-state frame carries
-no layout.
-
-## `hooks/useTargetAttributes.ts`
-
-Closes `FU-FE-USE-TARGET-PROPERTIES`: `useTargetAttributes` / `useRigAttributes` (flat) for the
-surfaces that *bind* attributes and need names plus "can a fader drive this". It landed beside a
-second export, `categoriseProperties`, for the surfaces that *rendered* group attributes; its last
-consumer, `GroupCard`'s group visualisers, became the fixture sheet's rows (fixture-fx-sheets plan
-session 4), and it went with them.
-
-`continuous` mirrors `AttributeChannelResolver`: sliders and colours only. A position pair or a
-setting on a fader would be a control that does nothing, so the library does not offer one.
-
-**A colour descriptor expands to the colour plus its bundled emitters.** The fixture descriptor
-list omits a `bundleWithColour` slider — `white`, `amber`, `uv` — and folds its channel into the
-colour's `whiteChannel` / `amberChannel` / `uvChannel`; the desk drives each as a slider by that
-name, so the hook mints one `AvailableAttribute` per present emitter (a group has one if any member
-does). The name is the category, which lighting7's `BundledEmitterNamesTest` pins across every
-fixture type. `SurfaceInspector`'s stage line mints the same descriptor off the colour's channel ref
-for those three names.
-
-## Colour axes
-
-A colour on a continuous control is one of four HSV axes — hue, a fine hue trim, saturation,
-brightness — and `lib/colourAxis.ts` is this side's whole vocabulary: the four wire strings
-(mirroring `midi/ColourAxis.kt`, pinned by `colourAxis.test.ts`), the chip labels and swatches,
-and the one rule everything compares through: **null is hue, and so is `'hue'`**. A binding never
-carries the field for hue; `withAxis` is how the picker, the library and the resolver keep it
-absent. This module labels and draws and never resolves — what a trim or a saturation position does
-to a head is `AttributeChannelResolver`'s in both directions, and the *Position* line on the
-inspector's live card is already that reading.
-
-The library offers a colour as **four chips**, one per axis with its own swatch, labelled by the
-axis alone when the target has one colour attribute; the Selection and Encoder bank rows get the
-same four from the rig vocabulary. `describeTarget` appends ` · sat` and the like for every axis but
-hue, so a hue binding reads exactly as it always did.
-
-## The library's sections and family groups
-
-The list is one sticky `EditorLabel` per kind that has rows, in kind-row order — **Desk · Groups ·
-Fixtures · Looks · Cues**, Desk moved to the front of both because the Selection row is what a
-selection-driven desk reaches for first and it used to sit under every fixture. Under a kind filter
-the one section shows without its heading. Inside a row the chips are grouped by family with a
-hairline between groups (`groupChipsByFamily`) and the actions
-last, which is what keeps a fixture row legible with four colour chips and the emitters beside them.
-The search matches chip labels as well as names; a target row's chips are known only inside
-`TargetRowItem`, which finishes the search itself, and a section whose rows all answered null hides
-with its heading (`:has`).

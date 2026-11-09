@@ -75,6 +75,7 @@ fun Application.configureRouting(state: State) {
                     routeApiRestLocate(state)
                     routeApiRestProgrammer(state)
                     routeApiRestControlSurfaceTypes(state)
+                    routeApiRestSurfaceFunctions()
                     routeApiRestPerf(state)
                     routeApiRestInstall(state)
                     routeApiRestInstallOsc(state)

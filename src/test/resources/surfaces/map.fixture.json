@@ -1,0 +1,617 @@
+{
+    "projectId": 7,
+    "deviceTypeKey": "x-touch-compact-standard",
+    "layers": {
+        "layer-a": {
+            "fader-1:MAIN": {
+                "from": "STRIP",
+                "bindingId": 1,
+                "stripId": "strip-1",
+                "does": {
+                    "type": "level",
+                    "attribute": "dimmer"
+                },
+                "on": {
+                    "type": "group",
+                    "key": "front-wash"
+                },
+                "entry": "level",
+                "label": "Dimmer · Front wash",
+                "subjectLabel": "Front wash",
+                "colour": "blue",
+                "writesTo": "LOCAL",
+                "shows": "The motor shows what Local holds for Front wash's dimmer, or the stage where Local holds nothing."
+            },
+            "fader-9:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 7,
+                "does": {
+                    "type": "tempo"
+                },
+                "on": {
+                    "type": "record",
+                    "kind": "MASTER",
+                    "uuid": "22222222-2222-4222-8222-222222222222"
+                },
+                "entry": "tempo",
+                "label": "Tempo · M2 · Chase",
+                "subjectLabel": "M2 · Chase",
+                "writesTo": "TEMPO",
+                "shows": "The motor shows M2 · Chase's tempo across 60–180 BPM."
+            },
+            "enc-1:MAIN": {
+                "from": "STRIP",
+                "bindingId": 1,
+                "stripId": "strip-1",
+                "does": {
+                    "type": "level",
+                    "attribute": "dimmer"
+                },
+                "on": {
+                    "type": "group",
+                    "key": "front-wash"
+                },
+                "entry": "level",
+                "label": "Dimmer · Front wash",
+                "subjectLabel": "Front wash",
+                "colour": "blue",
+                "writesTo": "LOCAL",
+                "shows": "The ring shows what Local holds for Front wash's dimmer, or the stage where Local holds nothing."
+            },
+            "enc-1:PUSH": {
+                "from": "NONE"
+            },
+            "enc-9:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 3,
+                "does": {
+                    "type": "level",
+                    "attribute": "pan"
+                },
+                "on": {
+                    "type": "selection"
+                },
+                "entry": "level",
+                "takeoverPolicy": "PICKUP",
+                "label": "Pan · The selection",
+                "subjectLabel": "The selection",
+                "writesTo": "LOCAL",
+                "shows": "The ring shows what Local holds for the selection's pan, or the stage where Local holds nothing. It goes dark while the selected heads differ."
+            },
+            "enc-9:PUSH": {
+                "from": "DIRECT",
+                "bindingId": 4,
+                "does": {
+                    "type": "locate"
+                },
+                "on": {
+                    "type": "selection"
+                },
+                "entry": "locate",
+                "takeoverPolicy": "PICKUP",
+                "label": "Locate · The selection",
+                "subjectLabel": "The selection",
+                "writesTo": "LOCAL",
+                "shows": "Lit while the selection is located."
+            },
+            "btn-1:MAIN": {
+                "from": "STRIP",
+                "bindingId": 1,
+                "stripId": "strip-1",
+                "does": {
+                    "type": "flash",
+                    "attribute": "dimmer"
+                },
+                "on": {
+                    "type": "group",
+                    "key": "front-wash"
+                },
+                "entry": "flash",
+                "label": "Flash · Front wash",
+                "subjectLabel": "Front wash",
+                "colour": "blue",
+                "writesTo": "LOCAL",
+                "shows": "Lit while held. Lets go to whatever was under it."
+            },
+            "btn-3:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 5,
+                "does": {
+                    "type": "go"
+                },
+                "on": {
+                    "type": "record",
+                    "kind": "STACK",
+                    "uuid": "11111111-1111-4111-8111-111111111111"
+                },
+                "entry": "go",
+                "label": "GO · Act 1",
+                "subjectLabel": "Act 1",
+                "writesTo": "PLAYBACK",
+                "shows": "Lit while Act 1 is running."
+            },
+            "btn-4:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 6,
+                "does": {
+                    "type": "go"
+                },
+                "on": {
+                    "type": "record",
+                    "kind": "STACK",
+                    "uuid": "99999999-1111-4111-8111-111111111111"
+                },
+                "entry": "go",
+                "label": "GO · A missing cue stack",
+                "subjectLabel": "A missing cue stack",
+                "writesTo": "PLAYBACK",
+                "shows": "Lit while a missing cue stack is running.",
+                "health": {
+                    "type": "missingStack",
+                    "stackUuid": "99999999-1111-4111-8111-111111111111"
+                },
+                "healthText": "missing cue stack 99999999-1111-4111-8111-111111111111"
+            },
+            "btn-5:MAIN": {
+                "from": "NONE"
+            },
+            "btn-25:MAIN": {
+                "from": "STRIP",
+                "bindingId": 1,
+                "stripId": "strip-1",
+                "does": {
+                    "type": "select"
+                },
+                "on": {
+                    "type": "group",
+                    "key": "front-wash"
+                },
+                "entry": "select",
+                "label": "Select · Front wash",
+                "subjectLabel": "Front wash",
+                "colour": "blue",
+                "writesTo": "DESK",
+                "shows": "Lit while all of Front wash is selected. Hold for half a second to select only it."
+            },
+            "btn-33:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 8,
+                "does": {
+                    "type": "blackout"
+                },
+                "on": {
+                    "type": "none"
+                },
+                "how": "ON",
+                "entry": "blackout",
+                "label": "Blackout on",
+                "writesTo": "MASTER",
+                "shows": "Lit while blackout is on."
+            },
+            "strip-1:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 1,
+                "does": {
+                    "type": "strip"
+                },
+                "on": {
+                    "type": "group",
+                    "key": "front-wash"
+                },
+                "entry": "strip",
+                "label": "Strip · Front wash",
+                "subjectLabel": "Front wash",
+                "colour": "blue",
+                "writesTo": "LOCAL",
+                "shows": "Its fader and encoder show what Local holds, or the stage; its select button is lit while selected."
+            }
+        },
+        "layer-b": {
+            "fader-1:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 2,
+                "bank": "layer-b",
+                "does": {
+                    "type": "level",
+                    "attribute": "dimmer"
+                },
+                "on": {
+                    "type": "fixture",
+                    "key": "hex-1"
+                },
+                "entry": "level",
+                "label": "Dimmer · Hex 1",
+                "subjectLabel": "Hex 1",
+                "writesTo": "LOCAL",
+                "shows": "The motor shows what Local holds for Hex 1's dimmer, or the stage where Local holds nothing."
+            },
+            "fader-9:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 7,
+                "does": {
+                    "type": "tempo"
+                },
+                "on": {
+                    "type": "record",
+                    "kind": "MASTER",
+                    "uuid": "22222222-2222-4222-8222-222222222222"
+                },
+                "entry": "tempo",
+                "label": "Tempo · M2 · Chase",
+                "subjectLabel": "M2 · Chase",
+                "writesTo": "TEMPO",
+                "shows": "The motor shows M2 · Chase's tempo across 60–180 BPM."
+            },
+            "enc-1:MAIN": {
+                "from": "STRIP",
+                "bindingId": 1,
+                "stripId": "strip-1",
+                "does": {
+                    "type": "level",
+                    "attribute": "dimmer"
+                },
+                "on": {
+                    "type": "group",
+                    "key": "front-wash"
+                },
+                "entry": "level",
+                "label": "Dimmer · Front wash",
+                "subjectLabel": "Front wash",
+                "colour": "blue",
+                "writesTo": "LOCAL",
+                "shows": "The ring shows what Local holds for Front wash's dimmer, or the stage where Local holds nothing."
+            },
+            "enc-1:PUSH": {
+                "from": "NONE"
+            },
+            "enc-9:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 3,
+                "does": {
+                    "type": "level",
+                    "attribute": "pan"
+                },
+                "on": {
+                    "type": "selection"
+                },
+                "entry": "level",
+                "takeoverPolicy": "PICKUP",
+                "label": "Pan · The selection",
+                "subjectLabel": "The selection",
+                "writesTo": "LOCAL",
+                "shows": "The ring shows what Local holds for the selection's pan, or the stage where Local holds nothing. It goes dark while the selected heads differ."
+            },
+            "enc-9:PUSH": {
+                "from": "DIRECT",
+                "bindingId": 4,
+                "does": {
+                    "type": "locate"
+                },
+                "on": {
+                    "type": "selection"
+                },
+                "entry": "locate",
+                "takeoverPolicy": "PICKUP",
+                "label": "Locate · The selection",
+                "subjectLabel": "The selection",
+                "writesTo": "LOCAL",
+                "shows": "Lit while the selection is located."
+            },
+            "btn-1:MAIN": {
+                "from": "STRIP",
+                "bindingId": 1,
+                "stripId": "strip-1",
+                "does": {
+                    "type": "flash",
+                    "attribute": "dimmer"
+                },
+                "on": {
+                    "type": "group",
+                    "key": "front-wash"
+                },
+                "entry": "flash",
+                "label": "Flash · Front wash",
+                "subjectLabel": "Front wash",
+                "colour": "blue",
+                "writesTo": "LOCAL",
+                "shows": "Lit while held. Lets go to whatever was under it."
+            },
+            "btn-3:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 5,
+                "does": {
+                    "type": "go"
+                },
+                "on": {
+                    "type": "record",
+                    "kind": "STACK",
+                    "uuid": "11111111-1111-4111-8111-111111111111"
+                },
+                "entry": "go",
+                "label": "GO · Act 1",
+                "subjectLabel": "Act 1",
+                "writesTo": "PLAYBACK",
+                "shows": "Lit while Act 1 is running."
+            },
+            "btn-4:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 6,
+                "does": {
+                    "type": "go"
+                },
+                "on": {
+                    "type": "record",
+                    "kind": "STACK",
+                    "uuid": "99999999-1111-4111-8111-111111111111"
+                },
+                "entry": "go",
+                "label": "GO · A missing cue stack",
+                "subjectLabel": "A missing cue stack",
+                "writesTo": "PLAYBACK",
+                "shows": "Lit while a missing cue stack is running.",
+                "health": {
+                    "type": "missingStack",
+                    "stackUuid": "99999999-1111-4111-8111-111111111111"
+                },
+                "healthText": "missing cue stack 99999999-1111-4111-8111-111111111111"
+            },
+            "btn-5:MAIN": {
+                "from": "NONE"
+            },
+            "btn-25:MAIN": {
+                "from": "STRIP",
+                "bindingId": 1,
+                "stripId": "strip-1",
+                "does": {
+                    "type": "select"
+                },
+                "on": {
+                    "type": "group",
+                    "key": "front-wash"
+                },
+                "entry": "select",
+                "label": "Select · Front wash",
+                "subjectLabel": "Front wash",
+                "colour": "blue",
+                "writesTo": "DESK",
+                "shows": "Lit while all of Front wash is selected. Hold for half a second to select only it."
+            },
+            "btn-33:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 8,
+                "does": {
+                    "type": "blackout"
+                },
+                "on": {
+                    "type": "none"
+                },
+                "how": "ON",
+                "entry": "blackout",
+                "label": "Blackout on",
+                "writesTo": "MASTER",
+                "shows": "Lit while blackout is on."
+            },
+            "strip-1:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 1,
+                "does": {
+                    "type": "strip"
+                },
+                "on": {
+                    "type": "group",
+                    "key": "front-wash"
+                },
+                "entry": "strip",
+                "label": "Strip · Front wash",
+                "subjectLabel": "Front wash",
+                "colour": "blue",
+                "writesTo": "LOCAL",
+                "shows": "Its fader and encoder show what Local holds, or the stage; its select button is lit while selected."
+            }
+        },
+        "": {
+            "fader-1:MAIN": {
+                "from": "STRIP",
+                "bindingId": 1,
+                "stripId": "strip-1",
+                "does": {
+                    "type": "level",
+                    "attribute": "dimmer"
+                },
+                "on": {
+                    "type": "group",
+                    "key": "front-wash"
+                },
+                "entry": "level",
+                "label": "Dimmer · Front wash",
+                "subjectLabel": "Front wash",
+                "colour": "blue",
+                "writesTo": "LOCAL",
+                "shows": "The motor shows what Local holds for Front wash's dimmer, or the stage where Local holds nothing."
+            },
+            "fader-9:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 7,
+                "does": {
+                    "type": "tempo"
+                },
+                "on": {
+                    "type": "record",
+                    "kind": "MASTER",
+                    "uuid": "22222222-2222-4222-8222-222222222222"
+                },
+                "entry": "tempo",
+                "label": "Tempo · M2 · Chase",
+                "subjectLabel": "M2 · Chase",
+                "writesTo": "TEMPO",
+                "shows": "The motor shows M2 · Chase's tempo across 60–180 BPM."
+            },
+            "enc-1:MAIN": {
+                "from": "STRIP",
+                "bindingId": 1,
+                "stripId": "strip-1",
+                "does": {
+                    "type": "level",
+                    "attribute": "dimmer"
+                },
+                "on": {
+                    "type": "group",
+                    "key": "front-wash"
+                },
+                "entry": "level",
+                "label": "Dimmer · Front wash",
+                "subjectLabel": "Front wash",
+                "colour": "blue",
+                "writesTo": "LOCAL",
+                "shows": "The ring shows what Local holds for Front wash's dimmer, or the stage where Local holds nothing."
+            },
+            "enc-1:PUSH": {
+                "from": "NONE"
+            },
+            "enc-9:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 3,
+                "does": {
+                    "type": "level",
+                    "attribute": "pan"
+                },
+                "on": {
+                    "type": "selection"
+                },
+                "entry": "level",
+                "takeoverPolicy": "PICKUP",
+                "label": "Pan · The selection",
+                "subjectLabel": "The selection",
+                "writesTo": "LOCAL",
+                "shows": "The ring shows what Local holds for the selection's pan, or the stage where Local holds nothing. It goes dark while the selected heads differ."
+            },
+            "enc-9:PUSH": {
+                "from": "DIRECT",
+                "bindingId": 4,
+                "does": {
+                    "type": "locate"
+                },
+                "on": {
+                    "type": "selection"
+                },
+                "entry": "locate",
+                "takeoverPolicy": "PICKUP",
+                "label": "Locate · The selection",
+                "subjectLabel": "The selection",
+                "writesTo": "LOCAL",
+                "shows": "Lit while the selection is located."
+            },
+            "btn-1:MAIN": {
+                "from": "STRIP",
+                "bindingId": 1,
+                "stripId": "strip-1",
+                "does": {
+                    "type": "flash",
+                    "attribute": "dimmer"
+                },
+                "on": {
+                    "type": "group",
+                    "key": "front-wash"
+                },
+                "entry": "flash",
+                "label": "Flash · Front wash",
+                "subjectLabel": "Front wash",
+                "colour": "blue",
+                "writesTo": "LOCAL",
+                "shows": "Lit while held. Lets go to whatever was under it."
+            },
+            "btn-3:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 5,
+                "does": {
+                    "type": "go"
+                },
+                "on": {
+                    "type": "record",
+                    "kind": "STACK",
+                    "uuid": "11111111-1111-4111-8111-111111111111"
+                },
+                "entry": "go",
+                "label": "GO · Act 1",
+                "subjectLabel": "Act 1",
+                "writesTo": "PLAYBACK",
+                "shows": "Lit while Act 1 is running."
+            },
+            "btn-4:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 6,
+                "does": {
+                    "type": "go"
+                },
+                "on": {
+                    "type": "record",
+                    "kind": "STACK",
+                    "uuid": "99999999-1111-4111-8111-111111111111"
+                },
+                "entry": "go",
+                "label": "GO · A missing cue stack",
+                "subjectLabel": "A missing cue stack",
+                "writesTo": "PLAYBACK",
+                "shows": "Lit while a missing cue stack is running.",
+                "health": {
+                    "type": "missingStack",
+                    "stackUuid": "99999999-1111-4111-8111-111111111111"
+                },
+                "healthText": "missing cue stack 99999999-1111-4111-8111-111111111111"
+            },
+            "btn-5:MAIN": {
+                "from": "NONE"
+            },
+            "btn-25:MAIN": {
+                "from": "STRIP",
+                "bindingId": 1,
+                "stripId": "strip-1",
+                "does": {
+                    "type": "select"
+                },
+                "on": {
+                    "type": "group",
+                    "key": "front-wash"
+                },
+                "entry": "select",
+                "label": "Select · Front wash",
+                "subjectLabel": "Front wash",
+                "colour": "blue",
+                "writesTo": "DESK",
+                "shows": "Lit while all of Front wash is selected. Hold for half a second to select only it."
+            },
+            "btn-33:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 8,
+                "does": {
+                    "type": "blackout"
+                },
+                "on": {
+                    "type": "none"
+                },
+                "how": "ON",
+                "entry": "blackout",
+                "label": "Blackout on",
+                "writesTo": "MASTER",
+                "shows": "Lit while blackout is on."
+            },
+            "strip-1:MAIN": {
+                "from": "DIRECT",
+                "bindingId": 1,
+                "does": {
+                    "type": "strip"
+                },
+                "on": {
+                    "type": "group",
+                    "key": "front-wash"
+                },
+                "entry": "strip",
+                "label": "Strip · Front wash",
+                "subjectLabel": "Front wash",
+                "colour": "blue",
+                "writesTo": "LOCAL",
+                "shows": "Its fader and encoder show what Local holds, or the stage; its select button is lit while selected."
+            }
+        }
+    }
+}

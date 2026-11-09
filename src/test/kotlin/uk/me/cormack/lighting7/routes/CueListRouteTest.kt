@@ -101,14 +101,14 @@ class CueListRouteTest : RouteIntegrationTest() {
         val sharedUses = shared.usedBy!!
         assertTrue(sharedUses.pads.isEmpty())
         assertTrue(sharedUses.slots.isEmpty())
-        assertEquals(listOf("xtouch-mini · button-7"), sharedUses.bindings.map { it.label })
+        assertEquals(listOf("xtouch-mini · button-7 · both layers"), sharedUses.bindings.map { it.label })
 
         val looseCue = cues.single { it.id == loose }
         assertTrue(looseCue.entries.isEmpty())
         val looseUses = looseCue.usedBy!!
         assertEquals(listOf("Page 1"), looseUses.pads.map { it.pageName })
         assertEquals(listOf("Page 1, slot 3"), looseUses.slots.map { it.label })
-        assertEquals(listOf("xtouch-mini · button-8"), looseUses.bindings.map { it.label })
+        assertEquals(listOf("xtouch-mini · button-8 · both layers"), looseUses.bindings.map { it.label })
 
         // One cue's read leaves *Used by* to the list.
         assertNull(client.get("$base/cues/$loose").body<CueDetails>().usedBy)

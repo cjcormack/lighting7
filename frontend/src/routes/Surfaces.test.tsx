@@ -1,29 +1,21 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { DndContext } from '@dnd-kit/core'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type {
-  ControlState,
-  ControlSurfaceBinding,
-  ControlSurfaceType,
-  SurfaceDeviceInfo,
-} from '@/store/surfaces'
+import type { ControlSurfaceBinding, SurfaceDeviceInfo } from '@/store/surfaces'
+import { CATALOGUE, FIXTURE_PROFILE, MAP_FRAME } from '@/components/surfaces/surfaceFixtures'
 
 /**
- * The Surfaces tab's structural claims: the run-mode toolbar is **gone** (plan D1), a matched
- * device is drawn as a **picture** and an unmatched one as the explain-yourself card, the dead
- * count is a header badge, and `?binding=` still lands on the control it names.
- *
- * That last one is not decoration: the link is minted from the fixtures and groups pages, so it
- * is an in-app contract the rebuild had to carry across.
+ * The Surfaces tab's structural claims: a matched device is drawn as a picture from the desk's map
+ * and an unmatched one as the explain-yourself card, the dead count is a header badge, viewing a
+ * layer moves nothing on the hardware (D13), the table is the other view, and `?binding=` lands on
+ * the control it names.
  */
 
 let devices: SurfaceDeviceInfo[] = []
 let bindings: ControlSurfaceBinding[] = []
-let controls: Record<string, Record<string, ControlState>> = {}
 let activeBanks: Record<string, string> = {}
-const setBank = vi.fn()
+const sent = vi.hoisted(() => [] as unknown[])
 
 vi.mock('@/store/surfaces', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/store/surfaces')>()
@@ -31,359 +23,167 @@ vi.mock('@/store/surfaces', async (importOriginal) => {
     ...actual,
     useSurfaceDevices: () => devices,
     useActiveBanks: () => activeBanks,
-    useEncoderBanks: () => ({ xtouch: { attribute: 'colour' } }),
-    useSurfaceControls: () => controls,
+    useSurfaceControls: () => ({}),
     usePickupStates: () => ({}),
-    useControlSurfaceTypeListQuery: () => ({ data: [profile] }),
+    useControlSurfaceTypeListQuery: () => ({ data: [FIXTURE_PROFILE] }),
     useSurfaceBindingsQuery: () => ({ data: bindings }),
-    useCreateSurfaceBindingMutation: () => [vi.fn(), {}],
-    useUpdateSurfaceBindingMutation: () => [vi.fn(), {}],
-    useExpandSurfaceBindingMutation: () => [vi.fn(), {}],
-    useDeleteSurfaceBindingMutation: () => [vi.fn(), {}],
+    useSurfaceFunctionsQuery: () => ({ data: CATALOGUE }),
+    useSurfaceMap: () => MAP_FRAME,
+    useWriteSurfaceSlotMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) })), {}],
+    useClearSurfaceSlotMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve() })), {}],
+    useIdentify: () => ({ wait: { waiting: false, endsAt: null, ended: null }, begin: vi.fn(), cancel: vi.fn() }),
   }
 })
-vi.mock('@/store/selection', () => ({
-  useDeskSelection: () => [],
-  clearDeskSelection: vi.fn(),
-}))
-// The inspector's stage line resolves a bound property's descriptor before it can read a value,
-// so both list queries are stubbed empty: no descriptor, no line, which is the arm every case in
-// this file takes.
-vi.mock('@/store/groups', () => ({
-  useGroupListQuery: () => ({ data: [] }),
-  useGroupAttributesQuery: () => ({ data: [] }),
-}))
-vi.mock('@/store/fixtures', () => ({
-  useFixtureListQuery: () => ({ data: [] }),
-  useVisibleFixtureListQuery: () => ({ data: [] }),
-}))
-// The inspector resolves a record binding's uuid to a name through these three; empty is the arm
-// every case in this file takes, since none of them binds a record.
-vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [] }) }))
-vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: [] }) }))
-vi.mock('@/store/busk', () => ({ useBuskPagesQuery: () => ({ data: [] }) }))
-// The narrow fallback and the inspector's two editing surfaces are stubbed: each drags in the
-// binding-target picker and, behind it, the speed-master bank, and none of them is what this file
-// is asserting about. `EditBindingSheet` lives in the matrix module, so the stub exports both.
-vi.mock('@/components/surfaces/BindingMatrix', () => ({
-  BindingMatrix: () => <div data-testid="binding-matrix" />,
-  EditBindingSheet: () => null,
-}))
-vi.mock('@/components/surfaces/LearnModeOverlay', () => ({ LearnModeOverlay: () => null }))
-// The library is stubbed for the reason above and one more: it reaches the fixture, group and cue
-// stores, whose module bodies install WS bridges against the `lightingApi` stub below.
-// `SurfaceLibrary.test.tsx` is where its rows are asserted.
-let libraryPlacements: ReadonlyMap<string, string> = new Map()
-vi.mock('@/components/surfaces/SurfaceLibrary', () => ({
-  SurfaceLibrary: (props: { placements: ReadonlyMap<string, string> }) => {
-    libraryPlacements = props.placements
-    return <div data-testid="surface-library" />
-  },
-}))
+vi.mock('@/store/selection', () => ({ useDeskSelection: () => [], clearDeskSelection: vi.fn() }))
+vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/fixtures', () => ({ useVisibleFixtureListQuery: () => ({ data: [] }) }))
+vi.mock('@/components/surfaces/recordOptions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/surfaces/recordOptions')>()
+  return { ...actual, useRecordOptions: () => actual.EMPTY_RECORD_OPTIONS }
+})
+vi.mock('@/components/surfaces/SurfaceSheet', () => ({ SurfaceSheet: () => <div data-testid="surface-sheet" /> }))
 vi.mock('@/components/CurrentProjectRedirect', () => ({ CurrentProjectRedirect: () => null }))
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => true }))
-// The rig's colours read the patch list, which these tests serve no store for.
-vi.mock('@/hooks/useTargetColours', () => ({ useTargetColours: () => ({ fixtures: new Map(), groups: new Map() }) }))
-// `@/store/surfaces` is only partially mocked, so its module body still runs — and that body
-// installs the bindings-changed bridge. The stub therefore has to be a whole surfaces API, not
-// just the one method the page calls.
-//
-// Everything *else* falls through to a no-op subscriber, `backendMock`'s trick and for its reason:
-// store slices self-register a WS subscription at module load, so merely importing one has to be
-// safe. This page reaches a long way now — the inspector's stage-value line pulls in the fixture,
-// group and channel-source modules — and enumerating each of their bridges would make an unrelated
-// new slice able to break this file.
-const noSubscription = { unsubscribe: () => {} }
-const anyNamespace = new Proxy({} as Record<string, unknown>, {
-  get: () => () => noSubscription,
-})
-const surfaces = {
-  setBank: (...args: unknown[]) => setBank(...args),
-  subscribeBindingsChanged: () => noSubscription,
-  subscribeDevices: () => noSubscription,
-  subscribeBanks: () => noSubscription,
-  subscribePickup: () => noSubscription,
-  subscribeControls: () => noSubscription,
-  subscribeEncoderBanks: () => noSubscription,
-  subscribeScaler: () => noSubscription,
-  getDevices: () => null,
-  getBanks: () => null,
-  getScaler: () => null,
-  getControls: () => null,
-  getEncoderBanks: () => null,
-}
-vi.mock('@/api/lightingApi', () => ({
-  lightingApi: new Proxy({ surfaces } as Record<string, unknown>, {
-    get: (target, prop: string) => target[prop] ?? anyNamespace,
-  }),
-}))
-
-const profile: ControlSurfaceType = {
-  typeKey: 'xtc',
-  vendor: 'Behringer',
-  product: 'X-Touch Compact',
-  portPattern: null,
-  className: 'X',
-  banks: [{ id: 'layer-a', name: 'A' }],
-  strips: [{ id: 'strip-1', fader: 'fader-1', select: 'btn-25', encoder: null, flash: null }],
-  layout: {
-    regions: [
-      {
-        name: 'strips',
-        columns: 1,
-        cells: [
-          { controlId: 'fader-1', col: 0, row: 0 },
-          { controlId: 'btn-25', col: 0, row: 1 },
-          { controlId: 'bank-layer-a', col: 0, row: 2 },
-        ],
+// Every namespace answers a no-op subscriber, since store slices subscribe at module load. The
+// surfaces namespace records every call that is not a subscription or a read, which is how the
+// layer tests see that nothing was sent.
+vi.mock('@/api/lightingApi', () => {
+  const noSubscription = { unsubscribe: () => {} }
+  const anyNamespace = new Proxy({}, { get: () => () => noSubscription })
+  const surfaces = new Proxy(
+    {},
+    {
+      get: (_target, name: string) => (...args: unknown[]) => {
+        if (name.startsWith('subscribe')) return noSubscription
+        if (name.startsWith('get')) return null
+        sent.push([name, ...args])
+        return true
       },
-    ],
-  },
-  controls: [
-    {
-      type: 'fader',
-      controlId: 'fader-1',
-      label: 'Fader 1',
-      cc: 1,
-      channel: 1,
-      hasMotor: true,
-      motorCc: 1,
-      touchNote: null,
-      touchCc: 101,
-      resolution: 'SEVEN_BIT',
     },
-    { type: 'button', controlId: 'btn-25', label: 'Button 25', note: 25, channel: 1, ledFeedback: 'ON_OFF' },
-    {
-      type: 'bankButton',
-      controlId: 'bank-layer-a',
-      label: 'A',
-      note: 90,
-      programChange: null,
-      channel: 1,
-      bankId: 'layer-a',
-    },
-  ],
-}
+  )
+  return { lightingApi: new Proxy({ surfaces } as Record<string, unknown>, { get: (target, prop: string) => target[prop] ?? anyNamespace }) }
+})
 
-const matched: SurfaceDeviceInfo = {
-  displayKey: 'xtouch',
-  displayName: 'X-Touch Compact',
-  typeKey: 'xtc',
-  isMatched: true,
+import { SurfacesContent } from './Surfaces'
+
+const device = (displayKey: string, isMatched = true): SurfaceDeviceInfo => ({
+  displayKey,
+  displayName: displayKey,
+  typeKey: isMatched ? FIXTURE_PROFILE.typeKey : null,
+  isMatched,
   hasInputPort: true,
   hasOutputPort: true,
   activeBank: null,
-}
-const unmatched: SurfaceDeviceInfo = {
-  displayKey: 'nano',
-  displayName: 'nanoKONTROL2',
-  typeKey: null,
-  isMatched: false,
-  hasInputPort: true,
-  hasOutputPort: false,
-  activeBank: null,
-}
+})
 
-function binding(
-  id: number,
-  controlId: string,
-  target: ControlSurfaceBinding['target'],
-  health: ControlSurfaceBinding['health'] = { type: 'ok' },
-): ControlSurfaceBinding {
-  return {
-    id,
-    projectId: 1,
-    deviceTypeKey: 'xtc',
-    controlId,
-    part: 'MAIN',
-    bank: null,
-    // The screens read `target`; the binding is the desk's, which these tests never read.
-    binding: { does: { type: 'unknown', storedType: target.type, rawPayload: '' } },
-    target,
-    targetType: target.type,
-    takeoverPolicy: null,
-    sortOrder: id,
-    health,
-  }
-}
-
-const { SurfacesContent } = await import('./Surfaces')
-
-/**
- * The page joins the app's single `DndContext` with `useDndMonitor` rather than nesting one, so it
- * has to be rendered inside a context here as `Layout.tsx` mounts it in the app. A monitor with no
- * context throws, which is dnd-kit telling you the same thing.
- */
-function renderPage(initialPath = '/') {
+function renderRoute(path = '/') {
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <DndContext>
-        <SurfacesContent projectId={1} />
-      </DndContext>
+    <MemoryRouter initialEntries={[path]}>
+      <SurfacesContent projectId={1} />
     </MemoryRouter>,
   )
 }
 
 beforeEach(() => {
-  devices = [matched]
+  devices = [device('xtouch')]
   bindings = []
-  controls = {}
-  activeBanks = {}
-  setBank.mockClear()
-  libraryPlacements = new Map()
+  activeBanks = { xtouch: 'layer-a' }
+  sent.length = 0
 })
 afterEach(cleanup)
 
 describe('Surfaces', () => {
-  // D1: these two promise the rig will change *now*, and this is the page where the desk is
-  // wired rather than run. The targets and the ShowBar's own toggles are untouched.
-  it('has no Blackout or grand-master buttons', () => {
-    renderPage()
-    expect(screen.queryByText(/blackout/i)).toBeNull()
-    expect(screen.queryByText(/^GM /i)).toBeNull()
-  })
-
-  it('draws the picture for a device with a layout', () => {
-    renderPage()
+  it('draws the picture for a device with a layout, labelled from the desk\'s map', () => {
+    renderRoute()
     expect(screen.getByTestId('surface-panel')).toBeInTheDocument()
-    expect(screen.getByTitle('Fader 1')).toBeInTheDocument()
+    expect(within(screen.getByTitle('Button 3')).getByText('GO · Act 1')).toBeInTheDocument()
   })
 
-  // An unmatched device is never auto-selected — there is nothing to draw for it — but its chip
-  // is a way in to the card that says why, which is the only place that explains itself.
   it('explains an unmatched device rather than drawing an empty panel', () => {
-    devices = [matched, unmatched]
-    renderPage()
-    fireEvent.click(screen.getByText('nanoKONTROL2'))
+    devices = [device('mystery', false)]
+    renderRoute()
+    fireEvent.click(screen.getByRole('button', { name: /mystery/ }))
     expect(screen.queryByTestId('surface-panel')).toBeNull()
     expect(screen.getByText(/didn’t match any registered/)).toBeInTheDocument()
   })
 
   it('counts every dead binding in the header', () => {
-    bindings = [
-      binding(1, 'fader-1', { type: 'blackout' }),
-      binding(2, 'btn-25', { type: 'fireCue', cueId: 4 }, { type: 'missingCue', cueId: 4 }),
-      binding(3, 'strip-1', { type: 'unknown', targetType: 'future', rawPayload: '{}' }, {
-        type: 'unknownTarget',
-        targetType: 'future',
-      }),
-    ]
-    renderPage()
+    bindings = [1, 2].map((id) => ({
+      id,
+      projectId: 1,
+      deviceTypeKey: FIXTURE_PROFILE.typeKey,
+      controlId: `btn-${id}`,
+      part: 'MAIN',
+      bank: null,
+      binding: { does: { type: 'go' } },
+      takeoverPolicy: null,
+      sortOrder: 0,
+      health: { type: 'missingStack', stackId: 0 },
+    }))
+    renderRoute()
     expect(screen.getByText('2 dead bindings')).toBeInTheDocument()
   })
 
-  it('opens the inspector on the control a ?binding= link names, and forces its bank', () => {
-    bindings = [{ ...binding(7, 'fader-1', { type: 'blackout' }), bank: 'layer-a' }]
-    renderPage('/?binding=7')
-    // The inspector's own heading, not the panel's cell.
-    expect(screen.getByRole('heading', { name: /Fader 1/ })).toBeInTheDocument()
-    expect(setBank).toHaveBeenCalledWith('xtouch', 'layer-a')
+  it('views a layer without switching the desk (D13)', () => {
+    renderRoute()
+    fireEvent.click(screen.getByRole('button', { name: /^Layer B/ }))
+    expect(within(screen.getByTitle('Fader 1')).getByText('Dimmer · Hex 1')).toBeInTheDocument()
+    expect(screen.getByText(/the desk is on Layer A, so its live state is faint/)).toBeInTheDocument()
+    expect(screen.getByTestId('surface-panel').getAttribute('data-dimmed')).toBe('true')
+    expect(sent).toEqual([])
   })
 
-  // A strip row's `controlId` is a strip id, which is in no profile's `controls` — so following
-  // the link straight to it renders an empty inspector rather than an error. And this is the
-  // common path, not a corner: a group on a strip is what mints the badge that links here.
-  it('lands a strip binding’s link on the strip’s fader', () => {
-    bindings = [binding(8, 'strip-1', { type: 'strip', target: { type: 'group', key: 'Movers' } })]
-    renderPage('/?binding=8')
-    expect(screen.getByRole('heading', { name: /Fader 1/ })).toBeInTheDocument()
+  it('views no layer while the desk is on none, where only bindings on both layers fire', () => {
+    activeBanks = {}
+    renderRoute()
+    const noLayer = screen.getByRole('button', { name: /^No layer/ })
+    expect(noLayer.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByText(/only bindings on both layers fire/)).toBeInTheDocument()
+    // The strip is on both layers; Layer B's own fader row is not.
+    expect(within(screen.getByTitle('Fader 1')).queryByText('Dimmer · Hex 1')).toBeNull()
+    expect(screen.getByTestId('surface-panel').getAttribute('data-dimmed')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^Layer A/ }))
+    expect(screen.getByTestId('surface-panel').getAttribute('data-dimmed')).toBe('true')
+    expect(sent).toEqual([])
   })
 
-  // D9: one slot, two occupants. The picture is what both are about, so the library takes the
-  // inspector's place rather than opening a second column beside it.
-  it('swaps the inspector for the library in edit mode, and back again', () => {
-    bindings = [{ ...binding(7, 'fader-1', { type: 'blackout' }), bank: 'layer-a' }]
-    renderPage('/?binding=7')
-    expect(screen.queryByTestId('surface-library')).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Edit bindings' }))
-    expect(screen.getByTestId('surface-library')).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: /Fader 1/ })).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
-    expect(screen.queryByTestId('surface-library')).toBeNull()
-    expect(screen.getByRole('heading', { name: /Fader 1/ })).toBeInTheDocument()
+  it('draws no No-layer chip while the desk is on a layer', () => {
+    renderRoute()
+    expect(screen.queryByRole('button', { name: /^No layer/ })).toBeNull()
   })
 
-  // Two identical surfaces share their type's bindings, but each is on its own layer (D16): the
-  // page shows and switches the selected device's, never its type-mate's.
-  it('shows and switches each device’s own layer when two share a type', () => {
-    const second: SurfaceDeviceInfo = { ...matched, displayKey: 'xtouch-2', displayName: 'Second X-Touch' }
-    devices = [matched, second]
-    activeBanks = { 'xtouch-2': 'layer-a' }
-    renderPage()
-    expect(screen.getByText('Behringer · X-Touch Compact · Global')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByText('Second X-Touch'))
-    expect(screen.getByText('Behringer · X-Touch Compact · Bank layer-a')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Global/ }))
-    expect(setBank).toHaveBeenCalledWith('xtouch-2', null)
-  })
-
-  /**
-   * One cross per *row*, not per control. A strip is one binding covering four controls, so a
-   * cross on its fader would remove three other things the operator was not pointing at — it goes
-   * on the strip's own backdrop instead, and only a control's own row is crossable on the control.
-   */
-  /**
-   * A binding on a bank button can never fire — `route` switches the bank before it resolves one —
-   * so the picture has to say so where the operator is looking rather than only in the inspector.
-   * The label stays the bank's, because that is still what the press does.
-   */
-  it('draws a bank button holding a binding as dead, without letting it claim the target', () => {
-    bindings = [binding(11, 'bank-layer-a', { type: 'blackout' })]
-    renderPage()
-    const cell = screen.getByTitle(/^A · bank layer-a/)
-    expect(cell.className).toContain('border-destructive')
-    expect(cell.textContent).toBe('A')
-    expect(screen.getByTitle(/holds a binding that can never fire/)).toBeInTheDocument()
-  })
-
-  it('offers the remove cross on a control’s own row and on the strip, never on a derived control', () => {
-    bindings = [
-      binding(8, 'strip-1', { type: 'strip', target: { type: 'group', key: 'Movers' } }),
-      binding(9, 'fader-1', { type: 'blackout' }),
-    ]
-    renderPage()
-    fireEvent.click(screen.getByRole('button', { name: 'Edit bindings' }))
-    // fader-1 has its own row, so it is crossable; btn-25 only resolves through strip-1.
-    expect(screen.getByLabelText('Remove the binding on Fader 1')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Remove the binding on Button 25')).toBeNull()
-    expect(screen.getByLabelText('Remove the strip-1 binding')).toBeInTheDocument()
-  })
-
-  /**
-   * A bank-agnostic strip row drives the picture on *every* bank — `resolveControl` falls back to
-   * it — so a cross that only saw the exact-bank row would leave a visibly bound strip with no way
-   * to unbind it while any bank was selected.
-   */
-  it('crosses off a bank-agnostic strip while a bank is active', () => {
-    bindings = [binding(8, 'strip-1', { type: 'strip', target: { type: 'group', key: 'Movers' } })]
-    activeBanks = { xtouch: 'layer-a' }
-    renderPage()
-    fireEvent.click(screen.getByRole('button', { name: 'Edit bindings' }))
-    expect(screen.getByLabelText('Remove the strip-1 binding')).toBeInTheDocument()
-  })
-
-  /**
-   * The badge has to describe the bank being drawn. Naming a binding on another bank would tell the
-   * operator a group is already on strip 1 while the panel beside it shows strip 1 empty — and the
-   * drop they then make creates a second, separate row.
-   */
-  it('badges a library row only for bindings in force on the shown bank', () => {
+  it('opens the inspector on a ?binding= link\'s control and views its layer, moving nothing', () => {
     bindings = [
       {
-        ...binding(8, 'strip-1', { type: 'strip', target: { type: 'group', key: 'Movers' } }),
+        id: 7,
+        projectId: 1,
+        deviceTypeKey: FIXTURE_PROFILE.typeKey,
+        controlId: 'fader-1',
+        part: 'MAIN',
         bank: 'layer-b',
+        binding: { does: { type: 'level', attribute: 'dimmer' }, on: { type: 'fixture', key: 'hex-1' } },
+        takeoverPolicy: null,
+        sortOrder: 0,
+        health: { type: 'ok' },
       },
-      binding(9, 'fader-1', { type: 'groupAttribute', groupName: 'Hexes', attribute: 'dimmer' }),
     ]
-    activeBanks = { xtouch: 'layer-a' }
-    renderPage()
-    fireEvent.click(screen.getByRole('button', { name: 'Edit bindings' }))
-    // Bank A is showing: the bank-B strip is not, but a bank-agnostic control binding is in force
-    // on every bank and still counts.
-    expect(libraryPlacements.get('group:Movers')).toBeUndefined()
-    expect(libraryPlacements.get('group:Hexes')).toBe('on 1 control')
+    renderRoute('/?binding=7')
+    expect(within(screen.getByTestId('surface-inspector')).getByText('Fader 1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Layer B/ }).getAttribute('aria-pressed')).toBe('true')
+    expect(sent).toEqual([])
+  })
+
+  it('swaps the picture for the table', () => {
+    renderRoute()
+    fireEvent.click(screen.getByRole('button', { name: 'Table' }))
+    expect(screen.getByTestId('surface-table-view').className).not.toContain('md:hidden')
+    expect(screen.getByTestId('surface-sheet')).toBeInTheDocument()
+  })
+
+  it('keeps the table as the only view below tablet width', () => {
+    renderRoute()
+    // The picture's wrapper is hidden below md; the table's is shown there and hidden from md up.
+    expect(screen.getByTestId('surface-panel').parentElement!.className).toContain('hidden')
+    expect(screen.getByTestId('surface-table-view').className).toContain('md:hidden')
   })
 })

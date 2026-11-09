@@ -10,6 +10,8 @@ import uk.me.cormack.lighting7.fx.stackEntryPositions
 import uk.me.cormack.lighting7.fx.StackEntryPositions
 import uk.me.cormack.lighting7.midi.Does
 import uk.me.cormack.lighting7.midi.RecordKind
+import uk.me.cormack.lighting7.midi.ControlPart
+import uk.me.cormack.lighting7.midi.SurfaceLabels
 import uk.me.cormack.lighting7.midi.decodeBinding
 import uk.me.cormack.lighting7.midi.recordUuid
 import uk.me.cormack.lighting7.models.*
@@ -136,7 +138,8 @@ internal fun cueUsesOf(
             slots = cueSlots.filter { it.cueId == id }.map { CueUseSlotDto(it.id.value, "Page ${it.page + 1}, slot ${it.slotIndex + 1}") },
             anchors = anchors.filter { cueOfEntry[it.entryId] == id }.map { CueUseAnchorDto(it.entryId, it.label) },
             bindings = bindings.filter { it.first == id }.map { (_, b) ->
-                CueUseBindingDto(b.id.value, listOfNotNull(b.deviceTypeKey, b.controlId, b.bank?.let { "bank $it" }).joinToString(" · "))
+                val part = ControlPart.entries.firstOrNull { it.name == b.part } ?: ControlPart.MAIN
+                CueUseBindingDto(b.id.value, SurfaceLabels.controlName(b.deviceTypeKey, b.controlId, part, b.bank))
             },
         )
     }

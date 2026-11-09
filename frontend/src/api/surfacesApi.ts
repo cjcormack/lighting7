@@ -1,529 +1,37 @@
 import { InternalApiConnection } from "./internalApi"
-import type { SubselectMode } from "./selectionApi"
 import type { BuskFocus } from "../lib/buskWindow"
 import { Subscription } from "./subscription"
 import { createWsSubscribable } from "./wsSubscriptionFactory"
 import { sendGesture } from "./wsGesture"
-import type { CueTarget } from "./cuesApi"
 
-// Types mirror `uk.me.cormack.lighting7.midi.BindingTarget` and related Kotlin
-// classes on the backend. Keep field names in sync with kotlinx.serialization.
+// Types mirror the desk's `midi/` binding grammar, its served map and its function catalogue.
+// Keep field names in sync with kotlinx.serialization.
 
 /**
  * Which axis of a **colour** property a continuous control drives — HSV, hue by default. Mirrors
- * `midi/ColourAxis.kt`; `lib/colourAxis.ts` owns the labels and the null-is-hue rule. A binding
- * carries no `colourAxis` for hue (the field is omitted on the wire, on both sides), and `| null`
+ * `midi/ColourAxis.kt`. A binding carries no `colourAxis` for hue (the field is omitted on the wire, on both sides), and `| null`
  * only because a hand-built payload may spell the absence out.
  */
 export type ColourAxis = "hue" | "hueFine" | "saturation" | "brightness"
 
 /**
  * What a device's strip encoders drive: a property and, for a colour, which axis (absent is hue).
- * Mirrors `midi/EncoderBankSelection`; carried by `surfaceEncoderBank.state` and read back by
- * `lib/surfaceResolve.ts` when it derives a strip's encoder.
+ * Mirrors `midi/EncoderBankSelection`; carried by `surfaceEncoderBank.state`.
  */
 export interface EncoderBankSelection {
   attribute: string
   colourAxis?: ColourAxis | null
 }
 
-/** Continuous target: fixture property driven by a fader/encoder. */
-export interface FixtureAttributeTarget {
-  type: "fixtureAttribute"
-  fixtureKey: string
-  attribute: string
-  /** On a colour property, which axis; absent is hue. Refused by name on anything else. */
-  colourAxis?: ColourAxis | null
-}
-
-/** Continuous target: fixture-group property driven by a fader/encoder. */
-export interface GroupAttributeTarget {
-  type: "groupAttribute"
-  groupName: string
-  attribute: string
-  /** As on {@link FixtureAttributeTarget}; a member on which the property is not a colour is skipped. */
-  colourAxis?: ColourAxis | null
-}
-
-// The four below carry a uuid *beside* the int id rather than instead of it. The int is what a
-// pre-v11 project wrote and is still what dispatch falls back to; the uuid is what survives a
-// clone or a cross-install import, and the backend resolves uuid-first where both are present
-// (`FU-SYNC-BINDING-PAYLOAD-UUIDS`, first half). Nullable because a row written before format 11
-// has never been through the service that fills it in.
-
-export interface CueStackGoTarget {
-  type: "cueStackGo"
-  stackId: number
-  stackUuid?: string | null
-}
-
-export interface CueStackBackTarget {
-  type: "cueStackBack"
-  stackId: number
-  stackUuid?: string | null
-}
-
-export interface CueStackPauseTarget {
-  type: "cueStackPause"
-  stackId: number
-  stackUuid?: string | null
-}
-
-export interface FireCueTarget {
-  type: "fireCue"
-  cueId: number
-  cueUuid?: string | null
-}
-
-// The five below (OSC plan D4) are uuid-only: they were added after format 11, so no row of theirs
-// predates the uuid. Each is an explicit form that lands the same state however often it arrives.
-
-/** GO TO one entry of a stack, starting it if stopped; nothing if that entry is already live. */
-export interface CueStackGoToTarget {
-  type: "cueStackGoTo"
-  stackUuid: string
-  entryUuid: string
-}
-
-/** Arm one entry of a stack as its next GO. */
-export interface CueStackStandbyTarget {
-  type: "cueStackStandby"
-  stackUuid: string
-  entryUuid: string
-}
-
-/** Stop a stack — which drops the desk's arm, as every stack stop does. */
-export interface CueStackStopTarget {
-  type: "cueStackStop"
-  stackUuid: string
-}
-
-/** Take (`on`) or let go of a cue's loose hold; nothing if it already is so. */
-export interface LooseCueSetTarget {
-  type: "looseCueSet"
-  cueUuid: string
-  on: boolean
-}
-
 /**
- * Fire one tube of a one-shot fixture (a confetti cannon) on press — stage-view plan session 9.
- * Needs the desk's arm, like every fire: an unarmed press does nothing and the desk announces it
- * (`effects.skipped`). `trigger` is the trigger's name (`output1`) or its label (`A`).
- */
-export interface FireTriggerTarget {
-  type: "fireTrigger"
-  fixtureKey: string
-  trigger: string
-}
-
-/** Flash wraps either a FixtureAttribute or GroupAttribute continuous target. */
-export interface FlashTarget {
-  type: "flash"
-  target: FixtureAttributeTarget | GroupAttributeTarget
-  max?: number
-}
-
-export interface BlackoutTarget {
-  type: "blackout"
-}
-
-export interface GrandMasterToggleTarget {
-  type: "grandMasterToggle"
-}
-
-/** Set blackout on or off on press — `blackout`'s explicit form (OSC plan D4): pressed twice, nothing moves. */
-export interface BlackoutSetTarget {
-  type: "blackoutSet"
-  on: boolean
-}
-
-/** Set the grand master to a level on press, `level` 0–100 %, taken whole (OSC plan D10). */
-export interface GrandMasterLevelTarget {
-  type: "grandMasterLevel"
-  level: number
-}
-
-/** Set the grand master's level from a fader / encoder: 0..127 across 0–100 %. */
-export interface GrandMasterFaderTarget {
-  type: "grandMasterFader"
-}
-
-/**
- * Set a cue stack's effect size (lighting7 effects plan D10) from a fader / encoder: 0..127 across
- * 0–100 %. The desk stamps `stackUuid` from `stackId` on write, as on the stack buttons.
- */
-export interface StackFxAmountTarget {
-  type: "stackFxAmount"
-  stackId: number
-  stackUuid?: string | null
-}
-
-export interface SetBankTarget {
-  type: "setBank"
-  deviceTypeKey: string
-  bank: string
-}
-
-/**
- * Drive a speed master's tempo from a fader / encoder. `masterUuid` null means master 1,
- * matching the `speedMasters.*` WS family — and a uuid rather than an int id, so the binding
- * survives clone and cross-install import.
- *
- * The control's 0..127 maps across `minBpm`..`maxBpm` rather than the clock's full 20..300:
- * 128 steps over the whole range is ~2.2 BPM a step, too coarse to trim a tempo with.
- */
-export interface SpeedMasterBpmTarget {
-  type: "speedMasterBpm"
-  masterUuid: string | null
-  minBpm: number
-  maxBpm: number
-}
-
-/** Tap a speed master's tempo on button press (`masterUuid` null → master 1). */
-export interface SpeedMasterTapTarget {
-  type: "speedMasterTap"
-  masterUuid: string | null
-}
-
-/**
- * Set a speed master's tempo on press, `bpm` 20–300 (`masterUuid` null → master 1) — a typed
- * tempo's write: on a held master it moves the hold, and a follower refuses it.
- */
-export interface SpeedMasterSetBpmTarget {
-  type: "speedMasterSetBpm"
-  masterUuid: string | null
-  bpm: number
-}
-
-/**
- * Halve or double a speed master's tempo on press (lighting7 fx-speed plan D12), `masterUuid` null →
- * master 1. On a held master it moves the hold; a press that would leave 20–300 is refused.
- */
-export interface SpeedMasterScaleTarget {
-  type: "speedMasterScale"
-  masterUuid: string | null
-  factor: 0.5 | 2
-}
-
-// ─── Selection-relative targets ───────────────────────────────────────
-//
-// The layer beside the fixed bindings above: these name no fixture of their own, and what they
-// act on is whatever is in the desk selection when the control moves. See
-// `docs/plans/completed/midi-surface-plan.md` D3 in lighting7.
-
-/**
- * Write a continuous property on **every selected target** — a fixture directly, a group fanned
- * to its members. An empty selection drops the write rather than widening it to everything, and
- * the control reads as the legend's "no selection" state.
- */
-export interface SelectionAttributeTarget {
-  type: "selectionAttribute"
-  attribute: string
-  /** As on {@link FixtureAttributeTarget}; judged against the rig's colour vocabulary at bind time. */
-  colourAxis?: ColourAxis | null
-}
-
-/**
- * The axis a {@link SelectionFanTarget} encoder fans: pan or tilt, or the beams' landing points
- * across the stage (`ACROSS`, SR↔SL) or up it (`DEPTH`).
+ * The axis a fan encoder fans: pan or tilt, or the beams' landing points across the stage
+ * (`ACROSS`, SR↔SL) or up it (`DEPTH`).
  */
 export type FanAxis = "PAN" | "TILT" | "ACROSS" | "DEPTH"
 
-/**
- * **Fan** the selection's positions on one axis (venue-visit plan S12): a turn moves the fan's
- * amount — two centre steps a 7-bit step on pan and tilt, a tenth of a metre on a stage axis — each
- * selected head written at its own position plus its share. The desk holds where the heads
- * started; the ring shows the amount, 64 its 0.
- */
-export interface SelectionFanTarget {
-  type: "selectionFan"
-  axis: FanAxis
-}
-
-/**
- * The Speed of every Local FX painting a head of the desk selection, each whole (lighting7 fx-speed
- * plan D13): an encoder moves each a quarter of an octave a detent, a fader sets every one from ×¼
- * to ×4, picking up at the lead FX's Speed, which the ring shows.
- */
-export interface FxSpeedTarget {
-  type: "fxSpeed"
-}
-
-/** How a {@link SelectTargetTarget} press changes the desk selection. */
-export type SelectMode = "toggle" | "replace"
-
-/**
- * Put one group or fixture into (or out of) the desk selection on press. A `toggle` also fires a
- * `replace` when held past the backend's `SELECT_HOLD_MS`, so the LED is immediate and the hold
- * narrows; that is a router behaviour, not a second target.
- */
-export interface SelectTargetTarget {
-  type: "selectTarget"
-  target: CueTarget
-  mode: SelectMode
-}
-
-/** Empty the desk selection on press. */
-export interface ClearSelectionTarget {
-  type: "clearSelection"
-}
-
-/** Locate every selected target on press; a second press releases them. */
-export interface LocateSelectionTarget {
-  type: "locateSelection"
-}
-
-/**
- * One group or fixture on a whole **channel strip**. The row is addressed by the strip id rather
- * than a control id and is never dispatched as it stands: it derives to the target each of the
- * strip's controls behaves as — fader and flash on the dimmer, select, encoder on the device's
- * current encoder bank. `lib/surfaceResolve.ts` is this side's copy of that rule.
- */
-export interface StripTarget {
-  type: "strip"
-  target: CueTarget
-}
-
-/**
- * Point the device's strip encoders at `attribute` on press. Applies to the device the button
- * is on, so the payload names no device; the LED is lit while this is that device's bank.
- */
-export interface EncoderBankSetTarget {
-  type: "encoderBankSet"
-  attribute: string
-  /**
-   * Which axis of a colour property the bank points the encoders at; absent is hue. The LED
-   * lights when the property **and** the axis match the device's bank.
-   */
-  colourAxis?: ColourAxis | null
-}
-
-// ─── Records on buttons ───────────────────────────────────────────────
-//
-// A named thing from the library, uuid-addressed, **each with exactly one behaviour** — see D6 in
-// `docs/plans/completed/midi-surface-plan.md`. Uuids rather than int ids because a binding has to survive a
-// clone or a cross-install import, which is what `FU-SYNC-BINDING-PAYLOAD-UUIDS` records.
-
-/**
- * Put a Look on **whole** — never onto the selection.
- *
- * The opposite choice from {@link PressPaletteTarget}, and for the reason that makes each of them
- * "one behaviour every press": a Look lands whole (absolute-looks plan D1) and a palette names no
- * targets of its own.
- */
-export interface ApplyLookTarget {
-  type: "applyLook"
-  lookUuid: string
-}
-
-/** A Look on whole (`on`) or every layer of it off; nothing if it already is so. */
-export interface LookSetTarget {
-  type: "lookSet"
-  lookUuid: string
-  on: boolean
-}
-
-/**
- * Press a template onto the **desk selection**, as a layer that tracks it — a palette chip's tap.
- *
- * A generic template with nothing selected is dropped: its rows take their targets from the press.
- * A per-fixture one names its own heads. The family mask is derived server-side from the
- * template's rows, so nothing here sends one.
- */
-export interface PressPaletteTarget {
-  type: "pressPalette"
-  paletteUuid: string
-}
-
-/**
- * Press a busk pad — its own bank's plan, solo siblings included, on the desk selection.
- *
- * The same press `POST /busk/pads/{id}/press` makes, through one `BuskPressService`, so a hardware
- * press and a screen press of one pad cannot diverge.
- */
-export interface PressPadTarget {
-  type: "pressPad"
-  padUuid: string
-}
-
-/**
- * Put the record on a **busk pad** into the desk's hand — the surface door of `hand.pickUp`
- * (multi-screen plan §3.5).
- *
- * A pad, not a record: a pad is the address a button already knows how to carry, and what it picks
- * up is exactly what it would otherwise press. The pick-up **replaces** whatever the hand held;
- * there is no "put it back" gesture on hardware or anywhere else.
- */
-export interface PickUpPadTarget {
-  type: "pickUpPad"
-  padUuid: string
-}
-
-/**
- * Place whatever the hand holds as a pad on the bank [bankUuid] names, then let go.
- *
- * The **one** place binding there is. A window places through its own mutation and then sends
- * `hand.drop` (D12); a button has no mutation of its own, so this runs the same append
- * `POST /busk/banks/{bankId}/pads` runs. An empty hand is a dropped press, not an error.
- *
- * There is deliberately no `handPlaceInSlot` and no layer-stack place: neither a cue slot nor the
- * programmer's layer stack has a uuid a binding could carry.
- */
-export interface HandPlaceInBankTarget {
-  type: "handPlaceInBank"
-  bankUuid: string
-}
-
-/** Let go of whatever the hand holds. A no-op on an empty hand, like every other drop. */
-export interface HandDropTarget {
-  type: "handDrop"
-}
-
-/**
- * The undo key as the surface's own source: the newer of the programmer's top step and the
- * surface's newest show change. A refusal does nothing; a surface cannot confirm.
- */
-export interface UndoTarget {
-  type: "undo"
-}
-
-/** The redo key as the surface's own source. */
-export interface RedoTarget {
-  type: "redo"
-}
-
-/** Undo the programmer's top step, whoever took it. */
-export interface ProgrammerUndoTarget {
-  type: "programmerUndo"
-}
-
-/** Show the next busk page, wrapping. Page-agnostic, so it names none. */
-export interface BuskPageNextTarget {
-  type: "buskPageNext"
-}
-
-/** Show the previous busk page, wrapping. */
-export interface BuskPagePrevTarget {
-  type: "buskPagePrev"
-}
-
-/** Show one named busk page. Its LED is lit while that page is the one showing. */
-export interface BuskPageSetTarget {
-  type: "buskPageSet"
-  pageUuid: string
-}
-
-/**
- * Set a desk window's busk **focus** — `split`, `pads` or `rig` — on press (busk-further plan D14).
- *
- * The window is named by its **registry name** (`windows.state`), since a binding cannot hold a
- * socket-minted row id: the desk sends one `windows.viewOptions {focus}` to **every** connected row
- * of that name (duplicate names are allowed, multi-screen plan D9), carrying the view that row
- * announced, so a window not on the busk view ignores it. A name matching no connected window is a
- * logged no-op with health `missingWindow`, re-evaluated as windows come and go. No LED: focus is
- * that window's own tab fact, not a desk state.
- */
-export interface BuskFocusSetTarget {
-  type: "buskFocusSet"
-  windowName: string
-  focus: BuskFocus
-}
-
-/** Fold or unfold a named desk window's busk side sheet on press — `{sheet: toggle}`, addressed and judged as [BuskFocusSetTarget]. */
-export interface BuskSheetToggleTarget {
-  type: "buskSheetToggle"
-  windowName: string
-}
-
-/** Step the whole desk selection one place along rig order, wrapping — `SubselectMode.NEXT`. */
-export interface SelectionNextTarget {
-  type: "selectionNext"
-}
-
-/** Step the whole desk selection one place back along rig order, wrapping — `SubselectMode.PREV`. */
-export interface SelectionPrevTarget {
-  type: "selectionPrev"
-}
-
-/**
- * Rewrite the desk selection's targets by [mode] on press — the Cells chip on a button, through the
- * same `DeskSelection.subselect` the chip's frame reaches. A sub-selection is not a state the desk
- * keeps, so there is no LED (`FU-SURFACE-SUBSELECT-LED`).
- */
-export interface SelectionCellsTarget {
-  type: "selectionCells"
-  mode: SubselectMode
-}
-
-/**
- * A persisted payload whose `type` this build does not know — produced only by the backend's
- * tolerant per-row decode and re-encoded verbatim, so an older desk reading a newer project keeps
- * the row instead of failing the load. It reads as health `unknownTarget`, draws dead, and is
- * rebindable; that is the whole point of it existing rather than the row being dropped.
- */
-export interface UnknownTarget {
-  type: "unknown"
-  targetType: string
-  rawPayload: string
-}
-
-export type BindingTarget =
-  | FixtureAttributeTarget
-  | GroupAttributeTarget
-  | CueStackGoTarget
-  | CueStackBackTarget
-  | CueStackPauseTarget
-  | CueStackGoToTarget
-  | CueStackStandbyTarget
-  | CueStackStopTarget
-  | FireCueTarget
-  | LooseCueSetTarget
-  | FireTriggerTarget
-  | FlashTarget
-  | BlackoutTarget
-  | BlackoutSetTarget
-  | GrandMasterToggleTarget
-  | GrandMasterLevelTarget
-  | GrandMasterFaderTarget
-  | StackFxAmountTarget
-  | SetBankTarget
-  | SpeedMasterBpmTarget
-  | SpeedMasterTapTarget
-  | SpeedMasterSetBpmTarget
-  | SpeedMasterScaleTarget
-  | SelectionAttributeTarget
-  | SelectionFanTarget
-  | FxSpeedTarget
-  | SelectTargetTarget
-  | ClearSelectionTarget
-  | LocateSelectionTarget
-  | StripTarget
-  | EncoderBankSetTarget
-  | ApplyLookTarget
-  | LookSetTarget
-  | PressPaletteTarget
-  | PressPadTarget
-  | PickUpPadTarget
-  | HandPlaceInBankTarget
-  | HandDropTarget
-  | UndoTarget
-  | RedoTarget
-  | ProgrammerUndoTarget
-  | BuskPageNextTarget
-  | BuskPagePrevTarget
-  | BuskPageSetTarget
-  | BuskFocusSetTarget
-  | BuskSheetToggleTarget
-  | SelectionNextTarget
-  | SelectionPrevTarget
-  | SelectionCellsTarget
-  | UnknownTarget
-
-// ─── The binding grammar (surface-setup plan session 1) ──────────────────────────────────
+// ─── The binding grammar  ──────────────────────────────────
 // Mirrors `midi/Binding.kt` and `midi/SurfaceFunctions.kt`: a binding is a function (`does`), the
-// subject it acts on and how a button drives it, at a control part. Every row the desk answers
-// carries it as `binding`, beside `target`, the old union the current screens read; the desk keeps
-// the two in step (`midi/SurfaceGrammar.kt`) until session 3 replaces those screens.
+// subject it acts on and how a button drives it, at a control part.
 
 /** A control's part: a fader's move, an encoder's turn or a button's press, or an encoder's push. */
 export type ControlPart = "MAIN" | "PUSH"
@@ -591,20 +99,6 @@ export interface SurfaceBinding {
   how?: How | null
 }
 
-/**
- * The rows the current screens show: one per control and layer, its main part where it has one,
- * else its push — which is where the desk put an encoder's button binding. A control with both
- * shows its main part; session 3's editor shows each part.
- */
-export function bindingsForScreens(bindings: ControlSurfaceBinding[]): ControlSurfaceBinding[] {
-  const shown = new Map<string, ControlSurfaceBinding>()
-  for (const binding of bindings) {
-    const key = `${binding.deviceTypeKey}\u0000${binding.controlId}\u0000${binding.bank ?? ""}`
-    const held = shown.get(key)
-    if (held === undefined || (held.part === "PUSH" && binding.part !== "PUSH")) shown.set(key, binding)
-  }
-  return bindings.filter((binding) => shown.get(`${binding.deviceTypeKey}\u0000${binding.controlId}\u0000${binding.bank ?? ""}`) === binding)
-}
 
 export type TakeoverPolicy = "IMMEDIATE" | "PICKUP"
 
@@ -650,7 +144,6 @@ export type BindingHealth =
   | { type: "missingWindow"; windowName: string }
   // The row the tolerant decode kept (see `UnknownTarget`). Dead, drawn, rebindable.
   | { type: "unknownTarget"; targetType: string }
-
 /** A single persisted binding. */
 export interface ControlSurfaceBinding {
   id: number
@@ -660,36 +153,10 @@ export interface ControlSurfaceBinding {
   part: ControlPart
   bank: string | null
   binding: SurfaceBinding
-  /** [binding] in the old union's words, which the current screens read and send. */
-  target: BindingTarget
-  targetType: string
   takeoverPolicy: TakeoverPolicy | null
   sortOrder: number
   health: BindingHealth
 }
-
-export interface CreateSurfaceBindingRequest {
-  deviceTypeKey: string
-  controlId: string
-  bank?: string | null
-  target: BindingTarget
-  takeoverPolicy?: TakeoverPolicy | null
-  sortOrder?: number
-}
-
-export interface UpdateSurfaceBindingRequest {
-  deviceTypeKey?: string
-  controlId?: string
-  /** `bankPresent: true` with `bank: null` clears the bank. */
-  bank?: string | null
-  bankPresent?: boolean
-  target?: BindingTarget
-  /** `takeoverPolicyPresent: true` with `takeoverPolicy: null` clears. */
-  takeoverPolicy?: TakeoverPolicy | null
-  takeoverPolicyPresent?: boolean
-  sortOrder?: number
-}
-
 // Device-type profile — discriminated union for the descriptor sub-types.
 
 export type FaderResolution = "SEVEN_BIT" | "FOURTEEN_BIT"
@@ -881,37 +348,130 @@ export interface BindingsChangeEvent {
   bindingId: number | null
 }
 
-export interface LearnCapturedEvent {
-  sessionId: string
+// ─── The served picture ────────────────────────────────────────────────────────────────────
+// Mirrors `midi/SurfaceMap.kt` and `midi/SurfaceCatalogue.kt`. The desk resolves, labels and judges
+// every control part; this side draws what it is sent and keeps no copy of the rules.
+
+/** Where a part's binding comes from: its own row, the strip it is on, or nothing. */
+export type PartSource = "DIRECT" | "STRIP" | "NONE"
+
+/** Where a function writes, in one word (D8). */
+export type WritesTo = "LOCAL" | "PLAYBACK" | "MASTER" | "TEMPO" | "DESK"
+
+/** One control part on one layer, as the desk resolved it. */
+export interface ResolvedPart {
+  from: PartSource
+  /** The row's id; on a strip control, the strip's row. */
+  bindingId?: number | null
+  /** The layer the row is stored on; absent for both. */
+  bank?: string | null
+  stripId?: string | null
+  does?: SurfaceDoes | null
+  on?: SurfaceSubject | null
+  how?: How | null
+  /** The catalogue entry `does` is; absent for an unreadable row. */
+  entry?: string | null
+  takeoverPolicy?: TakeoverPolicy | null
+  label?: string | null
+  subjectLabel?: string | null
+  colour?: string | null
+  writesTo?: WritesTo | null
+  /** What the control shows, in a sentence. */
+  shows?: string | null
+  health?: BindingHealth
+  healthText?: string | null
+}
+
+/** A part's key in a map frame: `"btn-36:MAIN"`. */
+export function partKey(controlId: string, part: ControlPart): string {
+  return `${controlId}:${part}`
+}
+
+/** One device type's map: layer (`""` for a profile with none) → part key → part. */
+export interface SurfaceMapFrame {
   projectId: number
   deviceTypeKey: string
+  layers: Record<string, Record<string, ResolvedPart>>
+}
+
+export type ControlKind = "CONTINUOUS" | "BUTTON"
+
+export type SubjectKind =
+  | "NONE" | "SELECTION" | "GROUP" | "FIXTURE" | "SLOT"
+  | "STACK" | "ENTRY" | "CUE" | "LOOK" | "PALETTE" | "PAD" | "BANK" | "PAGE" | "MASTER"
+
+export type ParamKind = "ATTRIBUTE" | "CHOICE" | "NUMBER" | "TEXT" | "RECORD" | "LAYER"
+
+export interface CatalogueParam {
+  key: string
+  label: string
+  kind: ParamKind
+  required?: boolean
+  default?: string | number | boolean | null
+  options?: { value: string | number | boolean; label: string }[]
+  min?: number | null
+  max?: number | null
+  record?: RecordKind | null
+}
+
+/** One function an editor offers (`GET /surface-functions`). */
+export interface CatalogueEntry {
+  id: string
+  /** The `does.type` a binding built from this entry carries. */
+  does: string
+  label: string
+  group: string
+  help: string
+  inputs: ControlKind[]
+  strip?: boolean
+  subjects: SubjectKind[]
+  hows: How[]
+  defaultHow: How | null
+  writesTo: WritesTo
+  params: CatalogueParam[]
+}
+
+/** The input a control's part feeds, or null for a part it does not have. Profile data, not a rule. */
+export function inputOf(control: ControlDescriptor, part: ControlPart): ControlKind | null {
+  switch (control.type) {
+    case "fader":
+      return part === "MAIN" ? "CONTINUOUS" : null
+    case "encoder":
+      return part === "MAIN" ? "CONTINUOUS" : control.pushNote != null ? "BUTTON" : null
+    case "button":
+      return part === "MAIN" ? "BUTTON" : null
+    case "bankButton":
+      return null
+  }
+}
+
+/** The parts a control has, main first. */
+export function partsOf(control: ControlDescriptor): ControlPart[] {
+  return (["MAIN", "PUSH"] as const).filter((part) => inputOf(control, part) != null)
+}
+
+/** This window's identify wait: what its banner draws. */
+export interface IdentifyState {
+  sessionId: string
+  waiting: boolean
+  deviceTypeKey?: string | null
+  deadlineMs?: number | null
+  /** How long the wait had left when the desk sent this; counted down on this browser's clock. */
+  remainingMs?: number | null
+  /** Why a wait ended without a capture: `cancelled` or `timeout`. */
+  reason?: string | null
+}
+
+/** The control part a touch named, sent to the window that waited for it only. */
+export interface IdentifyCapture {
+  sessionId: string
+  deviceTypeKey: string
+  displayKey: string
   controlId: string
-  /** The captured part: an encoder's push is its own. */
-  part?: ControlPart
+  part: ControlPart
 }
 
-export interface LearnStartedEvent {
-  sessionId: string
-  projectId: number
-  deviceTypeKey: string | null
-  deadlineMs: number
-}
-
-export interface LearnCancelledEvent {
-  sessionId: string
-  reason: string
-}
-
-export interface LearnErrorEvent {
-  sessionId: string | null
-  message: string
-}
-
-export interface LearnCommittedEvent {
-  sessionId: string
-  bindingId: number
-  projectId: number
-}
+export type IdentifyEvent = ({ type: "state" } & IdentifyState) | ({ type: "captured" } & IdentifyCapture)
 
 export interface SurfacesWsApi {
   /** List of all attached MIDI devices (matched + unmatched). */
@@ -922,55 +482,36 @@ export interface SurfacesWsApi {
   subscribePickup(fn: (change: PickupChange) => void): Subscription
   /**
    * Every attached device's control state, already folded: `surfaceControls.state` replaces one
-   * device's map wholesale, `surfaceControls.changed` merges its partial delta into it. The fold
-   * lives here rather than in the store for the reason `surfaceBank.changed`'s does — one place
-   * that knows how the two frames of a family compose — and because merging is what keeps an
-   * untouched control's object identity stable across a 20 Hz delta, which is what lets a
-   * memoized control skip the render.
+   * device's map wholesale, `surfaceControls.changed` merges its partial delta into it. Merging is
+   * what keeps an untouched control's object identity stable across a 20 Hz delta, which is what
+   * lets a memoized control skip the render.
    */
   subscribeControls(fn: (controls: SurfaceControlStates) => void): Subscription
   /** What each device's strip encoders drive, `displayKey` → selection; absent is `dimmer`. */
   subscribeEncoderBanks(fn: (attributes: Record<string, EncoderBankSelection>) => void): Subscription
+  /** Every device type's served map, keyed by its type; each frame replaces its type's. */
+  subscribeMaps(fn: (maps: Readonly<Record<string, SurfaceMapFrame>>) => void): Subscription
 
-  // The last snapshot of each cached stream, or null before its first frame. `subscribeX`
-  // already replays that snapshot synchronously to a new subscriber; these exist so a reader
-  // that is not a subscriber — an RTK Query `queryFn` seeding its cache entry — can have the
-  // same value without one. Mirrors `speedMasters.getState()`. There is deliberately no
-  // pickup equivalent: pickup is an event stream with no snapshot to replay.
+  // The last snapshot of each cached stream, or null before its first frame, for a reader that is
+  // not a subscriber — an RTK Query `queryFn` seeding its cache entry.
   getDevices(): SurfaceDeviceInfo[] | null
   getBanks(): Record<string, string> | null
   getScaler(): ScalerState | null
   getControls(): SurfaceControlStates | null
   getEncoderBanks(): Record<string, EncoderBankSelection> | null
+  getMaps(): Readonly<Record<string, SurfaceMapFrame>> | null
 
   /** Binding list membership changed (added / updated / removed / reloaded). */
   subscribeBindingsChanged(fn: (event: BindingsChangeEvent) => void): Subscription
-  /** Learn session events scoped to this connection. */
-  subscribeLearn(fn: (event: LearnEvent) => void): Subscription
+  /** This connection's identify waits and captures. */
+  subscribeIdentify(fn: (event: IdentifyEvent) => void): Subscription
 
-  // Three `request*State()` senders stood here — `surfaceDevices.state`, `surfaceBank.state`,
-  // `surfaceScaler.state` — described as "request the initial snapshots when mounted". Nothing
-  // ever called them, and nothing needed to: `setupSurfaceSubscriptions` takes each snapshot as a
-  // StateFlow subscription, so the server sends all three on connect, and `subscribeCached` below
-  // replays the last one to a subscriber that arrives after the frame. The backend still handles
-  // the request messages, so add one back if a surface ever needs a re-read the socket doesn't
-  // volunteer.
-
-  /** Set one attached device's active bank (pass null to clear). */
-  setBank(displayKey: string, bank: string | null): void
   /**
-   * Start a MIDI Learn session; responses come back via `subscribeLearn`. False when the socket
-   * was down, so no `started` event is coming — the caller has a spinner to take down.
+   * Wait for a touch on the desk (D14): the next press or move is captured and not dispatched. False
+   * when the socket was down, so no banner frame is coming.
    */
-  beginLearn(projectId: number, deviceTypeKey?: string | null): boolean
-  cancelLearn(sessionId: string): void
-  /** False when the socket was down — see `beginLearn`, and the same spinner. */
-  commitLearn(
-    sessionId: string,
-    target: BindingTarget,
-    bank?: string | null,
-    takeoverPolicy?: TakeoverPolicy | null,
-  ): boolean
+  beginIdentify(deviceTypeKey?: string | null): boolean
+  cancelIdentify(sessionId: string): void
 
   /** Scaler state (blackout / grand master). */
   subscribeScaler(fn: (state: ScalerState) => void): Subscription
@@ -982,13 +523,6 @@ export interface ScalerState {
   blackoutEnabled: boolean
   grandMasterEnabled: boolean
 }
-
-export type LearnEvent =
-  | ({ type: "started" } & LearnStartedEvent)
-  | ({ type: "captured" } & LearnCapturedEvent)
-  | ({ type: "committed" } & LearnCommittedEvent)
-  | ({ type: "cancelled" } & LearnCancelledEvent)
-  | ({ type: "error" } & LearnErrorEvent)
 
 type InboundMessage =
   | { type: "surfaceDevices.state"; devices: SurfaceDeviceInfo[] }
@@ -1007,40 +541,28 @@ type InboundMessage =
   | { type: "surfaceEncoderBank.state"; attributes: Record<string, EncoderBankSelection> }
   | ({ type: "surfaceBank.bindingsChanged" } & BindingsChangeEvent)
   | ({ type: "surfaceScaler.state" } & ScalerState)
-  | ({ type: "surfaceLearn.started" } & LearnStartedEvent)
-  | ({ type: "surfaceLearn.captured" } & LearnCapturedEvent)
-  | ({ type: "surfaceLearn.committed" } & LearnCommittedEvent)
-  | ({ type: "surfaceLearn.cancelled" } & LearnCancelledEvent)
-  | ({ type: "surfaceLearn.error" } & LearnErrorEvent)
-
-const LEARN_TYPE_MAP: Record<string, LearnEvent["type"]> = {
-  "surfaceLearn.started": "started",
-  "surfaceLearn.captured": "captured",
-  "surfaceLearn.committed": "committed",
-  "surfaceLearn.cancelled": "cancelled",
-  "surfaceLearn.error": "error",
-}
+  | ({ type: "surfaceMap.state" } & SurfaceMapFrame)
+  | ({ type: "surfaceIdentify.state" } & IdentifyState)
+  | ({ type: "surfaceIdentify.captured" } & IdentifyCapture)
 
 export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi {
   const devices = createWsSubscribable<SurfaceDeviceInfo[]>()
   const banks = createWsSubscribable<Record<string, string>>()
   const pickup = createWsSubscribable<PickupChange>()
   const bindings = createWsSubscribable<BindingsChangeEvent>()
-  const learn = createWsSubscribable<LearnEvent>()
+  const identify = createWsSubscribable<IdentifyEvent>()
   const scaler = createWsSubscribable<ScalerState>()
   const controls = createWsSubscribable<SurfaceControlStates>()
   const encoderBanks = createWsSubscribable<Record<string, EncoderBankSelection>>()
+  const maps = createWsSubscribable<Readonly<Record<string, SurfaceMapFrame>>>()
 
-  // Cached latest snapshots so newly-mounted subscribers can read current
-  // state synchronously without a round-trip.
   let lastDevices: SurfaceDeviceInfo[] | null = null
   let lastBanks: Record<string, string> | null = null
   let lastScaler: ScalerState | null = null
   let lastControls: SurfaceControlStates | null = null
   let lastEncoderBanks: Record<string, EncoderBankSelection> | null = null
+  let lastMaps: Readonly<Record<string, SurfaceMapFrame>> | null = null
 
-  // No state requests on open: the server pushes `surfaceDevices.state`,
-  // `surfaceBank.state` and `surfaceScaler.state` per connection.
   conn.subscribe((evType, _ev, frame) => {
     if (evType !== "message") return
 
@@ -1057,9 +579,6 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
         banks.notify(parsed.activeBanks)
         break
       case "surfaceBank.changed": {
-        // Apply the delta locally; the server also pushes a fresh
-        // `surfaceDevices.state` via its combine() flow so that channel
-        // stays consistent independently.
         const next: Record<string, string> = { ...(lastBanks ?? {}) }
         if (parsed.newBank == null) delete next[parsed.displayKey]
         else next[parsed.displayKey] = parsed.newBank
@@ -1068,8 +587,7 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
         break
       }
       // A whole device: the connect frame, and the frame after every full resync. An empty
-      // `controls` map means the device detached, so the key goes rather than being left behind
-      // as an attached-looking device with no controls.
+      // `controls` map means the device detached, so the key goes.
       case "surfaceControls.state": {
         const next = { ...(lastControls ?? {}) }
         if (Object.keys(parsed.controls).length === 0) delete next[parsed.displayKey]
@@ -1078,8 +596,6 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
         controls.notify(next)
         break
       }
-      // Only the controls that moved, at their current state. Merged, so every control the delta
-      // does not name keeps the object identity a memoized row is comparing against.
       case "surfaceControls.changed": {
         const device = lastControls?.[parsed.displayKey]
         const next = {
@@ -1116,12 +632,21 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
         }
         scaler.notify(lastScaler)
         break
-      default: {
-        const outType = LEARN_TYPE_MAP[parsed.type]
-        if (outType) {
-          const { type: _ignored, ...rest } = parsed
-          learn.notify({ type: outType, ...rest } as LearnEvent)
-        }
+      case "surfaceMap.state": {
+        const { type: _type, ...frame } = parsed
+        lastMaps = { ...(lastMaps ?? {}), [frame.deviceTypeKey]: frame }
+        maps.notify(lastMaps)
+        break
+      }
+      case "surfaceIdentify.state": {
+        const { type: _type, ...rest } = parsed
+        identify.notify({ type: "state", ...rest })
+        break
+      }
+      case "surfaceIdentify.captured": {
+        const { type: _type, ...rest } = parsed
+        identify.notify({ type: "captured", ...rest })
+        break
       }
     }
   })
@@ -1142,32 +667,20 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
     subscribePickup: pickup.api.subscribe,
     subscribeControls: subscribeCached(controls.api, () => lastControls),
     subscribeEncoderBanks: subscribeCached(encoderBanks.api, () => lastEncoderBanks),
+    subscribeMaps: subscribeCached(maps.api, () => lastMaps),
     getDevices: () => lastDevices,
     getBanks: () => lastBanks,
     getScaler: () => lastScaler,
     getControls: () => lastControls,
     getEncoderBanks: () => lastEncoderBanks,
+    getMaps: () => lastMaps,
     subscribeBindingsChanged: bindings.api.subscribe,
-    subscribeLearn: learn.api.subscribe,
+    subscribeIdentify: identify.api.subscribe,
     subscribeScaler: subscribeCached(scaler.api, () => lastScaler),
-    setBank: (displayKey, bank) =>
-      sendGesture(conn, { type: "surfaceBank.set", displayKey, bank }),
-    beginLearn: (projectId, deviceTypeKey) =>
-      sendGesture(conn, {
-        type: "surfaceLearn.begin",
-        projectId,
-        deviceTypeKey: deviceTypeKey ?? null,
-      }),
-    cancelLearn: (sessionId) =>
-      sendGesture(conn, { type: "surfaceLearn.cancel", sessionId }),
-    commitLearn: (sessionId, target, bank, takeoverPolicy) =>
-      sendGesture(conn, {
-        type: "surfaceLearn.commit",
-        sessionId,
-        target,
-        bank: bank ?? null,
-        takeoverPolicy: takeoverPolicy ?? null,
-      }),
+    beginIdentify: (deviceTypeKey) =>
+      sendGesture(conn, { type: "surfaceIdentify.begin", deviceTypeKey: deviceTypeKey ?? null }),
+    cancelIdentify: (sessionId) =>
+      sendGesture(conn, { type: "surfaceIdentify.cancel", sessionId }),
     setBlackout: (enabled) =>
       sendGesture(conn, { type: "surfaceScaler.setBlackout", enabled }),
     setGrandMaster: (enabled) =>

@@ -1,5 +1,4 @@
-import type { LayoutRegion, StripDefinition } from "@/store/surfaces"
-import type { StripControl } from "@/lib/surfaceResolve"
+import type { LayoutRegion } from "@/store/surfaces"
 
 /**
  * The arithmetic behind the panel picture, kept out of the components so it can be checked
@@ -69,42 +68,6 @@ export function knobPointer(dotIndex: number): { x: number; y: number } {
     x: RING_CENTRE + length * Math.sin(rad),
     y: RING_CENTRE - length * Math.cos(rad),
   }
-}
-
-/**
- * Which strip, if any, each column of a region is a picture of.
- *
- * Derived from the data rather than from the region being called `strips`, so a second device's
- * profile needs no component here and the right-hand block correctly answers nothing.
- *
- * The rule is **claimed by exactly one strip**, not *every control belongs to it*. A strip declares
- * four roles and a physical channel strip has more buttons than that: the X-Touch's column 0 is
- * `enc-1`, `btn-1` (the strip's flash), `btn-9`, `btn-17`, `fader-1`, `btn-25` (its select) — two
- * of six unclaimed, because the profile leaves them free for fixed bindings. Requiring every cell
- * meant this function returned an **empty map** for the only profile that has strips, so the
- * backdrop it exists to place never rendered on real hardware and there was nothing to outline as
- * a drop target. Unclaimed controls sit in the strip's column and read as part of it; two different
- * strips in one column would not, and still answer null.
- */
-export function columnStrips(
-  region: LayoutRegion,
-  stripControls: Map<string, StripControl>,
-): Map<number, StripDefinition> {
-  const byColumn = new Map<number, StripDefinition | null>()
-  for (const cell of region.cells) {
-    const strip = stripControls.get(cell.controlId)?.strip
-    if (strip == null) continue
-    if (!byColumn.has(cell.col)) {
-      byColumn.set(cell.col, strip)
-      continue
-    }
-    // A column two strips share is a picture of neither.
-    if (byColumn.get(cell.col)?.id !== strip.id) byColumn.set(cell.col, null)
-  }
-
-  const result = new Map<number, StripDefinition>()
-  for (const [col, strip] of byColumn) if (strip) result.set(col, strip)
-  return result
 }
 
 /** How many rows a region's cells occupy — the grid needs it to span a column backdrop. */

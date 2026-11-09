@@ -1,87 +1,56 @@
 import { useMemo } from "react"
 import { useParams } from "react-router"
-import { useSurfaceBindingsQuery } from "@/store/surfaces"
+import { useSurfaceBindingsQuery, type ControlSurfaceBinding } from "@/store/surfaces"
 import { BoundControlBadge } from "./BoundControlBadge"
-import { effectiveTarget } from "./targetUtils"
-import { STRIP_FADER_ATTRIBUTE } from "@/lib/surfaceResolve"
 
 /**
- * Renders a small chip row listing every surface-binding whose target is a
- * `fixtureAttribute` on this fixture. Silent when nothing is bound.
+ * The attribute a binding drives on [subject] — a level's or a flash's, or a strip's fader, which
+ * drives the dimmer — or null when it drives none there.
  */
-export function FixtureBoundControlsRow({ fixtureKey }: { fixtureKey: string }) {
+function attributeOn(binding: ControlSurfaceBinding, type: "fixture" | "group", key: string): string | null {
+  const on = binding.binding.on
+  if (on?.type !== type || on.key !== key) return null
+  const does = binding.binding.does
+  if (does.type === "level" || does.type === "flash") return does.attribute
+  if (does.type === "strip") return "dimmer"
+  return null
+}
+
+function useBoundByAttribute(type: "fixture" | "group", key: string) {
   const { projectId } = useParams()
   const projectIdNum = Number(projectId)
   const { data: bindings } = useSurfaceBindingsQuery(projectIdNum, { skip: !projectIdNum })
-
-  const byAttribute = useMemo(() => {
-    const map = new Map<string, typeof bindings>()
+  return useMemo(() => {
+    const map = new Map<string, ControlSurfaceBinding[]>()
     for (const b of bindings ?? []) {
-      const eff = effectiveTarget(b.target)
-      if (eff.type !== "fixtureAttribute" || eff.fixtureKey !== fixtureKey) continue
-      const list = map.get(eff.attribute) ?? []
-      list.push(b)
-      map.set(eff.attribute, list)
+      const attribute = attributeOn(b, type, key)
+      if (attribute == null) continue
+      map.set(attribute, [...(map.get(attribute) ?? []), b])
     }
     return map
-  }, [bindings, fixtureKey])
+  }, [bindings, type, key])
+}
 
+function BoundRows({ byAttribute }: { byAttribute: Map<string, ControlSurfaceBinding[]> }) {
   if (byAttribute.size === 0) return null
-
   return (
     <div className="flex flex-wrap items-center gap-1.5 -mt-1">
       {Array.from(byAttribute.entries()).map(([attribute, list]) => (
         <div key={attribute} className="flex items-center gap-1">
           <span className="text-[10px] text-muted-foreground font-mono">{attribute}:</span>
-          <BoundControlBadge
-            match={{ type: "fixtureAttribute", fixtureKey, attribute }}
-            preFiltered={list}
-          />
+          <BoundControlBadge bindings={list} />
         </div>
       ))}
     </div>
   )
 }
 
-/**
- * The group sheet's twin: every surface binding whose target is a `groupAttribute` on this group —
- * the badges `GroupCard` drew beside each group visualiser's name until the group sheet replaced
- * them (fixture-fx-sheets plan session 4). Silent when nothing is bound.
- */
+/** Every surface binding that drives an attribute of this fixture. Silent when nothing is bound. */
+export function FixtureBoundControlsRow({ fixtureKey }: { fixtureKey: string }) {
+  return <BoundRows byAttribute={useBoundByAttribute("fixture", fixtureKey)} />
+}
+
+/** The group sheet's twin, a strip on the group counting as its dimmer. */
 export function GroupBoundControlsRow({ groupName }: { groupName: string }) {
-  const { projectId } = useParams()
-  const projectIdNum = Number(projectId)
-  const { data: bindings } = useSurfaceBindingsQuery(projectIdNum, { skip: !projectIdNum })
-
-  const byAttribute = useMemo(() => {
-    const map = new Map<string, typeof bindings>()
-    for (const b of bindings ?? []) {
-      const eff = effectiveTarget(b.target)
-      // A strip on the group drives its dimmer, as `matchesBindingTarget` reads it for the badge.
-      const attribute =
-        eff.type === "groupAttribute" && eff.groupName === groupName
-          ? eff.attribute
-          : eff.type === "strip" && eff.target.type === "group" && eff.target.key === groupName
-            ? STRIP_FADER_ATTRIBUTE
-            : null
-      if (attribute == null) continue
-      const list = map.get(attribute) ?? []
-      list.push(b)
-      map.set(attribute, list)
-    }
-    return map
-  }, [bindings, groupName])
-
-  if (byAttribute.size === 0) return null
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 -mt-1">
-      {Array.from(byAttribute.entries()).map(([attribute, list]) => (
-        <div key={attribute} className="flex items-center gap-1">
-          <span className="text-[10px] text-muted-foreground font-mono">{attribute}:</span>
-          <BoundControlBadge match={{ type: "groupAttribute", groupName, attribute }} preFiltered={list} />
-        </div>
-      ))}
-    </div>
-  )
+  return <BoundRows byAttribute={useBoundByAttribute("group", groupName)} />
 }

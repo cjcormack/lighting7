@@ -27,9 +27,6 @@ import kotlin.math.roundToInt
  * What cannot be translated — a type this build never knew, an int that resolves to nothing, a
  * malformed uuid — answers null, and the caller keeps the row's bytes as they are, which then read
  * as [Does.Unknown].
- *
- * [legacyTarget] is the reverse, for the screens session 3 replaces: a [Binding] in the old union's
- * words, ints included, which only the desk can supply.
  */
 object SurfaceGrammar {
     /** What resolves a cue or stack an old row names by int alone, in the row's own project. */
@@ -40,15 +37,6 @@ object SurfaceGrammar {
 
     /** No ints resolve: an archive's rows, whose ints are another desk's. */
     object NoInts : Ints
-
-    /** What the reverse needs that a binding no longer carries. */
-    interface Ids {
-        fun stackId(uuid: UUID): Int? = null
-        fun cueId(uuid: UUID): Int? = null
-
-        /** The stack an entry belongs to. */
-        fun entryStack(entry: UUID): UUID? = null
-    }
 
     /** A translated row: its new `target_type`, payload and part. */
     data class Row(val targetType: String, val payload: String, val part: ControlPart)
@@ -218,124 +206,6 @@ object SurfaceGrammar {
         ColourAxis.SATURATION -> "saturation"
         ColourAxis.BRIGHTNESS -> "brightness"
     }
-
-    /**
-     * [binding] in the old union's words, for the screens session 3 replaces. [deviceTypeKey] is the
-     * row's device (a layer button named its device), and [button] whether the part is a button's (a
-     * grand master without a level was a fader there and a toggle on a button).
-     */
-    fun legacyTarget(binding: Binding, deviceTypeKey: String, button: Boolean, ids: Ids): JsonObject {
-        val on = binding.on
-        val how = binding.how
-        fun obj(type: String, fill: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit = {}) = buildJsonObject {
-            put("type", type)
-            fill()
-        }
-        fun uuidIn(kind: RecordKind) = on.recordUuid(kind)?.toString()
-        fun attributeTarget(attribute: String, axis: ColourAxis?): JsonObject = when (on) {
-            is Subject.Fixture -> obj("fixtureAttribute") { put("fixtureKey", on.key); put("attribute", attribute); axis?.let { put("colourAxis", serialName(it)) } }
-            is Subject.Group -> obj("groupAttribute") { put("groupName", on.key); put("attribute", attribute); axis?.let { put("colourAxis", serialName(it)) } }
-            else -> obj("selectionAttribute") { put("attribute", attribute); axis?.let { put("colourAxis", serialName(it)) } }
-        }
-        fun masterUuid(builder: kotlinx.serialization.json.JsonObjectBuilder) {
-            uuidIn(RecordKind.MASTER)?.let { builder.put("masterUuid", it) }
-        }
-        fun stackFields(builder: kotlinx.serialization.json.JsonObjectBuilder) {
-            val stack = on.recordUuid(RecordKind.STACK)
-            builder.put("stackId", stack?.let(ids::stackId) ?: 0)
-            stack?.let { builder.put("stackUuid", it.toString()) }
-        }
-        fun targetOf(): JsonObject = when (on) {
-            is Subject.Group -> buildJsonObject { put("type", TargetRef.Group.TYPE); put("key", on.key) }
-            is Subject.Fixture -> buildJsonObject { put("type", TargetRef.Fixture.TYPE); put("key", on.key) }
-            else -> buildJsonObject { put("type", TargetRef.Fixture.TYPE); put("key", "") }
-        }
-        return when (val does = binding.does) {
-            is Does.Level -> attributeTarget(does.attribute, does.axis)
-            is Does.Flash -> obj("flash") {
-                put("target", attributeTarget(does.attribute, null))
-                put("max", (does.percent * 255.0 / 100).roundToInt())
-            }
-            Does.Select -> obj("selectTarget") {
-                put("target", targetOf())
-                put("mode", if (how == How.REPLACE) "replace" else "toggle")
-            }
-            Does.Locate -> obj("locateSelection")
-            is Does.Fan -> obj("selectionFan") { put("axis", does.axis.name) }
-            Does.FxSpeed -> obj("fxSpeed")
-            is Does.Palette -> obj("pressPalette") { put("paletteUuid", does.palette.toString()) }
-            Does.Look -> when (how) {
-                How.ON, How.OFF -> obj("lookSet") { put("lookUuid", uuidIn(RecordKind.LOOK) ?: ""); put("on", how == How.ON) }
-                else -> obj("applyLook") { put("lookUuid", uuidIn(RecordKind.LOOK) ?: "") }
-            }
-            Does.Cue -> when (how) {
-                How.ON, How.OFF -> obj("looseCueSet") { put("cueUuid", uuidIn(RecordKind.CUE) ?: ""); put("on", how == How.ON) }
-                else -> obj("fireCue") {
-                    val cue = on.recordUuid(RecordKind.CUE)
-                    put("cueId", cue?.let(ids::cueId) ?: 0)
-                    cue?.let { put("cueUuid", it.toString()) }
-                }
-            }
-            Does.Pad -> obj("pressPad") { put("padUuid", uuidIn(RecordKind.PAD) ?: "") }
-            Does.PickUp -> obj("pickUpPad") { put("padUuid", uuidIn(RecordKind.PAD) ?: "") }
-            Does.Place -> obj("handPlaceInBank") { put("bankUuid", uuidIn(RecordKind.BANK) ?: "") }
-            Does.Drop -> obj("handDrop")
-            Does.Go -> obj("cueStackGo") { stackFields(this) }
-            Does.Back -> obj("cueStackBack") { stackFields(this) }
-            Does.Pause -> obj("cueStackPause") { stackFields(this) }
-            Does.Stop -> obj("cueStackStop") { put("stackUuid", uuidIn(RecordKind.STACK) ?: "") }
-            Does.GoTo, Does.Standby -> obj(if (does == Does.GoTo) "cueStackGoTo" else "cueStackStandby") {
-                val entry = on.recordUuid(RecordKind.ENTRY)
-                put("stackUuid", entry?.let(ids::entryStack)?.toString() ?: "")
-                put("entryUuid", entry?.toString() ?: "")
-            }
-            Does.FxAmount -> obj("stackFxAmount") { stackFields(this) }
-            is Does.Fire -> obj("fireTrigger") { put("fixtureKey", (on as? Subject.Fixture)?.key ?: ""); put("trigger", does.trigger) }
-            Does.Blackout -> when (how) {
-                How.ON, How.OFF -> obj("blackoutSet") { put("on", how == How.ON) }
-                else -> obj("blackout")
-            }
-            is Does.GrandMaster -> when {
-                does.level != null -> obj("grandMasterLevel") { put("level", does.level) }
-                button -> obj("grandMasterToggle")
-                else -> obj("grandMasterFader")
-            }
-            is Does.Tempo -> if (does.bpm != null) {
-                obj("speedMasterSetBpm") { masterUuid(this); put("bpm", does.bpm) }
-            } else {
-                obj("speedMasterBpm") { masterUuid(this); put("minBpm", does.minBpm); put("maxBpm", does.maxBpm) }
-            }
-            Does.Tap -> obj("speedMasterTap") { masterUuid(this) }
-            is Does.TempoScale -> obj("speedMasterScale") { masterUuid(this); put("factor", does.factor) }
-            is Does.Layer -> obj("setBank") { put("deviceTypeKey", deviceTypeKey); put("bank", does.layer) }
-            is Does.EncoderPage -> obj("encoderBankSet") { put("attribute", does.attribute); does.axis?.let { put("colourAxis", serialName(it)) } }
-            is Does.Undo -> obj(
-                when (does.kind) {
-                    UndoKind.UNDO -> "undo"
-                    UndoKind.REDO -> "redo"
-                    UndoKind.PROGRAMMER -> "programmerUndo"
-                },
-            )
-            is Does.BuskPage -> when {
-                on is Subject.Record -> obj("buskPageSet") { put("pageUuid", on.uuid.toString()) }
-                (does.step ?: 1) < 0 -> obj("buskPagePrev")
-                else -> obj("buskPageNext")
-            }
-            is Does.WindowFocus -> obj("buskFocusSet") { put("windowName", does.window); put("focus", does.focus) }
-            is Does.WindowSheet -> obj("buskSheetToggle") { put("windowName", does.window) }
-            is Does.SelectionStep -> when (does.step) {
-                SelectionMove.CLEAR -> obj("clearSelection")
-                SelectionMove.NEXT -> obj("selectionNext")
-                SelectionMove.PREV -> obj("selectionPrev")
-                else -> obj("selectionCells") { put("mode", does.step.name) }
-            }
-            Does.Strip -> obj("strip") { put("target", targetOf()) }
-            is Does.Unknown -> obj("unknown") { put("targetType", does.storedType); put("rawPayload", does.rawPayload) }
-        }
-    }
-
-    /** The old union's discriminator of [legacyTarget]'s answer. */
-    fun legacyType(target: JsonObject): String = target.string("type") ?: "unknown"
 
     private fun JsonObject.value(key: String): JsonPrimitive? = (this[key] as? JsonPrimitive)?.takeUnless { it is JsonNull }
 

@@ -151,6 +151,15 @@ export interface SheetColumn<Row extends SheetRow, C extends string = string, V 
    */
   write?: (rows: readonly Row[], value: unknown) => boolean
   /**
+   * Whether this row takes **this** value — the check [takesValue] cannot make, because it depends
+   * on what is being written: a surface's *On* takes a group on a level and refuses one on a GO. A
+   * commit drops the rows it refuses before [write], and hands them to [refused] to be named.
+   * Absent, every row that [takesValue] takes it.
+   */
+  accepts?: (row: Row, value: unknown) => boolean
+  /** Name the rows [accepts] refused a commit, after the rest were written. */
+  refused?: (rows: readonly Row[], value: unknown) => void
+  /**
    * The read-out sentence for the rows the kit dropped from a commit in this column —
    * *M2 and M4 follow M1 · skipped*. Absent, the kit names them through the sheet's `rowName`
    * (`skippedNote`). A column overrides it where *why* is worth saying: the rows it drops all fail
@@ -242,6 +251,11 @@ export function takesValue<Row extends SheetRow, C extends string>(column: Sheet
   return row.divider == null && column.value(row) !== undefined
 }
 
+/** Does this row take this value — [takesValue], then the column's [SheetColumn.accepts]. */
+export function acceptsValue<Row extends SheetRow, C extends string>(column: SheetColumn<Row, C>, row: Row, value: unknown): boolean {
+  return takesValue(column, row) && (column.accepts?.(row, value) ?? true)
+}
+
 /** A batch split into the rows a column writes and the rows it skips, both in visible order. */
 export function splitBatch<Row extends SheetRow, C extends string>(
   column: SheetColumn<Row, C>,
@@ -277,8 +291,9 @@ export function skippedNote(names: readonly string[]): string {
  * writes. Returns how many columns took it.
  *
  * **Rows with nothing to set in a column are dropped before its `write`** (`takesValue`): a
- * follower's BPM, master 1's Follows, a snap cue's Curve. A column left with no rows is not
- * written at all.
+ * follower's BPM, master 1's Follows, a snap cue's Curve. So are rows the column's `accepts`
+ * refuses this value, which are then named through its `refused`. A column left with no rows is
+ * not written at all.
  */
 export function commitToSelectedCells<Row extends SheetRow, C extends string>(
   groups: readonly { col: C; rows: readonly Row[] }[],
@@ -292,9 +307,10 @@ export function commitToSelectedCells<Row extends SheetRow, C extends string>(
     const column = columns.find((c) => c.key === col)
     if (!column?.write) continue
     if (col !== origin && (originKind == null || column.kind !== originKind)) continue
-    const taken = rows.filter((row) => takesValue(column, row))
-    if (taken.length === 0) continue
-    if (column.write(taken, value)) written += 1
+    const taken = rows.filter((row) => acceptsValue(column, row, value))
+    const refused = rows.filter((row) => takesValue(column, row) && !taken.includes(row))
+    if (taken.length > 0 && column.write(taken, value)) written += 1
+    if (refused.length > 0) column.refused?.(refused, value)
   }
   return written
 }

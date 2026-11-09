@@ -1,32 +1,21 @@
 import { memo, useMemo } from "react"
-import { useDroppable } from "@dnd-kit/core"
-import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type {
   BankButtonControl,
   ButtonControl,
   ControlDescriptor,
   ControlState,
-  ControlSurfaceBinding,
   ControlSurfaceType,
   EncoderControl,
   FaderControl,
   LayoutRegion,
   PickupChange,
-  StripDefinition,
-  EncoderBankSelection,
+  ResolvedPart,
 } from "@/store/surfaces"
-import type { ResolvedControl, SurfaceBindingIndex } from "@/lib/surfaceResolve"
-import { activeBindingAt, resolveControl } from "@/lib/surfaceResolve"
-import { canLand, controlKinds, type SurfaceDragData } from "@/lib/surfaceDrop"
-import { describeBindingTarget, type RecordBindingOptions } from "./recordOptions"
-import { bindingTargetColour } from "./targetColour"
-import { NO_TARGET_COLOURS, type TargetColours } from "@/lib/targetColours"
 import { colourVar, FIXTURE_COLOUR_LABELS, type FixtureColour } from "@/lib/fixtureColours"
 import {
   FADER_FRAME_HEIGHT,
   RING_DOTS,
-  columnStrips,
   faderCapTop,
   faderFillHeight,
   knobPointer,
@@ -43,37 +32,30 @@ import {
  * is profile data** (`ControlSurfaceType.layout`), so a second device is one `.kt` file in
  * lighting7 and no component here; and every state a control shows comes from the
  * `surfaceControls` stream, which is **what the hardware was told** — never a recomputation from
- * DMX. If the picture and the desk disagree, the publisher is wrong, and that is the bug worth
- * finding rather than papering over here (plan D7).
+ * DMX (plan D7).
  *
- * What a control *is* comes from `lib/surfaceResolve.ts`, not from the binding list directly: a
- * strip is one row covering four controls, so the label under a fader is derived, and a control
- * with its own binding beats the strip it sits on.
+ * What a control *does* — its label, its colour, whether it is dead — is the desk's served map
+ * (`surfaceMap.state`, surface-setup plan D15), read for the layer being viewed. Nothing here
+ * resolves a binding.
  */
 
 export interface SurfacePanelProps {
   profile: ControlSurfaceType
   /** This device's controls, keyed by `controlId`. */
   controls: Readonly<Record<string, ControlState>>
-  index: SurfaceBindingIndex
-  activeBank: string | null
-  encoderBank: EncoderBankSelection
+  /** The viewed layer's parts, keyed `controlId:PART`. */
+  parts: Readonly<Record<string, ResolvedPart>>
+  /** The layer being viewed, which a layer button lights. */
+  viewedLayer: string | null
+  /**
+   * The viewed layer is not the one the device is on, so the live state drawn — positions, LEDs —
+   * is the other layer's: drawn dimmed (D13).
+   */
+  dimmed?: boolean
   /** Soft-takeover state for this device, keyed by `controlId`. */
   pickups: Readonly<Record<string, PickupChange>>
   selectedControlId: string | null
   onSelectControl: (controlId: string) => void
-  /** *Edit bindings* is on: controls take drops and bound rows grow a remove cross. */
-  editing: boolean
-  /** The surface drag in flight, or null — what decides which droppables are live. */
-  lifted: SurfaceDragData | null
-  onRemoveBinding: (bindingId: number) => void
-  /** Resolves a record-addressed binding's uuid to a name — see `SurfaceInspector`'s `describe`. */
-  records: RecordBindingOptions
-  /**
-   * The rig's colours (`useTargetColours`), which the label under a control takes from the fixture
-   * or group it drives. Stable until a colour moves, so the memoised cells skip every frame.
-   */
-  colours?: TargetColours
 }
 
 const UNBOUND: ControlState = {
@@ -84,20 +66,17 @@ const UNBOUND: ControlState = {
   ring: "none",
 }
 
+const NO_PART: ResolvedPart = { from: "NONE" }
+
 export function SurfacePanel({
   profile,
   controls,
-  index,
-  activeBank,
-  encoderBank,
+  parts,
+  viewedLayer,
+  dimmed = false,
   pickups,
   selectedControlId,
   onSelectControl,
-  editing,
-  lifted,
-  onRemoveBinding,
-  records,
-  colours = NO_TARGET_COLOURS,
 }: SurfacePanelProps) {
   const byControlId = useMemo(() => {
     const map = new Map<string, ControlDescriptor>()
@@ -111,6 +90,7 @@ export function SurfacePanel({
     <div
       className="inline-flex items-start gap-3 rounded-2xl border border-surface-panel-edge bg-surface-panel p-3"
       data-testid="surface-panel"
+      data-dimmed={dimmed || undefined}
     >
       {profile.layout.regions.map((region) => (
         <PanelRegion
@@ -118,17 +98,12 @@ export function SurfacePanel({
           region={region}
           byControlId={byControlId}
           controls={controls}
-          index={index}
-          activeBank={activeBank}
-          encoderBank={encoderBank}
+          parts={parts}
+          viewedLayer={viewedLayer}
+          dimmed={dimmed}
           pickups={pickups}
           selectedControlId={selectedControlId}
           onSelectControl={onSelectControl}
-          editing={editing}
-          lifted={lifted}
-          onRemoveBinding={onRemoveBinding}
-          records={records}
-          colours={colours}
         />
       ))}
     </div>
@@ -144,40 +119,14 @@ function PanelRegion({
   region,
   byControlId,
   controls,
-  index,
-  activeBank,
-  encoderBank,
+  parts,
+  viewedLayer,
+  dimmed = false,
   pickups,
   selectedControlId,
   onSelectControl,
-  editing,
-  lifted,
-  onRemoveBinding,
-  records,
-  colours = NO_TARGET_COLOURS,
 }: RegionProps) {
-  // A column whose controls all belong to one strip gets a backdrop spanning the whole column —
-  // the thing session 3b outlines when a group row is dragged over it. Derived from the strips
-  // rather than from the region's name, so the right-hand block correctly gets none.
-  const strips = useMemo(
-    () => columnStrips(region, index.stripControls),
-    [region, index.stripControls],
-  )
   const rows = regionRowCount(region)
-
-  // Resolved once per region rather than inline per cell, and this is what makes `ControlCell`'s
-  // memo actually skip: resolving in the map would mint a fresh `ResolvedControl` for every
-  // control on every frame, so no cell's props would ever compare equal and a fader drag would
-  // re-render the whole panel at 20 Hz — the exact cost the memo exists to avoid. Bindings and
-  // the two bank values change rarely, so this map is stable across the frames that matter.
-  const resolved = useMemo(() => {
-    const map = new Map<string, ResolvedControl | null>()
-    for (const cell of region.cells) {
-      map.set(cell.controlId, resolveControl(cell.controlId, index, activeBank, encoderBank))
-    }
-    return map
-  }, [region, index, activeBank, encoderBank])
-
   return (
     <div
       className="grid gap-1.5"
@@ -187,271 +136,85 @@ function PanelRegion({
       }}
       data-region={region.name}
     >
-      {[...strips.entries()].map(([col, strip]) => (
-        <StripZone
-          key={`strip-${strip.id}`}
-          strip={strip}
-          col={col}
-          rows={rows}
-          editing={editing}
-          lifted={lifted}
-          // `activeBindingAt`, not `exactBindingAt`: this is the *reading* question, and a strip
-          // driven by a bank-agnostic row is drawn on every bank — so a cross that only saw the
-          // exact-bank row would leave a visibly bound strip with no way to unbind it.
-          binding={activeBindingAt(index, strip.id, activeBank)}
-          onRemoveBinding={onRemoveBinding}
-        />
-      ))}
       {region.cells.map((cell) => {
         const descriptor = byControlId.get(cell.controlId)
         if (!descriptor) return null
-        const hit = resolved.get(cell.controlId) ?? null
         return (
-          <ControlZone
-            key={cell.controlId}
-            descriptor={descriptor}
-            col={cell.col}
-            row={cell.row}
-            editing={editing}
-            lifted={lifted}
-            // Only a row the *control itself* owns can be crossed off here; a strip's row is
-            // crossed off on the strip, where one cross means one row rather than four controls.
-            ownBinding={hit?.via == null ? (hit?.binding ?? null) : null}
-            onRemoveBinding={onRemoveBinding}
-          >
+          <div key={cell.controlId} style={{ gridColumn: cell.col + 1, gridRow: cell.row + 1 }} className="relative min-w-0">
             <ControlCell
               descriptor={descriptor}
-              resolved={hit}
+              main={parts[`${cell.controlId}:MAIN`] ?? NO_PART}
+              push={parts[`${cell.controlId}:PUSH`] ?? NO_PART}
               state={controls[cell.controlId] ?? UNBOUND}
               pickup={pickups[cell.controlId]}
-              activeBank={activeBank}
+              dimmed={dimmed}
+              viewedLayer={viewedLayer}
               selected={selectedControlId === cell.controlId}
               onSelect={onSelectControl}
-              records={records}
-              colours={colours}
             />
-          </ControlZone>
+          </div>
         )
       })}
     </div>
   )
 }
 
-/**
- * The grid cell around one control: a plain wrapper in run mode, a drop zone while editing.
- *
- * **The droppable never lives inside `ControlCell`.** That cell is memoized precisely so a 20 Hz
- * `surfaceControls` delta re-renders only the controls that moved, and `useDroppable` re-renders
- * its host every time `isOver` flips — inside, a hover would cost the whole panel.
- *
- * Out here it costs something too, and that is why the two modes are **two components rather than
- * one with a `disabled` flag**: `PanelRegion` reads `controls[…]` and so re-renders on every frame,
- * which would re-run `useDroppable` for every control on the device sixty times a second while
- * nobody is dragging anything. Run mode is the state the panel spends its life in, and there is no
- * drop target in it at all, so it renders no hook. Switching modes remounts the wrappers, which is
- * what a mode switch is.
- */
-function ControlZone(props: ControlZoneProps) {
-  return props.editing ? <EditableControlZone {...props} /> : <PlainControlZone {...props} />
-}
-
-interface ControlZoneProps {
-  descriptor: ControlDescriptor
-  col: number
-  row: number
-  editing: boolean
-  lifted: SurfaceDragData | null
-  ownBinding: ControlSurfaceBinding | null
-  onRemoveBinding: (bindingId: number) => void
-  children: React.ReactNode
-}
-
-function PlainControlZone({ col, row, children }: ControlZoneProps) {
-  return (
-    <div style={{ gridColumn: col + 1, gridRow: row + 1 }} className="relative min-w-0">
-      {children}
-    </div>
-  )
-}
-
-/**
- * `disabled` is dnd-kit's own, and it is the half `canLand` cannot do: it keeps `over` — and so the
- * highlight — off a place the drop would refuse, rather than showing the operator a landing that
- * then does nothing.
- */
-function EditableControlZone({
-  descriptor,
-  col,
-  row,
-  lifted,
-  ownBinding,
-  onRemoveBinding,
-  children,
-}: ControlZoneProps) {
-  const kinds = useMemo(() => controlKinds(descriptor), [descriptor])
-  const drop = useMemo(
-    () => ({ type: "surface-control" as const, controlId: descriptor.controlId, kinds }),
-    [descriptor.controlId, kinds],
-  )
-  const eligible = lifted != null && canLand(lifted, drop)
-  const { setNodeRef, isOver } = useDroppable({
-    id: `surface-control:${descriptor.controlId}`,
-    data: drop,
-    disabled: !eligible,
-  })
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ gridColumn: col + 1, gridRow: row + 1 }}
-      className={cn(
-        "relative min-w-0 rounded-lg",
-        // A chip in flight that cannot land here says so by receding — nothing on the backend
-        // refuses a cue on a fader, so this dim is the whole warning.
-        lifted?.type === "surface-chip" && !eligible && "opacity-40",
-        isOver && "bg-primary/10 outline-2 outline-offset-2 outline-dashed outline-primary",
-      )}
-    >
-      {children}
-      {ownBinding && (
-        <RemoveCross
-          label={`Remove the binding on ${descriptor.label}`}
-          onClick={() => onRemoveBinding(ownBinding.id)}
-        />
-      )}
-    </div>
-  )
-}
-
-/**
- * The column backdrop behind a strip: its drop zone while a row is lifted, and where its one row
- * is crossed off.
- *
- * Split by mode for `ControlZone`'s reason — nine strips is nine fewer per-frame `useDroppable`
- * calls in run mode, where nothing can be dropped anyway.
- *
- * `pointer-events-none` on the backdrop so it never steals a click from the controls painted over
- * it — dnd-kit measures rects rather than hit-testing, so the droppable is unaffected — with the
- * cross opting back in.
- */
-function StripZone(props: StripZoneProps) {
-  if (!props.editing) {
-    return (
-      <div
-        className="pointer-events-none rounded-[10px]"
-        style={{ gridColumn: props.col + 1, gridRow: `1 / ${props.rows + 1}` }}
-        data-strip={props.strip.id}
-      />
-    )
-  }
-  return <EditableStripZone {...props} />
-}
-
-interface StripZoneProps {
-  strip: StripDefinition
-  col: number
-  rows: number
-  editing: boolean
-  lifted: SurfaceDragData | null
-  binding: ControlSurfaceBinding | null
-  onRemoveBinding: (bindingId: number) => void
-}
-
-function EditableStripZone({
-  strip,
-  col,
-  rows,
-  lifted,
-  binding,
-  onRemoveBinding,
-}: StripZoneProps) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: `surface-strip:${strip.id}`,
-    data: { type: "surface-strip", stripId: strip.id },
-    disabled: lifted?.type !== "surface-row",
-  })
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        "pointer-events-none relative rounded-[10px]",
-        isOver && "bg-primary/10 outline-2 outline-dashed outline-primary",
-      )}
-      style={{ gridColumn: col + 1, gridRow: `1 / ${rows + 1}` }}
-      data-strip={strip.id}
-    >
-      {binding && (
-        <RemoveCross
-          label={`Remove the ${strip.id} binding`}
-          onClick={() => onRemoveBinding(binding.id)}
-        />
-      )}
-    </div>
-  )
-}
-
-/** The busk pad's remove cross, at the top-left corner of whatever it is placed in. */
-function RemoveCross({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className="pointer-events-auto absolute -top-1.5 -left-1.5 z-10 grid size-[18px] place-items-center rounded-full border bg-muted text-muted-foreground hover:bg-destructive hover:text-destructive-foreground"
-    >
-      <X className="size-2.5" />
-    </button>
-  )
-}
-
 interface ControlCellProps {
   descriptor: ControlDescriptor
-  resolved: ResolvedControl | null
+  main: ResolvedPart
+  push: ResolvedPart
   state: ControlState
   pickup: PickupChange | undefined
-  activeBank: string | null
+  /** The live state is another layer's: drawn faint. */
+  dimmed: boolean
+  viewedLayer: string | null
   selected: boolean
   onSelect: (controlId: string) => void
-  records: RecordBindingOptions
-  colours: TargetColours
+}
+
+/** A part's label as the panel draws it, or null for a part nothing is bound to. */
+function partLabel(part: ResolvedPart): string | null {
+  return part.from === "NONE" ? null : (part.label ?? "—")
 }
 
 /**
  * Memoized on purpose: a `surfaceControls.changed` delta names only the controls that moved, and
  * the WS layer merges rather than rebuilds, so every untouched control's `state` keeps its
- * identity and skips the render. Without that pairing a fader drag re-renders the whole panel at
- * 20 Hz. `records` is safe alongside that: it is a `useRecordBindingOptions` result, stable across
- * every frame that only moves a channel value, and only changes identity when the Look/template/
- * busk-page libraries themselves do.
+ * identity and skips the render. A map frame keeps an unchanged part's identity only within one
+ * frame, which arrives at operator rate, never at 20 Hz.
  */
 const ControlCell = memo(function ControlCell({
   descriptor,
-  resolved,
+  main,
+  push,
   state,
   pickup,
-  activeBank,
+  dimmed,
+  viewedLayer,
   selected,
   onSelect,
-  records,
-  colours,
 }: ControlCellProps) {
-  const dead = resolved != null && resolved.binding.health.type !== "ok"
-  const label = resolved ? describeBindingTarget(resolved.target, records) : null
-  const colour = resolved ? bindingTargetColour(resolved.target, colours) : null
+  const shown = main.from === "NONE" && push.from !== "NONE" ? push : main
+  const pushOnly = shown === push && push !== main
+  const raw = partLabel(shown)
+  const label = raw == null ? null : pushOnly ? `Push · ${raw}` : raw
+  const dead = shown.from !== "NONE" && shown.health != null && shown.health.type !== "ok"
+  const colour = (shown.colour ?? null) as FixtureColour | null
   const common = { descriptor, state, label, colour, dead, selected, onSelect }
 
-  switch (descriptor.type) {
-    case "fader":
-      return <FaderCell {...common} descriptor={descriptor} pickup={pickup} />
-    case "encoder":
-      return <EncoderCell {...common} descriptor={descriptor} />
-    case "button":
-      return <ButtonCell {...common} descriptor={descriptor} />
-    case "bankButton":
-      return <BankButtonCell {...common} descriptor={descriptor} activeBank={activeBank} />
-  }
+  const cell = (() => {
+    switch (descriptor.type) {
+      case "fader":
+        return <FaderCell {...common} descriptor={descriptor} pickup={pickup} />
+      case "encoder":
+        return <EncoderCell {...common} descriptor={descriptor} />
+      case "button":
+        return <ButtonCell {...common} descriptor={descriptor} />
+      case "bankButton":
+        return <BankButtonCell {...common} descriptor={descriptor} viewedLayer={viewedLayer} />
+    }
+  })()
+  return dimmed ? <div className="opacity-60" data-live-dimmed>{cell}</div> : cell
 })
 
 interface CellCommon {
@@ -755,14 +518,13 @@ function ButtonCell({
 
 /**
  * A bank button is the profile's, never a binding's: it names the bank it switches to, and lights
- * while that bank is active.
+ * while that bank is the one being viewed.
  *
  * It draws its own label **whatever row sits on its control id**, because a binding there can never
  * fire: `SurfaceInputRouter.route` matches a bank button to `ResolvedInput.BankButton` and switches
  * the bank before resolving anything — "bank buttons short-circuit binding resolution", in its own
- * words. Showing a bound target here (as this cell did) promised a press that the desk does not
- * make; `controlKinds` returns `[]` for one so the library will not offer it either, and the
- * inspector says so for a row an older build or a hand edit left behind.
+ * words. The desk refuses a binding on one, and the inspector says so for a row an older build or a
+ * hand edit left behind.
  */
 function BankButtonCell({
   descriptor,
@@ -770,9 +532,9 @@ function BankButtonCell({
   label,
   selected,
   onSelect,
-  activeBank,
-}: CellCommon & { descriptor: BankButtonControl; activeBank: string | null }) {
-  const isActiveBank = activeBank === descriptor.bankId
+  viewedLayer,
+}: CellCommon & { descriptor: BankButtonControl; viewedLayer: string | null }) {
+  const isActiveBank = viewedLayer === descriptor.bankId
   // A row that resolves here is one an older build or a hand edit left behind. It is drawn as
   // **dead** rather than hidden: the picture's whole promise is that it mirrors the desk, and an
   // orphaned row that only the inspector mentions is one an operator scanning the surface would

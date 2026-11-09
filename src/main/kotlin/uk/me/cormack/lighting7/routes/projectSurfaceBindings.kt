@@ -1,6 +1,5 @@
 package uk.me.cormack.lighting7.routes
 
-import uk.me.cormack.lighting7.midi.EncoderBankState
 import io.ktor.http.*
 import io.ktor.resources.*
 import io.ktor.server.application.*
@@ -9,22 +8,17 @@ import io.ktor.server.resources.delete
 import io.ktor.server.resources.get
 import io.ktor.server.resources.patch
 import io.ktor.server.resources.post
+import io.ktor.server.resources.put
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonObject
 import uk.me.cormack.lighting7.models.AssignmentHealth
 import uk.me.cormack.lighting7.midi.Binding
 import uk.me.cormack.lighting7.midi.BindingRefused
-import uk.me.cormack.lighting7.midi.ControlKind
 import uk.me.cormack.lighting7.midi.ControlPart
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
 import uk.me.cormack.lighting7.midi.Does
-import uk.me.cormack.lighting7.midi.LegacyRefs
-import uk.me.cormack.lighting7.midi.SurfaceGrammar
-import uk.me.cormack.lighting7.midi.deriveStripBindings
-import uk.me.cormack.lighting7.midi.inputFor
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.state.State
 
@@ -36,70 +30,45 @@ import uk.me.cormack.lighting7.state.State
  *   - `GET    /api/rest/projects/{projectId}/surface-bindings/{bindingId}`
  *   - `PATCH  /api/rest/projects/{projectId}/surface-bindings/{bindingId}`
  *   - `DELETE /api/rest/projects/{projectId}/surface-bindings/{bindingId}`
- *   - `POST   /api/rest/projects/{projectId}/surface-bindings/{bindingId}/expand`
+ *   - `PUT    /api/rest/projects/{projectId}/surface-bindings/slot` — the editors' one write
+ *   - `DELETE /api/rest/projects/{projectId}/surface-bindings/slot`
  *
  * All mutations go through [ControlSurfaceBindingService], which keeps an in-memory cache
  * in sync with the DB and broadcasts [ControlSurfaceBindingService.BindingChange] events.
- *
- * A write carries a `binding`, or — from the screens session 3 replaces — a `target` in the old
- * union's words, which [SurfaceGrammar] translates with this project's ints; a row answers both
- * (`binding`, and `target` read back the same way). The bridge goes with those screens.
  */
 internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
     val service = state.controlSurfaceBindingService
 
     get<ProjectSurfaceBindingsResource> { resource ->
         withProject(state, resource.projectId) { project ->
-            val refs = LegacyRefs.of(state.database, project.id.value)
-            val list = service.list(project.id.value).map { it.toDto(refs) }
-            call.respond(list)
+            call.respond(service.list(project.id.value).map { it.toDto() })
         }
     }
 
     post<ProjectSurfaceBindingsResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val request = call.receive<CreateSurfaceBindingRequest>()
-            val refs = LegacyRefs.of(state.database, project.id.value)
-            val written = when (val read = readBinding(request.binding, request.target, request.deviceTypeKey, request.controlId, refs)) {
-                is BindingRead.Bad -> {
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(read.message))
-                    return@withProject
-                }
-                BindingRead.Absent -> {
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("A binding is required"))
-                    return@withProject
-                }
-                is BindingRead.Read -> read
-            }
-
-            val validationError =
-                validateRequestShape(request.deviceTypeKey, request.controlId, request.bank, written.binding)
-            if (validationError != null) {
-                call.respond(
-                    HttpStatusCode.BadRequest,
-                    ErrorResponse(validationError.message, code = validationError.code),
-                )
+            validateRequestShape(request.deviceTypeKey, request.controlId, request.bank, request.binding)?.let {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(it.message, code = it.code))
                 return@withProject
             }
-
             val takeoverPolicy = request.takeoverPolicy?.let { BindingTakeoverPolicy.parseOrNull(it) }
             if (request.takeoverPolicy != null && takeoverPolicy == null) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("Unknown takeoverPolicy: ${request.takeoverPolicy}"))
                 return@withProject
             }
-
             try {
                 val resolved = service.create(
                     projectId = project.id.value,
                     deviceTypeKey = request.deviceTypeKey,
                     controlId = request.controlId,
                     bank = request.bank,
-                    binding = written.binding,
+                    binding = request.binding,
                     takeoverPolicy = takeoverPolicy,
                     sortOrder = request.sortOrder ?: 0,
-                    part = request.part ?: written.part,
+                    part = request.part,
                 )
-                call.respond(HttpStatusCode.Created, resolved.toDto(refs))
+                call.respond(HttpStatusCode.Created, resolved.toDto())
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.Conflict, ErrorResponse(e.message ?: "Binding slot already taken"))
             } catch (e: IllegalArgumentException) {
@@ -108,10 +77,64 @@ internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
         }
     }
 
+    // The one write the editors use: whatever the slot holds becomes this binding.
+    put<ProjectSurfaceBindingSlotResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<SurfaceBindingSlotRequest>()
+            validateRequestShape(request.deviceTypeKey, request.controlId, request.layer, request.binding)?.let {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(it.message, code = it.code))
+                return@withProject
+            }
+            val takeoverPolicy = request.takeoverPolicy?.let { BindingTakeoverPolicy.parseOrNull(it) }
+            if (request.takeoverPolicy != null && takeoverPolicy == null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Unknown takeoverPolicy: ${request.takeoverPolicy}"))
+                return@withProject
+            }
+            val projectId = project.id.value
+            try {
+                val existing = service.rowAt(projectId, request.deviceTypeKey, request.controlId, request.part, request.layer)
+                val written = if (existing == null) {
+                    service.create(
+                        projectId = projectId,
+                        deviceTypeKey = request.deviceTypeKey,
+                        controlId = request.controlId,
+                        bank = request.layer,
+                        binding = request.binding,
+                        takeoverPolicy = takeoverPolicy,
+                        part = request.part,
+                    )
+                } else {
+                    service.update(
+                        projectId = projectId,
+                        bindingId = existing.id,
+                        binding = request.binding,
+                        takeoverPolicyUpdate = ControlSurfaceBindingService.FieldUpdate.Set(takeoverPolicy),
+                        part = request.part,
+                    )
+                }
+                if (written == null) call.respond(HttpStatusCode.NotFound, ErrorResponse("Binding not found"))
+                else call.respond(written.toDto())
+            } catch (e: IllegalStateException) {
+                call.respond(HttpStatusCode.Conflict, ErrorResponse(e.message ?: "Binding slot already taken"))
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, refusalResponse(e))
+            }
+        }
+    }
+
+    delete<ProjectSurfaceBindingSlotResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<SurfaceBindingSlotRef>()
+            val existing = service.rowAt(project.id.value, request.deviceTypeKey, request.controlId, request.part, request.layer)
+            if (existing != null && service.delete(project.id.value, existing.id)) call.respond(HttpStatusCode.NoContent)
+            else call.respond(HttpStatusCode.NotFound, ErrorResponse("Nothing is bound there"))
+        }
+    }
+
     get<ProjectSurfaceBindingResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val binding = service.get(project.id.value, resource.bindingId)
-            if (binding != null) call.respond(binding.toDto(LegacyRefs.of(state.database, project.id.value)))
+            if (binding != null) call.respond(binding.toDto())
             else call.respond(HttpStatusCode.NotFound, ErrorResponse("Binding not found"))
         }
     }
@@ -147,22 +170,11 @@ internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Binding not found"))
                 return@withProject
             }
-            val refs = LegacyRefs.of(state.database, project.id.value)
-            val deviceTypeKey = request.deviceTypeKey ?: existing.deviceTypeKey
-            val controlId = request.controlId ?: existing.controlId
-            val written = when (val read = readBinding(request.binding, request.target, deviceTypeKey, controlId, refs)) {
-                is BindingRead.Bad -> {
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(read.message))
-                    return@withProject
-                }
-                BindingRead.Absent -> null
-                is BindingRead.Read -> read
-            }
             val validationError = validateRequestShape(
-                deviceTypeKey = deviceTypeKey,
-                controlId = controlId,
+                deviceTypeKey = request.deviceTypeKey ?: existing.deviceTypeKey,
+                controlId = request.controlId ?: existing.controlId,
                 bank = if (request.bankPresent) request.bank else existing.bank,
-                binding = written?.binding ?: existing.binding,
+                binding = request.binding ?: existing.binding,
             )
             if (validationError != null) {
                 call.respond(
@@ -178,80 +190,17 @@ internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
                     bindingId = resource.bindingId,
                     deviceTypeKey = request.deviceTypeKey,
                     controlId = request.controlId,
-                    binding = written?.binding,
+                    binding = request.binding,
                     sortOrder = request.sortOrder,
                     bankUpdate = bankUpdate,
                     takeoverPolicyUpdate = takeoverPolicyUpdate,
-                    part = request.part ?: written?.part,
+                    part = request.part,
                 )
                 if (updated == null) {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("Binding not found"))
                 } else {
-                    call.respond(updated.toDto(refs))
+                    call.respond(updated.toDto())
                 }
-            } catch (e: IllegalStateException) {
-                call.respond(HttpStatusCode.Conflict, ErrorResponse(e.message ?: "Binding slot already taken"))
-            } catch (e: IllegalArgumentException) {
-                call.respond(HttpStatusCode.BadRequest, refusalResponse(e))
-            }
-        }
-    }
-
-    post<ProjectSurfaceBindingExpandResource> { resource ->
-        withProject(state, resource.parent.parent.projectId) { project ->
-            val projectId = project.id.value
-            val existing = service.get(projectId, resource.parent.bindingId)
-            if (existing == null) {
-                call.respond(HttpStatusCode.NotFound, ErrorResponse("Binding not found"))
-                return@withProject
-            }
-            if (existing.binding.does !is Does.Strip) {
-                call.respond(
-                    HttpStatusCode.BadRequest,
-                    ErrorResponse(
-                        "Binding ${existing.id} is not a strip binding",
-                        code = CODE_BINDING_CONTROL_NOT_STRIP,
-                    ),
-                )
-                return@withProject
-            }
-            val profile = ControlSurfaceRegistry.typeFor(existing.deviceTypeKey)
-            val strip = profile?.strips?.firstOrNull { it.id == existing.controlId }
-            if (strip == null) {
-                call.respond(
-                    HttpStatusCode.BadRequest,
-                    ErrorResponse("No strip '${existing.controlId}' on device '${existing.deviceTypeKey}'"),
-                )
-                return@withProject
-            }
-
-            // Derived at the encoder page the device the operator is looking at is on right now, so
-            // the four rows they end up with are the four bindings they could see a moment ago.
-            val attached = state.deviceMatcher.attached.value
-            val device = resource.displayKey?.takeIf { attached[it]?.typeKey == existing.deviceTypeKey }
-                ?: attached.entries.firstOrNull { it.value.typeKey == existing.deviceTypeKey }?.key
-            val derived = deriveStripBindings(
-                strip = strip,
-                on = existing.binding.on,
-                encoderBank = device?.let(state.encoderBankState::selectionFor) ?: EncoderBankState.DEFAULT,
-            )
-            try {
-                val created = service.replace(
-                    projectId = projectId,
-                    deleteIds = listOf(existing.id),
-                    creates = derived.map { (controlId, derived) ->
-                        ControlSurfaceBindingService.NewBinding(
-                            deviceTypeKey = existing.deviceTypeKey,
-                            controlId = controlId,
-                            bank = existing.bank,
-                            binding = derived,
-                            takeoverPolicy = existing.takeoverPolicy,
-                            sortOrder = existing.sortOrder,
-                        )
-                    },
-                )
-                val refs = LegacyRefs.of(state.database, projectId)
-                call.respond(HttpStatusCode.Created, created.map { it.toDto(refs) })
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.Conflict, ErrorResponse(e.message ?: "Binding slot already taken"))
             } catch (e: IllegalArgumentException) {
@@ -281,34 +230,6 @@ private fun refusalResponse(e: IllegalArgumentException) = ErrorResponse(
     e.message ?: "Invalid binding",
     code = (e as? BindingRefused)?.code,
 )
-
-/** A request's binding: given in the new grammar, translated from the old union, absent, or unreadable. */
-internal sealed interface BindingRead {
-    data class Read(val binding: Binding, val part: ControlPart?) : BindingRead
-    data object Absent : BindingRead
-    data class Bad(val message: String) : BindingRead
-}
-
-/**
- * The binding a write carries: [binding] as it is (its part left to the service), or [target], the
- * old union the screens session 3 replaces still send, through [SurfaceGrammar] with [refs] — on an
- * encoder, a button variant is its push, as the migration places one.
- */
-internal fun readBinding(
-    binding: Binding?,
-    target: JsonObject?,
-    deviceTypeKey: String,
-    controlId: String,
-    refs: SurfaceGrammar.Ints,
-): BindingRead {
-    if (binding != null && target != null) return BindingRead.Bad("Send a binding or a target, not both")
-    if (binding != null) return BindingRead.Read(binding, null)
-    if (target == null) return BindingRead.Absent
-    val translated = SurfaceGrammar.binding(target, refs)
-        ?: return BindingRead.Bad("The target ${SurfaceGrammar.legacyType(target)} does not name anything this show holds")
-    val descriptor = ControlSurfaceRegistry.typeFor(deviceTypeKey)?.control(controlId)
-    return BindingRead.Read(translated, SurfaceGrammar.partFor(descriptor, SurfaceGrammar.legacyType(target)))
-}
 
 /** A strip binding was bound to an ordinary control rather than to a strip id. */
 internal const val CODE_BINDING_STRIP_NEEDS_STRIP = "BINDING_STRIP_NEEDS_STRIP"
@@ -369,31 +290,19 @@ data class ProjectSurfaceBindingsResource(val projectId: String)
 @Resource("/{bindingId}")
 data class ProjectSurfaceBindingResource(val parent: ProjectSurfaceBindingsResource, val bindingId: Int)
 
-/**
- * `POST .../surface-bindings/{bindingId}/expand` — the inspector's *Fader only…*: replace a strip
- * binding with the individual bindings it was deriving, so the operator can then change one of
- * them. One transaction; answers the created rows.
- */
-@Resource("/expand")
-data class ProjectSurfaceBindingExpandResource(
-    val parent: ProjectSurfaceBindingResource,
-    /** The device whose encoder page the strip is expanded at; absent, the first attached device of the type. */
-    val displayKey: String? = null,
-)
+/** `PUT` / `DELETE .../surface-bindings/slot` — one control part on one layer, named in the body. */
+@Resource("/slot")
+data class ProjectSurfaceBindingSlotResource(val parent: ProjectSurfaceBindingsResource)
 
 // ─── DTOs ──────────────────────────────────────────────────────────────────
 
-/**
- * A new binding: [binding], or [target] in the old union's words. [part] null places it — an
- * encoder's push for a function only a button takes.
- */
+/** A new binding. [part] null places it — an encoder's push for a function only a button takes. */
 @Serializable
 data class CreateSurfaceBindingRequest(
     val deviceTypeKey: String,
     val controlId: String,
     val bank: String? = null,
-    val binding: Binding? = null,
-    val target: JsonObject? = null,
+    val binding: Binding,
     val part: ControlPart? = null,
     val takeoverPolicy: String? = null,
     val sortOrder: Int? = null,
@@ -411,17 +320,13 @@ data class UpdateSurfaceBindingRequest(
     val bank: String? = null,
     val bankPresent: Boolean = false,
     val binding: Binding? = null,
-    val target: JsonObject? = null,
     val part: ControlPart? = null,
     val takeoverPolicy: String? = null,
     val takeoverPolicyPresent: Boolean = false,
     val sortOrder: Int? = null,
 )
 
-/**
- * One binding row. [binding] is the binding; [target] and [targetType] say it in the old union's
- * words for the screens session 3 replaces.
- */
+/** One binding row. */
 @Serializable
 data class SurfaceBindingDto(
     val id: Int,
@@ -431,8 +336,6 @@ data class SurfaceBindingDto(
     val part: ControlPart,
     val bank: String?,
     val binding: Binding,
-    val target: JsonObject,
-    val targetType: String,
     val takeoverPolicy: String?,
     val sortOrder: Int,
     /**
@@ -443,21 +346,38 @@ data class SurfaceBindingDto(
     val health: AssignmentHealth = AssignmentHealth.Ok,
 )
 
-internal fun ControlSurfaceBindingService.ResolvedBinding.toDto(refs: SurfaceGrammar.Ids): SurfaceBindingDto {
-    val button = ControlSurfaceRegistry.typeFor(deviceTypeKey)?.control(controlId)?.inputFor(part) == ControlKind.BUTTON
-    val target = SurfaceGrammar.legacyTarget(binding, deviceTypeKey, button, refs)
-    return SurfaceBindingDto(
-        id = id,
-        projectId = projectId,
-        deviceTypeKey = deviceTypeKey,
-        controlId = controlId,
-        part = part,
-        bank = bank,
-        binding = binding,
-        target = target,
-        targetType = SurfaceGrammar.legacyType(target),
-        takeoverPolicy = takeoverPolicy?.name,
-        sortOrder = sortOrder,
-        health = health,
-    )
-}
+/**
+ * The slot write: [binding] at `(deviceTypeKey, controlId, part, layer)`, [layer] null for both
+ * layers, with [takeoverPolicy] as given (null is the control's default).
+ */
+@Serializable
+data class SurfaceBindingSlotRequest(
+    val deviceTypeKey: String,
+    val controlId: String,
+    val part: ControlPart = ControlPart.MAIN,
+    val layer: String? = null,
+    val binding: Binding,
+    val takeoverPolicy: String? = null,
+)
+
+/** A slot to clear. */
+@Serializable
+data class SurfaceBindingSlotRef(
+    val deviceTypeKey: String,
+    val controlId: String,
+    val part: ControlPart = ControlPart.MAIN,
+    val layer: String? = null,
+)
+
+internal fun ControlSurfaceBindingService.ResolvedBinding.toDto() = SurfaceBindingDto(
+    id = id,
+    projectId = projectId,
+    deviceTypeKey = deviceTypeKey,
+    controlId = controlId,
+    part = part,
+    bank = bank,
+    binding = binding,
+    takeoverPolicy = takeoverPolicy?.name,
+    sortOrder = sortOrder,
+    health = health,
+)

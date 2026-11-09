@@ -221,12 +221,3 @@ fun inferPart(descriptor: ControlDescriptor?, does: Does): ControlPart =
     if (descriptor is EncoderDescriptor && descriptor.pushNote != null &&
         ControlKind.CONTINUOUS !in does.spec.inputs && ControlKind.BUTTON in does.spec.inputs
     ) ControlPart.PUSH else ControlPart.MAIN
-
-/**
- * The part Learn binds: the part the operator [touched] when [does] takes its input, else where
- * [inferPart] places it, so turning an encoder to name it still binds a GO to its push.
- */
-fun learntPart(descriptor: ControlDescriptor?, touched: ControlPart, does: Does): ControlPart {
-    val input = descriptor?.inputFor(touched)
-    return if (input != null && input in does.spec.inputs) touched else inferPart(descriptor, does)
-}

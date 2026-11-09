@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicLong
  * `(projectId, deviceTypeKey, controlId, part, bank)` and resolved by [resolve] on each inbound
  * MIDI event, so the hot path is served from memory rather than touching the DB per event.
  *
- * Every write comes through here — the routes and MIDI Learn's commit — so the refusals live here:
+ * Every write comes through here — the routes — so the refusals live here:
  * a binding its function's [Spec] does not admit (the subject, the How, the control part's input) is
  * refused by name, and dispatch takes what is stored as given.
  *
@@ -77,6 +77,8 @@ class ControlSurfaceBindingService(
         val sortOrder: Int,
         val health: AssignmentHealth = AssignmentHealth.Ok,
         val part: ControlPart = ControlPart.MAIN,
+        /** The strip this binding is derived from, when [resolve] answered a control with its strip's row. */
+        val viaStrip: String? = null,
     )
 
     /** Emitted on any cache-mutating operation so UIs can react. */
@@ -178,6 +180,12 @@ class ControlSurfaceBindingService(
         return cache[projectId]?.byId?.get(bindingId)
     }
 
+    /** The row stored at exactly this slot — `(device type, control, part, layer)` — or null. */
+    fun rowAt(projectId: Int, deviceTypeKey: String, controlId: String, part: ControlPart, bank: String?): ResolvedBinding? {
+        ensureLoaded(projectId)
+        return cache[projectId]?.byControl?.get(ControlKey(deviceTypeKey, controlId, part))?.get(bank)
+    }
+
     /**
      * Resolve an inbound event on `(deviceTypeKey, controlId, part)` on the given [activeBank] and
      * [encoderBank]. This is the one resolution entry point — the input router, the feedback index
@@ -226,10 +234,11 @@ class ControlSurfaceBindingService(
 
         // Always the id of the control the event arrived on, even on the fallback below, so a
         // dead-binding warning names the fader the operator is pushing rather than its strip.
-        if (stripBinding.binding.does !is Does.Strip) return stripBinding.copy(controlId = controlId)
+        if (stripBinding.binding.does !is Does.Strip) return stripBinding.copy(controlId = controlId, viaStrip = onStrip.strip.id)
 
         return stripBinding.copy(
             controlId = controlId,
+            viaStrip = onStrip.strip.id,
             binding = deriveStripBinding(onStrip.role, stripBinding.binding.on, encoderBank),
         )
     }
@@ -497,16 +506,15 @@ class ControlSurfaceBindingService(
      * the binding *rows* haven't moved, only their derived health. Called from listeners
      * when fixtures / patches / cues / cue stacks mutate.
      *
-     * No-op if the project isn't loaded, the provider is null, or the provider returns
-     * null (pre-show init). Safe to call from any thread.
+     * No-op if the project isn't loaded or no context can be read: no provider, pre-show init,
+     * or a desk shutting down under the caller. Safe to call from any thread.
      */
     fun invalidateHealth(projectId: Int) {
         if (!loaded.contains(projectId)) return
-        val provider = healthContextProvider ?: return
         var changed = false
         synchronized(lockFor(projectId)) {
             val pc = cache[projectId] ?: return
-            val context = provider(projectId) ?: return
+            val context = resolveHealthContext(projectId) ?: return
             // Copy entries because we mutate byId via (un)install during iteration.
             val snapshot = pc.byId.values.toList()
             for (existing in snapshot) {
@@ -615,8 +623,7 @@ class ControlSurfaceBindingService(
      * A strip id and a control id share the `control_id` column but are not interchangeable: a
      * strip binding covers four controls by derivation, so it is only meaningful on a strip, and a
      * strip slot is only meaningful holding one. Enforced here because this service is the one door
-     * every write goes through — the routes, and MIDI Learn's commit, which has no route validation
-     * of its own. The routes still run their own version first, to answer a coded 400.
+     * every write goes through. The routes still run their own version first, to answer a coded 400.
      */
     private fun refuseWrongSlot(deviceTypeKey: String, controlId: String, binding: Binding) {
         val isStripSlot = controlId in stripIndexFor(deviceTypeKey).stripIds

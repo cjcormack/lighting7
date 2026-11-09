@@ -209,8 +209,8 @@ fun Application.configureSockets(state: State) {
                 connections -= thisConnection
                 DeskMetrics.global.wsClients.decrementAndGet()
                 scope.cancelAll()
-                scope.ownedLearnSessions.toList().forEach { state.midiLearnSessionManager.cancel(it) }
-                scope.ownedLearnSessions.clear()
+                scope.ownedIdentifySessions.toList().forEach { state.surfaceIdentify.cancel(it) }
+                scope.ownedIdentifySessions.clear()
                 // A window's registry row lives exactly as long as its socket — that is what
                 // makes a closed window disappear from the Screens sheet without a heartbeat.
                 // A no-op for a connection that never announced.

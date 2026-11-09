@@ -1,665 +1,363 @@
-import { useState } from "react"
-import { AlertTriangle, Radio, Trash2, Wand2 } from "lucide-react"
-import { useFixtureListQuery } from "@/store/fixtures"
-import { useGroupAttributesQuery } from "@/store/groups"
-import { useColourValue, useSliderValue } from "@/hooks/useAttributeValues"
-import { useGroupColourValues, useGroupSliderValues } from "@/hooks/useGroupAttributeValues"
-import type {
-  ChannelRef,
-  ColourAttributeDescriptor,
-  AttributeDescriptor,
-  SliderAttributeDescriptor,
-} from "@/store/fixtures"
-import type {
-  GroupColourAttributeDescriptor,
-  GroupAttributeDescriptor,
-  GroupSliderAttributeDescriptor,
-} from "@/api/groupsApi"
-import { Badge } from "@/components/ui/badge"
+import { useCallback } from "react"
+import { AlertTriangle, Hand, Trash2, X } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { describeHealth } from "@/lib/healthDescriptor"
 import { cn } from "@/lib/utils"
 import {
-  useDeleteSurfaceBindingMutation,
-  useExpandSurfaceBindingMutation,
-  useUpdateSurfaceBindingMutation,
+  useClearSurfaceSlotMutation,
+  useWriteSurfaceSlotMutation,
+  type CatalogueEntry,
+  type ControlDescriptor,
+  type ControlPart,
+  type ControlState,
+  type ControlSurfaceType,
+  type IdentifyWait,
+  type PickupChange,
+  type ResolvedPart,
+  type SurfaceBinding,
+  type SurfaceMapFrame,
+  type SurfaceSlot,
+  type TakeoverPolicy,
 } from "@/store/surfaces"
-import { axisSuffix, type ColourAxis } from "@/lib/colourAxis"
-import type {
-  BindingTarget,
-  ControlDescriptor,
-  ControlState,
-  ControlSurfaceBinding,
-  ControlSurfaceType,
-  EncoderBankSelection,
-  PickupChange,
-} from "@/store/surfaces"
-import { useDeskSelection } from "@/store/selection"
-import { deriveStripTarget, type SurfaceBindingIndex } from "@/lib/surfaceResolve"
-import { resolveControl } from "@/lib/surfaceResolve"
-import { EditBindingSheet } from "./BindingMatrix"
-import { LearnModeOverlay } from "./LearnModeOverlay"
-import { describeTarget, effectiveTarget } from "./targetUtils"
-import { describeBindingTarget, useRecordBindingOptions } from "./recordOptions"
+import { inputOf, partKey, partsOf } from "@/api/surfacesApi"
+import { DESK_OFFLINE_LABEL } from "@/api/wsGesture"
+import { BindingForm, WritesToPill, subjectValue, subjectOf, subjectOptions } from "./BindingForm"
+import { useBindingChoices } from "./useBindingChoices"
 import { midiPercent } from "./surfacePanelGeometry"
-import { surfaceSpeedWords } from "@/lib/fxSpeed"
 
 /**
- * The clicked control: what it is, what it is bound to, and what it is doing.
- *
- * The **binding card** is where a strip stops being invisible. A strip is one row covering four
- * controls, so an inspector that showed only "the binding on fader 5" would be describing a row
- * whose other three effects the operator cannot see from anywhere — hence the four-line breakdown,
- * and *Fader only…* beside it as the way back to single bindings.
+ * Editor A (surface-setup plan D12, §4): the control picked on the picture, or touched on the desk,
+ * with one **Does · On · How** block per part — Turn and Push for an encoder — each with its
+ * *Writes to* word, its layer chips and a line saying what it shows. A control a strip derives says
+ * so and offers *Make this control its own*. Every write is the slot write; what the control then
+ * does comes back on the map.
  */
-
 export interface SurfaceInspectorProps {
   projectId: number
-  /** The attached device shown, whose encoder page a strip expands at. */
-  displayKey?: string
   profile: ControlSurfaceType
   controlId: string
-  index: SurfaceBindingIndex
-  activeBank: string | null
-  encoderBank: EncoderBankSelection
+  /** The layer being viewed; edits land on it or on both. */
+  viewedLayer: string | null
+  frame: SurfaceMapFrame | null
+  catalogue: readonly CatalogueEntry[]
   state: ControlState | undefined
   pickup: PickupChange | undefined
-  /** Every row on this device type, for the "other banks" line. */
-  bindings: readonly ControlSurfaceBinding[]
+  connected: boolean
+  identify: { wait: IdentifyWait; begin: () => void; cancel: () => void }
+}
+
+const PART_WORDS: Record<ControlDescriptor["type"], Partial<Record<ControlPart, string>>> = {
+  fader: { MAIN: "Move" },
+  encoder: { MAIN: "Turn", PUSH: "Push" },
+  button: { MAIN: "Press" },
+  bankButton: {},
+}
+
+const KIND_WORDS: Record<ControlDescriptor["type"], (control: ControlDescriptor) => string> = {
+  fader: (c) => (c.type === "fader" && c.hasMotor ? "Motor fader" : "Fader"),
+  encoder: (c) => (c.type === "encoder" && c.pushNote != null ? "Encoder with ring and push" : "Encoder"),
+  button: () => "Button",
+  bankButton: () => "Layer key",
+}
+
+const NO_PART: ResolvedPart = { from: "NONE" }
+
+export const CLEAR_FAILED = "The desk could not take the binding off"
+
+/**
+ * What *Remove* takes off, from the banks of the rows it clears: `both layers`, `Layer A`, or both
+ * at once. Null on a profile with no layers, where there is only the one row.
+ */
+export function removeScope(banks: readonly (string | null)[], layers: readonly { id: string; name: string }[]): string | null {
+  if (layers.length === 0) return null
+  const words = [...new Set(banks)].map((bank) => (bank == null ? "both layers" : `Layer ${layers.find((l) => l.id === bank)?.name ?? bank} only`))
+  return words.join(" and ")
 }
 
 export function SurfaceInspector({
   projectId,
-  displayKey,
   profile,
   controlId,
-  index,
-  activeBank,
-  encoderBank,
+  viewedLayer,
+  frame,
+  catalogue,
   state,
   pickup,
-  bindings,
+  connected,
+  identify,
 }: SurfaceInspectorProps) {
-  const [editing, setEditing] = useState(false)
-  const [learning, setLearning] = useState(false)
-  const [updateBinding] = useUpdateSurfaceBindingMutation()
-  const [expandBinding] = useExpandSurfaceBindingMutation()
-  const [deleteBinding] = useDeleteSurfaceBindingMutation()
-
-  // One lookup for the whole inspector: the heading and the binding card both want a record's
-  // name where `describeTarget` can only give a uuid, and a hook per line would be two
-  // subscriptions to one library.
-  const records = useRecordBindingOptions(projectId)
-  const describe = (target: BindingTarget) => describeBindingTarget(target, records)
-
   const descriptor = profile.controls.find((c) => c.controlId === controlId)
-  const resolved = resolveControl(controlId, index, activeBank, encoderBank)
-  const onStrip = resolved?.via ?? null
-  const deadReason = resolved ? describeHealth(resolved.binding.health) : null
+  const layerParts = frame?.layers[viewedLayer ?? ""] ?? {}
+  const strip = profile.strips?.find((s) => [s.fader, s.select, s.encoder, s.flash].includes(controlId)) ?? null
+  const choices = useBindingChoices(projectId)
+  const [writeSlot] = useWriteSurfaceSlotMutation()
+  const [clearSlot] = useClearSurfaceSlotMutation()
+
+  const write = useCallback(
+    (slot: SurfaceSlot, binding: SurfaceBinding, takeoverPolicy?: TakeoverPolicy | null) =>
+      writeSlot({ projectId, slot, binding, takeoverPolicy })
+        .unwrap()
+        .then(
+          () => true,
+          (e: { data?: { message?: string } }) => {
+            toast.error(e?.data?.message ?? "The desk refused the binding")
+            return false
+          },
+        ),
+    [projectId, writeSlot],
+  )
+  const clear = useCallback(
+    (slot: SurfaceSlot) =>
+      clearSlot({ projectId, slot })
+        .unwrap()
+        .catch((e: { data?: { message?: string } }) => {
+          toast.error(e?.data?.message ?? CLEAR_FAILED)
+        }),
+    [projectId, clearSlot],
+  )
 
   if (!descriptor) return null
+  const slotOf = (part: ControlPart, layer: string | null): SurfaceSlot => ({
+    deviceTypeKey: profile.typeKey,
+    controlId,
+    part,
+    layer,
+  })
 
-  return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto p-4">
-      <div>
-        <div className="text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-          Selected control{onStrip ? ` · ${onStrip.strip.id}` : ""}
-        </div>
-        <h3 className="text-sm font-semibold">
-          {descriptor.label}
-          {resolved && (
-            <span className="ml-1.5 font-normal text-muted-foreground">
-              — {describe(resolved.target)}
-            </span>
-          )}
-        </h3>
-        <p className="font-mono text-[11px] text-muted-foreground">{addressing(descriptor)}</p>
-      </div>
-
-      {deadReason && (
-        <p className="flex items-start gap-1.5 rounded-md bg-destructive/10 p-2 text-xs text-destructive">
-          <AlertTriangle className="mt-px size-3.5 shrink-0" />
-          {deadReason}
+  const header = (
+    <div className="space-y-0.5">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{KIND_WORDS[descriptor.type](descriptor)}</div>
+      <div className="text-sm font-semibold">{descriptor.label}</div>
+      {strip && (
+        <p className="text-[11px] text-muted-foreground">
+          Part of strip {stripNumber(strip.id)} · its {stripRole(strip, controlId)}.
         </p>
       )}
+    </div>
+  )
 
-      <Separator />
-
-      {!resolved ? (
-        <p className="text-xs text-muted-foreground">
-          Nothing is bound to this control on{" "}
-          {activeBank == null ? "the global bank" : `bank ${activeBank}`}.
-        </p>
-      ) : (
-        <BindingCard
-          binding={resolved.binding}
-          profile={profile}
-          onStrip={onStrip}
-          encoderBank={encoderBank}
-          describe={describe}
-        />
-      )}
-
-      <div className="flex flex-wrap gap-2">
-        {resolved && (
-          <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
-            {onStrip ? "Change group" : "Change target"}
-          </Button>
-        )}
-        {onStrip && resolved?.binding.target.type === "strip" && (
-          <Button
-            size="sm"
-            variant="outline"
-            title="Replace this strip with the four single bindings it was deriving"
-            onClick={() => expandBinding({ projectId, bindingId: resolved.binding.id, displayKey })}
-          >
-            Fader only…
-          </Button>
-        )}
-        <Button size="sm" variant="outline" onClick={() => setLearning(true)}>
-          <Radio className="size-3.5" />
-          MIDI Learn
-        </Button>
-        {resolved && (
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={() => deleteBinding({ projectId, bindingId: resolved.binding.id })}
-          >
-            <Trash2 className="size-3.5" />
-            {onStrip ? "Remove strip" : "Remove"}
-          </Button>
-        )}
-      </div>
-
-      {resolved && (
-        <OtherBanks
-          bindings={bindings}
-          controlId={onStrip ? onStrip.strip.id : controlId}
-          profile={profile}
-          activeBank={activeBank}
-          describe={describe}
-        />
-      )}
-
-      <Separator />
-
-      {/*
-        Two arms, because "bank buttons can't be bound" and "this one is carrying a row that will
-        never fire" are different things to be told, and only the second is actionable. The panel
-        draws the second as dead; this says what to do about it, and *Remove* above is how.
-      */}
-      {descriptor.type === "bankButton" && (
-        <p
-          className={cn(
-            "rounded-md p-2 text-[11px]",
-            resolved ? "bg-destructive/10 text-destructive" : "bg-muted/60 text-muted-foreground",
-          )}
-        >
-          Bank buttons switch the device&rsquo;s bank. The router answers one before it resolves a
-          binding, so a row on this control can never fire — the library will not offer it.
-          {resolved && ` This one holds ${describe(resolved.target)}; remove it.`}
-        </p>
-      )}
-
-      <LiveCard descriptor={descriptor} state={state} pickup={pickup} resolved={resolved} />
-
-      {editing && resolved && (
-        <EditBindingSheet
-          open={editing}
-          onOpenChange={setEditing}
-          projectId={projectId}
-          binding={resolved.binding}
-          profile={profile}
-          onSave={async (target, bank, policy) => {
-            await updateBinding({
-              projectId,
-              bindingId: resolved.binding.id,
-              target,
-              bank,
-              bankPresent: true,
-              takeoverPolicy: policy,
-              takeoverPolicyPresent: true,
-            }).unwrap()
-            setEditing(false)
+  const ownRows = partsOf(descriptor).flatMap((part) => {
+    const resolved = layerParts[partKey(controlId, part)]
+    return resolved?.from === "DIRECT" ? [{ part, bank: resolved.bank ?? null }] : []
+  })
+  const scope = removeScope(ownRows.map((row) => row.bank), profile.banks)
+  const footer = (
+    <div className="flex flex-wrap items-center gap-2">
+      <IdentifyButton identify={identify} connected={connected} />
+      {ownRows.length > 0 && (
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={!connected}
+          title={connected ? `Take this control's own binding off ${scope ?? "it"}` : DESK_OFFLINE_LABEL}
+          onClick={() => {
+            for (const row of ownRows) clear(slotOf(row.part, row.bank))
           }}
-        />
-      )}
-
-      {learning && resolved && (
-        <LearnModeOverlay
-          open={learning}
-          onOpenChange={setLearning}
-          projectId={projectId}
-          deviceTypeKey={profile.typeKey}
-          target={resolved.binding.target}
-          bank={resolved.binding.bank}
-          takeoverPolicy={resolved.binding.takeoverPolicy}
-          profile={profile}
-          onCommitted={() => setLearning(false)}
-        />
+        >
+          <Trash2 className="size-3.5" />
+          {scope ? `Remove from ${scope}` : "Remove"}
+        </Button>
       )}
     </div>
   )
-}
 
-/** `CC 5 · touch CC 105 · ch 1 · motor` — how the desk addresses this control. */
-function addressing(descriptor: ControlDescriptor): string {
-  switch (descriptor.type) {
-    case "fader": {
-      const parts = [`CC ${descriptor.cc}`]
-      if (descriptor.touchCc != null) parts.push(`touch CC ${descriptor.touchCc}`)
-      if (descriptor.touchNote != null) parts.push(`touch note ${descriptor.touchNote}`)
-      parts.push(`ch ${descriptor.channel}`)
-      if (descriptor.hasMotor) parts.push("motor")
-      return parts.join(" · ")
-    }
-    case "encoder": {
-      const parts = [`CC ${descriptor.cc}`, `ch ${descriptor.channel}`]
-      if (descriptor.ringCc != null) parts.push(`ring CC ${descriptor.ringCc}`)
-      if (descriptor.pushNote != null) parts.push(`push note ${descriptor.pushNote}`)
-      return parts.join(" · ")
-    }
-    case "button":
-      return `Note ${descriptor.note} · ch ${descriptor.channel}`
-    case "bankButton":
-      return [
-        descriptor.note != null ? `Note ${descriptor.note}` : `PC ${descriptor.programChange}`,
-        `ch ${descriptor.channel}`,
-        `bank ${descriptor.bankId}`,
-      ].join(" · ")
+  if (descriptor.type === "bankButton") {
+    return (
+      <div className="space-y-3 p-4" data-testid="surface-inspector">
+        {header}
+        <p className="text-[11px] text-muted-foreground">
+          The device switches layers itself, so this key takes no binding. Any button can switch layer with Desk ›
+          Switch layer.
+        </p>
+        {footer}
+      </div>
+    )
   }
-}
 
-function BindingCard({
-  binding,
-  profile,
-  onStrip,
-  encoderBank,
-  describe,
-}: {
-  binding: ControlSurfaceBinding
-  profile: ControlSurfaceType
-  onStrip: { strip: { id: string } } | null
-  encoderBank: EncoderBankSelection
-  describe: (target: BindingTarget) => string
-}) {
-  const strip =
-    binding.target.type === "strip"
-      ? profile.strips?.find((s) => s.id === binding.controlId)
-      : undefined
+  const stripPart = strip ? (layerParts[partKey(strip.id, "MAIN")] ?? NO_PART) : null
 
   return (
-    <div className="space-y-2 rounded-md border p-2.5">
-      <div className="flex items-center gap-2 text-xs">
-        <span className="font-medium">
-          {strip ? "Strip binding" : "Binding"}
-        </span>
-        <Badge variant="outline" className="text-[10px]">
-          {binding.bank == null ? "global" : `bank ${binding.bank}`}
-        </Badge>
-        {binding.health.type === "ok" ? (
-          <Badge variant="secondary" className="text-[10px]">ok</Badge>
-        ) : (
-          <Badge variant="destructive" className="text-[10px]">dead</Badge>
-        )}
-      </div>
-
-      {/* A strip's four effects, spelled out: they are the part of the row nothing else shows. */}
-      {strip && binding.target.type === "strip" ? (
-        <dl className="space-y-1 text-[11px]">
-          <div className="pb-1 text-muted-foreground">
-            {binding.target.target.key} · {binding.target.target.type}
-          </div>
-          {(["fader", "select", "encoder", "flash"] as const).map((role) => {
-            const controlId =
-              role === "fader"
-                ? strip.fader
-                : role === "select"
-                  ? strip.select
-                  : role === "encoder"
-                    ? strip.encoder
-                    : strip.flash
-            if (!controlId) return null
-            const label = profile.controls.find((c) => c.controlId === controlId)?.label ?? controlId
-            const target =
-              binding.target.type === "strip"
-                ? deriveStripTarget(role, binding.target.target, encoderBank)
-                : null
-            return (
-              <div key={role} className="flex justify-between gap-2">
-                <dt className={cn("text-muted-foreground", onStrip && "shrink-0")}>{label}</dt>
-                <dd className="truncate text-right">
-                  {target ? describeTarget(target) : "—"}
-                  {role === "encoder" && (
-                    <span className="text-muted-foreground"> · from the encoder bank</span>
-                  )}
-                </dd>
+    <div className="space-y-3 overflow-y-auto p-4" data-testid="surface-inspector">
+      {header}
+      {partsOf(descriptor).map((part) => {
+        const resolved = layerParts[partKey(controlId, part)] ?? NO_PART
+        const input = inputOf(descriptor, part)!
+        const word = PART_WORDS[descriptor.type][part] ?? part
+        return (
+          <section key={part} className="space-y-2 rounded-lg border p-3" data-part={part}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold">{word}</span>
+              {resolved.from === "STRIP" && <WritesToPill writesTo={resolved.writesTo} />}
+            </div>
+            {resolved.from === "STRIP" && strip ? (
+              <div className="space-y-2">
+                <p className="text-xs">{resolved.label}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  From strip {stripNumber(strip.id)}. Change what the strip follows to move all of its controls together.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!connected || resolved.does == null}
+                  onClick={() => {
+                    if (resolved.does == null) return
+                    write(slotOf(part, viewedLayer), { does: resolved.does, on: resolved.on ?? undefined, how: resolved.how ?? undefined }, resolved.takeoverPolicy)
+                  }}
+                >
+                  Make this control its own
+                </Button>
               </div>
-            )
-          })}
-        </dl>
-      ) : (
-        <p className="text-[11px]">{describe(binding.target)}</p>
+            ) : (
+              <BindingForm
+                key={`${controlId}:${part}:${viewedLayer ?? ""}:${resolved.bindingId ?? "none"}`}
+                name={word}
+                catalogue={catalogue}
+                input={input}
+                binding={resolved.does == null ? null : { does: resolved.does, on: resolved.on ?? undefined, how: resolved.how ?? undefined }}
+                entryId={resolved.entry ?? null}
+                takeoverPolicy={resolved.takeoverPolicy ?? null}
+                subjects={choices.subjects}
+                attributesFor={choices.attributesFor}
+                layers={profile.banks}
+                layer={resolved.from === "DIRECT" ? (resolved.bank ?? null) : null}
+                onLayerChange={(layer) => {
+                  if (resolved.does == null) return
+                  const from = resolved.bank ?? null
+                  if (from === layer) return
+                  const binding = { does: resolved.does, on: resolved.on ?? undefined, how: resolved.how ?? undefined }
+                  write(slotOf(part, layer), binding, resolved.takeoverPolicy).then((ok) => {
+                    if (ok) clear(slotOf(part, from))
+                  })
+                }}
+                motor={descriptor.type === "fader" && descriptor.hasMotor}
+                disabled={!connected}
+                onChange={(binding, takeoverPolicy) => {
+                  const layer = resolved.from === "DIRECT" ? (resolved.bank ?? null) : null
+                  if (binding == null) clear(slotOf(part, layer))
+                  else write(slotOf(part, layer), binding, takeoverPolicy)
+                }}
+              />
+            )}
+            {resolved.shows && <p className="text-[11px] text-muted-foreground">{resolved.shows}</p>}
+            {resolved.healthText && (
+              <p className="flex items-center gap-1 text-[11px] text-destructive">
+                <AlertTriangle className="size-3" />
+                Dead: {resolved.healthText}
+              </p>
+            )}
+          </section>
+        )
+      })}
+      {strip && stripPart && (
+        <StripFollows
+          stripId={strip.id}
+          part={stripPart}
+          choices={choices.subjects}
+          disabled={!connected}
+          onChange={(on) =>
+            on == null
+              ? clear({ deviceTypeKey: profile.typeKey, controlId: strip.id, part: "MAIN", layer: stripPart.bank ?? null })
+              : write({ deviceTypeKey: profile.typeKey, controlId: strip.id, part: "MAIN", layer: stripPart.bank ?? null }, { does: { type: "strip" }, on })
+          }
+        />
       )}
-
-      <div className="flex justify-between gap-2 text-[11px]">
-        <span className="text-muted-foreground">Takeover</span>
-        <span>{binding.takeoverPolicy === "PICKUP" ? "Pickup" : "Immediate"}</span>
-      </div>
+      <LiveLine descriptor={descriptor} state={state} pickup={pickup} />
+      <Separator />
+      {footer}
     </div>
   )
 }
 
-/**
- * What this control does on the *other* banks. Worth showing because the panel can only draw one
- * bank at a time, and "unbound" on screen is easy to read as "unbound everywhere".
- */
-function OtherBanks({
-  bindings,
-  controlId,
-  profile,
-  activeBank,
-  describe,
-}: {
-  bindings: readonly ControlSurfaceBinding[]
-  controlId: string
-  profile: ControlSurfaceType
-  activeBank: string | null
-  describe: (target: BindingTarget) => string
-}) {
-  const banks: (string | null)[] = [...profile.banks.map((b) => b.id), null]
-  const others = banks.filter((b) => b !== activeBank)
-  if (others.length === 0) return null
+function stripNumber(stripId: string): string {
+  return stripId.replace(/^strip-/, "")
+}
 
+function stripRole(strip: NonNullable<ControlSurfaceType["strips"]>[number], controlId: string): string {
+  if (strip.fader === controlId) return "fader"
+  if (strip.select === controlId) return "select button"
+  if (strip.encoder === controlId) return "encoder"
+  return "flash button"
+}
+
+/** What the strip a control sits on follows — its group or fixture, or nothing. */
+function StripFollows({
+  stripId,
+  part,
+  choices,
+  disabled,
+  onChange,
+}: {
+  stripId: string
+  part: ResolvedPart
+  choices: Parameters<typeof subjectOptions>[1]
+  disabled: boolean
+  onChange: (on: ReturnType<typeof subjectOf>) => void
+}) {
+  const options = subjectOptions(["GROUP", "FIXTURE"], choices)
+  const current = part.from === "NONE" ? "" : subjectValue(part.on)
   return (
-    <p className="text-[11px] text-muted-foreground">
-      <span className="mr-1.5 font-medium">Other banks</span>
-      {others
-        .map((bank) => {
-          const hit = bindings.find(
-            (b) =>
-              b.deviceTypeKey === profile.typeKey &&
-              b.controlId === controlId &&
-              b.bank === bank,
-          )
-          const name = bank ?? "Global"
-          return `${name} — ${hit ? describe(hit.target) : "unbound"}`
-        })
-        .join(" · ")}
-    </p>
+    <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+      Strip {stripNumber(stripId)} follows
+      <select
+        aria-label={`Strip ${stripNumber(stripId)} follows`}
+        className="h-7 min-w-0 flex-1 rounded-md border bg-background px-1 text-xs text-foreground"
+        value={current}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value === "" ? null : subjectOf(e.target.value))}
+      >
+        <option value="">Nothing</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.group === "Groups" ? option.label : `${option.label} (fixture)`}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
 
-/**
- * What the control is doing now: three lines straight off the `surfaceControls` stream — what the
- * hardware was told, never a recomputation from DMX (D7) — and a fourth that is the opposite, the
- * value on the *stage* behind the binding.
- *
- * That fourth line is the one place this panel reads DMX, and deliberately: the other three answer
- * "what is the desk doing with this control", and it answers "and what came of it". A fader at 66%
- * over a dimmer reading 0 is a bound control writing into a park or a blackout, which is exactly
- * the question an operator asks the surface page.
- */
-function LiveCard({
-  descriptor,
-  state,
-  pickup,
-  resolved,
-}: {
-  descriptor: ControlDescriptor
-  state: ControlState | undefined
-  pickup: PickupChange | undefined
-  resolved: { target: BindingTarget } | null
-}) {
-  const selection = useDeskSelection()
-  const isSelectionTarget =
-    resolved?.target.type === "selectionAttribute" ||
-    resolved?.target.type === "selectionFan" ||
-    resolved?.target.type === "fxSpeed" ||
-    resolved?.target.type === "selectTarget" ||
-    resolved?.target.type === "locateSelection"
-
+/** Where the control is now, as the hardware was told. */
+function LiveLine({ descriptor, state, pickup }: { descriptor: ControlDescriptor; state: ControlState | undefined; pickup: PickupChange | undefined }) {
   const position = state?.physical ?? state?.value ?? null
-
   return (
-    <div className="space-y-1 text-[11px]">
-      <div className="text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-        Live
-      </div>
-      <p>
-        {position == null ? (
-          <span className="text-muted-foreground">Nothing fed back</span>
-        ) : (
-          <>
-            Position {position} / 127 · {midiPercent(position)}%
-          </>
-        )}
-      </p>
-      {descriptor.type === "fader" && state?.touched && (
-        <p className="text-muted-foreground">Touch held — motor feedback paused</p>
-      )}
+    <div className="space-y-0.5 text-[11px] text-muted-foreground">
+      {position != null && <p>At {midiPercent(position)}%</p>}
+      {descriptor.type === "fader" && state?.touched && <p>Touched — the motor holds still</p>}
       {pickup?.state === "AWAITING_PICKUP" && pickup.target != null && (
-        <p className="text-[var(--editor-warning)]">
-          Awaiting pickup — move to {midiPercent(pickup.target)}% to engage
-        </p>
-      )}
-      {state?.led !== "none" && state?.led != null && (
-        <p className="text-muted-foreground">LED {state.led}</p>
-      )}
-      {resolved && <StageValue target={resolved.target} />}
-      {resolved?.target.type === "fxSpeed" && selection.length > 0 && state != null && (
-        <p className="text-muted-foreground">
-          {state.value == null
-            ? "No Local FX on the selection — a move is dropped"
-            : `Lead FX at ${surfaceSpeedWords(state.value, descriptor.type === "encoder")}`}
-        </p>
-      )}
-      {isSelectionTarget && (
-        <p className="flex items-center gap-1 text-muted-foreground">
-          <Wand2 className="size-3" />
-          {selection.length === 0
-            ? "Nothing selected — a move is dropped"
-            : `Acts on ${selection.map((t) => t.key).join(", ")}`}
-        </p>
+        <p className="text-[var(--editor-warning)]">Waiting to pick up — move to {midiPercent(pickup.target)}%</p>
       )}
     </div>
   )
 }
 
-/**
- * `Movers.dimmer = 168` — what the binding's property is currently at on the rig.
- *
- * **A component, and four leaves, because the value hooks take a descriptor and hooks cannot be
- * conditional.** `useSliderValue` and `useGroupColourValues` want different shapes and subscribe to
- * different channel sets, so choosing between them inside one component would mean calling one of
- * them with a fabricated descriptor. `FxPadDetail` is the same shape for the same reason.
- *
- * Only **slider** and **colour** are drawn, which is not a simplification: those are exactly the
- * two `AttributeChannelResolver` writes from a continuous control, so a binding on anything else has
- * no stage value to report. A `flash` is unwrapped first — its inner target is the property it
- * drives.
- */
-function StageValue({ target }: { target: BindingTarget }) {
-  const inner = effectiveTarget(target)
-  if (inner.type === "fixtureAttribute") {
+/** *Touch a control on the desk*: the identify wait, with its banner and Cancel (D14). */
+export function IdentifyButton({
+  identify,
+  connected,
+}: {
+  identify: { wait: IdentifyWait; begin: () => void; cancel: () => void }
+  connected: boolean
+}) {
+  if (identify.wait.waiting) {
     return (
-      <FixtureStageValue
-        fixtureKey={inner.fixtureKey}
-        attribute={inner.attribute}
-        axis={inner.colourAxis}
-      />
+      <div role="status" className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-2 py-1 text-xs">
+        <Hand className="size-3.5 text-primary" />
+        Touch a control on the desk… it won’t fire.
+        <Button variant="ghost" size="sm" className="h-6 px-1.5" onClick={identify.cancel}>
+          <X className="size-3" />
+          Cancel
+        </Button>
+      </div>
     )
   }
-  if (inner.type === "groupAttribute") {
-    return (
-      <GroupStageValue
-        groupName={inner.groupName}
-        attribute={inner.attribute}
-        axis={inner.colourAxis}
-      />
-    )
-  }
-  return null
-}
-
-/**
- * A bundled emitter — `white`, `amber`, `uv` — is not in the descriptor list (the fixture
- * descriptor folds it into the colour's `whiteChannel` …), but it is a slider the desk drives by
- * that name, so its stage line is drawn from a descriptor minted here off the colour's channel ref.
- * The name → channel-key rule is the one `hooks/useTargetAttributes.ts` offers the chips by.
- */
-const EMITTER_CHANNELS = {
-  white: "whiteChannel",
-  amber: "amberChannel",
-  uv: "uvChannel",
-} as const
-
-function fixtureEmitterDescriptor(
-  attributes: readonly AttributeDescriptor[] | undefined,
-  attribute: string,
-): SliderAttributeDescriptor | undefined {
-  const key = EMITTER_CHANNELS[attribute as keyof typeof EMITTER_CHANNELS]
-  if (key == null) return undefined
-  for (const declared of attributes ?? []) {
-    if (declared.type !== "colour") continue
-    const channel = declared[key]
-    if (channel == null) continue
-    return {
-      type: "slider",
-      name: attribute,
-      displayName: attribute,
-      category: attribute as SliderAttributeDescriptor["category"],
-      channel,
-      min: 0,
-      max: 255,
-    }
-  }
-  return undefined
-}
-
-function groupEmitterDescriptor(
-  attributes: readonly GroupAttributeDescriptor[] | undefined,
-  attribute: string,
-): GroupSliderAttributeDescriptor | undefined {
-  const key = EMITTER_CHANNELS[attribute as keyof typeof EMITTER_CHANNELS]
-  if (key == null) return undefined
-  for (const declared of attributes ?? []) {
-    if (declared.type !== "colour") continue
-    const memberChannels = declared.memberColourChannels
-      .map((member) => member[key])
-      .filter((channel): channel is ChannelRef => channel != null)
-    if (memberChannels.length === 0) continue
-    return {
-      type: "slider",
-      name: attribute,
-      displayName: attribute,
-      category: attribute,
-      min: 0,
-      max: 255,
-      memberChannels,
-    }
-  }
-  return undefined
-}
-
-function StageLine({ label, value }: { label: string; value: string }) {
   return (
-    <p className="font-mono text-[11px] text-muted-foreground">
-      {label} = {value}
-    </p>
-  )
-}
-
-function FixtureStageValue({
-  fixtureKey,
-  attribute,
-  axis,
-}: {
-  fixtureKey: string
-  attribute: string
-  axis: ColourAxis | null | undefined
-}) {
-  const { data: fixtures } = useFixtureListQuery()
-  const attributes = fixtures?.find((f) => f.key === fixtureKey)?.attributes
-  const declared =
-    attributes?.find((p) => p.name === attribute) ??
-    fixtureEmitterDescriptor(attributes, attribute)
-  // The axis is on the label only. The *Position* line above is already the desk's reading on
-  // that axis (`ControlState.value` comes from `computeValue7Bit`); an HSV computed here would be
-  // a second copy of the read rule, and the two would drift.
-  const label = `${fixtureKey}.${attribute}${axisSuffix(axis)}`
-  if (declared?.type === "slider") return <FixtureSliderValue attribute={declared} label={label} />
-  if (declared?.type === "colour") return <FixtureColourValue attribute={declared} label={label} />
-  return null
-}
-
-function FixtureSliderValue({
-  attribute,
-  label,
-}: {
-  attribute: SliderAttributeDescriptor
-  label: string
-}) {
-  return <StageLine label={label} value={String(useSliderValue(attribute))} />
-}
-
-function FixtureColourValue({
-  attribute,
-  label,
-}: {
-  attribute: ColourAttributeDescriptor
-  label: string
-}) {
-  const { r, g, b } = useColourValue(attribute)
-  return <StageLine label={label} value={`${r}, ${g}, ${b}`} />
-}
-
-function GroupStageValue({
-  groupName,
-  attribute,
-  axis,
-}: {
-  groupName: string
-  attribute: string
-  axis: ColourAxis | null | undefined
-}) {
-  const { data: attributes } = useGroupAttributesQuery(groupName)
-  const declared =
-    attributes?.find((p) => p.name === attribute) ??
-    groupEmitterDescriptor(attributes, attribute)
-  const label = `${groupName}.${attribute}${axisSuffix(axis)}`
-  if (declared?.type === "slider") return <GroupSliderValue attribute={declared} label={label} />
-  if (declared?.type === "colour") return <GroupColourValue attribute={declared} label={label} />
-  return null
-}
-
-function GroupSliderValue({
-  attribute,
-  label,
-}: {
-  attribute: GroupSliderAttributeDescriptor
-  label: string
-}) {
-  // The group hook already answers "do the members agree", which is the same question D10 puts to
-  // the motor: a mixed group is why the encoder ring beside this line is dark.
-  const { min, max, isUniform } = useGroupSliderValues(attribute)
-  return <StageLine label={label} value={isUniform ? String(min) : `${min}–${max} (mixed)`} />
-}
-
-function GroupColourValue({
-  attribute,
-  label,
-}: {
-  attribute: GroupColourAttributeDescriptor
-  label: string
-}) {
-  const { avgR, avgG, avgB, isUniform } = useGroupColourValues(attribute)
-  return (
-    <StageLine
-      label={label}
-      value={`${avgR}, ${avgG}, ${avgB}${isUniform ? "" : " (mixed)"}`}
-    />
+    <span className="flex items-center gap-2">
+      <Button variant="outline" size="sm" disabled={!connected} title={connected ? undefined : DESK_OFFLINE_LABEL} onClick={identify.begin}>
+        <Hand className="size-3.5" />
+        Touch a control on the desk
+      </Button>
+      {identify.wait.ended === "timeout" && <span className={cn("text-[11px] text-muted-foreground")}>Nothing was touched.</span>}
+    </span>
   )
 }

@@ -210,13 +210,4 @@ class BindingSerializationTest {
         assertEquals(ControlPart.MAIN, inferPart(noPush, Does.Go))
         assertFalse(ControlKind.BUTTON in Does.Level("dimmer").spec.inputs, "no push writes a level full (D4)")
     }
-
-    @Test
-    fun `Learn binds the part touched when the function takes it, else the part it does take`() {
-        val encoder = EncoderDescriptor("enc-1", "Encoder 1", cc = 10, pushNote = 0)
-        assertEquals(ControlPart.PUSH, learntPart(encoder, ControlPart.MAIN, Does.Go), "a turn names the control; GO sits on its push")
-        assertEquals(ControlPart.MAIN, learntPart(encoder, ControlPart.PUSH, Does.Level("dimmer")), "a push names it; a level sits on its turn")
-        assertEquals(ControlPart.PUSH, learntPart(encoder, ControlPart.PUSH, Does.GrandMaster()))
-        assertEquals(ControlPart.MAIN, learntPart(encoder, ControlPart.MAIN, Does.GrandMaster()))
-    }
 }

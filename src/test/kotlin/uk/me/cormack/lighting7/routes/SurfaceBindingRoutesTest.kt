@@ -1,8 +1,11 @@
 package uk.me.cormack.lighting7.routes
 
 import io.ktor.client.call.body
+import io.ktor.client.request.delete
+import io.ktor.client.request.get
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -15,10 +18,16 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.midi.Binding
 import uk.me.cormack.lighting7.midi.BindingJson
+import uk.me.cormack.lighting7.midi.CatalogueEntry
+import uk.me.cormack.lighting7.midi.ControlKind
 import uk.me.cormack.lighting7.midi.ControlPart
 import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.How
 import uk.me.cormack.lighting7.midi.RecordKind
 import uk.me.cormack.lighting7.midi.Subject
+import uk.me.cormack.lighting7.midi.SubjectKind
+import uk.me.cormack.lighting7.midi.SurfaceCatalogue
+import uk.me.cormack.lighting7.midi.WritesTo
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
@@ -29,10 +38,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Bind-time shape validation on the surface-binding routes, and the *Fader only…* expansion.
- * A strip id and a control id share one slot namespace but are not interchangeable, and the
- * check applies to POST **and** PATCH — a drag onto an already-bound control saves as a PATCH.
- * A write carries a `binding` or, from the old screens, a `target` in the old union's words.
+ * Bind-time shape validation on the surface-binding routes, the slot write the editors use, and the
+ * function catalogue. A strip id and a control id share one slot namespace but are not
+ * interchangeable, and the check applies to every write.
  */
 class SurfaceBindingRoutesTest : RouteIntegrationTest() {
 
@@ -46,25 +54,6 @@ class SurfaceBindingRoutesTest : RouteIntegrationTest() {
         put("deviceTypeKey", JsonPrimitive(deviceTypeKey))
         put("controlId", JsonPrimitive(controlId))
         put("binding", bindingJson(binding))
-    }
-
-    private fun createOld(controlId: String, target: JsonObject) = buildJsonObject {
-        put("deviceTypeKey", JsonPrimitive(deviceTypeKey))
-        put("controlId", JsonPrimitive(controlId))
-        put("target", target)
-    }
-
-    private fun oldTarget(type: String, vararg fields: Pair<String, Any>) = buildJsonObject {
-        put("type", JsonPrimitive(type))
-        for ((key, value) in fields) {
-            put(
-                key,
-                when (value) {
-                    is Number -> JsonPrimitive(value)
-                    else -> JsonPrimitive(value.toString())
-                },
-            )
-        }
     }
 
     private fun seedStack(): Pair<Int, java.util.UUID> = transaction(state.database) {
@@ -111,7 +100,7 @@ class SurfaceBindingRoutesTest : RouteIntegrationTest() {
             setBody(create("strip-1", Binding(Does.Strip, wash)))
         }
         assertEquals(HttpStatusCode.Created, response.status)
-        assertEquals("strip", response.body<SurfaceBindingDto>().targetType)
+        assertEquals(Does.Strip, response.body<SurfaceBindingDto>().binding.does)
     }
 
     @Test
@@ -148,51 +137,116 @@ class SurfaceBindingRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.BadRequest, unknown.status)
     }
 
+    private fun slot(controlId: String, binding: Binding, part: ControlPart = ControlPart.MAIN, layer: String? = null, takeover: String? = null) =
+        buildJsonObject {
+            put("deviceTypeKey", JsonPrimitive(deviceTypeKey))
+            put("controlId", JsonPrimitive(controlId))
+            put("part", JsonPrimitive(part.name))
+            layer?.let { put("layer", JsonPrimitive(it)) }
+            put("binding", bindingJson(binding))
+            takeover?.let { put("takeoverPolicy", JsonPrimitive(it)) }
+        }
+
+    private fun slotRef(controlId: String, part: ControlPart = ControlPart.MAIN, layer: String? = null) = buildJsonObject {
+        put("deviceTypeKey", JsonPrimitive(deviceTypeKey))
+        put("controlId", JsonPrimitive(controlId))
+        put("part", JsonPrimitive(part.name))
+        layer?.let { put("layer", JsonPrimitive(it)) }
+    }
+
+    private val slotUrl get() = "/api/rest/projects/$projectId/surface-bindings/slot"
+
     @Test
-    fun `expand replaces a strip with the bindings it was deriving`() = testApplication {
+    fun `a slot write binds an empty part, and a second write replaces it in place`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
 
-        val strip = client.post("/api/rest/projects/$projectId/surface-bindings") {
+        val first = client.put(slotUrl) {
             contentType(ContentType.Application.Json)
-            setBody(create("strip-1", Binding(Does.Strip, wash)))
+            setBody(slot("enc-1", Binding(Does.Go, Subject.Record(RecordKind.STACK, seedStack().second)), ControlPart.PUSH, "layer-a"))
+        }
+        assertEquals(HttpStatusCode.OK, first.status)
+        val written = first.body<SurfaceBindingDto>()
+        assertEquals(ControlPart.PUSH, written.part)
+        assertEquals("layer-a", written.bank)
+
+        val second = client.put(slotUrl) {
+            contentType(ContentType.Application.Json)
+            setBody(slot("enc-1", Binding(Does.Blackout, how = How.ON), ControlPart.PUSH, "layer-a"))
         }.body<SurfaceBindingDto>()
-
-        val expanded = client
-            .post("/api/rest/projects/$projectId/surface-bindings/${strip.id}/expand")
-            .body<List<SurfaceBindingDto>>()
-
-        assertEquals(setOf("fader-1", "btn-25", "enc-1", "btn-1"), expanded.map { it.controlId }.toSet())
-        val fader = expanded.single { it.controlId == "fader-1" }
-        assertEquals(Binding(Does.Level("dimmer"), wash), fader.binding)
-        assertEquals("groupAttribute", fader.targetType)
-        val flash = expanded.single { it.controlId == "btn-1" }
-        assertEquals(Binding(Does.Flash("dimmer"), wash), flash.binding)
-        assertEquals("flash", flash.targetType)
-        assertTrue(expanded.all { it.part == ControlPart.MAIN }, "a strip derives main parts only")
-        // The strip row is gone; only the four singles remain.
-        val remaining = state.controlSurfaceBindingService.list(projectId)
-        assertEquals(4, remaining.size)
-        assertTrue(remaining.none { it.controlId == "strip-1" })
+        assertEquals(written.id, second.id, "the slot's own row is rewritten, not a second one added")
+        assertEquals(Binding(Does.Blackout, how = How.ON), second.binding)
+        assertEquals(1, state.controlSurfaceBindingService.list(projectId).size)
     }
 
     @Test
-    fun `expand refuses a binding that is not a strip`() = testApplication {
+    fun `a slot write on one layer leaves the other layers' rows alone`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
+        client.put(slotUrl) { contentType(ContentType.Application.Json); setBody(slot("btn-2", Binding(Does.Blackout))) }
+        client.put(slotUrl) { contentType(ContentType.Application.Json); setBody(slot("btn-2", Binding(Does.Drop), layer = "layer-b")) }
 
-        val plain = client.post("/api/rest/projects/$projectId/surface-bindings") {
-            contentType(ContentType.Application.Json)
-            setBody(create("btn-2", Binding(Does.Blackout)))
-        }.body<SurfaceBindingDto>()
-
-        val response = client.post("/api/rest/projects/$projectId/surface-bindings/${plain.id}/expand")
-        assertEquals(HttpStatusCode.BadRequest, response.status)
-        assertEquals(CODE_BINDING_CONTROL_NOT_STRIP, response.body<ErrorResponse>().code)
+        val rows = state.controlSurfaceBindingService.list(projectId)
+        assertEquals(setOf(null, "layer-b"), rows.map { it.bank }.toSet())
     }
 
     @Test
-    fun `a POST with a binding answers the binding, its part and the old union's target`() = testApplication {
+    fun `a slot write sets the takeover it is given`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val written = client.put(slotUrl) {
+            contentType(ContentType.Application.Json)
+            setBody(slot("fader-1", Binding(Does.Level("dimmer"), wash), takeover = "IMMEDIATE"))
+        }.body<SurfaceBindingDto>()
+        assertEquals("IMMEDIATE", written.takeoverPolicy)
+        val cleared = client.put(slotUrl) {
+            contentType(ContentType.Application.Json)
+            setBody(slot("fader-1", Binding(Does.Level("dimmer"), wash)))
+        }.body<SurfaceBindingDto>()
+        assertEquals(null, cleared.takeoverPolicy, "a slot write states the whole slot")
+    }
+
+    @Test
+    fun `a slot write is refused by the function's spec`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val goOnFader = client.put(slotUrl) {
+            contentType(ContentType.Application.Json)
+            setBody(slot("fader-1", Binding(Does.Go, Subject.Record(RecordKind.STACK, seedStack().second))))
+        }
+        assertEquals(HttpStatusCode.BadRequest, goOnFader.status)
+        assertEquals("BINDING_WRONG_CONTROL_KIND", goOnFader.body<ErrorResponse>().code)
+
+        val fanOnOne = client.put(slotUrl) {
+            contentType(ContentType.Application.Json)
+            setBody(slot("enc-2", Binding(Does.Fan(uk.me.cormack.lighting7.midi.FanAxis.PAN), Subject.Fixture("hex-1"))))
+        }
+        assertEquals(HttpStatusCode.BadRequest, fanOnOne.status)
+        assertEquals("BINDING_WRONG_SUBJECT", fanOnOne.body<ErrorResponse>().code)
+
+        val stripOnControl = client.put(slotUrl) {
+            contentType(ContentType.Application.Json)
+            setBody(slot("fader-1", Binding(Does.Strip, wash)))
+        }
+        assertEquals(CODE_BINDING_STRIP_NEEDS_STRIP, stripOnControl.body<ErrorResponse>().code)
+        assertTrue(state.controlSurfaceBindingService.list(projectId).isEmpty())
+    }
+
+    @Test
+    fun `a slot delete clears the part, and an empty part answers 404`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        client.put(slotUrl) { contentType(ContentType.Application.Json); setBody(slot("btn-2", Binding(Does.Blackout))) }
+
+        val gone = client.delete(slotUrl) { contentType(ContentType.Application.Json); setBody(slotRef("btn-2")) }
+        assertEquals(HttpStatusCode.NoContent, gone.status)
+        assertTrue(state.controlSurfaceBindingService.list(projectId).isEmpty())
+        val again = client.delete(slotUrl) { contentType(ContentType.Application.Json); setBody(slotRef("btn-2")) }
+        assertEquals(HttpStatusCode.NotFound, again.status)
+    }
+
+    @Test
+    fun `a POST answers the binding and its part`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val binding = Binding(Does.Level("dimmer"), wash)
@@ -205,44 +259,18 @@ class SurfaceBindingRoutesTest : RouteIntegrationTest() {
         val dto = response.body<SurfaceBindingDto>()
         assertEquals(binding, dto.binding)
         assertEquals(ControlPart.MAIN, dto.part)
-        assertEquals("groupAttribute", dto.targetType)
-        assertEquals(oldTarget("groupAttribute", "groupName" to "front-wash", "attribute" to "dimmer"), dto.target)
     }
 
     @Test
-    fun `a POST with the old union's target translates it, an int-only cueStackGo to the stack's uuid`() = testApplication {
+    fun `the old union's target is no longer a write`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        val (stackId, stackUuid) = seedStack()
-
-        val response = client.post("/api/rest/projects/$projectId/surface-bindings") {
-            contentType(ContentType.Application.Json)
-            setBody(createOld("btn-2", oldTarget("cueStackGo", "stackId" to stackId)))
-        }
-        assertEquals(HttpStatusCode.Created, response.status)
-        val dto = response.body<SurfaceBindingDto>()
-        assertEquals(Binding(Does.Go, Subject.Record(RecordKind.STACK, stackUuid)), dto.binding)
-        assertEquals(ControlPart.MAIN, dto.part)
-        assertEquals("cueStackGo", dto.targetType)
-        assertEquals(
-            oldTarget("cueStackGo", "stackId" to stackId, "stackUuid" to stackUuid.toString()),
-            dto.target,
-        )
-        assertEquals(dto.binding, state.controlSurfaceBindingService.get(projectId, dto.id)?.binding)
-    }
-
-    @Test
-    fun `a POST with both a binding and a target is refused`() = testApplication {
-        mountTestApp(state)
-        val client = jsonClient()
-
         val response = client.post("/api/rest/projects/$projectId/surface-bindings") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject {
                 put("deviceTypeKey", JsonPrimitive(deviceTypeKey))
                 put("controlId", JsonPrimitive("btn-2"))
-                put("binding", bindingJson(Binding(Does.Blackout)))
-                put("target", oldTarget("blackout"))
+                put("target", buildJsonObject { put("type", JsonPrimitive("blackout")) })
             })
         }
         assertEquals(HttpStatusCode.BadRequest, response.status)
@@ -250,17 +278,13 @@ class SurfaceBindingRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `an old union button target posted on an encoder lands on its push`() = testApplication {
+    fun `the function catalogue lists every entry once, from the specs`() = testApplication {
         mountTestApp(state)
-        val client = jsonClient()
-
-        val response = client.post("/api/rest/projects/$projectId/surface-bindings") {
-            contentType(ContentType.Application.Json)
-            setBody(createOld("enc-1", oldTarget("blackout")))
-        }
-        assertEquals(HttpStatusCode.Created, response.status)
-        val dto = response.body<SurfaceBindingDto>()
-        assertEquals(ControlPart.PUSH, dto.part)
-        assertEquals(Binding(Does.Blackout), dto.binding)
+        val entries = jsonClient().get("/api/rest/surface-functions").body<List<CatalogueEntry>>()
+        assertEquals(SurfaceCatalogue.entries.map { it.id }, entries.map { it.id })
+        val go = entries.single { it.id == "go" }
+        assertEquals(listOf(SubjectKind.STACK), go.subjects)
+        assertEquals(listOf(ControlKind.BUTTON), go.inputs)
+        assertEquals(WritesTo.PLAYBACK, go.writesTo)
     }
 }

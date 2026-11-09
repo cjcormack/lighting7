@@ -61,8 +61,7 @@ export interface CellsRig {
 export type CellsOver = 'HEADS' | 'CELLS'
 
 /**
- * The chip's words for the nine modes, shared with the MIDI library's chips and `describeTarget`
- * so a button and the chip name one rule the same way. The *Cells* menu holds the seven
+ * The chip's words for the nine modes. The *Cells* menu holds the seven
  * **filters** and two step buttons beside it hold *Prev* / *Next* (D12 as revised 2026-09-21; the
  * design's face-and-menu split put five on the face and four in the menu, and the mix read as two
  * controls).

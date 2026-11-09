@@ -16,10 +16,8 @@ import kotlinx.coroutines.flow.update
  * meaning "resolve to bank-agnostic bindings only"), and a device unplugged and plugged back under the
  * same `displayKey` comes back on the layer it left, as the encoder page does.
  *
- * Two ways to flip a bank:
- *   1. A device-side bank button, or a button bound to [Does.Layer] → [SurfaceInputRouter]
- *      calls [setBank] here for the device it is on.
- *   2. Frontend `surfaceBank.set` WebSocket message → handler calls [setBank] directly.
+ * Only the desk flips a bank: a device-side bank button, or a button bound to [Does.Layer], and
+ * [SurfaceInputRouter] calls [setBank] here for the device it is on. Nothing in the app does.
  *
  * Changes go out on [changes] so socket clients can mirror the active bank in their UI,
  * and on [active] for passive observers that want a full snapshot.

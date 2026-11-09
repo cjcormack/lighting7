@@ -44,7 +44,9 @@ import uk.me.cormack.lighting7.midi.MidiAccessSource
 import uk.me.cormack.lighting7.midi.createPlatformKtmidiAccessSource
 import uk.me.cormack.lighting7.midi.MidiDeviceRegistry
 import uk.me.cormack.lighting7.midi.NoOpMidiAccessSource
-import uk.me.cormack.lighting7.midi.MidiLearnSessionManager
+import uk.me.cormack.lighting7.midi.SurfaceIdentify
+import uk.me.cormack.lighting7.midi.SurfaceMapService
+import uk.me.cormack.lighting7.midi.SurfaceNames
 import uk.me.cormack.lighting7.midi.BuskRefs
 import uk.me.cormack.lighting7.midi.PadRef
 import uk.me.cormack.lighting7.midi.SurfaceFeedbackPublisher
@@ -71,6 +73,8 @@ import uk.me.cormack.lighting7.sync.auth.oauth.OAuthTokenStore
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import uk.co.xfactorylibrarians.coremidi4j.CoreMidiDeviceProvider
 import uk.co.xfactorylibrarians.coremidi4j.CoreMidiNotification
 import uk.me.cormack.lighting7.models.asInstant
@@ -703,20 +707,26 @@ class State(val config: ApplicationConfig) {
         val entryUuids: Map<java.util.UUID, java.util.UUID>,
     )
 
-    /**
-     * MIDI Learn session coordinator. Subscribes to [deviceMatcher] attach events and routes
-     * inbound controller events into pending learn sessions.
-     */
-    val midiLearnSessionManager: MidiLearnSessionManager by lazy {
-        MidiLearnSessionManager(
-            deviceMatcher = deviceMatcher,
-            controllerLookup = midiRegistry::controllerFor,
+    /** Identify mode: a window waiting for a touch on the desk, which the input router captures without dispatching. */
+    val surfaceIdentify: SurfaceIdentify by lazy { SurfaceIdentify() }
+
+    /** The served picture: every device type's resolved, labelled map for the current project. */
+    val surfaceMapService: SurfaceMapService by lazy {
+        SurfaceMapService(
+            bindingService = controlSurfaceBindingService,
+            projectIdProvider = { runCatching { projectManager.currentProject.id.value }.getOrNull() },
+            namesFor = { projectId -> transaction(database) { SurfaceNames.read(projectId) } },
+            encoderPageFor = { typeKey ->
+                deviceMatcher.attached.value.entries.firstOrNull { it.value.typeKey == typeKey }
+                    ?.let { encoderBankState.selectionFor(it.key) } ?: EncoderBankState.DEFAULT
+            },
+            attachedTypes = { deviceMatcher.attached.value.values.mapTo(HashSet()) { it.typeKey } },
         )
     }
 
     /**
-     * Active bank per device type (Phase 3). Ephemeral in-memory map mutated by the router
-     * on device-side bank buttons and by WS `surfaceBank.set`.
+     * Active bank per device. Ephemeral in-memory map mutated only by the router, on the desk's
+     * own bank buttons.
      */
     val activeBankState: ActiveBankState by lazy { ActiveBankState() }
 
@@ -1110,6 +1120,7 @@ class State(val config: ApplicationConfig) {
             feedbackHooks = surfaceFeedbackPublisher,
             latencyTracker = midiLatencyTracker,
             ensureHistory = { history.ensure(it) },
+            identify = surfaceIdentify,
         )
     }
 
@@ -1129,7 +1140,9 @@ class State(val config: ApplicationConfig) {
         registerCoreMidiChangeListener()
         midiRegistry.start(GlobalScope)
         deviceMatcher.start(GlobalScope)
-        midiLearnSessionManager.start(GlobalScope)
+        surfaceIdentify.start(GlobalScope)
+        surfaceMapService.start(GlobalScope)
+        attachSurfaceMapTriggers()
         surfaceFeedbackPublisher.start(GlobalScope)
         surfaceInputRouter.start(GlobalScope)
         attachBindingHealthListener()
@@ -1234,7 +1247,8 @@ class State(val config: ApplicationConfig) {
 
         runCatching { surfaceInputRouter.stop() }
         runCatching { surfaceFeedbackPublisher.stop() }
-        runCatching { midiLearnSessionManager.stop() }
+        runCatching { surfaceMapService.stop() }
+        surfaceMapJob?.cancel()
         runCatching { deviceMatcher.stop() }
         runCatching { midiRegistry.close() }
 
@@ -1296,6 +1310,7 @@ class State(val config: ApplicationConfig) {
             buskPageState.reconcile()
             refreshActiveProjectBindingHealth()
         }
+        override fun speedMasterListChanged() = refreshActiveProjectBindingHealth()
     }
 
     private fun attachBindingHealthListener() {
@@ -1316,6 +1331,24 @@ class State(val config: ApplicationConfig) {
             return
         }
         controlSurfaceBindingService.invalidateHealth(projectId)
+        // A record renamed moves a label though no binding's health does.
+        surfaceMapService.invalidate()
+    }
+
+    private var surfaceMapJob: Job? = null
+
+    /** What else moves the map: any binding change, a device's encoder page, a device attaching, the project. */
+    @OptIn(DelicateCoroutinesApi::class)
+    private fun attachSurfaceMapTriggers() {
+        surfaceMapJob?.cancel()
+        surfaceMapJob = GlobalScope.launch {
+            merge(
+                controlSurfaceBindingService.changes.map { },
+                encoderBankState.selections.map { },
+                deviceMatcher.attached.map { },
+                projectManager.projectChangedFlow.map { },
+            ).collect { surfaceMapService.invalidate() }
+        }
     }
 
     // CoreMIDI4J pushes midiSystemUpdated callbacks on macOS plug/unplug — provided CoreMidiHotPlug

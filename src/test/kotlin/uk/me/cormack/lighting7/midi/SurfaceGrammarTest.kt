@@ -23,12 +23,9 @@ class SurfaceGrammarTest {
     private val page = UUID.fromString("88888888-8888-4888-8888-888888888888")
     private val master = UUID.fromString("99999999-9999-4999-8999-999999999999")
 
-    private val refs = object : SurfaceGrammar.Ints, SurfaceGrammar.Ids {
+    private val refs = object : SurfaceGrammar.Ints {
         override fun stackUuid(id: Int) = if (id == 7) stack else null
         override fun cueUuid(id: Int) = if (id == 9) cue else null
-        override fun stackId(uuid: UUID) = if (uuid == stack) 7 else null
-        override fun cueId(uuid: UUID) = if (uuid == cue) 9 else null
-        override fun entryStack(entry: UUID) = if (entry == this@SurfaceGrammarTest.entry) stack else null
     }
 
     private fun old(json: String) = BindingJson.parseToJsonElement(json) as JsonObject
@@ -147,26 +144,5 @@ class SurfaceGrammarTest {
     fun `a row already in the grammar is left alone`() {
         val payload = Binding(Does.Go, Subject.Record(RecordKind.STACK, stack)).encodePayload()
         assertNull(SurfaceGrammar.row("x-touch-compact-standard", "btn-1", payload, refs))
-    }
-
-    @Test
-    fun `the old screens read every binding back in the old union's words, and it translates back the same`() {
-        for ((_, binding) in table) {
-            // The two spellings of the grand master's no-level binding differ only by the part's input.
-            for (button in listOf(false, true)) {
-                val legacy = SurfaceGrammar.legacyTarget(binding, "x-touch-compact-standard", button, refs)
-                assertEquals(binding, SurfaceGrammar.binding(legacy, refs), legacy.toString())
-            }
-        }
-        assertEquals(
-            "grandMasterToggle",
-            SurfaceGrammar.legacyType(SurfaceGrammar.legacyTarget(Binding(Does.GrandMaster()), "d", true, refs)),
-        )
-        assertEquals(
-            "grandMasterFader",
-            SurfaceGrammar.legacyType(SurfaceGrammar.legacyTarget(Binding(Does.GrandMaster()), "d", false, refs)),
-        )
-        val unknown = SurfaceGrammar.legacyTarget(Binding(Does.Unknown("futureThing", "{}")), "d", true, refs)
-        assertEquals("unknown", SurfaceGrammar.legacyType(unknown))
     }
 }

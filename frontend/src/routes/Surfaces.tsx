@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useDndMonitor } from "@dnd-kit/core"
 import { useSearchParams } from "react-router"
-import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -9,50 +7,29 @@ import { AlertTriangle, Sliders } from "lucide-react"
 import {
   useSurfaceDevices,
   useActiveBanks,
-  useEncoderBanks,
   useSurfaceControls,
   usePickupStates,
   useControlSurfaceTypeListQuery,
   useSurfaceBindingsQuery,
-  useCreateSurfaceBindingMutation,
-  useUpdateSurfaceBindingMutation,
-  useDeleteSurfaceBindingMutation,
+  useSurfaceFunctionsQuery,
+  useSurfaceMap,
+  useIdentify,
 } from "@/store/surfaces"
-import type {
-  ControlState,
-  ControlSurfaceBinding,
-  PickupChange,
-  SurfaceDeviceInfo,
-} from "@/store/surfaces"
+import type { ControlState, IdentifyCapture, PickupChange, SurfaceDeviceInfo } from "@/store/surfaces"
+import { useIsDeskConnected } from "@/store/status"
 import { BankSwitcher } from "@/components/surfaces/BankSwitcher"
-import { BindingMatrix } from "@/components/surfaces/BindingMatrix"
 import { SurfacePanel } from "@/components/surfaces/SurfacePanel"
-import { SurfaceInspector } from "@/components/surfaces/SurfaceInspector"
-import { SurfaceLibrary } from "@/components/surfaces/SurfaceLibrary"
+import { SurfaceInspector, IdentifyButton } from "@/components/surfaces/SurfaceInspector"
+import { SurfaceSheet } from "@/components/surfaces/SurfaceSheet"
 import { SelectionChip } from "@/components/surfaces/SelectionChip"
-import { effectiveTarget } from "@/components/surfaces/targetUtils"
-import { useRecordBindingOptions } from "@/components/surfaces/recordOptions"
-import { buildBindingIndex, DEFAULT_ENCODER_BANK } from "@/lib/surfaceResolve"
-import {
-  bindingWriteFor,
-  surfaceDragData,
-  surfaceDropData,
-  type SurfaceDragData,
-} from "@/lib/surfaceDrop"
-import { targetKey } from "@/lib/targetKey"
-import { lightingApi } from "@/api/lightingApi"
 import { cn } from "@/lib/utils"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
-import { useTargetColours } from "@/hooks/useTargetColours"
 
 /**
- * Settings › Surfaces — a picture of the attached desk, and an inspector for whichever control
- * you click.
- *
- * The Blackout and grand-master buttons that used to sit in this header are **gone** (plan D1).
- * The targets, the `surfaceScaler.*` family and the ShowBar's own toggles are untouched: this is
- * where the operator wires the desk, not where they run it, and a live-rig control on a settings
- * page is a control in the wrong place rather than a missing feature.
+ * Settings › Surfaces — the attached desk as a picture, and an inspector for whichever control you
+ * click or touch (editor A); or the same bindings as a table (editor C), the only view below tablet
+ * width. What every control does is the desk's served map (surface-setup plan D15), for the layer
+ * being viewed, which switches nothing on the hardware (D13).
  */
 
 // ─── Redirect ─────────────────────────────────────────────────────────
@@ -64,40 +41,27 @@ export function SurfacesRedirect() {
 // ─── Content ──────────────────────────────────────────────────────────
 
 const NO_CONTROLS: Readonly<Record<string, ControlState>> = {}
+const NO_CATALOGUE: never[] = []
 
 export function SurfacesContent({ projectId }: { projectId: number }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const devices = useSurfaceDevices()
   const banks = useActiveBanks()
-  const encoderBanks = useEncoderBanks()
   const allControls = useSurfaceControls()
   const pickups = usePickupStates()
+  const connected = useIsDeskConnected()
   const { data: types } = useControlSurfaceTypeListQuery()
   const { data: bindings } = useSurfaceBindingsQuery(projectId)
-  const [createBinding] = useCreateSurfaceBindingMutation()
-  const [updateBinding] = useUpdateSurfaceBindingMutation()
-  const [deleteBinding] = useDeleteSurfaceBindingMutation()
-  // One subscription for the whole route: the picture and the table are both mounted at once
-  // (one CSS-hidden by breakpoint, not unmounted — see the layout below), and both want a
-  // record's name where `describeTarget` can only give a uuid.
-  const records = useRecordBindingOptions(projectId)
-  const colours = useTargetColours(projectId)
-  // Edit mode is **local state**, deliberately not the busk view's Redux slice: that one exists
-  // because the cue-slot overlay is a sibling of the routed page and could never read a context
-  // provided inside it. Here the library and the picture are both inside this route, so a slice
-  // would be state outliving both of its readers for nothing.
-  const [editing, setEditing] = useState(false)
-
-  // `?binding=<id>` is minted from the fixtures and groups pages (`BoundControlBadge`), so it is
-  // an in-app contract: it picks the binding's device, forces its bank, and now also opens the
-  // inspector on the control it names.
-  const highlightBindingId = useMemo(() => {
-    const v = searchParams.get("binding")
-    return v ? Number(v) : null
-  }, [searchParams])
+  const { data: catalogue } = useSurfaceFunctionsQuery()
 
   const [selectedDisplayKey, setSelectedDisplayKey] = useState<string | null>(null)
   const [selectedControlId, setSelectedControlId] = useState<string | null>(null)
+  /**
+   * The layer the editors show, null for no layer; undefined until one is chosen, which views the
+   * device's own.
+   */
+  const [viewed, setViewed] = useState<string | null | undefined>(undefined)
+  const [view, setView] = useState<"picture" | "table">("picture")
 
   // Pick first matched device if nothing selected yet.
   useEffect(() => {
@@ -106,115 +70,59 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
     if (first) setSelectedDisplayKey(first.displayKey)
   }, [devices, selectedDisplayKey])
 
-  // Read, not a dependency: the link is consumed once, and the device shown only breaks a tie.
+  const selectedDevice = devices.find((d) => d.displayKey === selectedDisplayKey) ?? null
+  const selectedProfile = selectedDevice?.typeKey
+    ? ((types ?? []).find((t) => t.typeKey === selectedDevice.typeKey) ?? null)
+    : null
+  const frame = useSurfaceMap(selectedProfile?.typeKey)
+
+  const deviceLayer = selectedDevice ? (banks[selectedDevice.displayKey] ?? null) : null
+  const viewedLayer = viewed !== undefined ? viewed : deviceLayer
+  const layered = (selectedProfile?.banks.length ?? 0) > 0
+  const deviceOnNoLayer = layered && selectedDevice != null && deviceLayer == null
+
+  // `?binding=<id>` is minted from the fixtures and groups pages (`BoundControlBadge`): it picks the
+  // binding's device and control and **views** its layer, moving nothing on the hardware.
+  const highlightBindingId = useMemo(() => {
+    const v = searchParams.get("binding")
+    return v ? Number(v) : null
+  }, [searchParams])
   const selectedDisplayKeyRef = useRef(selectedDisplayKey)
   useEffect(() => {
     selectedDisplayKeyRef.current = selectedDisplayKey
   }, [selectedDisplayKey])
-
   useEffect(() => {
     if (!highlightBindingId || !bindings) return
     const binding = bindings.find((b) => b.id === highlightBindingId)
     if (!binding) return
-    // The device already shown when it is of the binding's type, so a second identical surface is not switched.
     const shown = devices.find((d) => d.displayKey === selectedDisplayKeyRef.current)
     const device =
       shown?.typeKey === binding.deviceTypeKey ? shown : devices.find((d) => d.typeKey === binding.deviceTypeKey)
     if (device) setSelectedDisplayKey(device.displayKey)
-    // A strip row's `controlId` is the *strip* id, which is in no profile's `controls` — so
-    // handing it straight to the inspector renders nothing at all. Land on the strip's fader
-    // instead: the badge that minted this link matched on the dimmer, and the fader is the
-    // dimmer. This is the common case rather than a corner, since a group on a strip is the
-    // shape the view is built around.
+    // A strip row's control id is the strip's, which no control has: land on its fader.
     const linkProfile = (types ?? []).find((t) => t.typeKey === binding.deviceTypeKey)
     const strip = linkProfile?.strips?.find((s) => s.id === binding.controlId)
     setSelectedControlId(strip ? strip.fader : binding.controlId)
-    if (device && binding.bank != null) {
-      lightingApi.surfaces.setBank(device.displayKey, binding.bank)
-    }
-    // Clear the param after we've consumed it so back-nav doesn't re-trigger.
+    if (binding.bank != null) setViewed(binding.bank)
+    setView("picture")
     const params = new URLSearchParams(searchParams)
     params.delete("binding")
     setSearchParams(params, { replace: true })
   }, [highlightBindingId, bindings, devices, types, searchParams, setSearchParams])
 
-  const selectedDevice = devices.find((d) => d.displayKey === selectedDisplayKey) ?? null
-  const selectedProfile = selectedDevice?.typeKey
-    ? ((types ?? []).find((t) => t.typeKey === selectedDevice.typeKey) ?? null)
-    : null
+  // A touch on the desk selects its control, on the device it came from.
+  const onCapture = useCallback((capture: IdentifyCapture) => {
+    setSelectedDisplayKey(capture.displayKey)
+    setSelectedControlId(capture.controlId)
+    setView("picture")
+  }, [])
+  const identify = useIdentify(onCapture)
+  const beginIdentify = useCallback(() => identify.begin(selectedProfile?.typeKey ?? null), [identify, selectedProfile])
+  const identifyControls = useMemo(() => ({ wait: identify.wait, begin: beginIdentify, cancel: identify.cancel }), [identify.wait, identify.cancel, beginIdentify])
 
   const deadBindingCount = useMemo(
     () => (bindings ?? []).filter((b) => b.health.type !== "ok").length,
     [bindings],
-  )
-
-  const activeBank = selectedDevice ? (banks[selectedDevice.displayKey] ?? null) : null
-  const encoderBank = selectedDevice
-    ? (encoderBanks[selectedDevice.displayKey] ?? DEFAULT_ENCODER_BANK)
-    : DEFAULT_ENCODER_BANK
-
-  const index = useMemo(
-    () => buildBindingIndex(bindings ?? [], selectedProfile),
-    [bindings, selectedProfile],
-  )
-
-  const deviceTypeKey = selectedProfile?.typeKey ?? null
-  const [lifted, setLifted] = useState<SurfaceDragData | null>(null)
-
-  /**
-   * The library's drops, resolved here rather than in the palette.
-   *
-   * `useDndMonitor` on the app's one `DndContext` (`dnd/DeskDndProvider.tsx`), never a nested one,
-   * for the busk page's reason — and foreign drags are ignored by id on the way in, exactly as the
-   * cue-slot handler ignores ours. The mapping itself is pure in `lib/surfaceDrop.ts`; what is left
-   * here is the two mutations and the device this page is showing.
-   */
-  const handleDragEnd = useCallback(
-    (drag: SurfaceDragData, over: Parameters<typeof surfaceDropData>[0]) => {
-      const drop = surfaceDropData(over)
-      if (drop == null || deviceTypeKey == null) return
-      const write = bindingWriteFor(drag, drop, index, activeBank)
-      if (write == null) return
-      if (write.kind === "update") {
-        updateBinding({ projectId, bindingId: write.bindingId, target: write.target })
-        return
-      }
-      createBinding({
-        projectId,
-        deviceTypeKey,
-        controlId: write.controlId,
-        bank: write.bank,
-        target: write.target,
-      })
-    },
-    [projectId, deviceTypeKey, index, activeBank, createBinding, updateBinding],
-  )
-
-  useDndMonitor({
-    onDragStart(event) {
-      setLifted(surfaceDragData(event.active))
-    },
-    onDragEnd(event) {
-      const drag = surfaceDragData(event.active)
-      setLifted(null)
-      if (drag != null) handleDragEnd(drag, event.over)
-    },
-    onDragCancel() {
-      setLifted(null)
-    },
-  })
-
-  const removeBinding = useCallback(
-    (bindingId: number) => {
-      deleteBinding({ projectId, bindingId })
-    },
-    [projectId, deleteBinding],
-  )
-
-  /** Where each library row already sits — `strip 3`, `on 2 controls`. */
-  const placements = useMemo(
-    () => describePlacements(bindings ?? [], deviceTypeKey, activeBank),
-    [bindings, deviceTypeKey, activeBank],
   )
 
   // Pickup state is keyed by `displayKey|controlId` across every device; the panel wants one
@@ -231,6 +139,21 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
   const controls = selectedDevice
     ? (allControls[selectedDevice.displayKey] ?? NO_CONTROLS)
     : NO_CONTROLS
+  const parts = frame?.layers[viewedLayer ?? ""] ?? {}
+  const dimmed = layered && selectedDevice != null && viewedLayer !== deviceLayer
+  const viewedName = selectedProfile?.banks.find((b) => b.id === viewedLayer)?.name
+  const deviceName = selectedProfile?.banks.find((b) => b.id === deviceLayer)?.name
+
+  const sheet = selectedProfile ? (
+    <SurfaceSheet
+      projectId={projectId}
+      profile={selectedProfile}
+      frame={frame}
+      catalogue={catalogue ?? NO_CATALOGUE}
+      viewedLayer={viewedLayer}
+      connected={connected}
+    />
+  ) : null
 
   return (
     <div className="flex h-full flex-col">
@@ -248,6 +171,7 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
               onSelect={() => {
                 setSelectedDisplayKey(device.displayKey)
                 setSelectedControlId(null)
+                setViewed(undefined)
               }}
             />
           ))
@@ -258,28 +182,30 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
             {deadBindingCount} dead binding{deadBindingCount === 1 ? "" : "s"}
           </Badge>
         )}
-        <div className="ml-auto flex items-center gap-2">
-          {selectedDevice && selectedProfile && (
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          {selectedProfile && (
             <BankSwitcher
-              displayKey={selectedDevice.displayKey}
               banks={selectedProfile.banks}
-              activeBank={activeBank}
+              viewedLayer={viewedLayer}
+              deviceLayer={deviceLayer}
+              deviceOnNoLayer={deviceOnNoLayer}
+              onView={setViewed}
             />
           )}
-          {/*
-            Hidden below `md` with the picture it edits — there is nothing to drag onto down
-            there — but *Done* stays at every width, so a window narrowed mid-edit can still leave.
-            The busk view's *Edit layout* makes the same pair of calls for the same reason.
-          */}
           {selectedProfile?.layout && (
-            <Button
-              size="sm"
-              variant={editing ? "default" : "outline"}
-              className={cn("h-7 text-xs", !editing && "hidden md:inline-flex")}
-              onClick={() => setEditing((on) => !on)}
-            >
-              {editing ? "Done" : "Edit bindings"}
-            </Button>
+            <div className="hidden items-center gap-1 md:flex" role="group" aria-label="View">
+              {(["picture", "table"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={view === v}
+                  onClick={() => setView(v)}
+                  className={cn("rounded-md border px-2 py-0.5 text-xs", view === v ? "border-primary bg-primary/10" : "text-muted-foreground")}
+                >
+                  {v === "picture" ? "Picture" : "Table"}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -287,159 +213,87 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
       <Separator />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-        <section className="min-w-0 flex-1 overflow-auto p-4">
+        <section className="flex min-w-0 flex-1 flex-col overflow-auto p-4">
           {!selectedDevice ? (
             <EmptyState />
           ) : !selectedProfile ? (
             <UnmatchedDeviceState device={selectedDevice} />
           ) : (
-            <div className="space-y-3">
+            <div className="flex min-h-0 flex-1 flex-col space-y-3">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 <p className="text-xs text-muted-foreground">
-                  {selectedProfile.vendor} · {selectedProfile.product} ·{" "}
-                  {activeBank == null ? "Global" : `Bank ${activeBank}`}
+                  {selectedProfile.vendor} · {selectedProfile.product}
+                  {viewedName ? ` · Layer ${viewedName}` : layered ? " · No layer" : ""}
                 </p>
                 <SelectionChip />
                 <Legend />
+                {deviceOnNoLayer && (
+                  <p className="text-[11px] text-[var(--editor-warning)]">
+                    The desk is on no layer, so only bindings on both layers fire. Its own layer key switches it.
+                  </p>
+                )}
+                {dimmed && (
+                  <p className="text-[11px] text-[var(--editor-warning)]">
+                    Viewing {viewedName ? `Layer ${viewedName}` : "no layer"}; the desk is on{" "}
+                    {deviceName ? `Layer ${deviceName}` : "no layer"}, so its live state is faint.
+                  </p>
+                )}
+                {view === "picture" && selectedControlId == null && (
+                  <span className="hidden md:inline">
+                    <IdentifyButton identify={identifyControls} connected={connected} />
+                  </span>
+                )}
               </div>
 
               {/*
-                The picture is the view; the grouped table is the narrow rendering and the
-                fallback for a profile with no layout. Both are hidden rather than reflowed,
-                because a panel drawn as a picture does not become a list by getting narrower.
+                The picture and the table are hidden rather than reflowed, because a panel drawn as a
+                picture does not become a list by getting narrower: below tablet width the table is
+                the only view.
               */}
               {selectedProfile.layout ? (
                 <>
-                  <div className="hidden overflow-x-auto md:block">
+                  <div className={cn("hidden overflow-x-auto", view === "picture" && "md:block")}>
                     <SurfacePanel
                       profile={selectedProfile}
                       controls={controls}
-                      index={index}
-                      activeBank={activeBank}
-                      encoderBank={encoderBank}
+                      parts={parts}
+                      viewedLayer={viewedLayer}
+                      dimmed={dimmed}
                       pickups={devicePickups}
                       selectedControlId={selectedControlId}
                       onSelectControl={setSelectedControlId}
-                      editing={editing}
-                      lifted={lifted}
-                      onRemoveBinding={removeBinding}
-                      records={records}
-                      colours={colours}
                     />
                   </div>
-                  <div className="md:hidden">
-                    <BindingMatrix
-                      projectId={projectId}
-                      device={selectedDevice}
-                      profile={selectedProfile}
-                      activeBank={activeBank}
-                      highlightBindingId={highlightBindingId}
-                      records={records}
-                    />
+                  <div className={cn("flex min-h-0 flex-1 flex-col", view === "picture" && "md:hidden")} data-testid="surface-table-view">
+                    {sheet}
                   </div>
                 </>
               ) : (
-                <BindingMatrix
-                  projectId={projectId}
-                  device={selectedDevice}
-                  profile={selectedProfile}
-                  activeBank={activeBank}
-                  highlightBindingId={highlightBindingId}
-                  records={records}
-                />
+                sheet
               )}
             </div>
           )}
         </section>
 
-        {/*
-          One slot, two occupants (D9): *Edit bindings* replaces the inspector with the library,
-          rather than opening a second panel beside it. The picture is what both are about, and
-          two 360px columns would leave it nothing.
-        */}
-        {selectedProfile && (editing || selectedControlId) && (
-          <aside className="hidden w-[360px] shrink-0 overflow-hidden border-l md:block">
-            {editing ? (
-              <SurfaceLibrary
-                projectId={projectId}
-                banks={selectedProfile.banks}
-                deviceTypeKey={selectedProfile.typeKey}
-                placements={placements}
-              />
-            ) : (
-              selectedControlId && (
-                <SurfaceInspector
-                  projectId={projectId}
-                  displayKey={selectedDevice?.displayKey}
-                  profile={selectedProfile}
-                  controlId={selectedControlId}
-                  index={index}
-                  activeBank={activeBank}
-                  encoderBank={encoderBank}
-                  state={controls[selectedControlId]}
-                  pickup={devicePickups[selectedControlId]}
-                  bindings={bindings ?? []}
-                />
-              )
-            )}
+        {selectedProfile && selectedControlId && view === "picture" && (
+          <aside className="hidden w-[360px] shrink-0 overflow-y-auto border-l md:block">
+            <SurfaceInspector
+              projectId={projectId}
+              profile={selectedProfile}
+              controlId={selectedControlId}
+              viewedLayer={viewedLayer}
+              frame={frame}
+              catalogue={catalogue ?? NO_CATALOGUE}
+              state={controls[selectedControlId]}
+              pickup={devicePickups[selectedControlId]}
+              connected={connected}
+              identify={identifyControls}
+            />
           </aside>
         )}
       </div>
     </div>
   )
-}
-
-/**
- * "This is already on the surface, and where" — `strip 3`, `on 2 controls`, keyed by the row's
- * `type:key`.
- *
- * **Only rows in force on the bank being drawn**, which is the exact-bank ones plus the
- * bank-agnostic ones — the same rule `activeBindingAt` applies to the picture. Counting every bank
- * would badge a group *strip 3* while the panel beside it shows strip 3 empty, and a drop there
- * would then create a second, separate binding rather than the one the badge implied was already
- * present.
- *
- * A strip wins over a count because it *is* the placement the library's row gesture makes; a target
- * that is only on single controls has no one place to name, so it gets the count instead. `flash`
- * is unwrapped so a flash button counts towards its own group rather than towards nothing.
- *
- * The record variants key by **uuid**, matching `SurfaceLibrary`'s row keys — a `pressPad` is
- * deliberately not counted, because its library row is its *page* and badging that page "on 1
- * control" for one of its pads would claim the page itself is bound.
- */
-function describePlacements(
-  bindings: readonly ControlSurfaceBinding[],
-  deviceTypeKey: string | null,
-  activeBank: string | null,
-): ReadonlyMap<string, string> {
-  const out = new Map<string, string>()
-  const counts = new Map<string, number>()
-  for (const binding of bindings) {
-    if (deviceTypeKey != null && binding.deviceTypeKey !== deviceTypeKey) continue
-    if (binding.bank != null && binding.bank !== activeBank) continue
-    const target = effectiveTarget(binding.target)
-    let key: string | null = null
-    if (target.type === "strip" || target.type === "selectTarget") key = targetKey(target.target)
-    else if (target.type === "fixtureAttribute") key = `fixture:${target.fixtureKey}`
-    else if (target.type === "groupAttribute") key = `group:${target.groupName}`
-    // The record rows key by uuid, matching `SurfaceLibrary`'s own row keys. No collision with the
-    // two above: a `CueTarget` type is only ever `fixture` or `group`. A pad badges the **page** it
-    // sits on, which is the row the library draws it in.
-    else if (target.type === "pressPalette") key = `palette:${target.paletteUuid}`
-    else if (target.type === "applyLook" || target.type === "lookSet") key = `look:${target.lookUuid}`
-    else if (target.type === "buskPageSet") key = `busk-page:${target.pageUuid}`
-    if (key == null) continue
-    if (binding.target.type === "strip") {
-      out.set(key, binding.controlId.replace(/^strip-/, "strip "))
-      continue
-    }
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  }
-  // Strips are already in `out` and win, so a count only fills a gap — no write-then-overwrite.
-  for (const [key, count] of counts) {
-    if (!out.has(key)) out.set(key, `on ${count} control${count === 1 ? "" : "s"}`)
-  }
-  return out
 }
 
 /** The legend the panel's states are read against — LED, touched, dead. */

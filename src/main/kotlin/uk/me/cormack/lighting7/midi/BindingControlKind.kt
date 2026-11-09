@@ -10,7 +10,7 @@ enum class ControlKind { CONTINUOUS, BUTTON }
 /**
  * A binding write the service refused, carrying the machine-readable [code] the client branches on.
  *
- * An [IllegalArgumentException] so every caller — both REST routes and MIDI Learn's commit — maps it
+ * An [IllegalArgumentException] so every caller — every REST route — maps it
  * to a 400; the routes additionally read [code] where they build their
  * [uk.me.cormack.lighting7.routes.ErrorResponse].
  */

@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  bindingsForScreens,
-  createSurfacesWsApi,
-  type ControlSurfaceBinding,
-  type ControlPart,
-} from './surfacesApi'
+import { createSurfacesWsApi } from './surfacesApi'
 import { InternalEventType, type InternalApiConnection, type InternalEventHandler } from './internalApi'
 import { Status } from './statusApi'
 
@@ -30,36 +25,6 @@ function fakeConnection() {
   return { conn, sent, message }
 }
 
-function row(id: number, controlId: string, part: ControlPart, bank: string | null = null): ControlSurfaceBinding {
-  return {
-    id,
-    projectId: 1,
-    deviceTypeKey: 'xtc',
-    controlId,
-    part,
-    bank,
-    binding: { does: { type: 'go' }, on: { type: 'record', kind: 'STACK', uuid: 's' } },
-    target: { type: 'cueStackGo', stackId: 1, stackUuid: 's' },
-    targetType: 'cueStackGo',
-    takeoverPolicy: null,
-    sortOrder: id,
-    health: { type: 'ok' },
-  }
-}
-
-describe('bindingsForScreens', () => {
-  it('shows one row per control and layer: the main part, else the push', () => {
-    const rows = [
-      row(1, 'enc-1', 'PUSH'),
-      row(2, 'enc-1', 'MAIN'),
-      row(3, 'enc-2', 'PUSH'),
-      row(4, 'enc-1', 'PUSH', 'layer-b'),
-      row(5, 'btn-1', 'MAIN'),
-    ]
-    expect(bindingsForScreens(rows).map((b) => b.id)).toEqual([2, 3, 4, 5])
-  })
-})
-
 // Two identical surfaces share their type's bindings but each keeps its own layer (D16).
 describe('active banks per device', () => {
   it('patches only the device a surfaceBank.changed names, not its type-mates', () => {
@@ -84,10 +49,38 @@ describe('active banks per device', () => {
     expect(api.getBanks()).toEqual({ 'xtc-right': 'b' })
   })
 
-  it('names the device, not its type, when setting a bank', () => {
+})
+
+describe('the served map', () => {
+  it('keeps each device type\'s latest frame, replacing only the type a frame names', () => {
     const fake = fakeConnection()
     const api = createSurfacesWsApi(fake.conn)
-    api.setBank('xtc-right', 'b')
-    expect(fake.sent).toEqual([{ type: 'surfaceBank.set', displayKey: 'xtc-right', bank: 'b' }])
+    fake.message({ type: 'surfaceMap.state', projectId: 1, deviceTypeKey: 'xtc', layers: { a: {} } })
+    fake.message({ type: 'surfaceMap.state', projectId: 1, deviceTypeKey: 'other', layers: {} })
+    fake.message({ type: 'surfaceMap.state', projectId: 1, deviceTypeKey: 'xtc', layers: { b: {} } })
+    expect(Object.keys(api.getMaps() ?? {})).toEqual(['xtc', 'other'])
+    expect(api.getMaps()?.xtc.layers).toEqual({ b: {} })
+  })
+
+  it('has no frame that switches a device\'s layer', () => {
+    const api = createSurfacesWsApi(fakeConnection().conn) as unknown as Record<string, unknown>
+    expect(api.setBank).toBeUndefined()
+  })
+})
+
+describe('identify', () => {
+  it('asks for a touch and relays its wait and its capture', () => {
+    const fake = fakeConnection()
+    const api = createSurfacesWsApi(fake.conn)
+    const events: unknown[] = []
+    api.subscribeIdentify((event) => events.push(event))
+    api.beginIdentify('xtc')
+    expect(fake.sent).toEqual([{ type: 'surfaceIdentify.begin', deviceTypeKey: 'xtc' }])
+    fake.message({ type: 'surfaceIdentify.state', sessionId: 's', waiting: true, deadlineMs: 5, remainingMs: 30000 })
+    fake.message({ type: 'surfaceIdentify.captured', sessionId: 's', deviceTypeKey: 'xtc', displayKey: 'xtc-1', controlId: 'btn-1', part: 'MAIN' })
+    expect(events).toEqual([
+      { type: 'state', sessionId: 's', waiting: true, deadlineMs: 5, remainingMs: 30000 },
+      { type: 'captured', sessionId: 's', deviceTypeKey: 'xtc', displayKey: 'xtc-1', controlId: 'btn-1', part: 'MAIN' },
+    ])
   })
 })

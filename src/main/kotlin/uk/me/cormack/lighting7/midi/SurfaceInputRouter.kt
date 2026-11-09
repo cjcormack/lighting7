@@ -19,13 +19,14 @@ import java.util.concurrent.ConcurrentHashMap
  * Routes inbound events from attached control surfaces to the app's composition / cue /
  * transport layers.
  *
- * Lifecycle mirrors [MidiLearnSessionManager]:
+ * Lifecycle:
  *   - [start] subscribes to [DeviceMatcher.events] and launches a per-device collector for
  *     each currently-attached surface. New attachments spin up a fresh collector; detachments
  *     cancel theirs.
  *   - [stop] cancels all running collectors.
  *
  * Hot path per inbound event:
+ *   0. Offer it to [SurfaceIdentify], which keeps a touch a window is waiting for from dispatch.
  *   1. Look the event up in the device profile's [ControlInputIndex] to find the control part it
  *      addresses. Layer-button presses short-circuit straight to [ActiveBankState.setBank] — they
  *      are intentionally not user-bindable.
@@ -57,6 +58,8 @@ class SurfaceInputRouter(
     selectHoldMs: Long = SurfaceDispatch.SELECT_HOLD_MS,
     /** Gives the project a record cache before an input writes to it, so the write is journaled (undo plan §3.2). */
     private val ensureHistory: (Int) -> Unit = {},
+    /** Identify mode, which takes a touch before dispatch sees it. */
+    private val identify: SurfaceIdentify? = null,
 ) {
     companion object {
         private val logger = LoggerFactory.getLogger(SurfaceInputRouter::class.java)
@@ -152,6 +155,7 @@ class SurfaceInputRouter(
     private fun route(displayKey: String, deviceTypeKey: String, event: MidiInputEvent) {
         val profile = types().firstOrNull { it.typeKey == deviceTypeKey } ?: return
         val input = profile.inputs.match(event) ?: return
+        if (identify?.offer(displayKey, deviceTypeKey, input) == true) return
         // Each input is one step of the programmer's history, the surface's own; a fader or encoder
         // moved on one control folds into one (undo plan §3.2, §3.6).
         val control = when (input) {
