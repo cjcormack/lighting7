@@ -406,9 +406,9 @@ run `./gradlew compileTestKotlin` and the touched packages' tests where they tou
 | 2 | Auto numbers from position | merged | `claude/gallant-meitner-7xk6a8` | [#411](https://github.com/cjcormack/lighting7/pull/411) | `210c26d` |
 | 3 | The Show view follows the show | merged | `claude/zen-dirac-kc1wi2` | [#413](https://github.com/cjcormack/lighting7/pull/413) | `5a7f5cc` |
 | 4 | Include, and Record's cue list and placement | merged | `claude/sharp-lamport-6erbz0` | [#415](https://github.com/cjcormack/lighting7/pull/415) | `0015e0e` |
-| 5 | One colour editor for FX | in review | `claude/venue-rig-fixes-1fe92b` | [#417](https://github.com/cjcormack/lighting7/pull/417) | `35394c6` |
-| 6 | Path's Size | in review | `claude/lucid-keller-q7h8l3` | | |
-| 7 | Move in dark's instant rows | planned | | | |
+| 5 | One colour editor for FX | merged | `claude/venue-rig-fixes-1fe92b` | [#417](https://github.com/cjcormack/lighting7/pull/417) | `35394c6` |
+| 6 | Path's Size | in review | `claude/lucid-keller-q7h8l3` | [#418](https://github.com/cjcormack/lighting7/pull/418) | `9f0b797` |
+| 7 | Move in dark's instant rows | in review | `claude/brave-darwin-jeducv` | | |
 | 8 | A show's name for a venue fixture | planned | | | |
 | 9 | Selecting in the Prompt Book while the show plays | planned | | | |
 
@@ -684,6 +684,13 @@ D22, D23.
 - Docs: `docs/cue-stacks-engineering.md` §"Move in dark" (the instant table, D22).
 - Local: `compileTestKotlin`, `--tests 'uk.me.cormack.lighting7.fx.*'` and the move-in-dark route
   tests.
+- *As built:* `HeadIntensity` carries what `isInstant` reads: `wheels` (a setting whose options
+  declare a colour preview or a gobo, or that declares `media`) and `travels` (the head declares a
+  wheel or a travelling category). "A head that has travelling rows" for a SPEED is read from the
+  head's declared attributes, not the cue's rows, so a mover's vector speed travels even in a cue that
+  sets nothing else. The service's catch-up at a GO gives an instant head the same zero timing, and a
+  head lit early that goes dark again is set at once too. The route test is in
+  `CueMoveInDarkRoutesTest`, beside the other static-plan tests.
 
 ### Session 8 — A show's name for a venue fixture
 

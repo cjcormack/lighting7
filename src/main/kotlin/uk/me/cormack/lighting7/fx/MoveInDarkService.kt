@@ -33,7 +33,7 @@ private val logger = LoggerFactory.getLogger("MoveInDarkService")
  * after one of those) watches the planned heads' intensity on the output ([HeadIntensity]):
  *
  * - dark since *t*, a head is [HeadState.WAITING]; at *t* + delay it is [HeadState.MOVING], its rows
- *   joining the stack's contributor and ramping over the move time; after that it is [HeadState.SET];
+ *   joining the stack's contributor and ramping over the move time; after that it is [HeadState.SET]; a head whose rows are all instant is [HeadState.SET] the moment it goes dark;
  * - one that lights while waiting goes back to idle; one that lights while moving or set is
  *   [HeadState.LIT_EARLY] (D8): its rows go, ramping back to what the live cues say over the move
  *   time, and once dark again it waits the delay and moves again;
@@ -515,7 +515,7 @@ class MoveInDarkService internal constructor(
         val dark = intensity.isDark(fixtures.controllerOrNull(intensity.dmxUniverse)) && !intensity.hasIntensityFx(covered, heads)
         when (head.state) {
             // The live cue lights it: dark only because something above holds it out, so nothing moves.
-            null -> if (dark && key !in run.litByLive) { head.state = HeadState.WAITING; head.since = now }
+            null -> if (dark && key !in run.litByLive) goneDark(head, now)
             HeadState.WAITING -> when {
                 !dark -> head.state = null
                 now - head.since >= head.move.delay.toMillis() -> { head.state = HeadState.MOVING; head.since = now }
@@ -529,8 +529,14 @@ class MoveInDarkService internal constructor(
                 }
                 head.state == HeadState.MOVING && now - head.since >= head.move.time.toMillis() -> head.state = HeadState.SET
             }
-            HeadState.LIT_EARLY -> if (dark) { head.state = HeadState.WAITING; head.since = now }
+            HeadState.LIT_EARLY -> if (dark) goneDark(head, now)
         }
+    }
+
+    /** [head] has just gone dark: it waits its delay, but one whose rows are all instant is set at once (D23). */
+    private fun goneDark(head: HeadRun, now: Long) {
+        head.state = if (head.move.instant) HeadState.SET else HeadState.WAITING
+        head.since = now
     }
 
     /**
@@ -575,7 +581,7 @@ class MoveInDarkService internal constructor(
                 continue
             }
             val timing = settings ?: continue
-            val move = MoveInDarkPlanner.HeadMove(key, entryId, cueId, moving, timing.delay, timing.time, label)
+            val move = MoveInDarkPlanner.headMove(key, head, entryId, cueId, moving, timing, label)
             run.heads[key] = HeadRun(move).also {
                 it.state = HeadState.SET
                 it.handOverUntil = until

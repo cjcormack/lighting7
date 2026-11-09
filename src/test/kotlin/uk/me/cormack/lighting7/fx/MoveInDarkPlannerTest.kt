@@ -3,9 +3,12 @@ package uk.me.cormack.lighting7.fx
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.AttributeCategory
+import uk.me.cormack.lighting7.fixture.dmx.China2CellLedBlinderFixture
+import uk.me.cormack.lighting7.fixture.dmx.Gear4MusicOrbit70Fixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.KamLiteobar252Fixture
 import uk.me.cormack.lighting7.fixture.dmx.LightstripRgbFixture
+import uk.me.cormack.lighting7.fixture.dmx.MartinMac250Fixture
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue
 import uk.me.cormack.lighting7.fx.MoveInDarkPlanner.LiveReason
 import uk.me.cormack.lighting7.models.CueMoveInDarkMode
@@ -17,6 +20,7 @@ import java.awt.Color
 import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -63,6 +67,7 @@ class MoveInDarkPlannerTest {
         next: Int? = live + 1,
         loop: Boolean = false,
         settings: MoveInDarkSettings = MoveInDarkSettings.NEW_STACK,
+        heads: Map<String, HeadIntensity> = this.heads,
     ) = MoveInDarkPlanner.plan(
         MoveInDarkPlanner.Input(
             settings = settings,
@@ -248,6 +253,7 @@ class MoveInDarkPlannerTest {
         settings: MoveInDarkSettings = MoveInDarkSettings.NEW_STACK,
         follows: Map<Int, Long> = emptyMap(),
         fades: Map<Int, Long> = emptyMap(),
+        heads: Map<String, HeadIntensity> = this.heads,
     ) = MoveInDarkPlanner.staticPlan(
         MoveInDarkPlanner.StaticInput(
             settings = settings,
@@ -326,6 +332,108 @@ class MoveInDarkPlannerTest {
         assertEquals(listOf(MoveInDarkPlanner.StaticLive("hex", LiveReason.TOO_QUICK, setOf(AttributeFamily.POSITION))), plan.getValue(10).live, "3 s less the 500 ms fade")
         val enough = static(cues, loop = true, follows = follows + (13 to 1_500L), fades = mapOf(2 to 500L))
         assertEquals(11, enough.getValue(10).moves.single().fromEntryId)
+    }
+
+    // ─── Instant rows (venue-rig-fixes plan D22–D23) ────────────────────────────────────────
+
+    /** A 2-cell blinder at 1, a MAC 250 (mode 4) at 21, an Orbit 70 (13 channels) at 41. */
+    private val rig: Map<String, HeadIntensity> = run {
+        val fixtures = Fixtures()
+        val universe = Universe(0, 0)
+        fixtures.register(removeUnused = true) {
+            addController(MockDmxController(universe))
+            addFixture(China2CellLedBlinderFixture(universe, "blinder", "Blinder", firstChannel = 1))
+            addFixture(MartinMac250Fixture.Mode4Ch(universe, "mac", "MAC 250", firstChannel = 21))
+            addFixture(Gear4MusicOrbit70Fixture.Mode13Ch(universe, "orbit", "Orbit", firstChannel = 41))
+        }
+        HeadIntensity.classify(fixtures)
+    }
+
+    private val cell1 = "blinder.cell-1"
+    private val cell2 = "blinder.cell-2"
+    private fun warmth(cell: String) = colour(cell, Color(255, 180, 90))
+    private fun program(level: Int) = row("blinder", "program", AttributeCategory.SETTING, AttributeValue.Setting(level.toUByte()))
+    private fun progSpeed(level: Int) = row("blinder", "progSpeed", AttributeCategory.SPEED, AttributeValue.Slider(level.toUByte()))
+    private fun colourWheel(level: Int) = row("mac", "colourWheel", AttributeCategory.COLOUR, AttributeValue.Setting(level.toUByte()))
+    private fun goboWheel(level: Int) = row("mac", "gobo", AttributeCategory.GOBO, AttributeValue.Setting(level.toUByte()))
+
+    /** Q1 lights the blinder warm, Q2 takes it out, Q3 brings it back cold with a program, Q2 following into Q3 in 500 ms. */
+    private val blinderCues = mapOf(
+        1 to content(dimmer("blinder", 255), warmth(cell1), warmth(cell2)),
+        2 to content(dimmer("blinder", 0)),
+        3 to content(dimmer("blinder", 255), colour(cell1, Color.WHITE), colour(cell2, Color.WHITE), program(80), progSpeed(120)),
+    )
+
+    @Test
+    fun `a blinder's warmth, program and speed are set at the dark, never too quick`() {
+        val plan = static(blinderCues, follows = mapOf(11 to 500L), heads = rig).getValue(12)
+        assertTrue(plan.live.isEmpty(), "nothing reads too quick: ${plan.live}")
+        assertEquals(setOf("blinder", cell1, cell2), plan.moves.map { it.head }.toSet())
+        assertTrue(plan.moves.all { it.fromEntryId == 11 })
+
+        val live = plan(blinderCues, live = 11, next = 12, heads = rig)
+        assertEquals(setOf("blinder", cell1, cell2), live.keys)
+        for (move in live.values) {
+            assertEquals(Duration.ZERO, move.delay, move.head)
+            assertEquals(Duration.ZERO, move.time, move.head)
+        }
+        assertEquals(setOf("program", "progSpeed"), live.getValue("blinder").rows.map { it.attribute }.toSet())
+    }
+
+    @Test
+    fun `a mover's position dark for 500 ms is still too quick`() {
+        val cues = mapOf(
+            1 to content(dimmer("mac", 255), position("mac", 10, 10)),
+            2 to content(dimmer("mac", 0)),
+            3 to content(dimmer("mac", 255), position("mac", 200, 100)),
+        )
+        assertEquals(
+            listOf(MoveInDarkPlanner.StaticLive("mac", LiveReason.TOO_QUICK, setOf(AttributeFamily.POSITION))),
+            static(cues, follows = mapOf(11 to 500L), heads = rig).getValue(12).live,
+        )
+    }
+
+    @Test
+    fun `a mover's position, vector speed and LED colour wait for the delay and move together`() {
+        val speed = row("orbit", "rotationSpeed", AttributeCategory.SPEED, AttributeValue.Slider(40u))
+        val led = colour("orbit", Color.RED)
+        val head = rig.getValue("orbit")
+        assertTrue(MoveInDarkPlanner.isInstant(led, head), "an LED colour is instant")
+        assertFalse(MoveInDarkPlanner.isInstant(speed, head), "a vector speed travels with the head")
+
+        val move = plan(mapOf(2 to content(dimmer("orbit", 255), position("orbit", 5, 6), speed, led)), heads = rig).getValue("orbit")
+        assertEquals(setOf("position", "rotationSpeed", "rgbColour"), move.rows.map { it.attribute }.toSet())
+        assertEquals(MoveInDarkSettings.DEFAULT_DELAY, move.delay)
+        assertEquals(MoveInDarkSettings.DEFAULT_TIME, move.time)
+    }
+
+    @Test
+    fun `a colour wheel and a gobo wheel travel`() {
+        val head = rig.getValue("mac")
+        assertFalse(MoveInDarkPlanner.isInstant(colourWheel(40), head), "a colour wheel is a COLOUR setting that travels")
+        assertFalse(MoveInDarkPlanner.isInstant(goboWheel(40), head))
+        assertTrue("colourWheel" in head.wheels)
+
+        val move = plan(mapOf(2 to content(dimmer("mac", 255), colourWheel(40), goboWheel(40))), heads = rig).getValue("mac")
+        assertEquals(MoveInDarkSettings.DEFAULT_DELAY, move.delay)
+        val cues = mapOf(
+            1 to content(dimmer("mac", 255), colourWheel(0)),
+            2 to content(dimmer("mac", 0)),
+            3 to content(dimmer("mac", 255), colourWheel(40)),
+        )
+        assertEquals(LiveReason.TOO_QUICK, static(cues, follows = mapOf(11 to 500L), heads = rig).getValue(12).live.single().reason)
+    }
+
+    @Test
+    fun `an instant-only head on a Late cue is set at the dark`() {
+        val late = blinderCues + (3 to MoveInDarkPlanner.CueContent(blinderCues.getValue(3).rows, moveInDark = cue(CueMoveInDarkMode.LATE)))
+        val plan = static(late, follows = mapOf(11 to 500L), heads = rig).getValue(12)
+        assertTrue(plan.live.isEmpty())
+        assertTrue(plan.moves.all { it.fromEntryId == 11 } && plan.moves.isNotEmpty())
+
+        val move = plan(late, live = 11, next = 12, heads = rig).getValue(cell1)
+        assertEquals(Duration.ZERO, move.delay)
+        assertEquals(Duration.ZERO, move.time)
     }
 }
 
