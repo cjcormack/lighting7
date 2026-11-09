@@ -21,6 +21,9 @@ import uk.me.cormack.lighting7.midi.Binding
 import uk.me.cormack.lighting7.midi.BindingJson
 import uk.me.cormack.lighting7.midi.ControlPart
 import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.JobItem
+import uk.me.cormack.lighting7.midi.JobKind
+import uk.me.cormack.lighting7.routes.PutSurfaceJobRequest
 import uk.me.cormack.lighting7.midi.MidiInputEvent
 import uk.me.cormack.lighting7.midi.PartSource
 import uk.me.cormack.lighting7.midi.RecordKind
@@ -87,7 +90,7 @@ class SurfaceSocketTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a control on a strip is drawn from its strip until it is bound on its own`() = testApplication {
+    fun `a control in a job region is drawn from its job until it is bound on its own`() = testApplication {
         mountTestApp(state)
         val rest = jsonClient()
         val client = createWsClient()
@@ -95,16 +98,22 @@ class SurfaceSocketTest : RouteIntegrationTest() {
 
         client.webSocket("/api") {
             awaitOfType<SurfaceBankStateOutMessage>()
-            rest.put("/api/rest/projects/$projectId/surface-bindings/slot") {
+            rest.put("/api/rest/projects/$projectId/surface-jobs/$deviceTypeKey/strips") {
                 contentType(ContentType.Application.Json)
-                setBody(slot("strip-1", Binding(Does.Strip, wash)))
+                setBody(PutSurfaceJobRequest(JobKind.GROUPS.id, listOf(JobItem.Group("front-wash"))))
             }
-            val viaStrip = awaitOfType<SurfaceMapStateOutMessage> {
-                it.deviceTypeKey == deviceTypeKey && it.layers["layer-a"]?.get("fader-1:MAIN")?.from == PartSource.STRIP
-            }.layers.getValue("layer-a").getValue("fader-1:MAIN")
-            assertEquals("strip-1", viaStrip.stripId)
-            assertEquals(Does.Level("dimmer"), viaStrip.does)
-            assertNull(viaStrip.bank)
+            val frame = awaitOfType<SurfaceMapStateOutMessage> {
+                it.deviceTypeKey == deviceTypeKey && it.layers["layer-a"]?.get("fader-1:MAIN")?.from == PartSource.JOB
+            }
+            val viaJob = frame.layers.getValue("layer-a").getValue("fader-1:MAIN")
+            assertEquals("strips", viaJob.jobRegion)
+            assertEquals(0, viaJob.item)
+            assertEquals("Groups as channel strips · item 1", viaJob.jobLabel)
+            assertEquals(Does.Level("dimmer"), viaJob.does)
+            assertNull(viaJob.bank)
+            assertNull(viaJob.bindingId)
+            assertEquals(listOf("strips"), frame.jobs.map { it.region })
+            assertEquals("front-wash", frame.jobs.single().items.single()?.label)
 
             // *Make this control its own*: the derived binding at the control's own slot.
             rest.put("/api/rest/projects/$projectId/surface-bindings/slot") {
@@ -114,7 +123,8 @@ class SurfaceSocketTest : RouteIntegrationTest() {
             val own = awaitOfType<SurfaceMapStateOutMessage> {
                 it.deviceTypeKey == deviceTypeKey && it.layers["layer-a"]?.get("fader-1:MAIN")?.from == PartSource.DIRECT
             }
-            assertEquals(PartSource.STRIP, own.layers.getValue("layer-b").getValue("fader-1:MAIN").from, "the other layer still follows the strip")
+            assertEquals("Groups as channel strips · item 1", own.layers.getValue("layer-a").getValue("fader-1:MAIN").beats, "it says what it beats")
+            assertEquals(PartSource.JOB, own.layers.getValue("layer-b").getValue("fader-1:MAIN").from, "the other layer still follows the job")
         }
     }
 

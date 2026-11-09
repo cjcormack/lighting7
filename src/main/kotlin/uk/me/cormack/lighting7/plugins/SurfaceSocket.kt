@@ -21,6 +21,7 @@ import uk.me.cormack.lighting7.midi.ResolvedPart
 import uk.me.cormack.lighting7.midi.SoftTakeoverStateMachine
 import uk.me.cormack.lighting7.midi.SurfaceIdentify
 import uk.me.cormack.lighting7.midi.SurfaceMapFrame
+import uk.me.cormack.lighting7.midi.SurfaceJobView
 
 // ─── Inbound ────────────────────────────────────────────────────────────
 
@@ -113,8 +114,9 @@ data class SurfaceMapStateOutMessage(
     val projectId: Int,
     val deviceTypeKey: String,
     val layers: Map<String, Map<String, ResolvedPart>>,
+    val jobs: List<SurfaceJobView> = emptyList(),
 ) : SurfaceOutMessage() {
-    constructor(frame: SurfaceMapFrame) : this(frame.projectId, frame.deviceTypeKey, frame.layers)
+    constructor(frame: SurfaceMapFrame) : this(frame.projectId, frame.deviceTypeKey, frame.layers, frame.jobs)
 }
 
 @Serializable
@@ -321,7 +323,7 @@ fun setupSurfaceSubscriptions(scope: SocketScope) {
     }
 
     scope.subscribe(state.controlSurfaceBindingService.changes) { change ->
-        scope.send(when (change) {
+        val frame = when (change) {
             is ControlSurfaceBindingService.BindingChange.Added ->
                 SurfaceBindingsChangedOutMessage(change.projectId, BindingChangeType.ADDED, change.binding.id)
             is ControlSurfaceBindingService.BindingChange.Updated ->
@@ -330,7 +332,10 @@ fun setupSurfaceSubscriptions(scope: SocketScope) {
                 SurfaceBindingsChangedOutMessage(change.projectId, BindingChangeType.REMOVED, change.bindingId)
             is ControlSurfaceBindingService.BindingChange.Reloaded ->
                 SurfaceBindingsChangedOutMessage(change.projectId, BindingChangeType.RELOADED, null)
-        })
+            // A job moves no row of the binding list; its parts reach every window on the map.
+            is ControlSurfaceBindingService.BindingChange.JobsChanged -> null
+        }
+        frame?.let { scope.send(it) }
     }
 
     scope.subscribe(state.activeBankState.changes) { change ->

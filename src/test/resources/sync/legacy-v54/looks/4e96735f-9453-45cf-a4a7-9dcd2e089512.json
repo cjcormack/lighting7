@@ -1,0 +1,72 @@
+{
+  "fx": [
+    {
+      "attribute": "dimmer",
+      "blendMode": "OVERRIDE",
+      "cycle": 2.0,
+      "family": "intensity",
+      "fxType": "Wave",
+      "order": "REVERSE",
+      "parameters": {
+        "low": "40"
+      },
+      "targetKey": "[{\"key\":\"hex-3\",\"type\":\"fixture\"},{\"key\":\"front-wash\",\"type\":\"group\"}]",
+      "targetType": "selection",
+      "uuid": "e9c90a29-9e95-4ef6-801f-0f31d7cdfcfa"
+    }
+  ],
+  "name": "Warm Amber",
+  "notes": "act one wash",
+  "rows": [
+    {
+      "attribute": "colour",
+      "fadeDurationMs": 750,
+      "targetKey": "hex-1",
+      "targetType": "fixture",
+      "uuid": "f8970e46-80a9-4220-80a3-daf144f91179",
+      "value": "#ff8800"
+    },
+    {
+      "attribute": "colour",
+      "sortOrder": 1,
+      "targetKey": "front-wash",
+      "targetType": "group",
+      "uuid": "38c57b60-7547-45fa-ab22-42d6fc06a1cf",
+      "value": "#ffaa44"
+    },
+    {
+      "attribute": "position",
+      "sortOrder": 2,
+      "targetKey": "hex-3",
+      "targetType": "fixture",
+      "uuid": "c867fb7f-e131-41b3-b014-1fb245e9b93b",
+      "value": "120,64"
+    },
+    {
+      "attribute": "rgbColour",
+      "sortOrder": 3,
+      "targetKey": "hex-2",
+      "targetType": "fixture",
+      "uuid": "81047603-3fbf-4ee1-878d-76a200b9133a",
+      "value": "pal:e9b46bbf-6eab-45d5-bbd2-21e4d55d9ac3"
+    }
+  ],
+  "scenery": [
+    {
+      "elementUuid": "6220fcfb-970d-465d-b8e3-396d769b6f22",
+      "state": {
+        "visible": true
+      },
+      "uuid": "4b0c4279-85ec-43f2-ad11-3f504f193397"
+    },
+    {
+      "elementUuid": "f76a3f17-f611-4dd0-abd1-ce3f5fcaeec5",
+      "sortOrder": 1,
+      "state": {
+        "open": 0.75
+      },
+      "uuid": "7bb6a8d9-8fae-4613-a39d-2623ede86c30"
+    }
+  ],
+  "uuid": "4e96735f-9453-45cf-a4a7-9dcd2e089512"
+}

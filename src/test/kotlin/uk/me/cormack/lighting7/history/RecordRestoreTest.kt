@@ -102,6 +102,7 @@ class RecordRestoreTest : RouteIntegrationTest() {
             folder == RecordFolders.SHOW_COLOURS -> next["colour"] = JsonPrimitive(if ((obj["colour"] as? JsonPrimitive)?.content == "red") "blue" else "red")
             folder == RecordFolders.PROMPT_BOOK_ANNOTATIONS -> next["text"] = JsonPrimitive(((obj["text"] as? JsonPrimitive)?.content ?: "") + " (edited)")
             folder == RecordFolders.SHOW_GROUP_ORDERS -> next["members"] = JsonArray((obj.getValue("members") as JsonArray).reversed())
+            folder == RecordFolders.SURFACE_JOBS -> next["items"] = JsonPrimitive("[]")
             text != null -> next[text] = JsonPrimitive((obj[text] as JsonPrimitive).content + " (edited)")
             obj["ordinal"] is JsonPrimitive -> next["ordinal"] = JsonPrimitive(((obj["ordinal"] as JsonPrimitive).content.toDouble()) + 0.25)
             // Canonical JSON leaves a default out, so an order of 0 is no field at all.

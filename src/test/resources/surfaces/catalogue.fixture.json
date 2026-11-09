@@ -898,7 +898,7 @@
         "does": "encoderPage",
         "label": "Encoder page",
         "group": "Desk",
-        "help": "Point the device's strip encoders at an attribute.",
+        "help": "Point the device's encoders at an attribute: the encoders a job or a Page level binding follows.",
         "inputs": [
             "BUTTON"
         ],
@@ -1124,22 +1124,5 @@
                 "required": true
             }
         ]
-    },
-    {
-        "id": "strip",
-        "does": "strip",
-        "label": "Channel strip",
-        "group": "Strips",
-        "help": "A group or fixture on a whole strip: level, select, the encoder page and flash.",
-        "inputs": [],
-        "strip": true,
-        "subjects": [
-            "GROUP",
-            "FIXTURE"
-        ],
-        "hows": [],
-        "defaultHow": null,
-        "writesTo": "LOCAL",
-        "params": []
     }
 ]

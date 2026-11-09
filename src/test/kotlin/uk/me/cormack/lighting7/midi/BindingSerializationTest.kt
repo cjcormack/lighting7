@@ -75,7 +75,6 @@ class BindingSerializationTest {
         Binding(Does.WindowFocus("Desk", "pads")),
         Binding(Does.WindowSheet("Desk")),
         Binding(Does.SelectionStep(SelectionMove.of(SubselectMode.ODD))),
-        Binding(Does.Strip, Subject.Fixture("hex-1")),
     )
 
     @Test
@@ -86,12 +85,12 @@ class BindingSerializationTest {
     }
 
     @Test
-    fun `every function's spec admits its sample, and takes an input unless it is never dispatched`() {
+    fun `every function's spec admits its sample, and takes an input`() {
         for (binding in samples) {
             val spec = binding.does.spec
             assertTrue(binding.on.subjectKind in spec.on, "${binding.functionId} on ${binding.on}")
             binding.how?.let { assertTrue(it in spec.hows, "${binding.functionId} takes ${binding.how}") }
-            if (binding.does != Does.Strip) assertTrue(spec.inputs.isNotEmpty(), "${binding.functionId} takes some input")
+            assertTrue(spec.inputs.isNotEmpty(), "${binding.functionId} takes some input")
             spec.defaultHow?.let { assertTrue(ControlKind.BUTTON in spec.inputs, "a default How is a button's") }
         }
     }

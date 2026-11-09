@@ -19,18 +19,18 @@ package uk.me.cormack.lighting7.midi
  * fire. Each subclass must have a no-argument primary constructor — [ControlSurfaceRegistry]
  * instantiates it reflectively once at registry load for introspection.
  *
- * Instances are immutable after construction: [controls], [banks] and [strips] return
+ * Instances are immutable after construction: [controls], [banks] and [jobRegions] return
  * read-only views of the lists populated during `init`, and [layout] the panel picture.
  */
 abstract class ControlSurfaceDevice {
     private val _controls = mutableListOf<ControlDescriptor>()
     private val _banks = mutableListOf<BankDefinition>()
-    private val _strips = mutableListOf<StripDescriptor>()
+    private val _jobRegions = mutableListOf<JobRegion>()
     private var _layout: SurfaceLayout? = null
 
     val controls: List<ControlDescriptor> get() = _controls
     val banks: List<BankDefinition> get() = _banks
-    val strips: List<StripDescriptor> get() = _strips
+    val jobRegions: List<JobRegion> get() = _jobRegions
     val layout: SurfaceLayout? get() = _layout
 
     /**
@@ -122,19 +122,34 @@ abstract class ControlSurfaceDevice {
     }
 
     /**
-     * Declare a channel strip — the fader-wing column of controls one binding row covers.
-     * [ControlSurfaceRegistry] refuses a strip naming a control the profile does not declare,
-     * a role naming a control of the wrong kind, a control claimed by two strips, and a strip
-     * id that collides with a control id.
+     * Declare a region a job fills (surface-setup plan D11): its [id], stored in a job row, its
+     * [name], and its slots in order. [ControlSurfaceRegistry] refuses a region naming a control the
+     * profile does not declare, a role naming a control of the wrong kind, a control in two regions
+     * and an empty region.
      */
-    protected fun strip(
-        id: String,
-        fader: String,
-        select: String,
-        encoder: String? = null,
-        flash: String? = null,
-    ) {
-        _strips += StripDescriptor(id = id, fader = fader, select = select, encoder = encoder, flash = flash)
+    protected fun jobRegion(id: String, name: String, build: JobRegionBuilder.() -> Unit) {
+        _jobRegions += JobRegion(id, name, JobRegionBuilder().apply(build).slots)
+    }
+
+    /** Receiver for [jobRegion]. */
+    protected class JobRegionBuilder {
+        internal val slots = mutableListOf<JobSlot>()
+
+        /** One slot: the control playing each role it has; [push] names the encoder whose push it is. */
+        fun slot(
+            fader: String? = null,
+            select: String? = null,
+            encoder: String? = null,
+            flash: String? = null,
+            button: String? = null,
+            push: String? = null,
+        ) {
+            val roles = listOf(
+                SlotRole.FADER to fader, SlotRole.SELECT to select, SlotRole.ENCODER to encoder,
+                SlotRole.FLASH to flash, SlotRole.BUTTON to button, SlotRole.PUSH to push,
+            )
+            slots += JobSlot(buildMap { for ((role, id) in roles) if (id != null) put(role, id) })
+        }
     }
 
     /**

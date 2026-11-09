@@ -2962,8 +2962,8 @@ snapshot, for `dragOverlayRegistry`'s stated reason.
 ### The MIDI surface view
 
 `/projects/:id/settings/surfaces` draws the attached desk as **a picture built from profile data**
-(`ControlSurfaceType.layout`) with an inspector per control (editor A), or the same bindings as a
-mapping sheet (editor C), the only view below tablet width (surface-setup plan session 3). Read
+(`ControlSurfaceType.layout`) with an inspector per control (editor A), a region's job (editor B,
+`SurfaceJobsPanel`), or the same bindings as a mapping sheet (editor C), the only view below tablet width (surface-setup plan session 3). Read
 [`docs/midi-surface-engineering.md`](docs/midi-surface-engineering.md) before touching it; the plan is
 `../docs/plans/surface-setup-plan.md`.
 
@@ -2974,7 +2974,9 @@ side keeps no copy of the resolve order, the kind tables or the label rules. **E
 write** (`PUT` / `DELETE …/surface-bindings/slot`), and the map comes back on the socket. **Viewing
 *Layer A* or *Layer B* switches nothing** (D13): the chips view, the desk's own key switches. **A touch
 on the desk is captured without firing** (D14): `useIdentify` and the desk's `surfaceIdentify.*`.
-**`SheetColumn.accepts`** is how the sheet's *On* skips, and names, rows that cannot take a subject.
+**`SheetColumn.accepts`** is how the sheet's *On* skips, and names, rows that cannot take a subject. **A
+job is a region's** (D11): every write is the whole job (`PUT` / `DELETE …/surface-jobs/{type}/{region}`),
+and a control it derives is labelled from the map's `jobLabel`, never worked out here.
 
 `BindingForm` asks Does · On · How for any catalogue entry; `SurfaceInspector` mounts one per part;
 `SurfaceSheet` mounts it in its *Does* cell. The fixtures pinned by lighting7's `SurfaceCatalogueTest`

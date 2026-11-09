@@ -39,12 +39,12 @@ afterEach(cleanup)
 const parts = MAP_FRAME.layers['layer-a']
 
 describe('the rows', () => {
-  it('groups every control part by region, strips first, one row per part', () => {
+  it('groups every control part by region, one row per part', () => {
     const rows = sheetRows(FIXTURE_PROFILE, parts, CATALOGUE, false)
     const dividers = rows.filter((r) => r.divider).map((r) => r.divider)
-    expect(dividers).toEqual(['Strips', 'Strips', 'Right'])
+    expect(dividers).toEqual(['Strips', 'Right'])
     expect(rows.filter((r) => r.controlId === 'enc-9').map((r) => r.part)).toEqual(['MAIN', 'PUSH'])
-    expect(rows.find((r) => r.controlId === 'strip-1')?.entry?.id).toBe('strip')
+    expect(rows.some((r) => r.controlId.startsWith('strip-'))).toBe(false)
   })
 
   it('brings the dead to the top when asked', () => {
@@ -58,22 +58,22 @@ describe('the rows', () => {
 describe('Fill in order', () => {
   it('lays the list down one to a row, skipping a row that cannot take it and naming why', () => {
     const rows = sheetRows(FIXTURE_PROFILE, parts, CATALOGUE, false).filter((r) => !r.divider)
-    const batch = ['strip-1:MAIN', 'btn-3:MAIN', 'enc-9:MAIN', 'btn-5:MAIN'].map((id) => rows.find((r) => r.id === id)!)
+    const batch = ['btn-3:MAIN', 'enc-9:MAIN', 'enc-9:PUSH', 'btn-5:MAIN'].map((id) => rows.find((r) => r.id === id)!)
     const { writes, skipped } = planFill(batch, { key: 'GROUP', values: ['group:front', 'group:back'] })
-    // The strip and the selection level take groups; the GO takes a stack; the unbound button takes nothing.
+    // The selection level and the locate push take groups; the GO takes a stack; the unbound button takes nothing.
     expect(writes.map((w) => [w.row.id, w.on])).toEqual([
-      ['strip-1:MAIN', 'group:front'],
-      ['enc-9:MAIN', 'group:back'],
+      ['enc-9:MAIN', 'group:front'],
+      ['enc-9:PUSH', 'group:back'],
     ])
     expect(skipped).toEqual(['Button 3 (GO) can’t take that', 'Button 5 does nothing yet'])
   })
 
-  it('skips a control its strip derives, whose subject is the strip\'s', () => {
+  it('skips a control its job derives, whose subject is the job\'s item', () => {
     const rows = sheetRows(FIXTURE_PROFILE, parts, CATALOGUE, false).filter((r) => !r.divider)
     const fader = rows.find((r) => r.id === 'fader-1:MAIN')!
-    expect(fader.resolved.from).toBe('STRIP')
+    expect(fader.resolved.from).toBe('JOB')
     expect(rowTakesSubject(fader, 'group:front')).toBe(false)
-    expect(planFill([fader], { key: 'GROUP', values: ['group:front'] })).toEqual({ writes: [], skipped: ['Fader 1 follows its strip'] })
+    expect(planFill([fader], { key: 'GROUP', values: ['group:front'] })).toEqual({ writes: [], skipped: ['Fader 1 follows its job'] })
   })
 
   it('fills the selection into every row that takes it', () => {
@@ -93,11 +93,11 @@ describe('SurfaceSheet', () => {
     expect(row.textContent).toContain('Lit while Act 1 is running.')
     const dead = document.querySelector('[data-row-id="btn-4:MAIN"]') as HTMLElement
     expect(dead.textContent).toContain('missing cue stack')
-    const strip = document.querySelector('[data-row-id="fader-1:MAIN"]') as HTMLElement
-    expect(strip.textContent).toContain('Strip 1')
-    // Its On is a read-out of the strip's subject, not a cell of its own.
-    expect(strip.textContent).toContain('Front wash')
-    expect(strip.querySelector('[data-cell="on"]')).toBeNull()
+    const fromJob = document.querySelector('[data-row-id="fader-1:MAIN"]') as HTMLElement
+    expect(fromJob.textContent).toContain('Job · Both')
+    // Its On is a read-out of the job's item, not a cell of its own.
+    expect(fromJob.textContent).toContain('Front wash')
+    expect(fromJob.querySelector('[data-cell="on"]')).toBeNull()
   })
 
   it('sorts the dead first from its toolbar', () => {

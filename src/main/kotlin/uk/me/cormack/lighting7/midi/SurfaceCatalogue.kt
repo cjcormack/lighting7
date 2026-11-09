@@ -38,7 +38,7 @@ object SurfaceCatalogue {
         Does.Look, Does.Cue, Does.Pad, Does.PickUp, Does.Place, Does.Drop, Does.Go, Does.Back, Does.Pause,
         Does.Stop, Does.GoTo, Does.Standby, Does.FxAmount, is Does.Fire, Does.Blackout, Does.Tap,
         is Does.TempoScale, is Does.Layer, is Does.EncoderPage, is Does.Undo, is Does.BuskPage,
-        is Does.WindowFocus, is Does.WindowSheet, is Does.SelectionStep, Does.Strip,
+        is Does.WindowFocus, is Does.WindowSheet, is Does.SelectionStep,
             -> does.functionId
     }
 }
@@ -51,13 +51,11 @@ data class CatalogueEntry(
     /** The function id a binding built from this entry carries as its `does.type`. */
     val does: String,
     val label: String,
-    /** The heading the entry is listed under: Fixtures, Programmer, Playback, Busk, Masters, Tempo, Desk, Strips. */
+    /** The heading the entry is listed under: Fixtures, Programmer, Playback, Busk, Masters, Tempo, Desk. */
     val group: String,
     val help: String,
-    /** The inputs that reach it: a continuous part (a fader's move, an encoder's turn), a button. Empty for a strip. */
+    /** The inputs that reach it: a continuous part (a fader's move, an encoder's turn), a button. */
     val inputs: List<ControlKind>,
-    /** Whether it sits on a strip slot rather than a control part. */
-    val strip: Boolean = false,
     val subjects: List<SubjectKind>,
     val hows: List<How>,
     val defaultHow: How?,
@@ -111,7 +109,6 @@ private class EntrySpec(
             group = group,
             help = help,
             inputs = spec.inputs.sortedBy { it.ordinal },
-            strip = sample is Does.Strip,
             subjects = spec.on.sortedBy { it.ordinal },
             hows = (spec.hows + listOfNotNull(spec.defaultHow)).distinct().sortedBy { it.ordinal },
             defaultHow = spec.defaultHow,
@@ -128,7 +125,6 @@ private const val BUSK = "Busk"
 private const val MASTERS = "Masters"
 private const val TEMPO = "Tempo"
 private const val DESK = "Desk"
-private const val STRIPS = "Strips"
 
 private fun choice(value: String, label: String) = ParamOption(JsonPrimitive(value), label)
 private fun choice(value: Double, label: String) = ParamOption(JsonPrimitive(value), label)
@@ -266,7 +262,7 @@ private val ENTRIES = listOf(
         listOf(CatalogueParam("layer", "Layer", ParamKind.LAYER, required = true)),
     ),
     EntrySpec(
-        "encoderPage", "Encoder page", DESK, "Point the device's strip encoders at an attribute.",
+        "encoderPage", "Encoder page", DESK, "Point the device's encoders at an attribute: the encoders a job or a Page level binding follows.",
         Does.EncoderPage("dimmer"), listOf(ATTRIBUTE, AXIS),
     ),
     EntrySpec(
@@ -304,9 +300,5 @@ private val ENTRIES = listOf(
         "windowSheet", "Busk sheet", DESK, "Fold or open the busk side sheet of every window with a name.",
         Does.WindowSheet("Desk"),
         listOf(CatalogueParam("window", "Window", ParamKind.TEXT, required = true)),
-    ),
-    EntrySpec(
-        "strip", "Channel strip", STRIPS, "A group or fixture on a whole strip: level, select, the encoder page and flash.",
-        Does.Strip,
     ),
 )

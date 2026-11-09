@@ -1,0 +1,8 @@
+{
+  "controlId": "button-6",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 8,
+  "targetPayload": "{\"does\":{\"type\":\"encoderPage\",\"attribute\":\"pan\"}}",
+  "targetType": "encoderPage",
+  "uuid": "5ef23449-b2dd-4262-8f6b-ab4fc060022e"
+}

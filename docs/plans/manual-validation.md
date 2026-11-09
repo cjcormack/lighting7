@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-SURFACE-SETUP-S5`](#fu-manual-surface-setup-s5) | an upgraded show's strips are a groups job; the heads job follows the selection with the faders still; the busk-page row follows a page button; a control made its own beats its job; the Jobs panel's up and down | Surface setup session 5, 2026-11-09 |
 | [`FU-MANUAL-SURFACE-SETUP-S4`](#fu-manual-surface-setup-s4) | Record from a button makes a cue at the end of its stack; Update writes back into it; Blind while held; Release on a group; Locate, a fan and FX speed bound on a group; an encoder following the encoder page | Surface setup session 4, 2026-11-09 |
 | [`FU-MANUAL-SURFACE-SETUP-S1`](#fu-manual-surface-setup-s1) | an upgraded show's bindings all still work; a pan encoder beats a running Circle; a strip encoder's push does nothing; a flash on a capped head lands at its percentage; the blinder takes a colour move; QLab's OSC cues unchanged; a layer B binding fires | Surface setup session 1, 2026-11-09 |
 | [`FU-MANUAL-SURFACE-SETUP-S3`](#fu-manual-surface-setup-s3) | touching a bound GO selects it in the editor without firing it; viewing Layer B leaves the desk on Layer A; a strip control made its own; the mapping table on a phone, with *Fill in order* | Surface setup session 3, 2026-11-09 |
@@ -247,6 +248,33 @@ allowlist:
    each does what it did.
 7. **Layer B.** Switch the device to Layer B with its own button and press a button bound on layer B
    only: it fires. The profile maps Layer A's MIDI only, so if it does not, note what the device sends.
+
+---
+
+## `FU-MANUAL-SURFACE-SETUP-S5`
+
+**What it proves**: *Jobs* (surface-setup plan session 5) — a region of the X-Touch bound by one job,
+upgraded from strips, live where it follows something, and edited from the Jobs panel.
+
+**Why it is here**: the tests derive bindings and feedback against a test show; only the X-Touch shows
+motor faders staying put while a live job re-points them, and the upgrade on the operator's own database.
+
+**Test**, on the dev desk with the X-Touch Compact attached:
+
+1. **Upgrade.** Start the desk on a database that bound groups to strips. Settings › Surfaces › Jobs:
+   *Strips 1–8* holds *Groups as channel strips* with the same groups in the same strips, a gap where a
+   strip was empty, and every fader, select, encoder and flash works as it did. The log names the step
+   and its backup.
+2. **Heads.** Change the strips' job to *The selection, one head per strip*. Select three heads: faders
+   1–3 move to their levels and 4–8 drop; select two others: the faders follow, and moving one picks up
+   at its head's level.
+3. **Busk page.** Put *The busk page that's showing* on *Buttons 9–16*. Press a busk page button on the
+   desk: the row's LEDs follow the new page's pads, and a press presses the pad shown.
+4. **Its own.** In the picture, select a fader the job fills: *From Groups as channel strips · item 2*.
+   *Make this control its own*, then bind it to something else: it does that, and the inspector says
+   *Bound by hand over* the job. Remove it: the job fills it again.
+5. **Panel.** In the Jobs panel move an item up: the two strips swap their groups on the desk at once.
+   Pick *Nothing*: the region binds nothing.
 
 ---
 

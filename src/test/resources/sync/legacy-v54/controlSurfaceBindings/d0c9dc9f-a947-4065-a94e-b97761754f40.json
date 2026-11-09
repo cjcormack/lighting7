@@ -1,0 +1,9 @@
+{
+  "controlId": "enc-1",
+  "deviceTypeKey": "xtouch-mini",
+  "part": "PUSH",
+  "sortOrder": 16,
+  "targetPayload": "{\"does\":{\"type\":\"select\"},\"on\":{\"type\":\"group\",\"key\":\"front-wash\"}}",
+  "targetType": "select",
+  "uuid": "d0c9dc9f-a947-4065-a94e-b97761754f40"
+}

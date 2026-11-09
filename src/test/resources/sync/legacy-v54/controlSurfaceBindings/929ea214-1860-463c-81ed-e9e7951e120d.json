@@ -1,0 +1,8 @@
+{
+  "controlId": "button-5",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 6,
+  "targetPayload": "{\"does\":{\"type\":\"cue\"},\"on\":{\"type\":\"record\",\"kind\":\"CUE\",\"uuid\":\"1d5bf37f-cdff-416d-acb3-190e701184f2\"}}",
+  "targetType": "cue",
+  "uuid": "929ea214-1860-463c-81ed-e9e7951e120d"
+}

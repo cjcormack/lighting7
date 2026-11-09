@@ -1,0 +1,17 @@
+{
+  "depthM": 2.0,
+  "heightM": 0.4,
+  "kind": "PLATFORM",
+  "layer": "SET",
+  "name": "Thrust deck",
+  "params": {
+    "railEdge": "DOWNSTAGE",
+    "railHeightM": 0.9,
+    "regionUuid": "6074c40b-e253-4a53-bac3-9e1c5ba49b4b"
+  },
+  "positionY": -5.0,
+  "positionZ": 0.4,
+  "sortOrder": 1,
+  "uuid": "6220fcfb-970d-465d-b8e3-396d769b6f22",
+  "widthM": 4.0
+}

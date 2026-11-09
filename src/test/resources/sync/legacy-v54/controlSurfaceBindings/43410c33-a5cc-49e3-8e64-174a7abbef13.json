@@ -1,0 +1,8 @@
+{
+  "controlId": "button-8",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 10,
+  "targetPayload": "{\"does\":{\"type\":\"palette\",\"palette\":\"e9b46bbf-6eab-45d5-bbd2-21e4d55d9ac3\"},\"on\":{\"type\":\"selection\"}}",
+  "targetType": "palette",
+  "uuid": "43410c33-a5cc-49e3-8e64-174a7abbef13"
+}

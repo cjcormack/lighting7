@@ -394,6 +394,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectShow(state)
         routeApiRestProjectPromptBooks(state)
         routeApiRestProjectSurfaceBindings(state)
+        routeApiRestProjectSurfaceJobs(state)
         // Both subtrees are admin territory, for different reasons. Cloud sync carries the
         // desk's git identity, remotes and credentials. Export/import take a caller-supplied
         // absolute filesystem path and read or write it verbatim as the desk process — the one
@@ -780,6 +781,7 @@ internal fun deleteProjectRows(state: State, project: DaoProject) {
     project.fxDefinitions.forEach { it.delete() }
     project.scripts.forEach { it.delete() }
     project.controlSurfaceBindings.forEach { it.delete() }
+    project.surfaceJobs.forEach { it.delete() }
 
     // Cloud-sync rows. These FKs have no ON DELETE cascade, so PostgreSQL
     // would reject `project.delete()` for any project that ever had a

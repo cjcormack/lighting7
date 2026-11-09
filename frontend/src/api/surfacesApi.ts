@@ -15,7 +15,7 @@ import { sendGesture } from "./wsGesture"
 export type ColourAxis = "hue" | "hueFine" | "saturation" | "brightness"
 
 /**
- * What a device's strip encoders drive: a property and, for a colour, which axis (absent is hue).
+ * What a device's encoders on the encoder page drive: a property and, for a colour, which axis (absent is hue).
  * Mirrors `midi/EncoderBankSelection`; carried by `surfaceEncoderBank.state`.
  */
 export interface EncoderBankSelection {
@@ -94,7 +94,6 @@ export type SurfaceDoes =
   | { type: "windowFocus"; window: string; focus: BuskFocus }
   | { type: "windowSheet"; window: string }
   | { type: "selection"; step: SelectionMove }
-  | { type: "strip" }
   | { type: "unknown"; storedType: string; rawPayload: string }
 
 export interface SurfaceBinding {
@@ -234,19 +233,23 @@ export interface BankDefinition {
   name: string
 }
 
+/** The role a control plays in a job region's slot. Mirrors `midi/ControlDescriptor.kt`'s `SlotRole`. */
+export type SlotRole = "FADER" | "SELECT" | "ENCODER" | "FLASH" | "BUTTON" | "PUSH"
+
+/** One slot of a job region: the control each of its roles is. */
+export interface JobSlotDefinition {
+  roles: Partial<Record<SlotRole, string>>
+}
+
 /**
- * A channel strip: the controls one `strip` binding row covers. `id` is what that row's
- * `controlId` holds — a strip id and a control id share one column and one namespace, which is
- * why the backend registry refuses a strip whose id collides with a control's.
- *
- * `encoder` and `flash` are optional because the master strip has neither.
+ * A region of the panel a job fills (surface-setup plan D11): its ordered slots, and the job kinds
+ * the desk says fit it. Profile data, not a rule this side knows.
  */
-export interface StripDefinition {
+export interface JobRegionDefinition {
   id: string
-  fader: string
-  select: string
-  encoder?: string | null
-  flash?: string | null
+  name: string
+  slots: JobSlotDefinition[]
+  kinds: string[]
 }
 
 /** One control's place in the panel picture. */
@@ -281,14 +284,11 @@ export interface ControlSurfaceType {
   controls: ControlDescriptor[]
   banks: BankDefinition[]
   /**
-   * Both optional, and not as a convenience: a desk running a build from before the strip
-   * session serves neither field, and this client talks to whatever desk it is pointed at. Left
-   * required, every reader would compile against a shape an older server does not send and throw
-   * on the first dereference — which is exactly what a `/control-surface-types` response from
-   * such a desk produces. Absent `layout` is also the documented fallback signal: no picture,
-   * the grouped table instead.
+   * Both optional, and not as a convenience: a desk running an older build serves neither field,
+   * and this client talks to whatever desk it is pointed at. Absent `layout` is also the
+   * documented fallback signal: no picture, the grouped table instead.
    */
-  strips?: StripDefinition[]
+  jobRegions?: JobRegionDefinition[]
   layout?: SurfaceLayout | null
 }
 
@@ -358,8 +358,8 @@ export interface BindingsChangeEvent {
 // Mirrors `midi/SurfaceMap.kt` and `midi/SurfaceCatalogue.kt`. The desk resolves, labels and judges
 // every control part; this side draws what it is sent and keeps no copy of the rules.
 
-/** Where a part's binding comes from: its own row, the strip it is on, or nothing. */
-export type PartSource = "DIRECT" | "STRIP" | "NONE"
+/** Where a part's binding comes from: its own row, its region's job, or nothing. */
+export type PartSource = "DIRECT" | "JOB" | "NONE"
 
 /** Where a function writes, in one word (D8). */
 export type WritesTo = "LOCAL" | "PLAYBACK" | "MASTER" | "TEMPO" | "DESK"
@@ -367,11 +367,18 @@ export type WritesTo = "LOCAL" | "PLAYBACK" | "MASTER" | "TEMPO" | "DESK"
 /** One control part on one layer, as the desk resolved it. */
 export interface ResolvedPart {
   from: PartSource
-  /** The row's id; on a strip control, the strip's row. */
+  /** The row's id; absent on a part a job derives. */
   bindingId?: number | null
-  /** The layer the row is stored on; absent for both. */
+  /** The layer the row, or the job, is stored on; absent for both. */
   bank?: string | null
-  stripId?: string | null
+  /** The job a `JOB` part comes from, its region and its slot (0-based). */
+  jobId?: number | null
+  jobRegion?: string | null
+  item?: number | null
+  /** Where a `JOB` part comes from, in the desk's words: `Groups as channel strips · item 3`. */
+  jobLabel?: string | null
+  /** On a `DIRECT` part, the job slot it beats, in the same words. */
+  beats?: string | null
   does?: SurfaceDoes | null
   on?: SurfaceSubject | null
   how?: How | null
@@ -393,11 +400,63 @@ export function partKey(controlId: string, part: ControlPart): string {
   return `${controlId}:${part}`
 }
 
-/** One device type's map: layer (`""` for a profile with none) → part key → part. */
+/** One device type's map: layer (`""` for a profile with none) → part key → part, and its jobs. */
 export interface SurfaceMapFrame {
   projectId: number
   deviceTypeKey: string
   layers: Record<string, Record<string, ResolvedPart>>
+  /** Every job stored for the type; absent from an older desk. */
+  jobs?: SurfaceJobView[]
+}
+
+// ─── Jobs (surface-setup plan D11) ─────────────────────────────────────────────────────────
+// Mirrors `midi/SurfaceJobs.kt` and `routes/projectSurfaceJobs.kt`.
+
+/** One item of a job: a group or fixture on a strip, a record by uuid, or a function (a wheel, a page). */
+export type JobItem =
+  | { type: "group"; key: string }
+  | { type: "fixture"; key: string }
+  | { type: "record"; kind: RecordKind; uuid: string }
+  | { type: "function"; does: SurfaceDoes; on?: SurfaceSubject }
+
+export type JobItemKind = "GROUP" | "FIXTURE" | "STACK" | "MASTER" | "PALETTE" | "LOOK" | "FUNCTION"
+
+export type JobSignal = "SELECTION" | "BUSK_PAGE"
+
+/** One job kind (`GET /surface-job-kinds`). Which regions it fits is on the profile's `jobRegions`. */
+export interface JobKindInfo {
+  id: string
+  label: string
+  help: string
+  /** What an item is; absent for a kind that holds none. */
+  item?: JobItemKind | null
+  /** The most items it holds; absent for one a slot. */
+  maxItems?: number | null
+  follows?: JobSignal | null
+  /** The catalogue entries a function item may be. */
+  entries?: string[]
+}
+
+/** One job item as the desk names it. */
+export interface SurfaceJobItemView {
+  item: JobItem
+  label: string
+  colour?: string | null
+  health?: BindingHealth
+  healthText?: string | null
+}
+
+/** One stored job on the served map. `items` is in order, a gap as null. */
+export interface SurfaceJobView {
+  id: number
+  region: string
+  /** The layer it is stored on; absent for both. */
+  bank?: string | null
+  kind: string
+  kindLabel?: string | null
+  items?: (SurfaceJobItemView | null)[]
+  /** False for a job this desk cannot read: it is kept and derives nothing. */
+  readable?: boolean
 }
 
 export type ControlKind = "CONTINUOUS" | "BUTTON"
@@ -429,7 +488,6 @@ export interface CatalogueEntry {
   group: string
   help: string
   inputs: ControlKind[]
-  strip?: boolean
   subjects: SubjectKind[]
   hows: How[]
   defaultHow: How | null

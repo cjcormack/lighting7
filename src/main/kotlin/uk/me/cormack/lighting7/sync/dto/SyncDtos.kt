@@ -34,6 +34,10 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v55: surface jobs (surface-setup plan session 5, D11). A new folder, `surfaceJobs/`, one record
+    // per region's job (`SurfaceJobJson`), which holds the channel strips; the importer translates an
+    // older archive's strip rows into jobs (`SurfaceStripJobs`, the translate database step 17 shares). The writer and `minReader` move to **55** (D18): a v54 reader would drop every job and
+    // push the drop. See `docs/sync-engineering.md` §"Version 55 — Surface jobs".
     // v54: auto numbers from position (venue-rig-fixes plan D6–D8). `CueStackEntryJson.cueNumber` is
     // written only when typed. The writer and `minReader` move to **54**: a v53 reader would derive
     // other auto numbers from the same list. See `docs/sync-engineering.md` §"Version 54 — Auto
@@ -398,9 +402,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 54,
+    val formatVersion: Int = 55,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 54,
+    val minReader: Int = 55,
 )
 
 /**
@@ -1437,6 +1441,21 @@ data class ControlSurfaceBindingJson(
     val targetPayload: String,
     val takeoverPolicy: String? = null,
     val sortOrder: Int = 0,
+)
+
+/**
+ * One region's job on a control surface (v55). [items] is the job's items as `BindingJson` writes them,
+ * a JSON array with a gap as null, kept as text so a kind or an item this build cannot read travels
+ * byte for byte; [bank] the layer, absent for both.
+ */
+@Serializable
+data class SurfaceJobJson(
+    val uuid: String,
+    val deviceTypeKey: String,
+    val region: String,
+    val bank: String? = null,
+    val kind: String,
+    val items: String = "[]",
 )
 
 /**

@@ -71,7 +71,6 @@ class SurfaceGrammarTest {
             Binding(Does.Select, Subject.Fixture("hex-1"), How.REPLACE),
         """{"type":"clearSelection"}""" to Binding(Does.SelectionStep(SelectionMove.CLEAR)),
         """{"type":"locateSelection"}""" to Binding(Does.Locate, Subject.Selection),
-        """{"type":"strip","target":{"type":"group","key":"front"}}""" to Binding(Does.Strip, Subject.Group("front")),
         """{"type":"encoderBankSet","attribute":"rgbColour","colourAxis":"hueFine"}""" to Binding(Does.EncoderPage("rgbColour", ColourAxis.HUE_FINE)),
         """{"type":"applyLook","lookUuid":"$look"}""" to Binding(Does.Look, Subject.Record(RecordKind.LOOK, look)),
         """{"type":"lookSet","lookUuid":"$look","on":true}""" to Binding(Does.Look, Subject.Record(RecordKind.LOOK, look), How.ON),
@@ -116,6 +115,8 @@ class SurfaceGrammarTest {
             """{"type":"futureThing","dial":3}""",
             """{"type":"unknown","targetType":"x","rawPayload":"{}"}""",
             """{"type":"flash","target":{"type":"selectionAttribute","attribute":"dimmer"}}""",
+            // A strip is no binding: its row becomes a job (SurfaceStripJobs).
+            """{"type":"strip","target":{"type":"group","key":"front"}}""",
         )
         for (json in cases) assertNull(translate(json), json)
         assertNull(SurfaceGrammar.row("x-touch-compact-standard", "btn-4", """{"type":"cueStackPause","stackId":9999}""", refs))
@@ -137,7 +138,8 @@ class SurfaceGrammarTest {
         assertEquals(ControlPart.PUSH, SurfaceGrammar.row(device, "enc-3", """{"type":"grandMasterToggle"}""", refs)!!.part)
         assertEquals(ControlPart.MAIN, SurfaceGrammar.row(device, "enc-1", """{"type":"fixtureAttribute","fixtureKey":"h","attribute":"pan"}""", refs)!!.part)
         assertEquals(ControlPart.MAIN, SurfaceGrammar.row(device, "btn-3", """{"type":"cueStackGo","stackId":7}""", refs)!!.part)
-        assertEquals(ControlPart.MAIN, SurfaceGrammar.row(device, "strip-1", """{"type":"strip","target":{"type":"group","key":"g"}}""", refs)!!.part)
+        // A strip is translated by no row of its own: its row is a job's to make (SurfaceStripJobs).
+        assertNull(SurfaceGrammar.row(device, "strip-1", """{"type":"strip","target":{"type":"group","key":"g"}}""", refs))
     }
 
     @Test

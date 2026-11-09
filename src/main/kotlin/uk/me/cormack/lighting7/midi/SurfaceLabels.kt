@@ -190,7 +190,6 @@ object SurfaceLabels {
             is Does.WindowSheet -> "Busk sheet · ${does.window}"
             is Does.SelectionStep -> if (does.step == SelectionMove.CLEAR) "Clear selection"
                 else "Selection · ${SELECTION_MOVE_WORDS.getValue(does.step).lowercase()}"
-            Does.Strip -> with("Strip")
             is Does.Unknown -> "Unknown (${does.storedType})"
         }
     }
@@ -239,7 +238,6 @@ object SurfaceLabels {
             Does.Blackout -> if (binding.how == How.OFF) "Lit while blackout is off." else "Lit while blackout is on."
             is Does.EncoderPage -> "Lit while ${attributeWord(does.attribute).lowercase()} is the encoder page."
             is Does.BuskPage -> if (binding.on is Subject.Record) "Lit while $s is showing." else NO_LIGHT
-            Does.Strip -> "Its fader and encoder show what Local holds, or the stage; its select button is lit while selected."
             Does.PickUp, Does.Place, Does.Drop, Does.Back, Does.Pause, Does.Stop, Does.GoTo, Does.Standby, is Does.Fire,
             Does.Tap, is Does.TempoScale, is Does.Layer, is Does.Undo, is Does.WindowFocus, is Does.WindowSheet,
             is Does.SelectionStep, is Does.Clear, is Does.Release, Does.Record, Does.Update, is Does.Unknown,
@@ -247,12 +245,27 @@ object SurfaceLabels {
         }
     }
 
+    /**
+     * A job item in words, as Editor B lists it: a group, fixture or record by its name, a wheel or an
+     * encoder page as its function — a level by its attribute or colour axis (`Saturation`), `Fan pan`,
+     * `Tempo · M2 · Chase` — naming its subject only where it is not the selection.
+     */
+    fun itemLabel(item: JobItem, names: SurfaceNames): String = when (item) {
+        is JobItem.Group -> names.groups[item.key] ?: item.key
+        is JobItem.Fixture -> names.fixtures[item.key] ?: item.key
+        is JobItem.Record -> names.record(item.kind, item.uuid) ?: "A missing ${RECORD_WORDS.getValue(item.kind)}"
+        is JobItem.Function -> when (val does = item.does) {
+            is Does.Level -> (axisWord(does.axis).trim().replaceFirstChar { it.uppercase() }.ifEmpty { attributeWord(does.attribute) }) +
+                (names.subjectWord(item.on)?.takeIf { item.on != Subject.Selection }?.let { " · $it" } ?: "")
+            is Does.EncoderPage -> attributeWord(does.attribute) + axisWord(does.axis)
+            else -> label(Binding(does, item.on.takeIf { it != Subject.Selection } ?: Subject.None), names)
+        }
+    }
+
     /** A control part in words, for a list of where something is bound: `X-Touch Compact · Button 36 · Layer A`. */
     fun controlName(deviceTypeKey: String, controlId: String, part: ControlPart, bank: String?): String {
         val profile = ControlSurfaceRegistry.typeFor(deviceTypeKey)
-        val control = profile?.control(controlId)?.label
-            ?: profile?.strips?.firstOrNull { it.id == controlId }?.let { strip -> "Strip ${strip.id.substringAfter("strip-")}" }
-            ?: controlId
+        val control = profile?.control(controlId)?.label ?: controlId
         val pushed = if (part == ControlPart.PUSH) "$control push" else control
         val layer = bank?.let { "Layer ${layerName(profile, it)}" } ?: "both layers".takeIf { profile?.banks?.isEmpty() != true }
         return listOfNotNull(profile?.product ?: deviceTypeKey, pushed, layer)

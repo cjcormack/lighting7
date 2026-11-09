@@ -127,6 +127,7 @@ buskRig/{uuid}.json            # v12+: the busk rig — one document per row, ti
                                # layout facts; both default so a v12 archive decodes
 parkedChannels/{uuid}.json     # (universe, channel, value) — the channel's parked output
 controlSurfaceBindings/{uuid}.json
+surfaceJobs/{uuid}.json        # v55+: a surface region's job — device type, region, bank, kind and items
 scripts/{uuid}.kts             # raw Kotlin script body for git-friendly diffs
 scripts/{uuid}.meta.json       # metadata sidecar (name, scriptType)
 promptBooks/{uuid}.json        # script reference by content hash (scriptHash)
@@ -449,6 +450,26 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 55 — Surface jobs
+
+Surface-setup plan session 5 (D11): a profile's controls are grouped into **job regions**, and a region
+holds a **job** — a kind and its items — per layer, which the desk derives each control's binding from
+(`docs/midi-control-surface-engineering.md` §"Jobs"). Jobs replace the strip: a `controlSurfaceBindings`
+record whose control is a strip id (`strip-1`…`strip-8`, `strip-master`) and whose function is `strip`.
+The new folder is `surfaceJobs/{uuid}.json` (`SurfaceJobJson`: `deviceTypeKey`, `region`, `bank`, `kind`
+and `items`, the items as the canonical JSON `encodeJobItems` writes, `[]` omitted).
+
+An older archive's strip rows become jobs **on import**, through `SurfaceStripJobs.convert` — the same
+translate database step 17 runs (P4): strips of one region and bank become one job of the kind most of
+them name (groups win a tie), an empty strip its gap, and a strip of the other kind its controls' own
+bindings where the control has none of its own. A job's uuid is derived from the uuids of the strip rows
+it replaces, and a binding's from its strip's uuid and control, so two desks importing one archive write
+the same records. A strip row on a profile this desk does not have is kept as an unknown binding.
+`LegacyV54ArchiveTest` holds a frozen v54 archive, `src/test/resources/sync/legacy-v54/`, to that.
+
+`SUPPORTED_FORMAT_VERSION = 55`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, and **`minReader` moves to
+55** (D18): a v54 desk would drop the folder and leave the regions bound to nothing.
 
 ### Version 54 — Auto numbers from position
 
@@ -1798,7 +1819,7 @@ case, not multi-master sync. Import:
    current*.
 5. Resolves UUID-keyed FKs in topological order: `projects → scripts →
    fxDefinitions → looks → … → cues → cue-children → showEntries →
-   cueSlots → controlSurfaceBindings`.
+   cueSlots → controlSurfaceBindings → surfaceJobs`.
 6. Wraps the whole sequence in a single
    `transaction(state.database) { … }` — any FK or validation failure
    rolls back atomically.

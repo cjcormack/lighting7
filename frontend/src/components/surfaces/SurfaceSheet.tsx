@@ -36,8 +36,9 @@ import { useBindingChoices } from "./useBindingChoices"
 
 /**
  * Editor C (surface-setup plan D12, §4): every control part as a row of the sheet kit, grouped by
- * the picture's regions, strips first — Control · Layer · Does · On · How · Writes to · Shows ·
- * Health. Settings › Surfaces' table view, and the only view below tablet width.
+ * the picture's regions — Control · Layer · Does · On · How · Writes to · Shows · Health. Settings ›
+ * Surfaces' table view, and the only view below tablet width. A part a job derives reads out what the
+ * job gives it; the job itself is edited in the Jobs view.
  *
  * *Does* is the compound binding cell, edited through the inspector's form. *On* takes a marquee:
  * one subject set over many rows, or **Fill in order** — groups, fixtures, stacks or masters one to a
@@ -60,7 +61,7 @@ interface PartRow extends SheetRow {
   part: ControlPart
   name: string
   sub: string | null
-  input: ControlKind | "STRIP"
+  input: ControlKind
   descriptor: ControlDescriptor | null
   resolved: ResolvedPart
   entry: CatalogueEntry | null
@@ -69,7 +70,7 @@ interface PartRow extends SheetRow {
 const NO_PART: ResolvedPart = { from: "NONE" }
 const PART_SUB: Record<ControlPart, string> = { MAIN: "", PUSH: "push" }
 
-/** The rows, in region order with strips first; dead rows first when asked. */
+/** The rows, in region order; dead rows first when asked. */
 export function sheetRows(
   profile: ControlSurfaceType,
   parts: Readonly<Record<string, ResolvedPart>>,
@@ -78,26 +79,6 @@ export function sheetRows(
 ): PartRow[] {
   const entryOf = (part: ResolvedPart) => catalogue.find((e) => e.id === part.entry) ?? null
   const groups: { name: string; rows: PartRow[] }[] = []
-  const strips = profile.strips ?? []
-  if (strips.length > 0) {
-    groups.push({
-      name: "Strips",
-      rows: strips.map((strip) => {
-        const resolved = parts[partKey(strip.id, "MAIN")] ?? NO_PART
-        return {
-          id: partKey(strip.id, "MAIN"),
-          controlId: strip.id,
-          part: "MAIN",
-          name: `Strip ${strip.id.replace(/^strip-/, "")}`,
-          sub: [strip.fader && "fader", strip.select && "select", strip.encoder && "encoder", strip.flash && "flash"].filter(Boolean).join(" · "),
-          input: "STRIP",
-          descriptor: null,
-          resolved,
-          entry: entryOf(resolved),
-        }
-      }),
-    })
-  }
   const byId = new Map(profile.controls.map((c) => [c.controlId, c]))
   const regions = profile.layout?.regions ?? [{ name: "Controls", columns: 1, cells: profile.controls.map((c, row) => ({ controlId: c.controlId, col: 0, row })) }]
   for (const region of regions) {
@@ -152,11 +133,11 @@ function divider(name: string): PartRow {
 }
 
 /**
- * Whether [row] takes [on]: its function acts on that kind of subject (D2). A control a strip
- * derives takes nothing: its subject is its strip's, set on the strip's row.
+ * Whether [row] takes [on]: its function acts on that kind of subject (D2). A part a job derives
+ * takes nothing: its subject is the job's item.
  */
 export function rowTakesSubject(row: PartRow, on: string): boolean {
-  if (row.entry == null || row.resolved.from === "STRIP") return false
+  if (row.entry == null || row.resolved.from === "JOB") return false
   return row.entry.subjects.includes(subjectKindOf(subjectOf(on)))
 }
 
@@ -184,8 +165,8 @@ export function planFill(
   let next = 0
   for (const row of rows) {
     const label = row.sub ? `${row.name} ${row.sub}` : row.name
-    if (row.resolved.from === "STRIP") {
-      skipped.push(`${label} follows its strip`)
+    if (row.resolved.from === "JOB") {
+      skipped.push(`${label} follows its job`)
       continue
     }
     if (row.entry == null) {
@@ -286,10 +267,10 @@ export function SurfaceSheet({ projectId, profile, frame, catalogue, viewedLayer
         width: "minmax(140px,1fr)",
         kind: "subject",
         value: (row) =>
-          row.entry == null || row.resolved.from === "STRIP" || !row.entry.subjects.some((k) => k !== "NONE" && k !== "SLOT")
+          row.entry == null || row.resolved.from === "JOB" || !row.entry.subjects.some((k) => k !== "NONE" && k !== "SLOT")
             ? undefined
             : subjectValue(row.resolved.on),
-        display: (row) => (row.resolved.from === "STRIP" ? <SubjectFace part={row.resolved} /> : null),
+        display: (row) => (row.resolved.from === "JOB" ? <SubjectFace part={row.resolved} /> : null),
         accepts: (row, value) => typeof value === "string" && rowTakesSubject(row, value),
         refused: (refusedRows) =>
           toast.warning(`Skipped ${listNames(refusedRows.map((r) => (r.sub ? `${r.name} ${r.sub}` : r.name)))}: it can’t take that`),
@@ -461,15 +442,13 @@ function SubjectFace({ part }: { part: ResolvedPart }) {
 
 function layerWord(row: PartRow, profile: ControlSurfaceType): string {
   if (row.resolved.from === "NONE") return ""
-  if (row.resolved.from === "STRIP") return `Strip ${row.resolved.stripId?.replace(/^strip-/, "") ?? ""}`
   const bank = row.resolved.bank
-  if (bank == null) return "Both"
-  return `${profile.banks.find((b) => b.id === bank)?.name ?? bank} only`
+  const layer = bank == null ? "Both" : `${profile.banks.find((b) => b.id === bank)?.name ?? bank} only`
+  return row.resolved.from === "JOB" ? `Job · ${layer}` : layer
 }
 
 function howWord(row: PartRow): string {
   if (row.entry == null) return ""
-  if (row.input === "STRIP") return "Level · select · page · flash"
   if (row.input === "CONTINUOUS") {
     if (row.descriptor?.type === "fader" && row.descriptor.hasMotor) return "Motor follows"
     return row.resolved.takeoverPolicy === "IMMEDIATE" ? "Jump" : "Pick up"
@@ -528,9 +507,9 @@ function BindingCell({
     >
       <div className="space-y-2">
         <EditorLabelLine subject={row.sub ? `${row.name} ${row.sub}` : row.name} column="Does" />
-        {resolved.from === "STRIP" ? (
+        {resolved.from === "JOB" ? (
           <p className="text-[11px] text-muted-foreground">
-            From strip {resolved.stripId?.replace(/^strip-/, "")}: {resolved.label}. Its strip row says what it follows.
+            From {resolved.jobLabel ?? "its region's job"}: {resolved.label}. The Jobs view says what the job holds.
           </p>
         ) : (
           <BindingForm

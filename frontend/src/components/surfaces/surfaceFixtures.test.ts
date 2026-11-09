@@ -9,8 +9,7 @@ import { CATALOGUE, FIXTURE_PROFILE, MAP_FRAME } from './surfaceFixtures'
  * fail on whatever this side still assumes.
  */
 describe('the catalogue fixture', () => {
-  it('offers a strip slot the strip alone, and every control input its functions', () => {
-    expect(entriesFor(CATALOGUE, 'STRIP').map((e) => e.id)).toEqual(['strip'])
+  it('offers every control input its functions', () => {
     const continuous = entriesFor(CATALOGUE, 'CONTINUOUS').map((e) => e.id)
     const buttons = entriesFor(CATALOGUE, 'BUTTON').map((e) => e.id)
     expect(continuous).toEqual(expect.arrayContaining(['level', 'fan', 'fxSpeed', 'fxAmount', 'grandMaster', 'tempo']))
@@ -21,7 +20,6 @@ describe('the catalogue fixture', () => {
 
   it('builds every entry a binding that is whole once its subject is chosen', () => {
     for (const entry of CATALOGUE) {
-      if (entry.strip) continue
       const does = doesFor(entry) as unknown as Record<string, unknown>
       expect(does.type).toBe(entry.does)
       for (const param of entry.params) {
@@ -46,6 +44,14 @@ describe('the catalogue fixture', () => {
 })
 
 describe('the map fixture', () => {
+  it('lists the type\'s jobs with their items named', () => {
+    expect(MAP_FRAME.jobs?.map((job) => [job.region, job.kind])).toEqual([
+      ['strips', 'groupStrips'],
+      ['encoders', 'wheels'],
+    ])
+    expect(MAP_FRAME.jobs?.[1].items?.map((item) => item?.label)).toEqual(['Saturation', 'Tempo · M2 · Chase'])
+  })
+
   it('names every part of every layer by the key this side reads', () => {
     for (const parts of Object.values(MAP_FRAME.layers)) {
       for (const control of FIXTURE_PROFILE.controls) {
@@ -57,9 +63,11 @@ describe('the map fixture', () => {
 
   it('says where each part comes from, and names each one the catalogue has', () => {
     const a = MAP_FRAME.layers['layer-a']
-    expect(a['fader-1:MAIN'].from).toBe('STRIP')
-    expect(a['fader-1:MAIN'].stripId).toBe('strip-1')
+    expect(a['fader-1:MAIN'].from).toBe('JOB')
+    expect(a['fader-1:MAIN'].jobRegion).toBe('strips')
+    expect(a['fader-1:MAIN'].jobLabel).toBe('Groups as channel strips · item 1')
     expect(MAP_FRAME.layers['layer-b']['fader-1:MAIN'].from).toBe('DIRECT')
+    expect(MAP_FRAME.layers['layer-b']['fader-1:MAIN'].beats).toBe('Groups as channel strips · item 1')
     expect(a['btn-5:MAIN'].from).toBe('NONE')
     for (const parts of Object.values(MAP_FRAME.layers)) {
       for (const part of Object.values(parts)) {

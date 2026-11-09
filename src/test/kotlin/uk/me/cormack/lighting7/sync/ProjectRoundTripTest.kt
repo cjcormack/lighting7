@@ -166,7 +166,7 @@ class ProjectRoundTripTest {
             if (!path.endsWith(".json")) continue
             for (name in old) assertTrue(name !in text, "$path says $name")
         }
-        assertEquals(FormatVersionJson(formatVersion = 54, minReader = 54), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+        assertEquals(FormatVersionJson(formatVersion = 55, minReader = 55), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
     }
 
     /**
@@ -273,6 +273,27 @@ class ProjectRoundTripTest {
      * A busk stack (busk-stack plan D1, D3, D6; formatVersion 50) travels with its run settings, and an
      * archive's stack naming none reads as one in the running order, staying at its end, at 2 s.
      */
+    @Test
+    fun `two archived jobs on one region and layer import as one`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        val later = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        Files.writeString(
+            exportDirA.resolve("surfaceJobs/$later.json"),
+            canonicalEncode(
+                uk.me.cormack.lighting7.sync.dto.SurfaceJobJson.serializer(),
+                uk.me.cormack.lighting7.sync.dto.SurfaceJobJson(uuid = later, deviceTypeKey = "x-touch-compact-standard", region = "keys", kind = "transport"),
+            ),
+        )
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) {
+            val onKeys = uk.me.cormack.lighting7.models.DaoSurfaceJob.all()
+                .filter { it.project.id.value == imported.projectId && it.region == "keys" && it.bank == null }
+            assertEquals(listOf(UUID.fromString(later)), onKeys.map { it.uuid }, "the later record replaces the earlier")
+        }
+    }
+
     @Test
     fun `a busk stack's run settings export and import`() {
         val projectId = seedRichProject(state)

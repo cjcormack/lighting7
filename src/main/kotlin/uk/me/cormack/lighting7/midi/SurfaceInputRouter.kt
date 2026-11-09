@@ -85,13 +85,13 @@ class SurfaceInputRouter(
     private val inputJobs = ConcurrentHashMap<String /* displayKey */, Job>()
 
     /**
-     * Keyed by binding id; value is (lastWarnNanos, signature) for the 30s throttle.
+     * Keyed by binding, or by job slot; value is (lastWarnNanos, signature) for the 30s throttle.
      * Access-ordered LRU capped at [DEAD_WARN_STATE_MAX] — it's a log-rate gate, not a
      * correctness cache, so imprecise eviction is fine.
      */
-    private val deadWarnState: MutableMap<Int, Pair<Long, String>> = Collections.synchronizedMap(
-        object : LinkedHashMap<Int, Pair<Long, String>>(16, 0.75f, /* accessOrder = */ true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Pair<Long, String>>?): Boolean =
+    private val deadWarnState: MutableMap<String, Pair<Long, String>> = Collections.synchronizedMap(
+        object : LinkedHashMap<String, Pair<Long, String>>(16, 0.75f, /* accessOrder = */ true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Long, String>>?): Boolean =
                 size > DEAD_WARN_STATE_MAX
         },
     )
@@ -271,9 +271,10 @@ class SurfaceInputRouter(
         val signature = describeAssignmentHealth(health)
         val now = System.nanoTime()
         val throttleNs = DEAD_WARN_THROTTLE_MS * 1_000_000L
-        val previous = deadWarnState[binding.id]
+        val key = binding.job?.let { "job ${it.jobId} slot ${it.slot}" } ?: "binding ${binding.id}"
+        val previous = deadWarnState[key]
         if (previous == null || previous.second != signature || (now - previous.first) >= throttleNs) {
-            deadWarnState[binding.id] = now to signature
+            deadWarnState[key] = now to signature
             logger.warn(
                 "surface-in: dropping dead binding id={} control={} ({})",
                 binding.id, binding.controlId, signature,

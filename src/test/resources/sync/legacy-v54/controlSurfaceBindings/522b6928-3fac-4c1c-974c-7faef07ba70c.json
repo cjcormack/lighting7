@@ -1,0 +1,9 @@
+{
+  "controlId": "strip-4",
+  "deviceTypeKey": "x-touch-compact-standard",
+  "sortOrder": 42,
+  "takeoverPolicy": "IMMEDIATE",
+  "targetPayload": "{\"does\":{\"type\":\"strip\"},\"on\":{\"type\":\"fixture\",\"key\":\"hex-2\"}}",
+  "targetType": "strip",
+  "uuid": "522b6928-3fac-4c1c-974c-7faef07ba70c"
+}

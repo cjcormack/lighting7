@@ -1,0 +1,9 @@
+{
+  "bank": "layer-a",
+  "controlId": "strip-1",
+  "deviceTypeKey": "x-touch-compact-standard",
+  "sortOrder": 43,
+  "targetPayload": "{\"does\":{\"type\":\"strip\"},\"on\":{\"type\":\"fixture\",\"key\":\"hex-1\"}}",
+  "targetType": "strip",
+  "uuid": "6a0c216e-ac42-48fc-b0ea-b26e922ef073"
+}

@@ -15,7 +15,8 @@ import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
 import uk.me.cormack.lighting7.midi.SurfaceCatalogue
 import uk.me.cormack.lighting7.midi.EncoderDescriptor
 import uk.me.cormack.lighting7.midi.FaderDescriptor
-import uk.me.cormack.lighting7.midi.StripDescriptor
+import uk.me.cormack.lighting7.midi.JobRegion
+import uk.me.cormack.lighting7.midi.SlotRole
 import uk.me.cormack.lighting7.midi.SurfaceLayout
 import uk.me.cormack.lighting7.state.State
 
@@ -80,15 +81,13 @@ sealed class ControlDescriptorDto {
     ) : ControlDescriptorDto()
 }
 
-/** A channel strip: the controls one binding row covers. */
+/** One slot of a job region: the control each of its roles is. */
 @Serializable
-data class StripDto(
-    val id: String,
-    val fader: String,
-    val select: String,
-    val encoder: String? = null,
-    val flash: String? = null,
-)
+data class JobSlotDto(val roles: Map<SlotRole, String>)
+
+/** A region a job fills (surface-setup plan D11), and the job kinds that fit it. */
+@Serializable
+data class JobRegionDto(val id: String, val name: String, val slots: List<JobSlotDto>, val kinds: List<String>)
 
 /** One control's place in the panel picture. */
 @Serializable
@@ -110,7 +109,7 @@ data class ControlSurfaceTypeDto(
     val className: String,
     val controls: List<ControlDescriptorDto>,
     val banks: List<BankDto>,
-    val strips: List<StripDto> = emptyList(),
+    val jobRegions: List<JobRegionDto> = emptyList(),
     val layout: SurfaceLayoutDto? = null,
 )
 
@@ -155,8 +154,8 @@ private fun ControlDescriptor.toDto(): ControlDescriptorDto = when (this) {
 
 private fun BankDefinition.toDto(): BankDto = BankDto(id = id, name = name)
 
-private fun StripDescriptor.toDto(): StripDto =
-    StripDto(id = id, fader = fader, select = select, encoder = encoder, flash = flash)
+private fun JobRegion.toDto(kinds: List<String>): JobRegionDto =
+    JobRegionDto(id = id, name = name, slots = slots.map { JobSlotDto(it.controls) }, kinds = kinds)
 
 private fun SurfaceLayout.toDto(): SurfaceLayoutDto = SurfaceLayoutDto(
     regions = regions.map { region ->
@@ -184,7 +183,7 @@ internal fun Route.routeApiRestControlSurfaceTypes(state: State) {
                 className = info.className,
                 controls = info.controls.map { it.toDto() },
                 banks = info.banks.map { it.toDto() },
-                strips = info.strips.map { it.toDto() },
+                jobRegions = jobKindsFitting(info).let { fits -> info.jobRegions.map { it.toDto(fits.getValue(it.id)) } },
                 layout = info.layout?.toDto(),
             )
         })

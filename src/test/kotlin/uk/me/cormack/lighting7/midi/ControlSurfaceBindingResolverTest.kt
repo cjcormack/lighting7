@@ -15,16 +15,21 @@ import kotlin.test.assertNull
  */
 class ControlSurfaceBindingResolverTest {
 
-    /** One strip covering fader-1 / btn-25 / enc-1 / btn-1, plus a master with no encoder. */
-    private val strips = listOf(
-        StripDescriptor("strip-1", fader = "fader-1", select = "btn-25", encoder = "enc-1", flash = "btn-1"),
-        StripDescriptor("strip-master", fader = "fader-9", select = "btn-33"),
-    )
-
     private val group = Subject.Group("front-wash")
 
+    private var live = JobLive.EMPTY
+
+    /** The X-Touch's own regions: strips 1–8, the right-hand encoders, the button rows, the master strip. */
     private fun service(): ControlSurfaceBindingService =
-        ControlSurfaceBindingService(database = FakeDatabase.instance, stripsFor = { strips })
+        ControlSurfaceBindingService(database = FakeDatabase.instance, jobLive = { live })
+
+    private var jobId = 100
+
+    private fun job(region: String, kind: JobKind, items: List<JobItem?> = emptyList(), bank: String? = null) =
+        ControlSurfaceBindingService.StoredJob(
+            id = ++jobId, uuid = java.util.UUID.randomUUID(), projectId = 1, deviceTypeKey = KEY, region = region, bank = bank,
+            kindId = kind.id, kind = kind, rawItems = encodeJobItems(items), items = items,
+        )
 
     private fun resolved(
         id: Int,
@@ -143,183 +148,133 @@ class ControlSurfaceBindingResolverTest {
         assertEquals(1, push("layer-b"))
     }
 
-    // ─── Strips ────────────────────────────────────────────────────────────
+    // ─── Jobs ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `a strip binding resolves each of its controls to that control's role`() {
+    fun `a groups job resolves each control of a strip to its role, on that slot's group`() {
         val svc = service()
-        svc.seedCacheForTest(
-            projectId = 1,
-            bindings = listOf(resolved(id = 9, controlId = "strip-1", binding = Binding(Does.Strip, group))),
-        )
+        val strips = job("strips", JobKind.GROUPS, listOf(JobItem.Group("front-wash"), null, JobItem.Group("movers")))
+        svc.seedCacheForTest(1, emptyList(), listOf(strips))
 
         val fader = assertNotNull(svc.resolve(1, KEY, "fader-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
         assertEquals(Binding(Does.Level("dimmer"), group), fader.binding)
-        // The strip row's identity, policy and health carry to every control it covers.
-        assertEquals(9, fader.id)
+        assertEquals(strips.id, fader.id)
+        assertEquals(ControlSurfaceBindingService.JobHit(strips.id, "strips", 0, SlotRole.FADER, JobKind.GROUPS), fader.job)
         assertEquals("fader-1", fader.controlId)
+        assertNull(fader.takeoverPolicy, "a job's controls take their own default")
 
-        val select = assertNotNull(svc.resolve(1, KEY, "btn-25", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
-        assertEquals(Binding(Does.Select, group), select.binding)
-
-        val flash = assertNotNull(svc.resolve(1, KEY, "btn-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
-        assertIs<Does.Flash>(flash.binding.does)
+        assertEquals(Binding(Does.Select, group), svc.resolve(1, KEY, "btn-25", null, EncoderBankSelection("dimmer"))?.binding)
+        assertIs<Does.Flash>(svc.resolve(1, KEY, "btn-1", null, EncoderBankSelection("dimmer"))?.binding?.does)
+        // A gap derives nothing, and the item after it is still its own slot's.
+        assertNull(svc.resolve(1, KEY, "fader-2", null, EncoderBankSelection("dimmer")))
+        assertEquals(Binding(Does.Level("dimmer"), Subject.Group("movers")), svc.resolve(1, KEY, "fader-3", null, EncoderBankSelection("dimmer"))?.binding)
+        // No item, no strip.
+        assertNull(svc.resolve(1, KEY, "fader-4", null, EncoderBankSelection("dimmer")))
     }
 
     @Test
-    fun `a strip encoder follows the encoder bank passed to resolve`() {
+    fun `a strip's encoder follows the encoder page passed to resolve, and its push derives nothing`() {
         val svc = service()
-        svc.seedCacheForTest(
-            projectId = 1,
-            bindings = listOf(resolved(id = 9, controlId = "strip-1", binding = Binding(Does.Strip, group))),
-        )
+        svc.seedCacheForTest(1, emptyList(), listOf(job("strips", JobKind.GROUPS, listOf(JobItem.Group("front-wash")))))
 
+        assertEquals(Binding(Does.Level("dimmer"), group), svc.resolve(1, KEY, "enc-1", null, EncoderBankSelection("dimmer"))?.binding)
         assertEquals(
-            Binding(Does.Level("dimmer"), group),
-            svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer"))?.binding,
+            Binding(Does.Level("rgbColour", ColourAxis.SATURATION), group),
+            svc.resolve(1, KEY, "enc-1", null, EncoderBankSelection("rgbColour", ColourAxis.SATURATION))?.binding,
         )
-        assertEquals(
-            Binding(Does.Level("colour"), group),
-            svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("colour"))?.binding,
-        )
+        assertNull(svc.resolve(1, KEY, "enc-1", null, EncoderBankSelection("dimmer"), part = ControlPart.PUSH), "D4: a push does nothing until bound")
     }
 
     @Test
-    fun `a strip encoder's push resolves nothing, and its own push row still does`() {
-        // A strip derives main parts only (D4): the push of an encoder it covers is unbound until
-        // it is bound on its own.
+    fun `a control's own binding beats the job at each layer level`() {
         val svc = service()
+        val both = job("strips", JobKind.GROUPS, listOf(JobItem.Group("front-wash")))
+        val onA = job("strips", JobKind.GROUPS, listOf(JobItem.Group("movers")), bank = "layer-a")
         svc.seedCacheForTest(
-            projectId = 1,
-            bindings = listOf(resolved(id = 9, controlId = "strip-1", binding = Binding(Does.Strip, group))),
-        )
-        assertNull(svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer"), part = ControlPart.PUSH))
-
-        svc.seedCacheForTest(
-            projectId = 1,
-            bindings = listOf(
-                resolved(id = 9, controlId = "strip-1", binding = Binding(Does.Strip, group)),
-                resolved(id = 10, controlId = "enc-1", binding = Binding(Does.Blackout), part = ControlPart.PUSH),
-            ),
-        )
-        assertEquals(
-            10,
-            svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer"), part = ControlPart.PUSH)?.id,
-        )
-        assertEquals(9, svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer"))?.id)
-    }
-
-    @Test
-    fun `a control's own binding beats its strip`() {
-        val svc = service()
-        svc.seedCacheForTest(
-            projectId = 1,
-            bindings = listOf(
-                resolved(id = 9, controlId = "strip-1", binding = Binding(Does.Strip, group)),
-                resolved(id = 10, controlId = "fader-1", binding = Binding(Does.GrandMaster())),
-            ),
-        )
-
-        val hit = assertNotNull(svc.resolve(1, KEY, "fader-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
-        assertEquals(10, hit.id)
-        // Its siblings still come from the strip.
-        assertEquals(9, svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer"))?.id)
-    }
-
-    @Test
-    fun `a bank-agnostic direct binding beats an exact-bank strip`() {
-        val svc = service()
-        svc.seedCacheForTest(
-            projectId = 1,
-            bindings = listOf(
-                resolved(id = 9, controlId = "strip-1", bank = "layer-a", binding = Binding(Does.Strip, group)),
+            1,
+            listOf(
                 resolved(id = 10, controlId = "fader-1", bank = null, binding = Binding(Does.GrandMaster())),
+                resolved(id = 11, controlId = "btn-25", bank = "layer-b", binding = Binding(Does.Blackout)),
             ),
+            listOf(both, onA),
         )
+        fun on(controlId: String, bank: String?) = svc.resolve(1, KEY, controlId, bank, EncoderBankSelection("dimmer"))
 
-        // Direct-first is applied across *both* bank levels before the strip is consulted, so a
-        // global single binding wins even against a strip bound to the active bank.
-        val hit = assertNotNull(svc.resolve(1, KEY, "fader-1", activeBank = "layer-a", encoderBank = EncoderBankSelection("dimmer")))
-        assertEquals(10, hit.id)
+        // A direct row on both layers beats an exact-layer job, as it beat an exact-layer strip.
+        assertEquals(10, on("fader-1", "layer-a")?.id)
+        assertEquals(10, on("fader-1", null)?.id)
+        // An exact-layer direct row beats the job on its layer only.
+        assertEquals(11, on("btn-25", "layer-b")?.id)
+        assertEquals(Binding(Does.Select, Subject.Group("movers")), on("btn-25", "layer-a")?.binding)
+        assertEquals(Binding(Does.Select, group), on("btn-25", null)?.binding)
+        // The exact-layer job beats the job on both layers.
+        assertEquals(onA.id, on("enc-1", "layer-a")?.id)
+        assertEquals(both.id, on("enc-1", "layer-b")?.id)
+        // What the direct row beats is still asked for.
+        assertEquals(both.id, svc.jobBindingAt(1, KEY, "fader-1", null, EncoderBankSelection("dimmer"))?.id)
     }
 
     @Test
-    fun `an exact-bank strip beats a bank-agnostic strip`() {
+    fun `an exact-layer job that derives nothing for a part falls through to the job on both`() {
         val svc = service()
-        svc.seedCacheForTest(
-            projectId = 1,
-            bindings = listOf(
-                resolved(id = 9, controlId = "strip-1", bank = null, binding = Binding(Does.Strip, group)),
-                resolved(
-                    id = 11, controlId = "strip-1", bank = "layer-a",
-                    binding = Binding(Does.Strip, Subject.Group("movers")),
-                ),
-            ),
-        )
+        val both = job("strips", JobKind.GROUPS, listOf(JobItem.Group("front-wash"), JobItem.Group("movers")))
+        val onA = job("strips", JobKind.STACKS, listOf(JobItem.Record(RecordKind.STACK, STACK)), bank = "layer-a")
+        svc.seedCacheForTest(1, emptyList(), listOf(both, onA))
+        fun on(controlId: String) = svc.resolve(1, KEY, controlId, "layer-a", EncoderBankSelection("dimmer"))
 
-        assertEquals(
-            Binding(Does.Level("dimmer"), Subject.Group("movers")),
-            svc.resolve(1, KEY, "fader-1", activeBank = "layer-a", encoderBank = EncoderBankSelection("dimmer"))?.binding,
-        )
-        assertEquals(
-            Binding(Does.Level("dimmer"), group),
-            svc.resolve(1, KEY, "fader-1", activeBank = "layer-b", encoderBank = EncoderBankSelection("dimmer"))?.binding,
-        )
+        assertEquals(Binding(Does.FxAmount, Subject.Record(RecordKind.STACK, STACK)), on("fader-1")?.binding)
+        // A stack's strip has no encoder: the both-layers job's still answers.
+        assertEquals(Binding(Does.Level("dimmer"), group), on("enc-1")?.binding)
+        // Its slot 2 is empty: so is slot 2 on layer A, and the job on both answers.
+        assertEquals(Binding(Does.Level("dimmer"), Subject.Group("movers")), on("fader-2")?.binding)
     }
 
     @Test
-    fun `a strip binding carries its health to every derived control`() {
+    fun `a job's slot health is the health of what it derives`() {
         val svc = service()
-        svc.seedCacheForTest(
-            projectId = 1,
-            bindings = listOf(
-                resolved(
-                    id = 9, controlId = "strip-1", binding = Binding(Does.Strip, group),
-                    health = AssignmentHealth.MissingGroup("front-wash"),
-                ),
-            ),
-        )
-        assertEquals(
-            AssignmentHealth.MissingGroup("front-wash"),
-            svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer"))?.health,
-        )
+        val strips = job("strips", JobKind.GROUPS, listOf(JobItem.Group("front-wash"))).copy(health = listOf(AssignmentHealth.MissingGroup("front-wash")))
+        svc.seedCacheForTest(1, emptyList(), listOf(strips))
+        assertEquals(AssignmentHealth.MissingGroup("front-wash"), svc.resolve(1, KEY, "enc-1", null, EncoderBankSelection("dimmer"))?.health)
     }
 
     @Test
-    fun `a master strip's absent encoder resolves to nothing`() {
+    fun `a heads job follows the selection's heads, read on every resolve`() {
         val svc = service()
-        svc.seedCacheForTest(
-            projectId = 1,
-            bindings = listOf(resolved(id = 9, controlId = "strip-master", binding = Binding(Does.Strip, group))),
-        )
-        assertNotNull(svc.resolve(1, KEY, "fader-9", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
-        // enc-9 belongs to no strip on this profile, so nothing derives it.
-        assertNull(svc.resolve(1, KEY, "enc-9", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
+        svc.seedCacheForTest(1, emptyList(), listOf(job("strips", JobKind.HEADS)))
+        assertNull(svc.resolve(1, KEY, "fader-1", null, EncoderBankSelection("dimmer")), "nothing selected, nothing on the strip")
+
+        live = JobLive(heads = listOf("hex-1", "hex-2.1"))
+        assertEquals(Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")), svc.resolve(1, KEY, "fader-1", null, EncoderBankSelection("dimmer"))?.binding)
+        assertEquals(Binding(Does.Select, Subject.Fixture("hex-2.1"), How.REPLACE), svc.resolve(1, KEY, "btn-26", null, EncoderBankSelection("dimmer"))?.binding)
+        assertNull(svc.resolve(1, KEY, "fader-3", null, EncoderBankSelection("dimmer")))
+
+        live = JobLive(heads = listOf("hex-2.1"))
+        assertEquals(Binding(Does.Level("dimmer"), Subject.Fixture("hex-2.1")), svc.resolve(1, KEY, "fader-1", null, EncoderBankSelection("dimmer"))?.binding)
+        assertEquals(true, svc.hasLiveJob(1, JobSignal.SELECTION))
+        assertEquals(false, svc.hasLiveJob(1, JobSignal.BUSK_PAGE))
     }
 
     @Test
-    fun `a strip slot holding something other than a strip still names the control that fired`() {
-        // Only reachable for a row this build cannot decode (the tolerant decode keeps it) — but
-        // the id has to be the physical control, or the dead-binding warning names the strip and
-        // the operator cannot tell which fader went quiet.
+    fun `a busk page job presses the pads of the page showing, in order`() {
         val svc = service()
-        svc.seedCacheForTest(
-            projectId = 1,
-            bindings = listOf(
-                resolved(
-                    id = 9, controlId = "strip-1",
-                    binding = Binding(Does.Unknown("fromTheFuture", "{}")),
-                    health = AssignmentHealth.UnknownTarget("fromTheFuture"),
-                ),
-            ),
-        )
+        svc.seedCacheForTest(1, emptyList(), listOf(job("row-2", JobKind.BUSK_PAGE)))
+        val pad = java.util.UUID.fromString("33333333-3333-4333-8333-333333333333")
+        live = JobLive(pads = listOf(pad))
+        assertEquals(Binding(Does.Pad, Subject.Record(RecordKind.PAD, pad)), svc.resolve(1, KEY, "btn-9", null, EncoderBankSelection("dimmer"))?.binding)
+        assertNull(svc.resolve(1, KEY, "btn-10", null, EncoderBankSelection("dimmer")))
+    }
 
-        val hit = assertNotNull(svc.resolve(1, KEY, "fader-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
-        assertEquals("fader-1", hit.controlId)
-        assertEquals(AssignmentHealth.UnknownTarget("fromTheFuture"), hit.health)
+    @Test
+    fun `a job this build cannot read derives nothing`() {
+        val svc = service()
+        val unknown = job("strips", JobKind.GROUPS).copy(kindId = "fromTheFuture", kind = null, items = null, rawItems = "[{\"type\":\"future\"}]")
+        svc.seedCacheForTest(1, emptyList(), listOf(unknown))
+        assertNull(svc.resolve(1, KEY, "fader-1", null, EncoderBankSelection("dimmer")))
+        assertEquals(listOf(unknown), svc.jobs(1))
     }
 
     private companion object {
         const val KEY = "x-touch-compact-standard"
+        val STACK: java.util.UUID = java.util.UUID.fromString("11111111-1111-4111-8111-111111111111")
     }
 }

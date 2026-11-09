@@ -1,0 +1,63 @@
+{
+  "basePitchDeg": 12.0,
+  "baseYawDeg": 180.0,
+  "displayName": "ADV2 1",
+  "extraPlacements": [
+    {
+      "focusSoftness": 0.9,
+      "gateRotationDeg": -20.0,
+      "iris": 0.6,
+      "label": "SR",
+      "lampRotationDeg": 45.0,
+      "lanternType": "par64-cp62",
+      "shutters": [
+        {},
+        {
+          "angleDeg": 10.0,
+          "depth": 0.4
+        },
+        {},
+        {
+          "angleDeg": -3.0,
+          "depth": 0.15
+        }
+      ],
+      "stageX": -1.5,
+      "stageY": -3.0,
+      "stageZ": 4.0,
+      "uuid": "8957ff19-c3d0-4264-ae73-a95cbb7fa99f",
+      "zoomDeg": 44.0
+    }
+  ],
+  "fixtureTypeKey": "generic-dimmer",
+  "focusSoftness": 0.25,
+  "gateRotationDeg": 7.5,
+  "iris": 0.8,
+  "key": "adv2-1",
+  "kindOverride": "PROFILE",
+  "lampKelvin": 3000,
+  "lampWatts": 750,
+  "lanternType": "s4-zoom-25-50",
+  "shutters": [
+    {
+      "depth": 0.28
+    },
+    {
+      "angleDeg": 4.0,
+      "depth": 0.05
+    },
+    {
+      "angleDeg": -12.5,
+      "depth": 0.35
+    },
+    {}
+  ],
+  "sortOrder": 7,
+  "stageX": 1.5,
+  "stageY": -3.0,
+  "stageZ": 4.0,
+  "startChannel": 300,
+  "universeConfigUuid": "6c967513-0f83-4b29-9d1b-db9d3099c329",
+  "uuid": "724b0b19-9eeb-49d9-8e31-512aa56b9c53",
+  "zoomDeg": 31.5
+}

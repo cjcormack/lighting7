@@ -1,0 +1,29 @@
+{
+  "fx": [
+    {
+      "attribute": "dimmer",
+      "blendMode": "MULTIPLY",
+      "cycle": 1.0,
+      "family": "intensity",
+      "fxType": "Flicker",
+      "order": "NORMAL",
+      "targetKey": "hex-2",
+      "targetType": "fixture",
+      "uuid": "e691d7a3-a7a2-47d1-908d-8de0b73b60e3"
+    },
+    {
+      "attribute": "dimmer",
+      "blendMode": "OVERRIDE",
+      "cycle": 1.0,
+      "family": "intensity",
+      "fxType": "Wave",
+      "order": "NORMAL",
+      "sortOrder": 1,
+      "targetKey": "hex-2",
+      "targetType": "fixture",
+      "uuid": "d04e5ab4-b8d9-4986-8b1d-febb7256a8f4"
+    }
+  ],
+  "name": "stacked",
+  "uuid": "d1ca81a4-869f-419a-8c9b-e01907ac912d"
+}

@@ -71,6 +71,10 @@ import uk.me.cormack.lighting7.midi.RecordKind
 import uk.me.cormack.lighting7.midi.SelectionMove
 import uk.me.cormack.lighting7.midi.Subject
 import uk.me.cormack.lighting7.midi.encodePayload
+import uk.me.cormack.lighting7.midi.JobItem
+import uk.me.cormack.lighting7.midi.JobKind
+import uk.me.cormack.lighting7.midi.encodeJobItems
+import uk.me.cormack.lighting7.models.DaoSurfaceJob
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
@@ -1183,7 +1187,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
 
     // control surface bindings in the grammar (surface-setup plan session 1): one bank-scoped, one
     // global (null bank), every subject shape, a push part, Hows of On and Replace, a flash at a
-    // percentage, a strip and a stack's FX amount. Non-default fields throughout: canonical JSON omits
+    // percentage and a stack's FX amount. Non-default fields throughout: canonical JSON omits
     // defaults, so a field left at its default is invisible to the round-trip and clone tests. Every
     // record is uuid-addressed, which is what the export remapper rewrites and the clone test checks.
     fun bind(controlId: String, binding: Binding, bank: String? = null, part: ControlPart = ControlPart.MAIN, takeover: String? = null, sortOrder: Int) =
@@ -1206,8 +1210,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     bind("button-3", Binding(Does.SelectionStep(SelectionMove.CLEAR)), sortOrder = 4)
     bind("button-4", Binding(Does.Locate, Subject.Selection), sortOrder = 5)
     bind("button-5", Binding(Does.Cue, Subject.Record(RecordKind.CUE, cue1.uuid)), sortOrder = 6)
-    // A whole strip on one row, and an encoder-page button (midi-surface plan, session 2).
-    bind("strip-1", Binding(Does.Strip, Subject.Group("front-wash")), bank = "bank-a", takeover = "PICKUP", sortOrder = 7)
+    // An encoder-page button (midi-surface plan, session 2).
     bind("button-6", Binding(Does.EncoderPage("pan")), sortOrder = 8)
     // A Look on, a palette, a pad and the busk page functions (midi-surface plan, session 4).
     bind("button-7", Binding(Does.Look, Subject.Record(RecordKind.LOOK, boundLook.uuid), How.ON), sortOrder = 9)
@@ -1218,6 +1221,17 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     bind("button-12", Binding(Does.BuskPage(-1)), sortOrder = 14)
     // A stack's FX amount on a fader.
     bind("fader-2", Binding(Does.FxAmount, Subject.Record(RecordKind.STACK, stack1.uuid)), sortOrder = 15)
+
+    // Surface jobs (v55): groups on Layer A's strips with a gap, wheels
+    // on both layers, and a stack's transport naming it by uuid — which the clone remaps.
+    fun job(region: String, bank: String?, kind: JobKind, items: List<JobItem?>) = DaoSurfaceJob.new {
+        this.project = project
+        deviceTypeKey = "x-touch-compact-standard"; this.region = region; this.bank = bank
+        this.kind = kind.id; this.items = encodeJobItems(items)
+    }
+    job("strips", "layer-a", JobKind.GROUPS, listOf(JobItem.Group("front-wash"), null, JobItem.Group("back-wash")))
+    job("encoders", null, JobKind.WHEELS, listOf(JobItem.Function(Does.Level("rgbColour", ColourAxis.SATURATION), Subject.Selection), JobItem.Function(Does.FxSpeed, Subject.Selection)))
+    job("keys", null, JobKind.TRANSPORT, listOf(JobItem.Record(RecordKind.STACK, stack1.uuid)))
 
     // Wire up the show playhead to the first stack.
     project.activeStackId = stack1.id.value

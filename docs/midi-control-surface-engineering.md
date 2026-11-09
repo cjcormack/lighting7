@@ -123,9 +123,9 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 | File | Purpose |
 |---|---|
 | `ControlSurfaceType.kt` | `@ControlSurfaceType(typeKey, vendor, product, portPattern)` annotation. |
-| `ControlSurfaceDevice.kt` | Base class with a small DSL: `motorFader`, `fader`, `encoder`, `button`, `bankButton`, `bank`. |
-| `ControlDescriptor.kt` | Sealed ADT: `FaderDescriptor`, `EncoderDescriptor`, `ButtonDescriptor`, `BankButtonDescriptor`. Enums: `LedFeedback`, `FaderResolution`, `EncoderRingStyle`. |
-| `ControlSurfaceRegistry.kt` | Reflective discovery of `@ControlSurfaceType` classes; fail-fast on duplicate `typeKey` or duplicate `controlId` within a class. |
+| `ControlSurfaceDevice.kt` | Base class with a small DSL: `motorFader`, `fader`, `encoder`, `button`, `bankButton`, `bank`, `jobRegion`, `layout`. |
+| `ControlDescriptor.kt` | Sealed ADT: `FaderDescriptor`, `EncoderDescriptor`, `ButtonDescriptor`, `BankButtonDescriptor`. Enums: `LedFeedback`, `FaderResolution`, `EncoderRingStyle`, `SlotRole`. `JobRegion` and its `JobSlot`s (§"Jobs"). |
+| `ControlSurfaceRegistry.kt` | Reflective discovery of `@ControlSurfaceType` classes; fail-fast on duplicate `typeKey` or duplicate `controlId` within a class, and on a bad job region or layout. `placeOf(controlId, part)` is where a part sits in a job region. |
 | `DeviceMatcher.kt` | Matches attached `MidiDeviceHandle`s against registered profiles by `portPattern`; emits `DeviceAttached` / `DeviceDetached` / `UnmatchedDeviceConnected` on a `SharedFlow<SurfaceEvent>`. |
 | `devices/XTouchCompactStandard.kt` | Behringer X-Touch Compact (Standard mode) — 9 motor faders, 16 encoders, 39 buttons, A/B bank buttons. Reference device. |
 
@@ -136,11 +136,14 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 | `Binding.kt` | The binding (surface-setup plan D1): `Binding(does, on, how)` — a function, its subject (`Subject`: none, the selection, a group, a fixture or element key, a job slot, or a record by uuid — `RecordKind` stack, entry, cue, Look, palette, pad, bank, page, master) and a `How` (Toggle, While held, On, Off, Toggle-hold-replaces, Replace) — at a slot with a `ControlPart` (`MAIN`, or an encoder's `PUSH`). `Spec` (where it writes, the subjects, inputs and Hows it takes, its default How), `Op`, `Acted`, `BindingJson` (`classDiscriminator = "type"`, defaults omitted), `decodeBinding` (an unreadable payload is `Does.Unknown`, kept byte for byte), `inputFor` and `inferPart`. Persisted as text in `DaoControlSurfaceBindings.targetPayload`. |
 | `SurfaceFunctions.kt` | One `Does` per function (P3): its parameters, its `spec` and its `act`, so the service's refusals, dispatch and health read one definition. `Unknown` is the tolerant decode's placeholder, never written by a client. |
 | `SurfaceGrammar.kt` | The one translate from a binding stored before the grammar (P4), shared by database step 15 and the archive reader (`LegacyNames.record`). See §"Before the grammar". |
+| `SurfaceJobs.kt` | The jobs (D11): `JobItem`, the item codec, `JobKind` — each kind's fit, items and derivation — and `JobLive`, what a live job reads. See §"Jobs". |
+| `SurfaceJobLive.kt` | The live state a job follows — the selection's heads in rig order, the busk page's pads — read off the input path and announced per signal. |
+| `SurfaceStripJobs.kt` | The one translate from channel-strip rows to jobs (P4), shared by database step 17 and the archive importer. |
 | `SurfaceCatalogue.kt` | The function catalogue (D15): one entry per function an editor offers — two for a grand master and a tempo, whose level or BPM makes a button of each — with its words, its parameters and their options, and the inputs, subjects and Hows its spec admits. `entryOf` is the one answer to which entry a stored binding is. Served as `GET /surface-functions`. |
 | `SurfaceLabels.kt` | `SurfaceNames` (every record, group and fixture by its name, with colours, read once per map) and the labels and *Shows* sentences the editors draw: *GO · Act 1*, *The motor shows what Local holds for Front wash's dimmer…*. `controlName` names a control part for a list of where something is bound (`CueUses`). |
-| `SurfaceMap.kt` | The served picture (D15): `SurfaceMaps.build` resolves every control part of a device type on every layer through the service's `resolve`, strip slots included, and describes each as a `ResolvedPart`; `SurfaceMapService` keeps the current project's frames in a `StateFlow`, rebuilt off the input path on any binding, encoder-page, health, record-name or project change. |
+| `SurfaceMap.kt` | The served picture (D15): `SurfaceMaps.build` resolves every control part of a device type on every layer through the service's `resolve`, and describes each as a `ResolvedPart`, beside the type's jobs; `SurfaceMapService` keeps the current project's frames in a `StateFlow`, rebuilt off the input path on any binding, encoder-page, health, record-name or project change. |
 | `SurfaceIdentify.kt` | Identify mode (D14): a window's wait for a touch. The router offers every input to it before dispatch; the next press, fader move or encoder turn is captured with its part and dropped, and the rest of that gesture on the same control with it until the control is still for 750 ms. 30 s without a touch ends the wait. |
-| `ControlSurfaceBindingService.kt` | Binding CRUD + in-memory resolver cache keyed by `(projectId, deviceTypeKey, controlId, part, bank)`; exact-bank wins over global. Decodes **per row**: an undecodable payload becomes `Does.Unknown` (health `unknownTarget`, re-written verbatim) rather than failing the project. Refuses what a function's spec does not admit (§"Bind-time refusals"). Emits `BindingChange` events; broadcast via `surfaceBank.bindingsChanged`. |
+| `ControlSurfaceBindingService.kt` | Binding and job CRUD + in-memory resolver cache keyed by `(projectId, deviceTypeKey, controlId, part, bank)`, jobs by `(deviceTypeKey, region, bank)`; a binding of the part's own beats its region's job, exact-bank over global at each. Decodes **per row**: an undecodable payload becomes `Does.Unknown` (health `unknownTarget`, re-written verbatim) rather than failing the project. Refuses what a function's spec does not admit (§"Bind-time refusals"). Emits `BindingChange` events; broadcast via `surfaceBank.bindingsChanged`. |
 | `Heads.kt` | `Heads.of(subject, attribute)`: the heads a write reaches — a fixture or element key, a group's members (elements included) tagged with `sourceGroup`, each selected target so; a cell beside its parent dropped, and a fixture whose attribute lives only on its cells standing for those cells (`PaletteFanOut.headsFor`). The level write, the flash, the colour-axis refusal and the feedback read all expand through it. |
 | `SelectionFxSpeed.kt` | The FX speed controls' gesture over the desk selection's Local FX (fx-speed plan D13): which Local FX paint a selected head, the lead FX, an encoder's detents and a fader's position written as whole-tick cycles through `applyFxUpdate`, and `shown` / `leadSpeed` — the `FxSpeedRing` half the feedback publisher reads. The arithmetic is `fx/FxSpeed.kt`, pinned to the editor's by `fxSpeed.fixture.json`. |
 | `SelectionFan.kt` | The fan encoders' gesture over the desk selection (venue-visit plan S12): the anchor (each head's start, the rig order read once), the amount per axis, a turn read as a move from the value the ring was last shown, a new gesture's pickup at the centre, and `shown` / `amountFor` — the `FanRing` half the feedback publisher reads. |
@@ -270,9 +273,9 @@ class XTouchCompactStandard : ControlSurfaceDevice() {
 }
 ```
 
-The `ControlSurfaceRegistry` is strictly stricter than `FixtureTypeRegistry` — it fails fast on duplicate `typeKey` *and* on duplicate `controlId` within a class, plus the strip and layout rules below. Rationale: `controlId` is a stable contract persisted in binding rows, so a duplicate would silently break persisted bindings.
+The `ControlSurfaceRegistry` is strictly stricter than `FixtureTypeRegistry` — it fails fast on duplicate `typeKey` *and* on duplicate `controlId` within a class, plus the job-region and layout rules below. Rationale: `controlId` is a stable contract persisted in binding rows, so a duplicate would silently break persisted bindings.
 
-A profile may also declare **strips** (see [Strips](#strips)) and a **layout**: named regions (`strips`, `right`, `master` on the X-Touch) with a `(region, col, row)` cell per control, so the Surfaces view draws any profile that has one from data rather than needing a React component per device. A profile without a layout renders as the grouped table. When a layout *is* declared the registry requires it to be complete — every declared control gets exactly one cell — because a control with no cell would simply vanish from the picture with nothing else reporting it. Both reach the frontend on `GET /api/rest/control-surface-types`.
+A profile may also declare **job regions** (see [Jobs](#jobs)) and a **layout**: named regions (`strips`, `right`, `master` on the X-Touch) with a `(region, col, row)` cell per control, so the Surfaces view draws any profile that has one from data rather than needing a React component per device. A profile without a layout renders as the grouped table. When a layout *is* declared the registry requires it to be complete — every declared control gets exactly one cell — because a control with no cell would simply vanish from the picture with nothing else reporting it. Both reach the frontend on `GET /api/rest/control-surface-types`.
 
 ### DeviceMatcher
 
@@ -284,57 +287,123 @@ A profile may also declare **strips** (see [Strips](#strips)) and a **layout**: 
 
 Every inbound `Connected` event yields exactly one `SurfaceEvent` — the matcher is the single arbiter of "is this device one we know about?".
 
-## Strips
+## Jobs
 
-Fixed per-control bindings run out fast: nine faders and sixteen encoders is not many, and every console the composition model measures itself against solves that the same way — a **channel strip**. The profile declares which controls form one column, and a *single* binding row addressed by the strip id then covers all of them.
+Fixed per-control bindings run out fast: nine faders and sixteen encoders is not many, and every console
+the composition model measures itself against solves that the same way — a region of the desk is given a
+**job** (surface-setup plan D11): eight groups as channel strips, the selection's wheels on the right,
+palettes on a row. MagicQ's wing modes and grandMA3's executor configurations work this way. Jobs replace
+the channel strips of earlier sessions: a strip was a job for one column.
+
+**Regions** are the profile's (`midi/ControlDescriptor.kt`'s `JobRegion`, declared with `jobRegion`): ordered
+slots, each naming the control that plays each of its roles — `FADER`, `SELECT`, `ENCODER`, `FLASH`, `BUTTON`,
+`PUSH` (an encoder's push part). They are kept apart from the picture's layout regions: the picture places every
+control, a job region names slots. The X-Touch Compact's six:
 
 ```kotlin
-repeat(8) { i ->
-    strip(id = "strip-${i + 1}", fader = "fader-${i + 1}", select = "btn-${25 + i}",
-          encoder = "enc-${i + 1}", flash = "btn-${i + 1}")
+jobRegion("strips", "Strips 1–8") {
+    repeat(8) { i -> slot(fader = "fader-${i + 1}", select = "btn-${25 + i}", encoder = "enc-${i + 1}", flash = "btn-${i + 1}", push = "enc-${i + 1}") }
 }
-strip(id = "strip-master", fader = "fader-9", select = "btn-33")   // no encoder
+jobRegion("encoders", "Encoders 9–16") { repeat(8) { i -> slot(encoder = "enc-${9 + i}", push = "enc-${9 + i}") } }
+jobRegion("row-2", "Buttons 9–16") { repeat(8) { i -> slot(button = "btn-${9 + i}") } }
+jobRegion("row-3", "Buttons 17–24") { repeat(8) { i -> slot(button = "btn-${17 + i}") } }
+jobRegion("keys", "Buttons 34–39") { repeat(6) { i -> slot(button = "btn-${34 + i}") } }
+jobRegion("master", "Master strip") { slot(fader = "fader-9", select = "btn-33") }
 ```
 
-A strip id lives in the **same `control_id` column** as a control id — no new table, no new column — so the two share one slot namespace and the registry refuses a collision. `buildFromClasses` also fails fast on a duplicate strip id, a strip naming an undeclared control, a role naming a control of the wrong kind (fader→`FaderDescriptor`, select/flash→`ButtonDescriptor`, encoder→`EncoderDescriptor`), and a control claimed by two strips. Same reasoning as the duplicate-`controlId` check: these ids are a persisted contract.
+`buildFromClasses` fails fast on a duplicate region id, an empty region or slot, a role naming an undeclared
+control or one of the wrong kind (a fader→`FaderDescriptor`, an encoder→`EncoderDescriptor`, a push→an encoder
+with a `pushNote`, the rest→`ButtonDescriptor`), a control part in two slots and a control in two regions: a
+region id is a persisted contract, as a `controlId` is. The profile DTO carries `jobRegions`, each with the kinds
+that fit it, so a client never judges a fit itself (P5).
 
-**Derivation** is the pure function `deriveStripBinding(role, subject, encoderBank)` in `midi/StripDerivation.kt`, on the strip's group or fixture:
+**Kinds** are one enum, `JobKind` (`midi/SurfaceJobs.kt`): each says the region shapes it fits, what its items
+are, and the binding each slot's role derives — `derive(role, slot, ctx)`, pure. A kind whose item is a subject
+derives a template on `Subject.Slot` and fills it from the slot's item (`Binding.filled`); a kind whose item is
+the function (a wheel, an encoder page, a palette) builds the binding from it.
 
-| Role | Behaves as |
-|---|---|
-| fader | `level("dimmer")` |
-| select | `select` (Toggle-hold-replaces) |
-| encoder | `level` on the device's current [encoder page](#encoder-bank)'s attribute and axis |
-| flash | `flash("dimmer", 100 %)` |
+| Kind | Fits | Items | Each slot |
+|---|---|---|---|
+| `groupStrips`, `fixtureStrips` | every slot a fader | groups / fixtures | fader `level(dimmer)`, select `select`, encoder `level` on the device's encoder page, flash `flash(dimmer)` |
+| `headStrips` | every slot a fader | — (the selection's heads, in rig order) | as a strip, its select *Replace*: narrows the selection to that head |
+| `stackStrips` | every slot a fader | stacks | fader `fxAmount`, flash `go`, select `back` |
+| `masterStrips` | every slot a fader | speed masters | fader `tempo`, flash `tap` |
+| `wheels` | encoders, no faders | functions (any continuous entry, on its subject) | encoder the item |
+| `pagedWheels` | encoders, no faders | — (the selection's heads) | encoder `level` on the encoder page, on head *n* |
+| `palettes` | buttons | palettes | `palette` on the selection |
+| `buskPage` | buttons | — (the pads of the busk page showing) | `pad` on pad *n* |
+| `gos` | buttons | stacks | `go` |
+| `looks` | buttons | Looks | `look` |
+| `encoderPages` | buttons | functions (`encoderPage` only) | the item |
+| `transport` | buttons | one stack | GO, Back, Stop, Pause, Tap (master 1), Clear, by slot |
+| `programmer` | buttons | — | Clear, Blind, Undo, Release and Locate on the selection, Clear selection, by slot |
+| `grandMaster` | one slot with a fader | — | fader `grandMaster`, select `blackout` |
 
-A strip derives **main parts only**: an encoder's push on a strip is its own binding and does nothing until bound (D4).
+No kind derives a push: an encoder's push does nothing until bound (D4). The code's encoder page names one
+attribute, so *Wheels by encoder page* is the selection's heads one an encoder on the page's attribute, and
+*Encoder pages* sets one attribute a button.
 
-One function, because the input router, the feedback index and the frontend inspector all have to agree about what a strip control does.
+**Storage**: `surface_jobs` (`models/surfaceJobs.kt`) — `uuid`, project, device type, region, layer (null for both),
+kind and items, a JSON array of `JobItem`s with a gap as null, kept as text so a kind or an item this build cannot
+read is kept byte for byte and derives nothing. One job a `(project, device type, region, layer)`, which the
+service holds to, and so does the importer: an archived or restored job landing where another stands replaces it
+(the unique index cannot, since SQLite lets two rows share a null layer). Trailing gaps are trimmed before the items
+are counted. The service caches jobs beside the bindings and writes them through `putJob` / `deleteJob`,
+refusing by name with `SURFACE_JOB_INVALID`: an unknown device type, region, layer or kind, a kind that does not
+fit the region, too many items, an item of the wrong type, a wheel that takes no continuous input or acts on no
+subject it admits. `GET /projects/{id}/surface-jobs`, `GET` / `PUT` / `DELETE
+/projects/{id}/surface-jobs/{deviceTypeKey}/{region}?layer=`; `GET /surface-job-kinds` is the kinds, static per build.
 
-**Resolution order** — `ControlSurfaceBindingService.resolve` answers the control's own binding *across both bank levels* before it looks at the strip, then the strip across both:
+**Resolution order** — `ControlSurfaceBindingService.resolve` answers the control part's own binding *across both
+layers* before it looks at the job, then the job on its region across both:
 
-1. the control's row for the exact bank
-2. the control's bank-agnostic row
-3. the strip's row for the exact bank
-4. the strip's bank-agnostic row
+1. the part's row for the exact layer
+2. the part's row on both layers
+3. what the job on the region derives for the part's slot and role, at the exact layer
+4. what the job on both layers derives
 
-Direct before strip at **both** levels is the load-bearing part: a bank-agnostic single binding beats an exact-bank strip, which is what makes "any control can still be bound on its own" true regardless of banks. `resolve` is the only resolution entry point — router, feedback index and takeover-policy lookup all come through it — so the strip arm needs no second implementation.
+Direct before job at **both** levels is the load-bearing part: a both-layers binding beats an exact-layer job,
+which is what makes "a control bound by hand leaves the job" true regardless of layers. An exact-layer job that
+derives nothing for the part — an empty slot, a role its kind leaves alone — falls through to the job on both, as
+a binding does. `resolve` is the only resolution entry point — router, feedback index, the map and the takeover
+lookup all come through it.
 
-A strip hit is answered as the strip's row with the control's id and the derived binding, so the four derived bindings share the strip row's `id`, `takeoverPolicy` and `health`. Health is deliberately **not** re-evaluated per derived target: an encoder whose bank attribute no selected head declares reads unbound and drops its turn, which is a property of the selection rather than a dead binding.
+A job hit is answered with the job's id, the slot's health and no takeover policy (the control's own default), and
+`job: JobHit` naming the job, region, slot and role. Each slot's health is evaluated when the job is cached and on
+`invalidateHealth`, from what its roles derive; a live job's slots are always Ok. `jobBindingAt` answers what the
+job would derive on a part a binding of its own beats, which the map reads for `beats`.
 
-`Does.Strip` is stored but never dispatched, and the rest of the strip code takes that as given — a raw `Strip` reaching dispatch is a control that silently does nothing, and health cannot catch it because a `Strip`'s health only judges its group. So the slot rule is enforced **in `ControlSurfaceBindingService`**, beside `refuseUnknown`, on `create` / `update` / `replace`: that is the one door every write goes through. `POST` / `PATCH` and the slot `PUT` on `/surface-bindings` run their own copy first only so the frontend gets a coded 400 to branch on — `BINDING_STRIP_NEEDS_STRIP` for a strip binding on a control id, `BINDING_CONTROL_NOT_STRIP` for anything else on a strip id.
+**Live jobs** follow state: `headStrips` and `pagedWheels` the selection's heads in rig order, `buskPage` the pads
+of the page showing. `SurfaceJobLive` (`State.surfaceJobLive`) holds them as a volatile snapshot `resolve` reads
+lock-free on every event, refreshed off the input path on the selection, the busk page, the rig, the layout, the
+jobs and the project, and read only while the project holds a job that follows that signal. A change re-derives the
+region without re-arming pickup: the publisher rebuilds its index and feeds each job-derived entry again with
+`rearm = false`, and a part a job derived before and no longer does goes dark (`rederiveJobs`). The encoder page is
+not one of them: a page change already rebuilds the device's index and re-arms, because the meaning moved under the
+operator's hand.
 
-*Make this control its own* (editor A) writes the binding a strip control derives at the control's own slot on the viewed layer, through the slot write; the strip keeps the rest of its controls. The map names a derived part `from: STRIP`, its `stripId` beside it.
+*Make this control its own* (editor A) writes the binding a job's control derives at the control's own slot on the
+viewed layer, through the slot write; the job keeps the rest of its controls. The map names a derived part
+`from: JOB` with its `jobId`, `jobRegion`, `item` (the slot) and `jobLabel`; a part bound by hand over a job says
+what it `beats`; and each frame lists the type's `jobs`, their items named by name (`SurfaceJobView`).
+
+**Database step 17** (`state/SurfaceJobsMigration.kt`) and the archive importer turn an older desk's strip rows —
+binding rows at `strip-1`…`strip-8` and `strip-master` — into jobs through one translate, `SurfaceStripJobs.convert`
+(P4): per device type, layer and region, a `groupStrips` job where most strips name a group, else `fixtureStrips`,
+each strip its slot's item and an empty strip a gap; a strip naming the other kind becomes its controls' own
+bindings (the encoder a `pageLevel`), unless a binding of the control's own already beat it there. A strip row whose
+subject cannot be read is dropped. Uuids are made from the strips', so two desks translating one archive write the
+same records. A strip's takeover policy is not carried: a job's controls take their own default.
 
 ## Encoder bank
 
-What a device's strip encoders drive is per-device session state, keyed by the device's `displayKey` (D16): `EncoderBankState`, shaped exactly like `ActiveBankState` with an `EncoderBankSelection` — an attribute name and, for a colour, a `ColourAxis` (null is hue) — where that has a bank id: one map-valued `StateFlow` for the snapshot, a lock-free `selectionFor()` for the hot path, a `changes` `SharedFlow` for the publisher. Default `dimmer`. Two selections are one bank when the attribute and the *effective* axis agree, so `(rgbColour, null)` and `(rgbColour, HUE)` are not a change and `(rgbColour, SATURATION)` is.
+What a device's encoders on the encoder page drive is per-device session state, keyed by the device's `displayKey` (D16): `EncoderBankState`, shaped exactly like `ActiveBankState` with an `EncoderBankSelection` — an attribute name and, for a colour, a `ColourAxis` (null is hue) — where that has a bank id: one map-valued `StateFlow` for the snapshot, a lock-free `selectionFor()` for the hot path, a `changes` `SharedFlow` for the publisher. Default `dimmer`. Two selections are one bank when the attribute and the *effective* axis agree, so `(rgbColour, null)` and `(rgbColour, HUE)` are not a change and `(rgbColour, SATURATION)` is.
 
-It moves two ways: a button bound to `encoderPage(attribute, axis?)`, which applies to **the device the button is on** (the payload names no device, so a bank button can never be stranded pointing at a surface that is not attached), or the frontend's `surfaceEncoderBank.set`. The LED lights when both halves match, so a *hue* button and a *saturation* button on one colour attribute light one at a time. `deriveStripBinding` puts the axis on the strip's **encoder** and nowhere else — the fader and flash are the dimmer whatever the bank says.
+It moves two ways: a button bound to `encoderPage(attribute, axis?)`, which applies to **the device the button is on** (the payload names no device, so a bank button can never be stranded pointing at a surface that is not attached), or the frontend's `surfaceEncoderBank.set`. The LED lights when both halves match, so a *hue* button and a *saturation* button on one colour attribute light one at a time. A strip job puts the axis on the strip's **encoder** and nowhere else — the fader and flash are the dimmer whatever the page says.
 
 It survives a device unplug and is **reset on project switch** (a carried reload of the same project keeps it) — unlike the active bank, which does not. The vocabulary it draws from is the patch's (`BindingHealthEvaluator.selectionAttributesOf`, the same set a level on the selection is judged against), so carrying an attribute across projects could point every encoder at an attribute the new rig has no fixture for.
 
-A change rebuilds the feedback index — every strip encoder now stands on different channels — and re-arms takeover on that device through the same path a bank change uses, because the meaning of the control moved under the operator's hand without them touching it.
+A change rebuilds the feedback index — every encoder following the page now stands on different channels — and re-arms takeover on that device through the same path a bank change uses, because the meaning of the control moved under the operator's hand without them touching it.
 
 ## Binding model
 
@@ -371,7 +440,7 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | Function | On | Input | Effect |
 |---|---|---|---|
 | `level(attribute, axis?)` | selection · group · fixture | Continuous | Programmer write (owner `surface`) on every head the subject reaches (`Heads.of`), typed through `AttributeChannelResolver.surfaceWrite` on the binding's colour axis (null is hue; refused at bind time on a non-colour attribute, `BINDING_AXIS_NEEDS_COLOUR`); a head on which the attribute is not a colour skips an axis move. A head's **pan or tilt writes its `position`**, the other axis kept, as `programmer.setPosition` writes it (D5) — the key a Circle paints, so a nudge holds the Circle back (and holds the other axis against later cues). A `DmxWhiteMixColour` head takes a colour move on the colour its whites make. An empty selection drops the write with a debug log, never widened to "everything". Health `unknownAttribute` for a selection attribute no patched fixture takes |
-| `pageLevel` | selection · group · fixture | Continuous | A `level` on whatever attribute and colour axis the [encoder page](#encoder-bank) of **the device it is on** names, as a strip encoder follows it, on any continuous control and subject. A page change rebuilds that device's index, so the readout follows the new attribute at once. Health is the subject's alone: its attribute is the device's, which no binding names |
+| `pageLevel` | selection · group · fixture | Continuous | A `level` on whatever attribute and colour axis the [encoder page](#encoder-bank) of **the device it is on** names, as a strip job's encoder follows it, on any continuous control and subject. A page change rebuilds that device's index, so the readout follows the new attribute at once. Health is the subject's alone: its attribute is the device's, which no binding names |
 | `flash(attribute, percent)` | selection · group · fixture | Button (While held) | Press: programmer write (owner `flash`) at `percent` of each head's own range, as a fader scales (D10), grey at the percentage on a colour. Release: clears the `flash` slot of exactly the heads the press wrote — on the selection, the heads selected at the press, not whatever is selected at the release |
 | `select` | group · fixture | Button | `DeskSelection.toggle` (head-by-head, a group by its members), or `set(listOf(target))` on Replace; LED lit while the target's heads are all selected. **Toggle-hold-replaces**, the default, toggles on press and, still held at `SurfaceDispatch.SELECT_HOLD_MS` (500 ms), replaces — the fader-wing gesture. A release always cancels the pending replace, even if the binding changed or went dead meanwhile. Toggle and Replace arm no hold |
 | `locate` | selection · group · fixture | Button | `toggleLocate` once per target of the subject — each selected target, or the one group or fixture: all located → all released, else the unlocated ones come up; LED lit while every target is located (the selection's while it is non-empty) |
@@ -403,7 +472,6 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `buskPage(step?)` | none · record (page) | Button | One page along (`step` ±1, wrapping), or that page (`BuskPageState.setByUuid`; LED lit while it shows). A page with a step, or no page without one, is refused |
 | `windowFocus(window, focus)` · `windowSheet(window)` | — | Button | One `windows.viewOptions` — `{focus}` (`split` · `pads` · `rig`) or `{sheet: toggle}` — to **every** connected window named `window`. Health `missingWindow` while none has the name, re-evaluated on every registry change. No LED |
 | `selection(step)` | — | Button | `CLEAR` empties the desk selection; every other step is `DeskSelection.subselect` (the Elements chip's `ALL` · `ODD` · `EVEN` · `FIRST_HALF` · `SECOND_HALF` · `INVERT` · `MASTERS`, and `NEXT` / `PREV` one step along the rig order). No LED |
-| `strip` | group · fixture | — (a strip slot) | Never dispatched: `resolve` derives it to the binding of the control the event arrived on. See [Strips](#strips) |
 | `unknown` | — | — | Never dispatched: health `unknownTarget` gates it. Produced only by the tolerant decode; re-encoded verbatim; refused from a request |
 
 **A window-addressed function names its window by registry name**, not by row id, because a binding
@@ -455,7 +523,6 @@ service is the one door every write comes through:
 | Rule | Refuses | Code |
 |---|---|---|
 | `refuseUnknown` | an `unknown` binding from a request — it exists to be rebound, not re-sent | — |
-| `refuseWrongSlot` | a strip binding off a strip slot, or anything else on one | `BINDING_STRIP_NEEDS_STRIP` / `BINDING_CONTROL_NOT_STRIP` |
 | `refuseWrongKind` | a function the control part's input is not in (`inputFor(part)` against `Spec.inputs`): a level on a button or a push, a GO on an encoder's turn, anything on a bank button | `BINDING_WRONG_CONTROL_KIND` |
 | `refuseBySpec` | a subject the function's spec does not take — a fan on one fixture, a GO on a cue — or the function's own `refusal` (a busk page with both a page and a step), and a How it does not take | `BINDING_WRONG_SUBJECT` / `BINDING_WRONG_HOW` |
 | `refuseTriggerAttribute` | a `level`, `flash` or `encoderPage` naming a **one-shot trigger or its arm** (stage-view plan session 9): a trigger fires as an event, and a surface's door to one is `fire`, which needs the arm. Judged by `TriggerIndex` against the register; a target-less selection or encoder-bank name by every trigger's name. A **fixture command** (fixture optics plan session 7 — a reset, a lamp strike) is refused by the same rule through `CommandIndex`: a command runs from the fixture panel or `run_fixture_command`, never from a control | `TRIGGER_NOT_STORABLE`, `COMMAND_NOT_STORABLE` |
@@ -468,14 +535,12 @@ plus `hand.drop` and needs no binding at all (D12); see
 `docs/lighting-composition-model.md` §"The busk layout".
 
 `refuseWrongKind` closes `FU-MIDI-BIND-CONTROL-KIND` from the function's spec: what a part feeds is
-`inputFor(part)` and what a function takes is its `Spec.inputs`. **Strip slots are skipped**: a strip id
-names no descriptor, and its binding reaches a control by derivation rather than dispatch. The
-frontend keeps no copy: its form offers only the catalogue entries whose inputs include the part's.
+`inputFor(part)` and what a function takes is its `Spec.inputs`. The frontend keeps no copy: its form
+offers only the catalogue entries whose inputs include the part's.
 
 The coded rules carry their code out through `BindingRefused(message, code)`, an
-`IllegalArgumentException` every existing caller already maps to a 400. Session 2 got a coded
-refusal by *duplicating* each strip rule into the routes' `validateRequestShape`; the rules added
-since take this path instead, because four more rules would have meant four more copies.
+`IllegalArgumentException` every existing caller already maps to a 400; the routes' own
+`validateRequestShape` checks only that the slot exists.
 
 **Related non-MIDI path.** Phase 7 of `docs/plans/completed/cue-authoring-unification-plan.md` adds a
 separate resolver, `fx/AttributeChannelWriter`, for attribute-value → channel
@@ -491,17 +556,17 @@ don't need to distinguish.
 The editors draw what the desk resolves; the browser keeps no copy of the resolve order, the kind
 tables or the label rules (P5). Three things serve it:
 
-- **`surfaceMap.state`** — one frame per device type, `{projectId, deviceTypeKey, layers}`: each layer
+- **`surfaceMap.state`** — one frame per device type, `{projectId, deviceTypeKey, layers, jobs}`: each layer
   the profile declares, and `""`, no layer — what fires on a device on none (the rows on both layers),
   as after a restart, and a profile with no layers' only entry — → `"controlId:PART"` → a `ResolvedPart`. A part says where its
-  binding comes from (`DIRECT`, `STRIP` with its `stripId`, or `NONE`), the row's `bindingId` and the
-  layer it is stored on (`bank`, null for both), the binding's `does`, `on` and `how`, its catalogue
-  `entry`, its `takeoverPolicy`, its `label` (records by name), `subjectLabel`, the colour of the group
-  or fixture it drives, `writesTo`, the `shows` sentence, and its `health` with `healthText`. Strip slots
-  are parts too (`"strip-1:MAIN"`), so the mapping sheet can edit a strip. A strip's encoder is labelled
-  at the encoder page of the first attached device of the type — the page is a device's (D16), the map a
-  type's. Only the current project is mapped, and only the types in use: attached now, holding a
-  binding in the project, or already built (so a type that drops out still gets the frame that empties
+  binding comes from (`DIRECT`, `JOB` with its `jobId`, `jobRegion`, `item` and `jobLabel`, or `NONE`),
+  the row's `bindingId` and the layer it is stored on (`bank`, null for both), the binding's `does`, `on`
+  and `how`, its catalogue `entry`, its `takeoverPolicy`, its `label` (records by name), `subjectLabel`,
+  the colour of the group or fixture it drives, `writesTo`, the `shows` sentence, and its `health` with
+  `healthText`; a direct part over a job says what it `beats`. `jobs` is every job of the type with its
+  items named (`SurfaceJobView`), what Editor B draws. A job's encoder on the encoder page is labelled
+  at the page of the first attached device of the type — the page is a device's (D16), the map a type's. Only the current project is mapped, and only the types in use: attached now, holding a
+  binding or a job in the project, or already built (so a type that drops out still gets the frame that empties
   it). The frame is sent again only when it changed; a speed master's rename rebuilds it, as a
   record's does.
 - **`GET /api/rest/surface-functions`** — `SurfaceCatalogue.entries`, static per build.
@@ -915,7 +980,7 @@ From `State.kt`:
 
 3. **The jump rule is eight steps for every driven control.** A fast flick from a position the desk did not show the encoder is refused and the ring shown its value again (§"One jump rule"); a binding that wants every move taken sets its takeover policy to *Immediate*.
 
-4. **Enum / setting attributes are button-only.** `AttributeChannelResolver` returns empty for `DmxFixtureSetting`. Continuous-to-enum mappings are disallowed at bind time (Open Question 7). Bind-time refusals about strips carry a machine-readable `code` (`BINDING_STRIP_NEEDS_STRIP`, `BINDING_CONTROL_NOT_STRIP`); the older shape errors on this route still answer 400 with a message alone.
+4. **Enum / setting attributes are button-only.** `AttributeChannelResolver` returns empty for `DmxFixtureSetting`. Continuous-to-enum mappings are disallowed at bind time (Open Question 7). Bind-time refusals carry a machine-readable `code` (`BINDING_WRONG_CONTROL_KIND` and the rest); the slot shape errors on this route still answer 400 with a message alone.
 
 5. **No cross-session ownership for continuous controls.** Two `/surfaces` tabs can create conflicting bindings; the last-write-wins mutation happens under a per-project mutex, so atomicity is preserved, but there's no "this surface belongs to this operator" concept.
 

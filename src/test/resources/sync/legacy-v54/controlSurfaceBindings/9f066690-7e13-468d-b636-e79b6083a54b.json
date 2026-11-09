@@ -1,0 +1,8 @@
+{
+  "controlId": "button-13",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 31,
+  "targetPayload": "{\"does\":{\"type\":\"flash\",\"attribute\":\"dimmer\",\"percent\":78},\"on\":{\"type\":\"fixture\",\"key\":\"hex-1\"}}",
+  "targetType": "flash",
+  "uuid": "9f066690-7e13-468d-b636-e79b6083a54b"
+}

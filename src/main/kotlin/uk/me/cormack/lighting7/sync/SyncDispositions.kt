@@ -13,6 +13,7 @@ import uk.me.cormack.lighting7.models.DaoCloudLinkEvents
 import uk.me.cormack.lighting7.models.DaoCloudLinkInvites
 import uk.me.cormack.lighting7.models.DaoCloudRemoteSessions
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
+import uk.me.cormack.lighting7.models.DaoSurfaceJobs
 import uk.me.cormack.lighting7.models.DaoCueAdHocFx
 import uk.me.cormack.lighting7.models.DaoCueAttributeAssignments
 import uk.me.cormack.lighting7.models.DaoCueEvents
@@ -162,6 +163,7 @@ object SyncDispositions {
         DaoPromptBookAnchors to SyncDisposition.Portable("promptBookAnchors"),
         DaoPromptBookAnnotations to SyncDisposition.Portable("promptBookAnnotations"),
         DaoControlSurfaceBindings to SyncDisposition.Portable("controlSurfaceBindings"),
+        DaoSurfaceJobs to SyncDisposition.Portable("surfaceJobs"),
 
         DaoMachineOverrides to SyncDisposition.MachineLocal(
             "per-rig field overrides (controller IPs); cloned same-machine, never exported"

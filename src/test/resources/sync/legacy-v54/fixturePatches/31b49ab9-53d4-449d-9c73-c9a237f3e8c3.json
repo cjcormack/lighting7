@@ -1,0 +1,9 @@
+{
+  "displayName": "ADV1 Twin Shot",
+  "fixtureTypeKey": "equinox-twin-shot-mkii",
+  "key": "cannon-1",
+  "sortOrder": 8,
+  "startChannel": 400,
+  "universeConfigUuid": "6c967513-0f83-4b29-9d1b-db9d3099c329",
+  "uuid": "31b49ab9-53d4-449d-9c73-c9a237f3e8c3"
+}

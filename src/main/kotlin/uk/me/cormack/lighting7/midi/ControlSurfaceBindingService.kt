@@ -20,13 +20,17 @@ import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.DaoSurfaceJob
+import uk.me.cormack.lighting7.models.DaoSurfaceJobs
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Persistence + in-memory resolver for control-surface bindings. Bindings are cached by
- * `(projectId, deviceTypeKey, controlId, part, bank)` and resolved by [resolve] on each inbound
- * MIDI event, so the hot path is served from memory rather than touching the DB per event.
+ * Persistence + in-memory resolver for control-surface bindings and the jobs regions take. Bindings
+ * are cached by `(projectId, deviceTypeKey, controlId, part, bank)`, jobs by `(projectId,
+ * deviceTypeKey, region, bank)`, and both resolved by [resolve] on each inbound MIDI event, so the
+ * hot path is served from memory rather than touching the DB per event.
  *
  * Every write comes through here — the routes — so the refusals live here:
  * a binding its function's [Spec] does not admit (the subject, the How, the control part's input) is
@@ -48,12 +52,12 @@ class ControlSurfaceBindingService(
      */
     private val healthContextProvider: ((projectId: Int) -> BindingHealthEvaluator.Context?)? = null,
     /**
-     * The channel strips a device profile declares, for the strip arm of [resolve]. Defaults to
-     * the live registry; injectable so tests can resolve against a synthetic profile.
+     * A device type's profile, for the job arm of [resolve] and the job writes. Defaults to the live
+     * registry; injectable so tests can resolve against a synthetic profile.
      */
-    private val stripsFor: (deviceTypeKey: String) -> List<StripDescriptor> = { typeKey ->
-        ControlSurfaceRegistry.typeFor(typeKey)?.strips.orEmpty()
-    },
+    private val profileFor: (deviceTypeKey: String) -> ControlSurfaceRegistry.DeviceTypeInfo? = ControlSurfaceRegistry::typeFor,
+    /** What a live job reads now: the selection's heads, the busk page's pads. */
+    private val jobLive: () -> JobLive = { JobLive.EMPTY },
 ) {
     companion object {
         private val logger = LoggerFactory.getLogger(ControlSurfaceBindingService::class.java)
@@ -77,9 +81,40 @@ class ControlSurfaceBindingService(
         val sortOrder: Int,
         val health: AssignmentHealth = AssignmentHealth.Ok,
         val part: ControlPart = ControlPart.MAIN,
-        /** The strip this binding is derived from, when [resolve] answered a control with its strip's row. */
-        val viaStrip: String? = null,
+        /** The job slot this binding is derived from, when [resolve] answered a control from its region's job; [id] is then the job's. */
+        val job: JobHit? = null,
     )
+
+    /** Which job, slot and role a derived binding came from. */
+    data class JobHit(val jobId: Int, val region: String, val slot: Int, val role: SlotRole, val kind: JobKind?)
+
+    /**
+     * One stored job as the cache holds it. [items] is null and [kind] null for a row this build
+     * cannot read, kept byte for byte in [rawItems] and [kindId]; such a job derives nothing.
+     * [health] is each slot's, evaluated at install as a binding's is.
+     */
+    data class StoredJob(
+        val id: Int,
+        val uuid: UUID,
+        val projectId: Int,
+        val deviceTypeKey: String,
+        val region: String,
+        val bank: String?,
+        val kindId: String,
+        val kind: JobKind?,
+        val rawItems: String,
+        val items: List<JobItem?>?,
+        val health: List<AssignmentHealth> = emptyList(),
+    ) {
+        /** What slot [slot]'s [role] derives under [live] and [page], or null. */
+        fun derive(slot: Int, role: SlotRole, live: JobLive, page: EncoderBankSelection): Binding? {
+            val kind = kind ?: return null
+            val items = items ?: return null
+            return kind.derive(role, slot, JobContext(items, live, page))
+        }
+
+        fun healthAt(slot: Int): AssignmentHealth = health.getOrNull(slot) ?: AssignmentHealth.Ok
+    }
 
     /** Emitted on any cache-mutating operation so UIs can react. */
     sealed class BindingChange {
@@ -88,6 +123,8 @@ class ControlSurfaceBindingService(
         data class Updated(override val projectId: Int, val binding: ResolvedBinding) : BindingChange()
         data class Removed(override val projectId: Int, val bindingId: Int) : BindingChange()
         data class Reloaded(override val projectId: Int) : BindingChange()
+        /** A job was written or taken off. */
+        data class JobsChanged(override val projectId: Int) : BindingChange()
     }
 
     /**
@@ -101,27 +138,18 @@ class ControlSurfaceBindingService(
     private class ProjectCache {
         val byId: MutableMap<Int, ResolvedBinding> = LinkedHashMap()
         val byControl: MutableMap<ControlKey, MutableMap<String?, ResolvedBinding>> = HashMap()
+
+        /** `(deviceTypeKey, region)` → layer → job; replaced whole on a job write, read lock-free. */
+        @Volatile
+        var jobs: Map<JobKey, Map<String?, StoredJob>> = emptyMap()
     }
 
     /** Lookup key for the hot-path resolver. Interned at boundary so string equality is hashmap-cheap. */
     private data class ControlKey(val deviceTypeKey: String, val controlId: String, val part: ControlPart)
 
+    private data class JobKey(val deviceTypeKey: String, val region: String)
+
     private val cache = ConcurrentHashMap<Int, ProjectCache>()
-
-    /**
-     * Per device type: which strip claims each control, and the strip ids themselves. Profiles are
-     * immutable for the life of the process, so this is computed once per device type rather than
-     * re-scanned on every event — [resolve] is on the MIDI hot path.
-     */
-    private class StripIndex(val byControl: Map<String, StripControl>, val stripIds: Set<String>)
-
-    private val stripIndexes = ConcurrentHashMap<String, StripIndex>()
-
-    private fun stripIndexFor(deviceTypeKey: String): StripIndex =
-        stripIndexes.computeIfAbsent(deviceTypeKey) { typeKey ->
-            val strips = stripsFor(typeKey)
-            StripIndex(stripControlsByControlId(strips), strips.mapTo(HashSet()) { it.id })
-        }
 
     // Projects whose cache has been loaded at least once. Guards against repeat DB hits
     // on every resolve() for well-known "no bindings" projects.
@@ -145,15 +173,17 @@ class ControlSurfaceBindingService(
         if (loaded.contains(projectId)) return
         synchronized(lockFor(projectId)) {
             if (loaded.contains(projectId)) return
-            val raw = transaction(database) {
+            val (raw, rawJobs) = transaction(database) {
                 DaoControlSurfaceBinding.find { DaoControlSurfaceBindings.project eq projectId }
                     .orderBy(DaoControlSurfaceBindings.sortOrder to SortOrder.ASC)
-                    .map { it.toResolved() }
+                    .map { it.toResolved() } to
+                    DaoSurfaceJob.find { DaoSurfaceJobs.project eq projectId }.orderBy(DaoSurfaceJobs.id to SortOrder.ASC).map { it.toStored() }
             }
             val context = resolveHealthContext(projectId)
             val list = raw.map { it.withHealth(context) }
             val pc = ProjectCache()
             list.forEach { pc.install(it) }
+            pc.jobs = indexJobs(rawJobs.map { it.withHealth(context) })
             cache[projectId] = pc
             loaded.add(projectId)
             val dead = list.filter { it.health !is AssignmentHealth.Ok }
@@ -188,28 +218,27 @@ class ControlSurfaceBindingService(
 
     /**
      * Resolve an inbound event on `(deviceTypeKey, controlId, part)` on the given [activeBank] and
-     * [encoderBank]. This is the one resolution entry point — the input router, the feedback index
-     * and the takeover-policy lookup all come through here — so the strip arm below needs no second
-     * implementation anywhere.
+     * [encoderBank]. This is the one resolution entry point — the input router, the feedback index,
+     * the served map and the takeover-policy lookup all come through here — so the job arm below needs
+     * no second implementation anywhere.
      *
-     * The order is **the control part's own binding across both bank levels, then its strip's
-     * across both**:
+     * The order is **the control part's own binding across both layers, then its region's job across
+     * both** (surface-setup plan §3 "Jobs"):
      *
-     *   1. the part's row for the exact bank,
-     *   2. the part's bank-agnostic row,
-     *   3. the row on the strip containing the control, for the exact bank,
-     *   4. that strip's bank-agnostic row.
+     *   1. the part's row for the exact layer,
+     *   2. the part's row on both layers,
+     *   3. what the job on the control's region derives for its slot and role, at the exact layer,
+     *   4. what the job on both layers derives.
      *
-     * Direct before strip at *both* levels is the load-bearing part: a bank-agnostic strip must
-     * lose to an exact-bank binding on one of its controls, which is what makes "any control can
-     * still be bound on its own" true regardless of banks. A strip derives main parts only: an
-     * encoder's push on a strip is its own binding (D4).
+     * Direct before job at *both* levels is the load-bearing part: a job on both layers loses to an
+     * exact-layer binding on one of its controls, which is what makes "a control bound by hand leaves
+     * the job" true regardless of layers. A job at the exact layer that derives nothing for the part —
+     * an empty slot, a role its kind leaves alone — falls through to the job on both, as a binding
+     * does.
      *
-     * A strip hit is answered as the strip's row with the control's id and the binding that
-     * control behaves as ([deriveStripBinding]), so the derived bindings share the strip row's id,
-     * takeover policy and health. Health is deliberately not re-evaluated per derived binding: an
-     * encoder whose page's attribute no selected head declares reads unbound and drops its turn,
-     * which is a property of the selection rather than a dead binding.
+     * A job hit is answered with the job's id, its slot's health and no takeover policy (the
+     * control's own default). A live job reads [jobLive] here, so a change of the selection or of the
+     * busk page moves what its controls do without a write.
      */
     fun resolve(
         projectId: Int,
@@ -220,26 +249,171 @@ class ControlSurfaceBindingService(
         part: ControlPart = ControlPart.MAIN,
     ): ResolvedBinding? {
         ensureLoaded(projectId)
-        val byControl = cache[projectId]?.byControl ?: return null
-
-        byControl[ControlKey(deviceTypeKey, controlId, part)]?.let { byBank ->
+        val pc = cache[projectId] ?: return null
+        pc.byControl[ControlKey(deviceTypeKey, controlId, part)]?.let { byBank ->
             byBank[activeBank]?.let { return it }
             byBank[null]?.let { return it }
         }
-        if (part != ControlPart.MAIN) return null
+        return resolveJob(pc, deviceTypeKey, controlId, activeBank, encoderBank, part)
+    }
 
-        val onStrip = stripIndexFor(deviceTypeKey).byControl[controlId] ?: return null
-        val stripByBank = byControl[ControlKey(deviceTypeKey, onStrip.strip.id, ControlPart.MAIN)] ?: return null
-        val stripBinding = stripByBank[activeBank] ?: stripByBank[null] ?: return null
+    /** What the job on [controlId]'s region derives for the part, ignoring any binding of its own: what a direct binding beats. */
+    fun jobBindingAt(
+        projectId: Int,
+        deviceTypeKey: String,
+        controlId: String,
+        activeBank: String?,
+        encoderBank: EncoderBankSelection,
+        part: ControlPart = ControlPart.MAIN,
+    ): ResolvedBinding? {
+        ensureLoaded(projectId)
+        val pc = cache[projectId] ?: return null
+        return resolveJob(pc, deviceTypeKey, controlId, activeBank, encoderBank, part)
+    }
 
-        // Always the id of the control the event arrived on, even on the fallback below, so a
-        // dead-binding warning names the fader the operator is pushing rather than its strip.
-        if (stripBinding.binding.does !is Does.Strip) return stripBinding.copy(controlId = controlId, viaStrip = onStrip.strip.id)
+    private fun resolveJob(
+        pc: ProjectCache,
+        deviceTypeKey: String,
+        controlId: String,
+        activeBank: String?,
+        encoderBank: EncoderBankSelection,
+        part: ControlPart,
+    ): ResolvedBinding? {
+        val byBank = pc.jobs.takeIf { it.isNotEmpty() } ?: return null
+        val place = profileFor(deviceTypeKey)?.placeOf(controlId, part) ?: return null
+        val jobs = byBank[JobKey(deviceTypeKey, place.region)] ?: return null
+        val live = jobLive()
+        for (job in listOfNotNull(activeBank?.let { jobs[it] }, jobs[null])) {
+            val binding = job.derive(place.slot, place.role, live, encoderBank) ?: continue
+            return ResolvedBinding(
+                id = job.id,
+                projectId = job.projectId,
+                deviceTypeKey = deviceTypeKey,
+                controlId = controlId,
+                bank = job.bank,
+                binding = binding,
+                takeoverPolicy = null,
+                sortOrder = 0,
+                health = if (job.kind?.follows != null) AssignmentHealth.Ok else job.healthAt(place.slot),
+                part = part,
+                job = JobHit(job.id, place.region, place.slot, place.role, job.kind),
+            )
+        }
+        return null
+    }
 
-        return stripBinding.copy(
-            controlId = controlId,
-            viaStrip = onStrip.strip.id,
-            binding = deriveStripBinding(onStrip.role, stripBinding.binding.on, encoderBank),
+    // ─── Jobs ──────────────────────────────────────────────────────────────
+
+    /** Every job of [projectId], in the order they were made. */
+    fun jobs(projectId: Int): List<StoredJob> {
+        ensureLoaded(projectId)
+        return cache[projectId]?.jobs?.values?.flatMap { it.values }?.sortedBy { it.id }.orEmpty()
+    }
+
+    /** The job stored at exactly `(deviceTypeKey, region, bank)`, or null. */
+    fun jobAt(projectId: Int, deviceTypeKey: String, region: String, bank: String?): StoredJob? {
+        ensureLoaded(projectId)
+        return cache[projectId]?.jobs?.get(JobKey(deviceTypeKey, region))?.get(bank)
+    }
+
+    /** Whether [projectId] holds a job that follows [signal], on any device type. */
+    fun hasLiveJob(projectId: Int, signal: JobSignal): Boolean {
+        ensureLoaded(projectId)
+        return cache[projectId]?.jobs?.values?.any { byBank -> byBank.values.any { it.kind?.follows == signal } } == true
+    }
+
+    /**
+     * Give `(deviceTypeKey, region, bank)` the job [kindId] with [items], replacing what it holds.
+     * Refused with [BindingRefused] ([CODE_SURFACE_JOB_INVALID]) for an unknown device type, region,
+     * layer or kind, a kind that does not fit the region, or items the kind cannot hold.
+     */
+    fun putJob(projectId: Int, deviceTypeKey: String, region: String, bank: String?, kindId: String, items: List<JobItem?>): StoredJob {
+        val profile = profileFor(deviceTypeKey) ?: refuseJob("Unknown device type '$deviceTypeKey'")
+        val jobRegion = profile.jobRegion(region) ?: refuseJob("'$region' is no job region of ${profile.product}")
+        if (bank != null && profile.banks.none { it.id == bank }) refuseJob("Unknown layer '$bank' for '$deviceTypeKey'")
+        val kind = JobKind.of(kindId) ?: refuseJob("Unknown job kind '$kindId'")
+        if (!kind.fits(jobRegion)) refuseJob("${kind.label} does not fit ${jobRegion.name}")
+        val trimmed = items.dropLastWhile { it == null }
+        kind.itemsRefusal(jobRegion, trimmed)?.let(::refuseJob)
+        ensureLoaded(projectId)
+        val context = resolveHealthContext(projectId)
+        val stored = synchronized(lockFor(projectId)) {
+            val raw = transaction(database) {
+                val existing = DaoSurfaceJob.find {
+                    (DaoSurfaceJobs.project eq projectId) and (DaoSurfaceJobs.deviceTypeKey eq deviceTypeKey) and
+                        (DaoSurfaceJobs.region eq region)
+                }.firstOrNull { it.bank == bank }
+                val row = existing ?: DaoSurfaceJob.new {
+                    this.project = DaoProject.findById(projectId) ?: throw IllegalArgumentException("Project $projectId not found")
+                    this.deviceTypeKey = deviceTypeKey
+                    this.region = region
+                    this.bank = bank
+                }
+                row.kind = kind.id
+                row.items = encodeJobItems(trimmed)
+                row.toStored()
+            }.withHealth(context)
+            val pc = cache.getOrPut(projectId) { ProjectCache() }
+            pc.jobs = indexJobs(pc.jobs.values.flatMap { it.values }.filterNot { it.id == raw.id } + raw)
+            raw
+        }
+        _changes.tryEmit(BindingChange.JobsChanged(projectId))
+        return stored
+    }
+
+    /** Take the job off `(deviceTypeKey, region, bank)`. True if there was one. */
+    fun deleteJob(projectId: Int, deviceTypeKey: String, region: String, bank: String?): Boolean {
+        ensureLoaded(projectId)
+        val removed = synchronized(lockFor(projectId)) {
+            val pc = cache[projectId] ?: return false
+            val existing = pc.jobs[JobKey(deviceTypeKey, region)]?.get(bank) ?: return false
+            transaction(database) { DaoSurfaceJob.findById(existing.id)?.takeIf { it.project.id.value == projectId }?.delete() }
+            pc.jobs = indexJobs(pc.jobs.values.flatMap { it.values }.filterNot { it.id == existing.id })
+            true
+        }
+        if (removed) _changes.tryEmit(BindingChange.JobsChanged(projectId))
+        return removed
+    }
+
+    private fun refuseJob(message: String): Nothing = throw BindingRefused(message, CODE_SURFACE_JOB_INVALID)
+
+    private fun indexJobs(jobs: List<StoredJob>): Map<JobKey, Map<String?, StoredJob>> =
+        jobs.groupBy { JobKey(it.deviceTypeKey, it.region) }.mapValues { (_, list) -> list.associateBy { it.bank } }
+
+    /** Each slot's health: the first role whose derived binding is not Ok, as a binding's own would read. */
+    private fun StoredJob.withHealth(context: BindingHealthEvaluator.Context?): StoredJob {
+        if (context == null) return this
+        val kind = kind
+        val items = items
+        if (kind == null || items == null) return copy(health = listOf(AssignmentHealth.UnknownTarget(kindId)))
+        val region = profileFor(deviceTypeKey)?.jobRegion(region) ?: return copy(health = emptyList())
+        val ctx = JobContext(items, JobLive.EMPTY, EncoderBankState.DEFAULT)
+        val health = region.slots.indices.map { slot ->
+            SlotRole.entries.asSequence()
+                .mapNotNull { role -> kind.derive(role, slot, ctx) }
+                .map { BindingHealthEvaluator.evaluate(it, context, deviceTypeKey) }
+                .firstOrNull { it != AssignmentHealth.Ok } ?: AssignmentHealth.Ok
+        }
+        return if (health == this.health) this else copy(health = health)
+    }
+
+    private fun DaoSurfaceJob.toStored(): StoredJob {
+        val kind = JobKind.of(this.kind)
+        val items = decodeJobItems(this.items)
+        if (kind == null || items == null) {
+            logger.warn("Surface job id={} ({} on {}) cannot be read and derives nothing", id.value, this.kind, region)
+        }
+        return StoredJob(
+            id = id.value,
+            uuid = uuid,
+            projectId = project.id.value,
+            deviceTypeKey = deviceTypeKey,
+            region = region,
+            bank = bank,
+            kindId = this.kind,
+            kind = kind,
+            rawItems = this.items,
+            items = items,
         )
     }
 
@@ -413,8 +587,7 @@ class ControlSurfaceBindingService(
     )
 
     /**
-     * Delete some rows and create others as one unit — what *Fader only…* does when it turns a
-     * strip binding into the four single bindings it was deriving.
+     * Delete some rows and create others as one unit.
      *
      * Every new slot is checked free (allowing for the rows being deleted in the same call)
      * **before** the first delete, because the uniqueness check reads the cache: a failure part
@@ -524,6 +697,12 @@ class ControlSurfaceBindingService(
                 pc.install(existing.copy(health = newHealth))
                 changed = true
             }
+            val jobs = pc.jobs.values.flatMap { it.values }
+            val rejudged = jobs.map { it.withHealth(context) }
+            if (rejudged != jobs) {
+                pc.jobs = indexJobs(rejudged)
+                changed = true
+            }
         }
         if (changed) _changes.tryEmit(BindingChange.Reloaded(projectId))
     }
@@ -555,10 +734,11 @@ class ControlSurfaceBindingService(
      * Marks the project as loaded so subsequent reads don't trigger a DB query. This
      * lets resolver / list / get tests run against a pure cache without an H2 backend.
      */
-    internal fun seedCacheForTest(projectId: Int, bindings: List<ResolvedBinding>) {
+    internal fun seedCacheForTest(projectId: Int, bindings: List<ResolvedBinding>, jobs: List<StoredJob> = emptyList()) {
         synchronized(lockFor(projectId)) {
             val pc = ProjectCache()
             bindings.forEach { pc.install(it) }
+            pc.jobs = indexJobs(jobs)
             cache[projectId] = pc
             loaded.add(projectId)
         }
@@ -566,12 +746,11 @@ class ControlSurfaceBindingService(
 
     /** The part a binding with no part named sits on: [inferPart] against the control the slot names. */
     private fun partFor(deviceTypeKey: String, controlId: String, binding: Binding): ControlPart =
-        inferPart(ControlSurfaceRegistry.typeFor(deviceTypeKey)?.control(controlId), binding.does)
+        inferPart(profileFor(deviceTypeKey)?.control(controlId), binding.does)
 
-    /** Every refusal that needs no project snapshot: an unknown binding, the strip slot rule, and the spec. */
+    /** Every refusal that needs no project snapshot: an unknown binding, the control part's input, and the spec. */
     private fun refuse(deviceTypeKey: String, controlId: String, part: ControlPart, binding: Binding) {
         refuseUnknown(binding)
-        refuseWrongSlot(deviceTypeKey, controlId, binding)
         refuseWrongKind(deviceTypeKey, controlId, part, binding)
         refuseBySpec(binding)
     }
@@ -620,37 +799,13 @@ class ControlSurfaceBindingService(
     }
 
     /**
-     * A strip id and a control id share the `control_id` column but are not interchangeable: a
-     * strip binding covers four controls by derivation, so it is only meaningful on a strip, and a
-     * strip slot is only meaningful holding one. Enforced here because this service is the one door
-     * every write goes through. The routes still run their own version first, to answer a coded 400.
-     */
-    private fun refuseWrongSlot(deviceTypeKey: String, controlId: String, binding: Binding) {
-        val isStripSlot = controlId in stripIndexFor(deviceTypeKey).stripIds
-        val isStrip = binding.does is Does.Strip
-        if (isStrip && !isStripSlot) {
-            throw IllegalArgumentException(
-                "'$controlId' on $deviceTypeKey is a control, not a strip — a strip binding covers a whole strip",
-            )
-        }
-        if (!isStrip && isStripSlot) {
-            throw IllegalArgumentException(
-                "'$controlId' on $deviceTypeKey is a strip and takes a strip binding; " +
-                    "bind its controls individually instead",
-            )
-        }
-    }
-
-    /**
      * A control part can only be given a function its input reaches (`FU-MIDI-BIND-CONTROL-KIND`):
      * the part's input ([inputFor]) must be in the function's [Spec.inputs]. A bank button has no
      * input at all — it switches the layer before any binding is resolved — and a fader or button
-     * has no push. Strip slots are skipped: a strip id names no descriptor, and [refuseWrongSlot]
-     * judges a strip binding.
+     * has no push.
      */
     private fun refuseWrongKind(deviceTypeKey: String, controlId: String, part: ControlPart, binding: Binding) {
-        if (controlId in stripIndexFor(deviceTypeKey).stripIds) return
-        val descriptor = ControlSurfaceRegistry.typeFor(deviceTypeKey)?.control(controlId)
+        val descriptor = profileFor(deviceTypeKey)?.control(controlId)
             ?: return  // Unknown control: the routes' own shape check answers that, with a better message.
         val input = descriptor.inputFor(part)
         val wanted = binding.does.spec.inputs

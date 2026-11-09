@@ -23,6 +23,7 @@ import java.nio.file.Path
 import kotlin.io.path.name
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -72,6 +73,12 @@ class LegacyV52ArchiveTest {
             assertEquals(bindingFiles().size, rows.size)
             for (row in rows) {
                 val binding = decodeBinding(row.targetPayload, row.targetType)
+                // A strip is no binding any more, and this one is on a profile this desk does not
+                // have, so no job takes it: kept as it was, read as unknown.
+                if (row.targetType == "strip") {
+                    assertIs<Does.Unknown>(binding.does)
+                    continue
+                }
                 assertEquals(binding.functionId, row.targetType, "${row.controlId}: an old row imports translated")
                 assertTrue(row.targetPayload.contains("\"does\""), row.targetPayload)
             }

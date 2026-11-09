@@ -122,6 +122,7 @@ const USER_NOUNS: Record<string, [string, string]> = {
   LOOK: ['Look', 'Looks'],
   PALETTE: ['palette', 'palettes'],
   BINDING: ['binding', 'bindings'],
+  SURFACE_JOB: ['surface job', 'surface jobs'],
 }
 
 /**

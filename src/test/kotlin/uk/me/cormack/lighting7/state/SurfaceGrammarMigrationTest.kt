@@ -114,10 +114,12 @@ class SurfaceGrammarMigrationTest {
         val (_, logs) = captureLogs("SurfaceGrammarMigration") { startDesk() }
         stopDesk()
 
-        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
+        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
         assertEquals(setOf("uq_surface_binding_part_slot"), indexes(), "the old slot index is gone, the new one has the part")
         val after = rows()
-        assertEquals(61, after.size)
+        // The two strip rows are kept by this step and made jobs by step 17.
+        assertEquals(59, after.size)
+        assertEquals(2, sql { st -> st.executeQuery("SELECT COUNT(*) FROM surface_jobs").use { rs -> rs.next(); rs.getInt(1) } })
 
         fun at(control: String, layer: String? = null) = after.getValue(control to layer)
         val expected: Map<Pair<String, String?>, Pair<Binding, ControlPart>> = mapOf(
@@ -180,8 +182,6 @@ class SurfaceGrammarMigrationTest {
             ("btn-5" to "layer-b") to (Binding(Does.SelectionStep(SelectionMove.of(SubselectMode.ODD))) to ControlPart.MAIN),
             ("btn-6" to "layer-b") to (Binding(Does.Look, Subject.Record(RecordKind.LOOK, haze), How.OFF) to ControlPart.MAIN),
             ("btn-8" to "layer-b") to (Binding(Does.Cue, Subject.Record(RecordKind.CUE, storm)) to ControlPart.MAIN),
-            ("strip-1" to null) to (Binding(Does.Strip, Subject.Group("front")) to ControlPart.MAIN),
-            ("strip-2" to "layer-b") to (Binding(Does.Strip, Subject.Fixture("hex-1")) to ControlPart.MAIN),
         )
         for ((slot, want) in expected) {
             val row = after.getValue(slot)
@@ -198,7 +198,7 @@ class SurfaceGrammarMigrationTest {
             assertIs<Does.Unknown>(after.getValue(slot).binding().does)
         }
         assertEquals(expected.size + 2, after.size, "every row is accounted for")
-        assertTrue(logs.any { "59 bindings translated, 2 kept" in it }, logs.joinToString("\n"))
+        assertTrue(logs.any { "57 bindings translated, 4 kept" in it }, logs.joinToString("\n"))
 
         val backup = backups().single()
         sql(backup.toString()) { s ->
@@ -230,7 +230,7 @@ class SurfaceGrammarMigrationTest {
         sql { s -> s.executeUpdate("PRAGMA user_version = $BUSK_PAD_STACK_USER_VERSION") }
         val (_, logs) = captureLogs("SurfaceGrammarMigration") { startDesk() }
         stopDesk()
-        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
+        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
         assertTrue(backups().isEmpty(), "the two it cannot translate change nothing")
         assertTrue(logs.any { "0 bindings translated, 2 kept" in it }, logs.joinToString("\n"))
     }
@@ -251,7 +251,7 @@ class SurfaceGrammarMigrationTest {
     fun `a fresh database is only marked`() {
         val (_, logs) = captureLogs("SurfaceGrammarMigration") { startDesk() }
         stopDesk()
-        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
+        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
         assertEquals(setOf("uq_surface_binding_part_slot"), indexes())
         assertTrue(backups().isEmpty())
         assertTrue(logs.isEmpty(), logs.joinToString("\n"))

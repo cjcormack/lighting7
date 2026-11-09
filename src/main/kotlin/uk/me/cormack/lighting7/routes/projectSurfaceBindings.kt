@@ -18,7 +18,6 @@ import uk.me.cormack.lighting7.midi.BindingRefused
 import uk.me.cormack.lighting7.midi.ControlPart
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
-import uk.me.cormack.lighting7.midi.Does
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.state.State
 
@@ -48,7 +47,7 @@ internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
     post<ProjectSurfaceBindingsResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val request = call.receive<CreateSurfaceBindingRequest>()
-            validateRequestShape(request.deviceTypeKey, request.controlId, request.bank, request.binding)?.let {
+            validateRequestShape(request.deviceTypeKey, request.controlId, request.bank)?.let {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(it.message, code = it.code))
                 return@withProject
             }
@@ -81,7 +80,7 @@ internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
     put<ProjectSurfaceBindingSlotResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val request = call.receive<SurfaceBindingSlotRequest>()
-            validateRequestShape(request.deviceTypeKey, request.controlId, request.layer, request.binding)?.let {
+            validateRequestShape(request.deviceTypeKey, request.controlId, request.layer)?.let {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(it.message, code = it.code))
                 return@withProject
             }
@@ -174,7 +173,6 @@ internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
                 deviceTypeKey = request.deviceTypeKey ?: existing.deviceTypeKey,
                 controlId = request.controlId ?: existing.controlId,
                 bank = if (request.bankPresent) request.bank else existing.bank,
-                binding = request.binding ?: existing.binding,
             )
             if (validationError != null) {
                 call.respond(
@@ -219,65 +217,30 @@ internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
 }
 
 /**
- * The 400 body for a write the service refused.
- *
- * [BindingRefused] carries a machine-readable code, which is how a rule can live on
- * [ControlSurfaceBindingService] — the one door every write comes through — *and* still answer
- * something the frontend can branch on. Session 2 got both by duplicating the strip rules into
- * [validateRequestShape]; the rules added since do it this way instead.
+ * The 400 body for a write the service refused. [BindingRefused] carries a machine-readable code,
+ * which is how a rule can live on [ControlSurfaceBindingService] — the one door every write comes
+ * through — and still answer something the frontend can branch on.
  */
 private fun refusalResponse(e: IllegalArgumentException) = ErrorResponse(
     e.message ?: "Invalid binding",
     code = (e as? BindingRefused)?.code,
 )
 
-/** A strip binding was bound to an ordinary control rather than to a strip id. */
-internal const val CODE_BINDING_STRIP_NEEDS_STRIP = "BINDING_STRIP_NEEDS_STRIP"
-
-/** A strip slot was given something other than a strip binding. */
-internal const val CODE_BINDING_CONTROL_NOT_STRIP = "BINDING_CONTROL_NOT_STRIP"
-
 /** A refused write: a human-readable [message] and, where one exists, a machine-readable [code]. */
 private data class ShapeError(val message: String, val code: String? = null)
 
 /**
- * The slot a write asks for has to exist and has to suit the binding. Applied to **both** POST and
- * PATCH: a PATCH is how the surface view saves a drag onto an already-bound control, so leaving it
- * unvalidated would let exactly the same bad row in through the other door.
- *
- * A strip id and a control id share one namespace (the registry refuses a collision), and the two
- * are not interchangeable: a strip binding covers four controls by derivation, so it is only
- * meaningful on a strip, and a strip slot is only meaningful holding one.
+ * The slot a write asks for has to exist: the device type, the control and the layer. Applied to
+ * **both** POST and PATCH, so the same bad row cannot come in through the other door.
  */
-private fun validateRequestShape(
-    deviceTypeKey: String,
-    controlId: String,
-    bank: String?,
-    binding: Binding?,
-): ShapeError? {
+private fun validateRequestShape(deviceTypeKey: String, controlId: String, bank: String?): ShapeError? {
     val profile = ControlSurfaceRegistry.typeFor(deviceTypeKey)
         ?: return ShapeError("Unknown deviceTypeKey: $deviceTypeKey")
-    val isStripSlot = profile.isStripId(controlId)
-    if (!isStripSlot && profile.controls.none { it.controlId == controlId }) {
+    if (profile.control(controlId) == null) {
         return ShapeError("Unknown controlId '$controlId' for device '$deviceTypeKey'")
     }
     if (bank != null && profile.banks.none { it.id == bank }) {
         return ShapeError("Unknown bank '$bank' for device '$deviceTypeKey'")
-    }
-    if (binding != null) {
-        val isStrip = binding.does is Does.Strip
-        if (isStrip && !isStripSlot) {
-            return ShapeError(
-                "'$controlId' is a control, not a strip — a strip binding covers a whole strip",
-                CODE_BINDING_STRIP_NEEDS_STRIP,
-            )
-        }
-        if (!isStrip && isStripSlot) {
-            return ShapeError(
-                "'$controlId' is a strip and takes a strip binding; bind its controls individually instead",
-                CODE_BINDING_CONTROL_NOT_STRIP,
-            )
-        }
     }
     return null
 }

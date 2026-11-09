@@ -36,6 +36,7 @@ val ALL_TABLES: List<Table> = listOf(
     DaoParkedChannels, DaoFxDefinitions,
     DaoPromptBooks, DaoPromptBookAnchors, DaoPromptBookAnnotations,
     DaoControlSurfaceBindings,
+    DaoSurfaceJobs,
     DaoProjectScalerStates,
     DaoInstalls, DaoMachineOverrides,
     DaoSyncConfigs, DaoSyncLinkedRepos,
