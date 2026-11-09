@@ -431,7 +431,7 @@ internal class RecordRestorer(private val state: State) {
             "universeConfigs" to "universe_configs.", "riggings" to "riggings.", "stageRegions" to "stage_regions.",
             "stageElements" to "stage_elements.", "stageViewpoints" to "stage_viewpoints.", "scripts" to "scripts.",
             "fxDefinitions" to "fx_definitions.", "speedMasters" to "speed_masters.", "parkedChannels" to "parked_channels.",
-            "showParkReleases" to "show_park_releases.", "controlSurfaceBindings" to "control_surface_bindings.",
+            "showParkReleases" to "show_park_releases.", "controlSurfaceBindings" to "control_surface_bindings.", "surfaceJobs" to "surface_jobs.",
             "promptBooks" to "prompt_books.", "promptBookAnnotations" to "prompt_book_annotations.", "showHides" to "show_hides.",
             "showOverrides" to "show_overrides.", "showColours" to "show_colours.", "showGroupOrders" to "show_group_orders.",
         )

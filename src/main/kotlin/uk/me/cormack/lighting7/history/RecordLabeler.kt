@@ -51,6 +51,7 @@ object RecordLabeler {
         "promptBookAnchors" to Kind("prompt-book anchor"),
         "promptBookAnnotations" to Kind("prompt-book note"),
         "controlSurfaceBindings" to Kind("binding"),
+        "surfaceJobs" to Kind("surface job"),
     )
 
     /** A child folder's records, named as their owner's: the folder that owns them and the field naming it. */

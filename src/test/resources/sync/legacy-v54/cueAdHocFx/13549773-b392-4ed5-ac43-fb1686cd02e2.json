@@ -1,0 +1,18 @@
+{
+  "attribute": "rgbColour",
+  "blendMode": "OVERRIDE",
+  "cueUuid": "1d5bf37f-cdff-416d-acb3-190e701184f2",
+  "cycle": 4.0,
+  "family": "colour",
+  "fxType": "ColourCycle",
+  "order": "NORMAL",
+  "parameters": {
+    "colours": "#ff0000,#00ff00,#0000ff"
+  },
+  "sortOrder": 5,
+  "spread": 3.0,
+  "spreadUnit": "STEP",
+  "targetKey": "front-wash",
+  "targetType": "group",
+  "uuid": "13549773-b392-4ed5-ac43-fb1686cd02e2"
+}

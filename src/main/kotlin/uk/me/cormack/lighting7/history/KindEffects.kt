@@ -61,7 +61,7 @@ internal object KindEffects {
         setOf(
             SyncDispositions.PROJECT_FOLDER, LOOKS, PALETTES, CUE_STACKS, CUE_STACK_ENTRIES, CUES, CUE_SLOTS, BUSK_PAGES, BUSK_RIG,
             RIGGINGS, STAGE_REGIONS, STAGE_ELEMENTS, STAGE_VIEWPOINTS, SPEED_MASTERS, SCRIPTS, FX_DEFINITIONS, PROMPT_BOOKS,
-            CONTROL_SURFACE_BINDINGS,
+            CONTROL_SURFACE_BINDINGS, SURFACE_JOBS,
         ) + CUE_CHILDREN + PROMPT_BOOK_CHILDREN + RIG + PARKS
     }
 
@@ -199,7 +199,9 @@ internal object KindEffects {
             if (current) reregister(state, projectId, definitions, before, after)
             fixtures.fxDefinitionListChanged()
         }
-        if (touched(RecordFolders.CONTROL_SURFACE_BINDINGS).isNotEmpty()) state.controlSurfaceBindingService.invalidate(projectId)
+        if (touched(RecordFolders.CONTROL_SURFACE_BINDINGS, RecordFolders.SURFACE_JOBS).isNotEmpty()) {
+            state.controlSurfaceBindingService.invalidate(projectId)
+        }
     }
 
     /** How putting one rig record back reaches the live fixtures. */

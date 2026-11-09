@@ -46,6 +46,8 @@ import uk.me.cormack.lighting7.midi.MidiDeviceRegistry
 import uk.me.cormack.lighting7.midi.NoOpMidiAccessSource
 import uk.me.cormack.lighting7.midi.SurfaceIdentify
 import uk.me.cormack.lighting7.midi.SurfaceMapService
+import uk.me.cormack.lighting7.midi.SurfaceJobLive
+import uk.me.cormack.lighting7.midi.JobSignal
 import uk.me.cormack.lighting7.midi.SurfaceNames
 import uk.me.cormack.lighting7.midi.BuskRefs
 import uk.me.cormack.lighting7.midi.PadRef
@@ -75,6 +77,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.Dispatchers
+import uk.me.cormack.lighting7.fx.TargetCoverage
+import uk.me.cormack.lighting7.routes.buskPadsInOrder
 import uk.co.xfactorylibrarians.coremidi4j.CoreMidiDeviceProvider
 import uk.co.xfactorylibrarians.coremidi4j.CoreMidiNotification
 import uk.me.cormack.lighting7.models.asInstant
@@ -614,6 +620,31 @@ class State(val config: ApplicationConfig) {
         ControlSurfaceBindingService(
             database = database,
             healthContextProvider = { projectId -> buildBindingHealthContext(projectId) },
+            jobLive = { surfaceJobLive.state },
+        )
+    }
+
+    /**
+     * What a live surface job follows (surface-setup plan D11): the selection's heads in rig order and
+     * the busk page's pads, read only while the current project holds a job that follows them.
+     */
+    val surfaceJobLive: SurfaceJobLive by lazy {
+        SurfaceJobLive(
+            follows = { signal ->
+                runCatching { controlSurfaceBindingService.hasLiveJob(projectManager.currentProject.id.value, signal) }.getOrDefault(false)
+            },
+            heads = {
+                val targets = deskSelection.state.value.targets
+                if (targets.isEmpty()) emptyList() else {
+                    val fixtures = show.fixtures
+                    val heads = TargetCoverage { fixtures }.expand(targets).distinct()
+                    (buskRigOrder()?.sort(heads) ?: heads).map { it.key }
+                }
+            },
+            pads = {
+                val pageId = buskPageState.pageId.value
+                if (pageId == null) emptyList() else transaction(database) { buskPadsInOrder(pageId) }
+            },
         )
     }
 
@@ -1019,6 +1050,7 @@ class State(val config: ApplicationConfig) {
             locateManagerProvider = { show.locateManager },
             programmerLayerStackProvider = { show.programmerLayerStack },
             buskPageState = buskPageState,
+            jobLive = surfaceJobLive,
             windowRegistry = windowRegistry,
             cueLooseHeldProvider = { cueId ->
                 runCatching { show.cueStackManager.holds.looseHeld(cueId) }.getOrDefault(false)
@@ -1143,6 +1175,7 @@ class State(val config: ApplicationConfig) {
         surfaceIdentify.start(GlobalScope)
         surfaceMapService.start(GlobalScope)
         attachSurfaceMapTriggers()
+        attachSurfaceJobLiveTriggers()
         surfaceFeedbackPublisher.start(GlobalScope)
         surfaceInputRouter.start(GlobalScope)
         attachBindingHealthListener()
@@ -1249,6 +1282,7 @@ class State(val config: ApplicationConfig) {
         runCatching { surfaceFeedbackPublisher.stop() }
         runCatching { surfaceMapService.stop() }
         surfaceMapJob?.cancel()
+        surfaceJobLiveJob?.cancel()
         runCatching { deviceMatcher.stop() }
         runCatching { midiRegistry.close() }
 
@@ -1278,6 +1312,7 @@ class State(val config: ApplicationConfig) {
             // A dropped target leaves the selection; the rest stay — the rule a press applies.
             deskSelection.prune()
             refreshActiveProjectBindingHealth()
+            refreshSurfaceJobLive(setOf(JobSignal.SELECTION))
         }
         override fun cueListChanged() {
             // The hand's reconcile rides the same three lists the record bindings' health does, and
@@ -1309,7 +1344,9 @@ class State(val config: ApplicationConfig) {
             // A pad or a page may have gone; which ones is the client's question, not health's.
             buskPageState.reconcile()
             refreshActiveProjectBindingHealth()
+            refreshSurfaceJobLive(setOf(JobSignal.BUSK_PAGE))
         }
+        override fun buskRigChanged() = refreshSurfaceJobLive(setOf(JobSignal.SELECTION))
         override fun speedMasterListChanged() = refreshActiveProjectBindingHealth()
     }
 
@@ -1336,6 +1373,31 @@ class State(val config: ApplicationConfig) {
     }
 
     private var surfaceMapJob: Job? = null
+    private var surfaceJobLiveJob: Job? = null
+
+    /** Read what live jobs follow again, off the caller's thread, and rebuild the map when it moved. */
+    @OptIn(DelicateCoroutinesApi::class)
+    private fun refreshSurfaceJobLive(signals: Set<JobSignal> = JobSignal.entries.toSet()) {
+        GlobalScope.launch(Dispatchers.Default) {
+            if (surfaceJobLive.refresh(signals).isNotEmpty()) surfaceMapService.invalidate()
+        }
+    }
+
+    /** What a live job follows: the selection, the busk page showing, and the jobs themselves. */
+    @OptIn(DelicateCoroutinesApi::class)
+    private fun attachSurfaceJobLiveTriggers() {
+        surfaceJobLiveJob?.cancel()
+        surfaceJobLiveJob = GlobalScope.launch {
+            merge(
+                deskSelection.state.map { it.targets }.distinctUntilChanged().map { setOf(JobSignal.SELECTION) },
+                buskPageState.pageId.map { setOf(JobSignal.BUSK_PAGE) },
+                controlSurfaceBindingService.changes.map { JobSignal.entries.toSet() },
+                projectManager.projectChangedFlow.map { JobSignal.entries.toSet() },
+            ).collect { signals ->
+                if (surfaceJobLive.refresh(signals).isNotEmpty()) surfaceMapService.invalidate()
+            }
+        }
+    }
 
     /** What else moves the map: any binding change, a device's encoder page, a device attaching, the project. */
     @OptIn(DelicateCoroutinesApi::class)
@@ -1572,6 +1634,10 @@ class State(val config: ApplicationConfig) {
         // venue-rig-fixes plan step 16: every stack's auto numbers derived once from position, backed
         // up first when one changes. After step 15. `AutoNumberTidyMigration.kt`.
         AutoNumberTidyMigration.runIfNeeded(ds, database, dbPath)
+
+        // surface-setup plan step 17: every project's channel strips turned into jobs, backed up first
+        // when it holds a strip. After step 16. `SurfaceJobsMigration.kt`.
+        SurfaceJobsMigration.runIfNeeded(ds, database, dbPath)
 
         databaseInitWindow = startedAt to java.time.Instant.now()
         return database

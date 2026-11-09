@@ -60,7 +60,7 @@ describe('BindingForm', () => {
   it('binds a GO to the first stack, whole, as soon as it is picked', () => {
     const { onChange } = renderForm()
     pick('GO')
-    expect(onChange).toHaveBeenCalledWith({ does: { type: 'go' }, on: { type: 'record', kind: 'STACK', uuid: 'stack-1' } }, undefined)
+    expect(onChange).toHaveBeenCalledWith({ does: { type: 'go' }, on: { type: 'record', kind: 'STACK', uuid: 'stack-1' } }, undefined, 'go')
   })
 
   it('holds a function whose subject it cannot fill, and says so', () => {
@@ -74,14 +74,14 @@ describe('BindingForm', () => {
     const blackout: SurfaceBinding = { does: { type: 'blackout' } }
     const { onChange } = renderForm({ binding: blackout, entryId: 'blackout' })
     fireEvent.click(screen.getByRole('button', { name: 'On' }))
-    expect(onChange).toHaveBeenCalledWith({ does: { type: 'blackout' }, how: 'ON' }, undefined)
+    expect(onChange).toHaveBeenCalledWith({ does: { type: 'blackout' }, how: 'ON' }, undefined, 'blackout')
   })
 
   it('gives a continuous part Pick up or Jump, and a motor fader a sentence', () => {
     const level: SurfaceBinding = { does: { type: 'level', attribute: 'dimmer' }, on: { type: 'group', key: 'front-wash' } }
     const { onChange } = renderForm({ input: 'CONTINUOUS', binding: level, entryId: 'level' })
     fireEvent.click(screen.getByRole('button', { name: 'Jump' }))
-    expect(onChange).toHaveBeenCalledWith(level, 'IMMEDIATE')
+    expect(onChange).toHaveBeenCalledWith(level, 'IMMEDIATE', 'level')
     cleanup()
     renderForm({ input: 'CONTINUOUS', binding: level, entryId: 'level', motor: true })
     expect(screen.getByText(/The motor follows/)).toBeInTheDocument()

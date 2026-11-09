@@ -56,6 +56,8 @@ export interface SurfacePanelProps {
   pickups: Readonly<Record<string, PickupChange>>
   selectedControlId: string | null
   onSelectControl: (controlId: string) => void
+  /** The controls of the job region being edited, lit on the picture (Editor B). */
+  highlighted?: ReadonlySet<string>
 }
 
 const UNBOUND: ControlState = {
@@ -77,6 +79,7 @@ export function SurfacePanel({
   pickups,
   selectedControlId,
   onSelectControl,
+  highlighted,
 }: SurfacePanelProps) {
   const byControlId = useMemo(() => {
     const map = new Map<string, ControlDescriptor>()
@@ -104,6 +107,7 @@ export function SurfacePanel({
           pickups={pickups}
           selectedControlId={selectedControlId}
           onSelectControl={onSelectControl}
+          highlighted={highlighted}
         />
       ))}
     </div>
@@ -125,6 +129,7 @@ function PanelRegion({
   pickups,
   selectedControlId,
   onSelectControl,
+  highlighted,
 }: RegionProps) {
   const rows = regionRowCount(region)
   return (
@@ -140,7 +145,12 @@ function PanelRegion({
         const descriptor = byControlId.get(cell.controlId)
         if (!descriptor) return null
         return (
-          <div key={cell.controlId} style={{ gridColumn: cell.col + 1, gridRow: cell.row + 1 }} className="relative min-w-0">
+          <div
+            key={cell.controlId}
+            style={{ gridColumn: cell.col + 1, gridRow: cell.row + 1 }}
+            className={cn("relative min-w-0 rounded-md", highlighted?.has(cell.controlId) && "bg-primary/15 ring-1 ring-primary/40")}
+            data-in-job={highlighted?.has(cell.controlId) || undefined}
+          >
             <ControlCell
               descriptor={descriptor}
               main={parts[`${cell.controlId}:MAIN`] ?? NO_PART}

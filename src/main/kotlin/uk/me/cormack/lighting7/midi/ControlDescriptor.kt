@@ -119,45 +119,47 @@ data class BankButtonDescriptor(
 data class BankDefinition(val id: String, val name: String)
 
 /**
- * The role a control plays within a [StripDescriptor]. [Strip derivation][deriveStripBinding]
- * turns a role plus the strip's subject into the [Binding] the control behaves as.
+ * The role a control plays in a [JobSlot]: a strip's fader, select button, encoder and flash button,
+ * a row's button, or an encoder's push. A job kind derives one binding per role it fills.
  */
-enum class StripRole { FADER, SELECT, ENCODER, FLASH }
+enum class SlotRole {
+    FADER, SELECT, ENCODER, FLASH, BUTTON, PUSH;
+
+    /** The control part the role is: an encoder's push, else the control's main part. */
+    val part: ControlPart get() = if (this == PUSH) ControlPart.PUSH else ControlPart.MAIN
+}
+
+/** One slot of a [JobRegion]: the control playing each of its roles. */
+data class JobSlot(val controls: Map<SlotRole, String>) {
+    fun controlFor(role: SlotRole): String? = controls[role]
+
+    /** Whether the slot has a control in [role]. */
+    fun has(role: SlotRole): Boolean = role in controls
+}
 
 /**
- * A channel strip: the profile's declaration that these controls belong together as one
- * fader-wing column. A *single* binding row addressed by [id] then covers all of them —
- * the fader drives the target's dimmer, the select button selects it, the encoder drives
- * whatever attribute the device's encoder bank names, and the flash button flashes it.
- *
- * [id] shares the `control_id` column with every [ControlDescriptor.controlId], so the
- * registry refuses a strip id that collides with a control id — the binding table's
- * unique slot index cannot tell the two apart.
- *
- * [encoder] and [flash] are optional: a master strip is a fader and a select button.
+ * A region of the panel a **job** fills (surface-setup plan D11): ordered slots, each with its
+ * roles — the eight channel strips, a row of buttons, the right-hand encoders. Kept apart from the
+ * picture's [LayoutRegion]s: the picture places every control, a job region names slots. The
+ * registry refuses a control in two regions, a role naming a control the profile does not declare
+ * or of the wrong kind, and a region with no slots.
  */
-data class StripDescriptor(
-    val id: String,
-    val fader: String,
-    val select: String,
-    val encoder: String? = null,
-    val flash: String? = null,
-) {
-    /** The control playing [role] on this strip, or null when the strip has no such control. */
-    fun controlFor(role: StripRole): String? = when (role) {
-        StripRole.FADER -> fader
-        StripRole.SELECT -> select
-        StripRole.ENCODER -> encoder
-        StripRole.FLASH -> flash
+data class JobRegion(val id: String, val name: String, val slots: List<JobSlot>) {
+    /** Every control part the region claims, with its slot and role. */
+    val places: Map<Pair<String, ControlPart>, JobPlace> by lazy {
+        buildMap {
+            slots.forEachIndexed { index, slot ->
+                for ((role, controlId) in slot.controls) put(controlId to role.part, JobPlace(id, index, role))
+            }
+        }
     }
 
-    /** The role [controlId] plays on this strip, or null when it is not part of it. */
-    fun roleOf(controlId: String): StripRole? =
-        StripRole.entries.firstOrNull { controlFor(it) == controlId }
-
-    /** Every control this strip claims, in role order. */
-    val controlIds: List<String> get() = listOfNotNull(fader, select, encoder, flash)
+    /** Every control the region claims, in slot order. */
+    val controlIds: Set<String> get() = slots.flatMapTo(LinkedHashSet()) { it.controls.values }
 }
+
+/** Where one control part sits in a job region. */
+data class JobPlace(val region: String, val slot: Int, val role: SlotRole)
 
 /**
  * Where a control sits when the surface is drawn as a picture rather than a table. Purely

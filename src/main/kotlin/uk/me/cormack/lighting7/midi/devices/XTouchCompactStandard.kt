@@ -91,19 +91,29 @@ class XTouchCompactStandard : ControlSurfaceDevice() {
         bank(id = "layer-a", name = "A", inputProgramChange = 0)
         bank(id = "layer-b", name = "B", inputProgramChange = 1)
 
-        // The device physically *is* eight channel strips plus a master, which is how MagicQ
-        // and Eos users map it. Encoder above, flash button on the upper top row, fader, select
-        // button beneath. The master strip has no encoder of its own.
-        repeat(8) { i ->
-            strip(
-                id = "strip-${i + 1}",
-                fader = "fader-${i + 1}",
-                select = "btn-${25 + i}",
-                encoder = "enc-${i + 1}",
-                flash = "btn-${i + 1}",
-            )
+        // The regions a job fills (surface-setup plan D11). The device physically *is* eight channel
+        // strips plus a master, which is how MagicQ and Eos users map it: encoder above, flash button
+        // on the upper top row, fader, select button beneath.
+        jobRegion("strips", "Strips 1–8") {
+            repeat(8) { i ->
+                slot(fader = "fader-${i + 1}", select = "btn-${25 + i}", encoder = "enc-${i + 1}", flash = "btn-${i + 1}", push = "enc-${i + 1}")
+            }
         }
-        strip(id = "strip-master", fader = "fader-9", select = "btn-33")
+        jobRegion("encoders", "Encoders 9–16") {
+            repeat(8) { i -> slot(encoder = "enc-${9 + i}", push = "enc-${9 + i}") }
+        }
+        jobRegion("row-2", "Buttons 9–16") {
+            repeat(8) { i -> slot(button = "btn-${9 + i}") }
+        }
+        jobRegion("row-3", "Buttons 17–24") {
+            repeat(8) { i -> slot(button = "btn-${17 + i}") }
+        }
+        jobRegion("keys", "Buttons 34–39") {
+            repeat(6) { i -> slot(button = "btn-${34 + i}") }
+        }
+        jobRegion("master", "Master strip") {
+            slot(fader = "fader-9", select = "btn-33")
+        }
 
         layout {
             // Eight strip columns, top to bottom exactly as the panel reads.

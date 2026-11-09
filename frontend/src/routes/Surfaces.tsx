@@ -12,6 +12,7 @@ import {
   useControlSurfaceTypeListQuery,
   useSurfaceBindingsQuery,
   useSurfaceFunctionsQuery,
+  useSurfaceJobKindsQuery,
   useSurfaceMap,
   useIdentify,
 } from "@/store/surfaces"
@@ -21,15 +22,17 @@ import { BankSwitcher } from "@/components/surfaces/BankSwitcher"
 import { SurfacePanel } from "@/components/surfaces/SurfacePanel"
 import { SurfaceInspector, IdentifyButton } from "@/components/surfaces/SurfaceInspector"
 import { SurfaceSheet } from "@/components/surfaces/SurfaceSheet"
+import { SurfaceJobsPanel } from "@/components/surfaces/SurfaceJobsPanel"
 import { SelectionChip } from "@/components/surfaces/SelectionChip"
 import { cn } from "@/lib/utils"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
 
 /**
  * Settings › Surfaces — the attached desk as a picture, and an inspector for whichever control you
- * click or touch (editor A); or the same bindings as a table (editor C), the only view below tablet
- * width. What every control does is the desk's served map (surface-setup plan D15), for the layer
- * being viewed, which switches nothing on the hardware (D13).
+ * click or touch (editor A); a job for each region beside the picture (editor B); or the same
+ * bindings as a table (editor C), the only view below tablet width. What every control does is the
+ * desk's served map (surface-setup plan D15), for the layer being viewed, which switches nothing on
+ * the hardware (D13).
  */
 
 // ─── Redirect ─────────────────────────────────────────────────────────
@@ -42,6 +45,8 @@ export function SurfacesRedirect() {
 
 const NO_CONTROLS: Readonly<Record<string, ControlState>> = {}
 const NO_CATALOGUE: never[] = []
+type View = "picture" | "jobs" | "table"
+const VIEW_WORDS: Record<View, string> = { picture: "Picture", jobs: "Jobs", table: "Table" }
 
 export function SurfacesContent({ projectId }: { projectId: number }) {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -53,6 +58,7 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
   const { data: types } = useControlSurfaceTypeListQuery()
   const { data: bindings } = useSurfaceBindingsQuery(projectId)
   const { data: catalogue } = useSurfaceFunctionsQuery()
+  const { data: jobKinds } = useSurfaceJobKindsQuery()
 
   const [selectedDisplayKey, setSelectedDisplayKey] = useState<string | null>(null)
   const [selectedControlId, setSelectedControlId] = useState<string | null>(null)
@@ -61,7 +67,9 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
    * device's own.
    */
   const [viewed, setViewed] = useState<string | null | undefined>(undefined)
-  const [view, setView] = useState<"picture" | "table">("picture")
+  const [view, setView] = useState<View>("picture")
+  /** The job region the Jobs view is editing, lit on the picture. */
+  const [focusedRegion, setFocusedRegion] = useState<string | null>(null)
 
   // Pick first matched device if nothing selected yet.
   useEffect(() => {
@@ -99,16 +107,13 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
     const device =
       shown?.typeKey === binding.deviceTypeKey ? shown : devices.find((d) => d.typeKey === binding.deviceTypeKey)
     if (device) setSelectedDisplayKey(device.displayKey)
-    // A strip row's control id is the strip's, which no control has: land on its fader.
-    const linkProfile = (types ?? []).find((t) => t.typeKey === binding.deviceTypeKey)
-    const strip = linkProfile?.strips?.find((s) => s.id === binding.controlId)
-    setSelectedControlId(strip ? strip.fader : binding.controlId)
+    setSelectedControlId(binding.controlId)
     if (binding.bank != null) setViewed(binding.bank)
     setView("picture")
     const params = new URLSearchParams(searchParams)
     params.delete("binding")
     setSearchParams(params, { replace: true })
-  }, [highlightBindingId, bindings, devices, types, searchParams, setSearchParams])
+  }, [highlightBindingId, bindings, devices, searchParams, setSearchParams])
 
   // A touch on the desk selects its control, on the device it came from.
   const onCapture = useCallback((capture: IdentifyCapture) => {
@@ -142,6 +147,15 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
   const parts = frame?.layers[viewedLayer ?? ""] ?? {}
   const dimmed = layered && selectedDevice != null && viewedLayer !== deviceLayer
   const viewedName = selectedProfile?.banks.find((b) => b.id === viewedLayer)?.name
+  const highlighted = useMemo(() => {
+    if (view !== "jobs" || focusedRegion == null) return undefined
+    const region = selectedProfile?.jobRegions?.find((r) => r.id === focusedRegion)
+    return region ? new Set(region.slots.flatMap((slot) => Object.values(slot.roles))) : undefined
+  }, [view, focusedRegion, selectedProfile])
+  const editJob = useCallback((region: string) => {
+    setFocusedRegion(region)
+    setView("jobs")
+  }, [])
   const deviceName = selectedProfile?.banks.find((b) => b.id === deviceLayer)?.name
 
   const sheet = selectedProfile ? (
@@ -194,7 +208,7 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
           )}
           {selectedProfile?.layout && (
             <div className="hidden items-center gap-1 md:flex" role="group" aria-label="View">
-              {(["picture", "table"] as const).map((v) => (
+              {(["picture", "jobs", "table"] as const).filter((v) => v !== "jobs" || (selectedProfile.jobRegions?.length ?? 0) > 0).map((v) => (
                 <button
                   key={v}
                   type="button"
@@ -202,7 +216,7 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
                   onClick={() => setView(v)}
                   className={cn("rounded-md border px-2 py-0.5 text-xs", view === v ? "border-primary bg-primary/10" : "text-muted-foreground")}
                 >
-                  {v === "picture" ? "Picture" : "Table"}
+                  {VIEW_WORDS[v]}
                 </button>
               ))}
             </div>
@@ -252,7 +266,7 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
               */}
               {selectedProfile.layout ? (
                 <>
-                  <div className={cn("hidden overflow-x-auto", view === "picture" && "md:block")}>
+                  <div className={cn("hidden overflow-x-auto", view !== "table" && "md:block")}>
                     <SurfacePanel
                       profile={selectedProfile}
                       controls={controls}
@@ -260,11 +274,16 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
                       viewedLayer={viewedLayer}
                       dimmed={dimmed}
                       pickups={devicePickups}
-                      selectedControlId={selectedControlId}
-                      onSelectControl={setSelectedControlId}
+                      selectedControlId={view === "jobs" ? null : selectedControlId}
+                      onSelectControl={(controlId) => {
+                        if (view !== "jobs") return setSelectedControlId(controlId)
+                        const region = selectedProfile.jobRegions?.find((r) => r.slots.some((slot) => Object.values(slot.roles).includes(controlId)))
+                        if (region) setFocusedRegion(region.id)
+                      }}
+                      highlighted={highlighted}
                     />
                   </div>
-                  <div className={cn("flex min-h-0 flex-1 flex-col", view === "picture" && "md:hidden")} data-testid="surface-table-view">
+                  <div className={cn("flex min-h-0 flex-1 flex-col", view !== "table" && "md:hidden")} data-testid="surface-table-view">
                     {sheet}
                   </div>
                 </>
@@ -288,6 +307,22 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
               pickup={devicePickups[selectedControlId]}
               connected={connected}
               identify={identifyControls}
+              onEditJob={(selectedProfile.jobRegions?.length ?? 0) > 0 ? editJob : undefined}
+            />
+          </aside>
+        )}
+
+        {selectedProfile && view === "jobs" && (
+          <aside className="hidden w-[380px] shrink-0 overflow-y-auto border-l md:block">
+            <SurfaceJobsPanel
+              projectId={projectId}
+              profile={selectedProfile}
+              frame={frame}
+              catalogue={catalogue ?? NO_CATALOGUE}
+              kinds={jobKinds ?? NO_CATALOGUE}
+              connected={connected}
+              focused={focusedRegion}
+              onFocus={setFocusedRegion}
             />
           </aside>
         )}

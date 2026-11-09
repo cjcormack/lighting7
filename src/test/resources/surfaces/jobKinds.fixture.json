@@ -1,0 +1,103 @@
+[
+    {
+        "id": "groupStrips",
+        "label": "Groups as channel strips",
+        "help": "Each group on a strip: its level, select, the encoder page and flash.",
+        "item": "GROUP"
+    },
+    {
+        "id": "fixtureStrips",
+        "label": "Fixtures as channel strips",
+        "help": "Each fixture on a strip: its level, select, the encoder page and flash.",
+        "item": "FIXTURE"
+    },
+    {
+        "id": "headStrips",
+        "label": "The selection, one head per strip",
+        "help": "The first selected heads, in rig order, one a strip. A select button narrows the selection to that head.",
+        "follows": "SELECTION"
+    },
+    {
+        "id": "stackStrips",
+        "label": "Cue stacks as playbacks",
+        "help": "Fader is the stack's FX amount, flash is GO, select is Back.",
+        "item": "STACK"
+    },
+    {
+        "id": "masterStrips",
+        "label": "Speed masters",
+        "help": "Fader is the master's tempo across 20–300 BPM, flash is Tap.",
+        "item": "MASTER"
+    },
+    {
+        "id": "wheels",
+        "label": "Wheels on the selection",
+        "help": "Each encoder one function: a level, a colour axis, a fan, FX speed or a tempo.",
+        "item": "FUNCTION",
+        "entries": [
+            "level",
+            "pageLevel",
+            "fan",
+            "fxSpeed",
+            "fxAmount",
+            "grandMaster",
+            "tempo"
+        ]
+    },
+    {
+        "id": "pagedWheels",
+        "label": "Wheels by encoder page",
+        "help": "The first selected heads, in rig order, one an encoder, each on the attribute the encoder page names.",
+        "follows": "SELECTION"
+    },
+    {
+        "id": "palettes",
+        "label": "Palettes onto the selection",
+        "help": "Each button presses a palette on the selection.",
+        "item": "PALETTE"
+    },
+    {
+        "id": "buskPage",
+        "label": "The busk page that's showing",
+        "help": "Its first pads in order. A page button moves it, and the row follows.",
+        "follows": "BUSK_PAGE"
+    },
+    {
+        "id": "gos",
+        "label": "GO for each cue stack",
+        "help": "Each button is a stack's GO.",
+        "item": "STACK"
+    },
+    {
+        "id": "looks",
+        "label": "Looks",
+        "help": "Each button puts a Look on, or takes it off.",
+        "item": "LOOK"
+    },
+    {
+        "id": "encoderPages",
+        "label": "Encoder pages",
+        "help": "Each button points the device's encoders at an attribute, lit while it is the page.",
+        "item": "FUNCTION",
+        "entries": [
+            "encoderPage"
+        ]
+    },
+    {
+        "id": "transport",
+        "label": "Transport for one stack",
+        "help": "GO, Back, Stop, Pause, Tap and Clear, in that order, for one stack.",
+        "item": "STACK",
+        "maxItems": 1
+    },
+    {
+        "id": "programmer",
+        "label": "Programmer keys",
+        "help": "Clear, Blind, Undo, Release, Locate and Clear selection, in that order, on the selection."
+    },
+    {
+        "id": "grandMaster",
+        "label": "Grand master and blackout",
+        "help": "The fader is the grand master, its select button blackout."
+    }
+]

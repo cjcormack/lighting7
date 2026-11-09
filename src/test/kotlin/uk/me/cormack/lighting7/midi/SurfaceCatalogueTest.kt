@@ -9,6 +9,7 @@ import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -39,7 +40,7 @@ class SurfaceCatalogueTest {
             assertTrue(entries.isNotEmpty(), "${function.simpleName} has no catalogue entry")
         }
         for (entry in SurfaceCatalogue.entries) {
-            assertTrue(entry.strip || entry.inputs.isNotEmpty(), "${entry.id} takes some input")
+            assertTrue(entry.inputs.isNotEmpty(), "${entry.id} takes some input")
             assertTrue(entry.subjects.isNotEmpty(), "${entry.id} acts on something")
             entry.defaultHow?.let { assertTrue(it in entry.hows, "${entry.id}'s default How is one it takes") }
         }
@@ -63,6 +64,11 @@ class SurfaceCatalogueTest {
     }
 
     @Test
+    fun `the job kinds fixture is the kinds the desk serves`() {
+        pinned("jobKinds.fixture.json", json.encodeToString(ListSerializer(uk.me.cormack.lighting7.routes.JobKindDto.serializer()), uk.me.cormack.lighting7.routes.jobKindDtos()))
+    }
+
+    @Test
     fun `the map fixture is what the desk serves for a sample of bindings`() {
         pinned("map.fixture.json", json.encodeToString(SurfaceMapFrame.serializer(), sampleFrame()))
     }
@@ -79,8 +85,20 @@ class SurfaceCatalogueTest {
     fun `the map has a no-layer entry beside each layer, holding only what fires on both`() {
         val frame = sampleFrame()
         assertEquals(setOf("layer-a", "layer-b", ""), frame.layers.keys)
-        assertEquals(PartSource.STRIP, frame.layers.getValue("").getValue("fader-1:MAIN").from)
+        assertEquals(PartSource.JOB, frame.layers.getValue("").getValue("fader-1:MAIN").from)
         assertEquals(PartSource.DIRECT, frame.layers.getValue("layer-b").getValue("fader-1:MAIN").from)
+    }
+
+    @Test
+    fun `a job's part says where it comes from, a control bound over it what it beats, and the frame lists the jobs`() {
+        val frame = sampleFrame()
+        val fromJob = frame.layers.getValue("layer-a").getValue("fader-1:MAIN")
+        assertEquals("Groups as channel strips · item 1", fromJob.jobLabel)
+        assertEquals("Dimmer · Front wash", fromJob.label)
+        val own = frame.layers.getValue("layer-b").getValue("fader-1:MAIN")
+        assertEquals("Groups as channel strips · item 1", own.beats)
+        assertNull(frame.layers.getValue("layer-b").getValue("btn-3:MAIN").beats, "a control no job reaches beats nothing")
+        assertEquals(listOf("Front wash", "Saturation", "Tempo · M2 · Chase"), frame.jobs.flatMap { job -> job.items.map { it?.label } })
     }
 
     @Test
@@ -112,8 +130,9 @@ class SurfaceCatalogueTest {
     private val master = UUID.fromString("22222222-2222-4222-8222-222222222222")
 
     /**
-     * One of each source and a spread of functions: a strip, a control bound on its own over its
-     * strip on one layer, an encoder's push, a selection level, a tempo on a named master, a dead GO.
+     * One of each source and a spread of functions: a job on the strips, a control bound on its own
+     * over its job on one layer, wheels on the right-hand encoders, an encoder's push, a selection
+     * level, a tempo on a named master, a dead GO.
      */
     private fun sampleFrame(): SurfaceMapFrame {
         val typeKey = "x-touch-compact-standard"
@@ -126,10 +145,13 @@ class SurfaceCatalogueTest {
                 takeoverPolicy = if (controlId.startsWith("enc")) BindingTakeoverPolicy.PICKUP else null,
                 sortOrder = 0, health = health, part = part,
             )
+        fun job(id: Int, region: String, kind: JobKind, items: List<JobItem?>) = ControlSurfaceBindingService.StoredJob(
+            id = id, uuid = UUID(0, id.toLong()), projectId = 7, deviceTypeKey = typeKey, region = region, bank = null,
+            kindId = kind.id, kind = kind, rawItems = encodeJobItems(items), items = items,
+        )
         service.seedCacheForTest(
             7,
             listOf(
-                row("strip-1", Binding(Does.Strip, Subject.Group("front-wash"))),
                 row("fader-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")), bank = "layer-b"),
                 row("enc-9", Binding(Does.Level("pan"), Subject.Selection)),
                 row("enc-9", Binding(Does.Locate, Subject.Selection), part = ControlPart.PUSH),
@@ -137,6 +159,13 @@ class SurfaceCatalogueTest {
                 row("btn-4", Binding(Does.Go, Subject.Record(RecordKind.STACK, missingStack)), health = AssignmentHealth.MissingStack(0, missingStack.toString())),
                 row("fader-9", Binding(Does.Tempo(), Subject.Record(RecordKind.MASTER, master))),
                 row("btn-33", Binding(Does.Blackout, how = How.ON)),
+            ),
+            listOf(
+                job(1, "strips", JobKind.GROUPS, listOf(JobItem.Group("front-wash"))),
+                job(2, "encoders", JobKind.WHEELS, listOf(
+                    JobItem.Function(Does.Level("rgbColour", ColourAxis.SATURATION), Subject.Selection),
+                    JobItem.Function(Does.Tempo(), Subject.Record(RecordKind.MASTER, master)),
+                )),
             ),
         )
         val names = SurfaceNames(
@@ -150,9 +179,9 @@ class SurfaceCatalogueTest {
             masterOne = "M1 · Main",
         )
         val full = SurfaceMaps.build(7, profile, service, names, EncoderBankSelection("dimmer"))
-        // Only the parts the sample binds, and the strip's other controls, so the fixture stays readable.
-        val keep = setOf("strip-1:MAIN", "fader-1:MAIN", "btn-25:MAIN", "enc-1:MAIN", "btn-1:MAIN", "enc-1:PUSH",
-            "enc-9:MAIN", "enc-9:PUSH", "btn-3:MAIN", "btn-4:MAIN", "fader-9:MAIN", "btn-33:MAIN", "btn-5:MAIN")
+        // Only the parts the sample binds, and strip 1's other controls, so the fixture stays readable.
+        val keep = setOf("fader-1:MAIN", "btn-25:MAIN", "enc-1:MAIN", "btn-1:MAIN", "enc-1:PUSH",
+            "enc-9:MAIN", "enc-9:PUSH", "enc-10:MAIN", "enc-10:PUSH", "btn-3:MAIN", "btn-4:MAIN", "fader-9:MAIN", "btn-33:MAIN", "btn-5:MAIN")
         return full.copy(layers = full.layers.mapValues { (_, parts) -> parts.filterKeys { it in keep } })
     }
 }

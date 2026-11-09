@@ -119,10 +119,16 @@ class SurfaceFeedbackPublisherTest {
         /** The device profiles, for a test that needs a control the X-Touch lacks. */
         types: List<ControlSurfaceRegistry.DeviceTypeInfo> = ControlSurfaceRegistry.allTypes,
         pollIntervalMs: Long = 3_600_000L,
+        /** The jobs the project's regions take. */
+        jobs: List<ControlSurfaceBindingService.StoredJob> = emptyList(),
     ) {
         val fixtures = Fixtures()
         val controller = MockDmxController(Universe(0, 0), parkSource)
-        val bindingService = ControlSurfaceBindingService(FakeDatabase.instance)
+        /** What a live job reads; [jobLive] announces a change of it. */
+        var heads: List<String> = emptyList()
+        var pads: List<UUID> = emptyList()
+        val jobLive = SurfaceJobLive(follows = { true }, heads = { heads }, pads = { pads })
+        val bindingService = ControlSurfaceBindingService(FakeDatabase.instance, jobLive = { jobLive.state })
         val bankState = ActiveBankState()
         val encoderBankState = EncoderBankState()
         val holds = SurfaceHolds()
@@ -167,7 +173,7 @@ class SurfaceFeedbackPublisherTest {
             scaler = GlobalScalerState(fixtures)
             scaler.attach()
 
-            bindingService.seedCacheForTest(projectId, bindings)
+            bindingService.seedCacheForTest(projectId, bindings, jobs)
 
             val registry = MidiDeviceRegistry(FakeMidiAccess(), pollIntervalMs = 60_000L, autoOpen = false)
             matcher = DeviceMatcher(registry)
@@ -221,6 +227,7 @@ class SurfaceFeedbackPublisherTest {
                 cueIdResolver = { cueIds[it] },
                 types = { types },
                 pollIntervalMs = pollIntervalMs,
+                jobLive = jobLive,
             )
         }
 
@@ -262,6 +269,13 @@ class SurfaceFeedbackPublisherTest {
             ))
         }
     }
+
+    /** A job on the X-Touch's strips: each of [items] on its strip. */
+    private fun strips(kind: JobKind = JobKind.GROUPS, items: List<JobItem?> = listOf(JobItem.Group("front-wash")), bank: String? = null) =
+        ControlSurfaceBindingService.StoredJob(
+            id = 50, uuid = UUID.randomUUID(), projectId = projectId, deviceTypeKey = deviceTypeKey, region = "strips", bank = bank,
+            kindId = kind.id, kind = kind, rawItems = encodeJobItems(items), items = items,
+        )
 
     private fun binding(
         id: Int,
@@ -1211,15 +1225,96 @@ class SurfaceFeedbackPublisherTest {
     }
 
     @Test
+    fun `a heads job follows the selection, re-feeding its strips without re-arming pickup`() = runBlocking {
+        val h = Harness(emptyList(), jobs = listOf(strips(JobKind.HEADS, emptyList())))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.hold("hex-1", "dimmer", 200u)
+            h.hold("hex-2", "dimmer", 50u)
+            h.heads = listOf("hex-1", "hex-2")
+            h.jobLive.refresh()
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            assertEquals(AttributeChannelResolver.scaleDmxTo7Bit(200u), h.recordingController.feedback.ccOn(1).last().value, "strip 1 is hex-1")
+            assertEquals(AttributeChannelResolver.scaleDmxTo7Bit(50u), h.recordingController.feedback.ccOn(2).last().value, "strip 2 is hex-2")
+            val rearms = h.recordingController.allInvalidations.get()
+            fun control(id: String) = h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue(id)
+
+            // The selection narrows to hex-2: strip 1 is hex-2 now, strip 2 nothing.
+            h.recordingController.feedback.clear()
+            h.heads = listOf("hex-2")
+            h.jobLive.refresh()
+            yield()
+            assertEquals(AttributeChannelResolver.scaleDmxTo7Bit(50u), h.recordingController.feedback.ccOn(1).last().value, "strip 1 follows the selection")
+            assertNull(control("fader-2").value, "strip 2 has no head, so shows nothing")
+            assertEquals(rearms, h.recordingController.allInvalidations.get(), "a live job's change re-arms nothing")
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `a busk-page job follows the showing page, re-feeding its LEDs without re-arming pickup`() = runBlocking {
+        val lookUuid = UUID.nameUUIDFromBytes("look:Warm".toByteArray())
+        val lookPad = UUID.nameUUIDFromBytes("pad:Warm".toByteArray())
+        val otherPad = UUID.nameUUIDFromBytes("pad:Cold".toByteArray())
+        val job = ControlSurfaceBindingService.StoredJob(
+            id = 51, uuid = UUID.randomUUID(), projectId = projectId, deviceTypeKey = deviceTypeKey, region = "row-2", bank = null,
+            kindId = JobKind.BUSK_PAGE.id, kind = JobKind.BUSK_PAGE, rawItems = "[]", items = emptyList(),
+        )
+        val h = Harness(
+            emptyList(),
+            buskRefs = BuskRefs(
+                pads = mapOf(lookPad to PadRef.Layer(lookUuid, isLook = true), otherPad to PadRef.Layer(UUID.randomUUID(), isLook = true)),
+                pageIds = emptyMap(),
+            ),
+            jobs = listOf(job),
+        )
+        h.looks[lookUuid] = LookSnapshot(lookId = 1, lookUuid = lookUuid, name = "Warm", rows = emptyList(), effects = emptyList())
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.pads = listOf(lookPad)
+            h.jobLive.refresh()
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            fun led(control: String) = h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue(control).led
+            h.layers.add(source = LayerSource.look(1, lookUuid, "Warm"), targets = emptyList())
+            yield()
+            assertEquals(LedState.ON, led("btn-9"), "the page's first pad is the Look's, which is on")
+            val rearms = h.recordingController.allInvalidations.get()
+
+            // Another page shows: the Look's pad is second now.
+            h.pads = listOf(otherPad, lookPad)
+            h.jobLive.refresh()
+            yield()
+            assertEquals(LedState.OFF, led("btn-9"), "button 9 is the other page's first pad")
+            assertEquals(LedState.ON, led("btn-10"), "button 10 is the Look's pad")
+            assertEquals(rearms, h.recordingController.allInvalidations.get(), "a page change re-arms nothing")
+
+            // A page with no pads: the row goes dark.
+            h.pads = emptyList()
+            h.jobLive.refresh()
+            yield()
+            assertEquals(LedState.OFF, led("btn-10"), "a slot with no pad turns off")
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun `an encoder-bank change moves a strip encoder onto the new attribute`() = runBlocking {
-        val h = Harness(listOf(binding(1, "strip-1", Binding(Does.Strip, Subject.Group("front-wash")))))
+        val h = Harness(emptyList(), jobs = listOf(strips()))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
             h.publisher.start(scope)
             h.attachXTouch()
             yield()
 
-            // enc-1 is strip-1's encoder; on the default bank it stands on the group's dimmer. Its ring RX is CC 10.
+            // enc-1 is strip 1's encoder; on the default bank it stands on the group's dimmer. Its ring RX is CC 10.
             fun ringWrites() = h.recordingController.feedback
                 .filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>()
                 .filter { it.cc == 10 }
@@ -1259,9 +1354,7 @@ class SurfaceFeedbackPublisherTest {
     fun `an encoder-bank change re-shows the device, and a ring encoder judges moves against the new attribute`() = runBlocking {
         // The bank change re-arms the device, because the meaning of the control moved under the
         // operator's hand even though they did not touch it.
-        val h = Harness(listOf(
-            binding(1, "strip-1", Binding(Does.Strip, Subject.Group("front-wash")), policy = BindingTakeoverPolicy.PICKUP),
-        ))
+        val h = Harness(emptyList(), jobs = listOf(strips()))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
             h.publisher.start(scope)
@@ -1687,9 +1780,7 @@ class SurfaceFeedbackPublisherTest {
 
     @Test
     fun `an axis-only change of encoder bank rebuilds the index and judges the ring against the new axis`() = runBlocking {
-        val h = Harness(listOf(
-            binding(1, "strip-1", Binding(Does.Strip, Subject.Group("front-wash")), policy = BindingTakeoverPolicy.PICKUP),
-        ))
+        val h = Harness(emptyList(), jobs = listOf(strips()))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
             h.paint("hex-1", 0, 0, 200)
@@ -2006,9 +2097,8 @@ class SurfaceFeedbackPublisherTest {
         val h = Harness(listOf(
             binding(1, "btn-10", Binding(Does.Blackout)),
             binding(2, "btn-10", Binding(Does.GrandMaster()), bank = "layer-b"),
-            binding(3, "strip-1", Binding(Does.Strip, Subject.Group("front-wash"))),
             binding(4, "btn-11", flash),
-        ))
+        ), jobs = listOf(strips()))
         val dispatch = SurfaceDispatch(uk.me.cormack.lighting7.testsupport.RecordingSurfaceActions(), h.bankState, h.encoderBankState, h.holds)
         fun origin(displayKey: String) = SurfaceDispatch.Origin(
             deviceTypeKey, HistorySource.surface(displayKey), hold = SurfaceDispatch.HoldKey(displayKey, "btn-11", ControlPart.MAIN),

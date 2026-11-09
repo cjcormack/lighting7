@@ -9,6 +9,11 @@ import org.jetbrains.exposed.v1.jdbc.select
 import uk.me.cormack.lighting7.midi.Binding
 import uk.me.cormack.lighting7.midi.Subject
 import uk.me.cormack.lighting7.midi.decodeBinding
+import uk.me.cormack.lighting7.midi.JobItem
+import uk.me.cormack.lighting7.midi.decodeJobItems
+import uk.me.cormack.lighting7.midi.encodeJobItems
+import uk.me.cormack.lighting7.models.DaoSurfaceJob
+import uk.me.cormack.lighting7.models.DaoSurfaceJobs
 import uk.me.cormack.lighting7.midi.encodePayload
 import uk.me.cormack.lighting7.models.DaoBuskRigRows
 import uk.me.cormack.lighting7.models.DaoBuskRigTile
@@ -45,13 +50,13 @@ import uk.me.cormack.lighting7.models.placeLabel
 
 /**
  * Where a project's own stored records name a fixture by key or a group by name — cue rows, ad-hoc
- * effects, palette-layer targets and the heads a cue keeps live, Look rows and effects, template rows and surface bindings — for MCP's
+ * effects, palette-layer targets and the heads a cue keeps live, Look rows and effects, template rows, surface bindings and surface jobs' items — for MCP's
  * patch edits: who still names a key `unpatch_fixtures` removes, and the rewrite `rename_fixtures`
  * and `edit_groups` make. A cell is named `<fixture key>.<cell>`, so a fixture key also matches its
  * cells. Scripts are Kotlin source, so they are only ever reported. Inside a transaction.
  */
 internal object RigKeyReferences {
-    /** Who names a key: `CUE | LOOK | PALETTE | BINDING | SCRIPT`. */
+    /** Who names a key: `CUE | LOOK | PALETTE | BINDING | SURFACE_JOB | SCRIPT`, [id] the record's row id in its own table. */
     data class User(val kind: String, val id: Int, val name: String)
 
     /** What a rewrite changed: the records to republish and announce. */
@@ -253,6 +258,29 @@ internal object RigKeyReferences {
                 touched.bindings++
             }
         }
+
+        DaoSurfaceJob.find { DaoSurfaceJobs.project eq project.id }.forEach { job ->
+            val items = decodeJobItems(job.items) ?: return@forEach
+            val user = User("SURFACE_JOB", job.id.value, listOfNotNull(job.deviceTypeKey, job.region, job.bank?.let { "bank $it" }).joinToString(" "))
+            var changed = false
+            val next = items.map { item ->
+                val renamed = item?.renamed { type, key -> visit(user, type, key) }
+                if (renamed != null) changed = true
+                renamed ?: item
+            }
+            if (changed) {
+                job.items = encodeJobItems(next)
+                touched.bindings++
+            }
+        }
+    }
+
+    /** This job item with the fixture or group it names passed through [rename]; null when nothing changed. */
+    private fun JobItem.renamed(rename: (String, String) -> String?): JobItem? = when (this) {
+        is JobItem.Fixture -> rename(TargetRef.Fixture.TYPE, key)?.let { JobItem.Fixture(it) }
+        is JobItem.Group -> rename(TargetRef.Group.TYPE, key)?.let { JobItem.Group(it) }
+        is JobItem.Function -> Binding(does, on).renamed(rename)?.let { copy(on = it.on) }
+        is JobItem.Record -> null
     }
 
     /** This binding with the fixture or group it acts on passed through [rename]; null when nothing changed. */

@@ -177,13 +177,6 @@ class BindingHealthEvaluatorTest {
     }
 
     @Test
-    fun `a strip is judged by its subject alone, not by the attributes it derives`() {
-        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Strip, Subject.Group("front-wash"))))
-        assertEquals(AssignmentHealth.MissingGroup("side-wash"), health(Binding(Does.Strip, Subject.Group("side-wash"))))
-        assertEquals(AssignmentHealth.MissingFixture("hex-9"), health(Binding(Does.Strip, Subject.Fixture("hex-9"))))
-    }
-
-    @Test
     fun `an encoder page needs an attribute some patched fixture can take`() {
         assertEquals(AssignmentHealth.Ok, health(Binding(Does.EncoderPage("dimmer"))))
         assertEquals(AssignmentHealth.UnknownAttribute("tilt"), health(Binding(Does.EncoderPage("tilt"))))

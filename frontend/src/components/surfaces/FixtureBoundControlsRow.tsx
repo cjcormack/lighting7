@@ -4,15 +4,14 @@ import { useSurfaceBindingsQuery, type ControlSurfaceBinding } from "@/store/sur
 import { BoundControlBadge } from "./BoundControlBadge"
 
 /**
- * The attribute a binding drives on [subject] — a level's or a flash's, or a strip's fader, which
- * drives the dimmer — or null when it drives none there.
+ * The attribute a binding drives on [subject] — a level's or a flash's — or null when it drives none
+ * there. A job's controls are no binding rows, so a group on a strip job is not counted here.
  */
 function attributeOn(binding: ControlSurfaceBinding, type: "fixture" | "group", key: string): string | null {
   const on = binding.binding.on
   if (on?.type !== type || on.key !== key) return null
   const does = binding.binding.does
   if (does.type === "level" || does.type === "flash") return does.attribute
-  if (does.type === "strip") return "dimmer"
   return null
 }
 
@@ -50,7 +49,7 @@ export function FixtureBoundControlsRow({ fixtureKey }: { fixtureKey: string }) 
   return <BoundRows byAttribute={useBoundByAttribute("fixture", fixtureKey)} />
 }
 
-/** The group sheet's twin, a strip on the group counting as its dimmer. */
+/** The group sheet's twin. */
 export function GroupBoundControlsRow({ groupName }: { groupName: string }) {
   return <BoundRows byAttribute={useBoundByAttribute("group", groupName)} />
 }

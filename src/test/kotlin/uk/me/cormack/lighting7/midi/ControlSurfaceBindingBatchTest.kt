@@ -9,11 +9,12 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
- * [ControlSurfaceBindingService.replace] — the one-transaction delete-and-create behind the
- * inspector's *Fader only…*. Needs a real database (the pure resolver test's `FakeDatabase`
- * never opens a connection), so it lives here.
+ * [ControlSurfaceBindingService]'s writes against a real database (the pure resolver test's
+ * `FakeDatabase` never opens a connection): [ControlSurfaceBindingService.replace]'s one-transaction
+ * delete-and-create, the job writes and their refusals, and the control-kind rule.
  */
 class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
 
@@ -33,37 +34,31 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
     @Test
     fun `replace deletes and creates in one call and answers the created rows`() {
         val service = service()
-        val strip = service.create(
+        val old = service.create(
             projectId = projectId,
             deviceTypeKey = deviceTypeKey,
-            controlId = "strip-1",
+            controlId = "fader-2",
             bank = null,
-            binding = Binding(Does.Strip, wash),
+            binding = Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")),
             takeoverPolicy = BindingTakeoverPolicy.PICKUP,
         )
 
         val created = service.replace(
             projectId = projectId,
-            deleteIds = listOf(strip.id),
-            creates = deriveStripBindings(
-                strip = StripDescriptor("strip-1", "fader-1", "btn-25", "enc-1", "btn-1"),
-                on = wash,
-                encoderBank = EncoderBankSelection("colour"),
-            ).map { (controlId, binding) ->
-                newBinding(controlId, binding).copy(takeoverPolicy = strip.takeoverPolicy)
-            },
+            deleteIds = listOf(old.id),
+            creates = listOf(
+                newBinding("fader-1", Binding(Does.Level("dimmer"), wash)).copy(takeoverPolicy = BindingTakeoverPolicy.PICKUP),
+                newBinding("btn-25", Binding(Does.Select, wash)),
+                newBinding("enc-1", Binding(Does.PageLevel, wash)),
+                newBinding("btn-1", Binding(Does.Flash("dimmer"), wash)),
+            ),
         )
 
         assertEquals(4, created.size)
-        assertNull(service.get(projectId, strip.id))
+        assertNull(service.get(projectId, old.id))
         assertEquals(
             setOf("fader-1", "btn-25", "enc-1", "btn-1"),
             service.list(projectId).map { it.controlId }.toSet(),
-        )
-        // The four rows resolve to exactly what the strip was deriving, and keep its policy.
-        assertEquals(
-            Binding(Does.Level("colour"), wash),
-            service.resolve(projectId, deviceTypeKey, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("colour"))?.binding,
         )
         assertEquals(BindingTakeoverPolicy.PICKUP, created.single { it.controlId == "fader-1" }.takeoverPolicy)
 
@@ -75,9 +70,9 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
     @Test
     fun `a slot clash refuses before anything is deleted`() {
         val service = service()
-        val strip = service.create(
-            projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "strip-1",
-            bank = null, binding = Binding(Does.Strip, wash),
+        val old = service.create(
+            projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "fader-2",
+            bank = null, binding = Binding(Does.Level("dimmer"), wash),
         )
         val occupier = service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "btn-25",
@@ -87,7 +82,7 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         assertFailsWith<IllegalStateException> {
             service.replace(
                 projectId = projectId,
-                deleteIds = listOf(strip.id),
+                deleteIds = listOf(old.id),
                 creates = listOf(
                     newBinding("fader-1", Binding(Does.Level("dimmer"), wash)),
                     newBinding("btn-25", Binding(Does.Select, wash)),
@@ -95,10 +90,10 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
             )
         }
 
-        // Nothing moved: the strip is still there, so is the occupier, and no partial row landed.
-        assertNotNull(service.get(projectId, strip.id))
+        // Nothing moved: the old row is still there, so is the occupier, and no partial row landed.
+        assertNotNull(service.get(projectId, old.id))
         assertNotNull(service.get(projectId, occupier.id))
-        assertEquals(setOf("strip-1", "btn-25"), service.list(projectId).map { it.controlId }.toSet())
+        assertEquals(setOf("fader-2", "btn-25"), service.list(projectId).map { it.controlId }.toSet())
 
         service.invalidate(projectId)
         assertEquals(2, service.list(projectId).size)
@@ -140,44 +135,63 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         assertEquals(emptyList(), service.list(projectId))
     }
 
-    // The slot guard lives on the service, not only on the REST routes, because MIDI Learn's
-    // commit writes through `create` with no route validation of its own.
+    // ─── Jobs ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `create refuses a strip binding on an ordinary control`() {
+    fun `a job is stored, answered, replaced in place and taken off`() {
         val service = service()
-        assertFailsWith<IllegalArgumentException> {
-            service.create(
-                projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "fader-1",
-                bank = null, binding = Binding(Does.Strip, wash),
-            )
-        }
-        assertEquals(emptyList(), service.list(projectId))
-    }
+        val items = listOf(JobItem.Group("front-wash"), null, JobItem.Group("back-wash"))
+        val job = service.putJob(projectId, deviceTypeKey, "strips", null, JobKind.GROUPS.id, items + null)
+        assertEquals(items, job.items, "a trailing gap is no item")
 
-    @Test
-    fun `create refuses a non-strip binding on a strip slot`() {
-        val service = service()
-        assertFailsWith<IllegalArgumentException> {
-            service.create(
-                projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "strip-1",
-                bank = null, binding = Binding(Does.Blackout),
-            )
-        }
-        assertEquals(emptyList(), service.list(projectId))
-    }
-
-    @Test
-    fun `update cannot move a strip binding onto an ordinary control`() {
-        val service = service()
-        val strip = service.create(
-            projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "strip-1",
-            bank = null, binding = Binding(Does.Strip, wash),
+        service.invalidate(projectId)
+        assertEquals(listOf(job.uuid), service.jobs(projectId).map { it.uuid })
+        assertEquals(
+            Binding(Does.Level("dimmer"), Subject.Group("back-wash")),
+            service.resolve(projectId, deviceTypeKey, "fader-3", null, EncoderBankSelection("dimmer"))?.binding,
         )
-        assertFailsWith<IllegalArgumentException> {
-            service.update(projectId = projectId, bindingId = strip.id, controlId = "fader-1")
+
+        val replaced = service.putJob(projectId, deviceTypeKey, "strips", null, JobKind.HEADS.id, emptyList())
+        assertEquals(job.id, replaced.id, "one job a region and layer: the write replaces it")
+        assertEquals(JobKind.HEADS, service.jobAt(projectId, deviceTypeKey, "strips", null)?.kind)
+        assertNull(service.jobAt(projectId, deviceTypeKey, "strips", "layer-a"))
+
+        val onA = service.putJob(projectId, deviceTypeKey, "strips", "layer-a", JobKind.FIXTURES.id, listOf(JobItem.Fixture("hex-1")))
+        assertEquals(2, service.jobs(projectId).size)
+        assertEquals(true, service.deleteJob(projectId, deviceTypeKey, "strips", null))
+        assertEquals(false, service.deleteJob(projectId, deviceTypeKey, "strips", null))
+        assertEquals(listOf(onA.id), service.jobs(projectId).map { it.id })
+    }
+
+    @Test
+    fun `trailing gaps are trimmed before the items are counted`() {
+        val stack = JobItem.Record(RecordKind.STACK, UUID.randomUUID())
+        val job = service().putJob(projectId, deviceTypeKey, "keys", null, JobKind.TRANSPORT.id, listOf(stack, null))
+        assertEquals(listOf(stack), job.items)
+    }
+
+    @Test
+    fun `a job write is refused by name`() {
+        val service = service()
+        fun refused(region: String, kind: String, items: List<JobItem?> = emptyList(), bank: String? = null): String {
+            val e = assertFailsWith<BindingRefused> { service.putJob(projectId, deviceTypeKey, region, bank, kind, items) }
+            assertEquals(CODE_SURFACE_JOB_INVALID, e.code)
+            return e.message!!
         }
-        assertEquals("strip-1", service.get(projectId, strip.id)?.controlId)
+        assertTrue("no job region" in refused("right", JobKind.GROUPS.id))
+        assertTrue("Unknown job kind" in refused("strips", "fromTheFuture"))
+        assertTrue("Unknown layer" in refused("strips", JobKind.GROUPS.id, bank = "layer-c"))
+        assertTrue("does not fit" in refused("row-2", JobKind.GROUPS.id))
+        assertTrue("does not fit" in refused("strips", JobKind.GRAND_MASTER.id))
+        assertTrue("at most 8" in refused("strips", JobKind.GROUPS.id, List(9) { JobItem.Group("g$it") }))
+        assertTrue("is not a group" in refused("strips", JobKind.GROUPS.id, listOf(JobItem.Fixture("hex-1"))))
+        assertTrue("holds no items" in refused("strips", JobKind.HEADS.id, listOf(JobItem.Group("g"))))
+        assertTrue("at most 1" in refused("keys", JobKind.TRANSPORT.id, List(2) { JobItem.Record(RecordKind.STACK, UUID.randomUUID()) }))
+        // A wheel is a continuous function on something it acts on.
+        assertTrue("does not take a continuous" in refused("encoders", JobKind.WHEELS.id, listOf(JobItem.Function(Does.Blackout))))
+        assertTrue("does not act on none" in refused("encoders", JobKind.WHEELS.id, listOf(JobItem.Function(Does.Level("dimmer")))))
+        assertTrue("is an encoder page" in refused("row-3", JobKind.ENCODER_PAGES.id, listOf(JobItem.Function(Does.Blackout))))
+        assertEquals(emptyList(), service.jobs(projectId))
     }
 
     // ─── The control-kind rule (`FU-MIDI-BIND-CONTROL-KIND`) ──────────
@@ -294,18 +308,6 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a strip slot is exempt from the kind rule`() {
-        // A strip id names no descriptor, and its binding reaches a control by derivation rather
-        // than dispatch — so the kind rule must skip it and leave `refuseWrongSlot` to judge it.
-        val service = service()
-        val strip = service.create(
-            projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "strip-1",
-            bank = null, binding = Binding(Does.Strip, wash),
-        )
-        assertNotNull(service.get(projectId, strip.id))
-    }
-
-    @Test
     fun `update is guarded too`() {
         val service = service()
         val fader = service.create(
@@ -325,7 +327,7 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
             service.replace(
                 projectId = projectId,
                 deleteIds = emptyList(),
-                creates = listOf(newBinding("btn-2", Binding(Does.Strip, wash))),
+                creates = listOf(newBinding("btn-2", Binding(Does.Level("dimmer"), wash))),
             )
         }
         assertEquals(emptyList(), service.list(projectId))

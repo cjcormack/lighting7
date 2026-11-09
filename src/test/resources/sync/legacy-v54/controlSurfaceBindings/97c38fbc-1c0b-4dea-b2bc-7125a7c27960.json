@@ -1,0 +1,8 @@
+{
+  "controlId": "strip-2",
+  "deviceTypeKey": "x-touch-compact-standard",
+  "sortOrder": 41,
+  "targetPayload": "{\"does\":{\"type\":\"strip\"},\"on\":{\"type\":\"group\",\"key\":\"back-wash\"}}",
+  "targetType": "strip",
+  "uuid": "97c38fbc-1c0b-4dea-b2bc-7125a7c27960"
+}

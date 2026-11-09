@@ -48,8 +48,8 @@ export interface SubjectChoices {
 
 export interface BindingFormProps {
   catalogue: readonly CatalogueEntry[]
-  /** What the part takes: a continuous move, a button, or a strip slot. */
-  input: ControlKind | "STRIP"
+  /** What the part takes: a continuous move or a button. */
+  input: ControlKind
   binding: SurfaceBinding | null
   /** The catalogue entry [binding] is, as the desk's map names it. */
   entryId: string | null
@@ -65,8 +65,8 @@ export interface BindingFormProps {
   /** A motor fader follows what it shows: its How is a sentence, not a choice. */
   motor?: boolean
   disabled?: boolean
-  /** A whole binding, or null to take it off. */
-  onChange: (binding: SurfaceBinding | null, takeoverPolicy?: TakeoverPolicy | null) => void
+  /** A whole binding and the catalogue entry it is, or null to take it off. */
+  onChange: (binding: SurfaceBinding | null, takeoverPolicy?: TakeoverPolicy | null, entryId?: string) => void
   /** Prefix for the fields' accessible names: `Turn`, `Push`. */
   name?: string
 }
@@ -113,9 +113,9 @@ export function WritesToPill({ writesTo }: { writesTo: WritesTo | null | undefin
   )
 }
 
-/** The entries a part's input reaches: a strip slot takes the strip, a control part what its input drives. */
-export function entriesFor(catalogue: readonly CatalogueEntry[], input: ControlKind | "STRIP"): CatalogueEntry[] {
-  return catalogue.filter((entry) => (input === "STRIP" ? entry.strip === true : !entry.strip && entry.inputs.includes(input)))
+/** The entries a part's input reaches. */
+export function entriesFor(catalogue: readonly CatalogueEntry[], input: ControlKind): CatalogueEntry[] {
+  return catalogue.filter((entry) => entry.inputs.includes(input))
 }
 
 /** A subject as the value of a select: `none`, `selection`, `group:<key>`, `fixture:<key>`, `record:<KIND>:<uuid>`. */
@@ -253,7 +253,7 @@ export function BindingForm({
     if (nextEntry == null) return
     if (isWhole(nextEntry, next)) {
       setDraft(null)
-      onChange(next, policy)
+      onChange(next, policy, nextEntry.id)
     } else {
       setDraft({ binding: next, entryId: nextEntry.id })
     }
@@ -757,7 +757,7 @@ function HowRow({
 }: {
   entry: CatalogueEntry
   how: How | null
-  input: ControlKind | "STRIP"
+  input: ControlKind
   motor?: boolean
   takeoverPolicy: TakeoverPolicy | null
   disabled?: boolean

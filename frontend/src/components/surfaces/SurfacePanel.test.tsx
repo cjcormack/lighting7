@@ -61,7 +61,7 @@ describe('SurfacePanel — what a control says it is', () => {
     expect(within(cell('btn-5')).getByText('—')).toBeInTheDocument()
   })
 
-  it('labels a strip\'s controls from the strip, and a control\'s own row on the layer that holds it', () => {
+  it('labels a job\'s controls from the job, and a control\'s own row on the layer that holds it', () => {
     renderPanel()
     expect(within(cell('fader-1')).getByText('Dimmer · Front wash')).toBeInTheDocument()
     expect(within(cell('btn-25')).getByText('Select · Front wash')).toBeInTheDocument()

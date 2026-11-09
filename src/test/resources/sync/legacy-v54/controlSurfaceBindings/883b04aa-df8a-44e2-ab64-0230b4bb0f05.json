@@ -1,0 +1,8 @@
+{
+  "controlId": "button-9",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 11,
+  "targetPayload": "{\"does\":{\"type\":\"pad\"},\"on\":{\"type\":\"record\",\"kind\":\"PAD\",\"uuid\":\"e99d2bd6-1854-49cc-8b62-b9d00e29cfbd\"}}",
+  "targetType": "pad",
+  "uuid": "883b04aa-df8a-44e2-ab64-0230b4bb0f05"
+}

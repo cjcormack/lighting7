@@ -142,6 +142,8 @@ class SurfaceFeedbackPublisher(
     private val fxSpeed: FxSpeedRing? = null,
     /** The live show's running-FX list, which an FX speed control's value follows. */
     private val fxStateProvider: (() -> Flow<*>)? = null,
+    /** What a live job follows; a change re-derives the job's controls without re-arming pickup. Null disables it. */
+    private val jobLive: SurfaceJobLive? = null,
     private val types: () -> List<ControlSurfaceRegistry.DeviceTypeInfo> = { ControlSurfaceRegistry.allTypes },
     /** How often the readback polls the programmer: about 50 Hz. */
     private val pollIntervalMs: Long = 20,
@@ -243,8 +245,8 @@ class SurfaceFeedbackPublisher(
         jobs += scope.launch(CoroutineName("FeedbackPublisher-banks")) {
             bankState.changes.collect { deviceChanged(it.displayKey) }
         }
-        // The encoder page moved: every strip encoder on that device now means another attribute, so
-        // the index is stale and pickup re-arms — the meaning moved under the operator's hand.
+        // The encoder page moved: every encoder following it on that device now means another
+        // attribute, so the index is stale and pickup re-arms — the meaning moved under the operator's hand.
         jobs += scope.launch(CoroutineName("FeedbackPublisher-encoder-banks")) {
             encoderBankState.changes.collect { deviceChanged(it.displayKey) }
         }
@@ -269,6 +271,7 @@ class SurfaceFeedbackPublisher(
         buskPageState?.let { pages ->
             jobs += pages.pageId.onEach { refresh(Signal.BUSK_PAGE) }.launchIn(scope)
         }
+        jobLive?.let { live -> jobs += live.changes.onEach { rederiveJobs() }.launchIn(scope) }
         // Machine-scoped like the selection they read, so subscribed once rather than per show.
         selectionFan?.let { fan -> jobs += fan.shown.onEach { refresh(Signal.FAN) }.launchIn(scope) }
         fxSpeed?.let { speed -> jobs += speed.shown.onEach { refresh(Signal.FX_SPEED_SHOWN, force = true) }.launchIn(scope) }
@@ -440,6 +443,24 @@ class SurfaceFeedbackPublisher(
     private fun rebuildAndResync() {
         rebuildIndex()
         for (displayKey in deviceMatcher.attached.value.keys) sendFullResync(displayKey, rearmPickup = false)
+    }
+
+    /**
+     * A live job's state moved (the selection's heads, the busk page's pads): what its controls do has
+     * moved with it, so the index is rebuilt and each control a job derives is fed again — **without**
+     * re-arming pickup, since the operator's hand has not moved. A part a job derived before and no
+     * longer does (a head fewer, a pad fewer) goes dark.
+     */
+    private fun rederiveJobs() {
+        val before = index.get()
+        rebuildIndex()
+        val after = index.get()
+        val pass = Pass()
+        for (entry in after.byPart.values) if (entry.binding.job != null) apply(entry, pass, rearm = false)
+        for ((key, gone) in before.byPart) {
+            if (gone.binding.job == null || key in after.byPart) continue
+            if (gone.light != null) sendLed(gone, false) else sendRingOff(gone.displayKey, gone.control)
+        }
     }
 
     /** Re-read every entry following [signal]; [force] sends past the transport's last-sent cache. */

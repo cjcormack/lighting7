@@ -4,9 +4,11 @@
     "layers": {
         "layer-a": {
             "fader-1:MAIN": {
-                "from": "STRIP",
-                "bindingId": 1,
-                "stripId": "strip-1",
+                "from": "JOB",
+                "jobId": 1,
+                "jobRegion": "strips",
+                "item": 0,
+                "jobLabel": "Groups as channel strips · item 1",
                 "does": {
                     "type": "level",
                     "attribute": "dimmer"
@@ -24,7 +26,7 @@
             },
             "fader-9:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 7,
+                "bindingId": 6,
                 "does": {
                     "type": "tempo"
                 },
@@ -40,9 +42,11 @@
                 "shows": "The motor shows M2 · Chase's tempo across 60–180 BPM."
             },
             "enc-1:MAIN": {
-                "from": "STRIP",
-                "bindingId": 1,
-                "stripId": "strip-1",
+                "from": "JOB",
+                "jobId": 1,
+                "jobRegion": "strips",
+                "item": 0,
+                "jobLabel": "Groups as channel strips · item 1",
                 "does": {
                     "type": "level",
                     "attribute": "dimmer"
@@ -63,7 +67,8 @@
             },
             "enc-9:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 3,
+                "bindingId": 2,
+                "beats": "Wheels on the selection · item 1",
                 "does": {
                     "type": "level",
                     "attribute": "pan"
@@ -80,7 +85,7 @@
             },
             "enc-9:PUSH": {
                 "from": "DIRECT",
-                "bindingId": 4,
+                "bindingId": 3,
                 "does": {
                     "type": "locate"
                 },
@@ -94,10 +99,35 @@
                 "writesTo": "LOCAL",
                 "shows": "Lit while the selection is located."
             },
+            "enc-10:MAIN": {
+                "from": "JOB",
+                "jobId": 2,
+                "jobRegion": "encoders",
+                "item": 1,
+                "jobLabel": "Wheels on the selection · item 2",
+                "does": {
+                    "type": "tempo"
+                },
+                "on": {
+                    "type": "record",
+                    "kind": "MASTER",
+                    "uuid": "22222222-2222-4222-8222-222222222222"
+                },
+                "entry": "tempo",
+                "label": "Tempo · M2 · Chase",
+                "subjectLabel": "M2 · Chase",
+                "writesTo": "TEMPO",
+                "shows": "The ring shows M2 · Chase's tempo across 60–180 BPM."
+            },
+            "enc-10:PUSH": {
+                "from": "NONE"
+            },
             "btn-1:MAIN": {
-                "from": "STRIP",
-                "bindingId": 1,
-                "stripId": "strip-1",
+                "from": "JOB",
+                "jobId": 1,
+                "jobRegion": "strips",
+                "item": 0,
+                "jobLabel": "Groups as channel strips · item 1",
                 "does": {
                     "type": "flash",
                     "attribute": "dimmer"
@@ -115,7 +145,7 @@
             },
             "btn-3:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 5,
+                "bindingId": 4,
                 "does": {
                     "type": "go"
                 },
@@ -132,7 +162,7 @@
             },
             "btn-4:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 6,
+                "bindingId": 5,
                 "does": {
                     "type": "go"
                 },
@@ -156,9 +186,11 @@
                 "from": "NONE"
             },
             "btn-25:MAIN": {
-                "from": "STRIP",
-                "bindingId": 1,
-                "stripId": "strip-1",
+                "from": "JOB",
+                "jobId": 1,
+                "jobRegion": "strips",
+                "item": 0,
+                "jobLabel": "Groups as channel strips · item 1",
                 "does": {
                     "type": "select"
                 },
@@ -175,7 +207,7 @@
             },
             "btn-33:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 8,
+                "bindingId": 7,
                 "does": {
                     "type": "blackout"
                 },
@@ -187,30 +219,14 @@
                 "label": "Blackout on",
                 "writesTo": "MASTER",
                 "shows": "Lit while blackout is on."
-            },
-            "strip-1:MAIN": {
-                "from": "DIRECT",
-                "bindingId": 1,
-                "does": {
-                    "type": "strip"
-                },
-                "on": {
-                    "type": "group",
-                    "key": "front-wash"
-                },
-                "entry": "strip",
-                "label": "Strip · Front wash",
-                "subjectLabel": "Front wash",
-                "colour": "blue",
-                "writesTo": "LOCAL",
-                "shows": "Its fader and encoder show what Local holds, or the stage; its select button is lit while selected."
             }
         },
         "layer-b": {
             "fader-1:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 2,
+                "bindingId": 1,
                 "bank": "layer-b",
+                "beats": "Groups as channel strips · item 1",
                 "does": {
                     "type": "level",
                     "attribute": "dimmer"
@@ -227,7 +243,7 @@
             },
             "fader-9:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 7,
+                "bindingId": 6,
                 "does": {
                     "type": "tempo"
                 },
@@ -243,9 +259,11 @@
                 "shows": "The motor shows M2 · Chase's tempo across 60–180 BPM."
             },
             "enc-1:MAIN": {
-                "from": "STRIP",
-                "bindingId": 1,
-                "stripId": "strip-1",
+                "from": "JOB",
+                "jobId": 1,
+                "jobRegion": "strips",
+                "item": 0,
+                "jobLabel": "Groups as channel strips · item 1",
                 "does": {
                     "type": "level",
                     "attribute": "dimmer"
@@ -266,7 +284,8 @@
             },
             "enc-9:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 3,
+                "bindingId": 2,
+                "beats": "Wheels on the selection · item 1",
                 "does": {
                     "type": "level",
                     "attribute": "pan"
@@ -283,7 +302,7 @@
             },
             "enc-9:PUSH": {
                 "from": "DIRECT",
-                "bindingId": 4,
+                "bindingId": 3,
                 "does": {
                     "type": "locate"
                 },
@@ -297,10 +316,35 @@
                 "writesTo": "LOCAL",
                 "shows": "Lit while the selection is located."
             },
+            "enc-10:MAIN": {
+                "from": "JOB",
+                "jobId": 2,
+                "jobRegion": "encoders",
+                "item": 1,
+                "jobLabel": "Wheels on the selection · item 2",
+                "does": {
+                    "type": "tempo"
+                },
+                "on": {
+                    "type": "record",
+                    "kind": "MASTER",
+                    "uuid": "22222222-2222-4222-8222-222222222222"
+                },
+                "entry": "tempo",
+                "label": "Tempo · M2 · Chase",
+                "subjectLabel": "M2 · Chase",
+                "writesTo": "TEMPO",
+                "shows": "The ring shows M2 · Chase's tempo across 60–180 BPM."
+            },
+            "enc-10:PUSH": {
+                "from": "NONE"
+            },
             "btn-1:MAIN": {
-                "from": "STRIP",
-                "bindingId": 1,
-                "stripId": "strip-1",
+                "from": "JOB",
+                "jobId": 1,
+                "jobRegion": "strips",
+                "item": 0,
+                "jobLabel": "Groups as channel strips · item 1",
                 "does": {
                     "type": "flash",
                     "attribute": "dimmer"
@@ -318,7 +362,7 @@
             },
             "btn-3:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 5,
+                "bindingId": 4,
                 "does": {
                     "type": "go"
                 },
@@ -335,7 +379,7 @@
             },
             "btn-4:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 6,
+                "bindingId": 5,
                 "does": {
                     "type": "go"
                 },
@@ -359,9 +403,11 @@
                 "from": "NONE"
             },
             "btn-25:MAIN": {
-                "from": "STRIP",
-                "bindingId": 1,
-                "stripId": "strip-1",
+                "from": "JOB",
+                "jobId": 1,
+                "jobRegion": "strips",
+                "item": 0,
+                "jobLabel": "Groups as channel strips · item 1",
                 "does": {
                     "type": "select"
                 },
@@ -378,7 +424,7 @@
             },
             "btn-33:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 8,
+                "bindingId": 7,
                 "does": {
                     "type": "blackout"
                 },
@@ -390,30 +436,15 @@
                 "label": "Blackout on",
                 "writesTo": "MASTER",
                 "shows": "Lit while blackout is on."
-            },
-            "strip-1:MAIN": {
-                "from": "DIRECT",
-                "bindingId": 1,
-                "does": {
-                    "type": "strip"
-                },
-                "on": {
-                    "type": "group",
-                    "key": "front-wash"
-                },
-                "entry": "strip",
-                "label": "Strip · Front wash",
-                "subjectLabel": "Front wash",
-                "colour": "blue",
-                "writesTo": "LOCAL",
-                "shows": "Its fader and encoder show what Local holds, or the stage; its select button is lit while selected."
             }
         },
         "": {
             "fader-1:MAIN": {
-                "from": "STRIP",
-                "bindingId": 1,
-                "stripId": "strip-1",
+                "from": "JOB",
+                "jobId": 1,
+                "jobRegion": "strips",
+                "item": 0,
+                "jobLabel": "Groups as channel strips · item 1",
                 "does": {
                     "type": "level",
                     "attribute": "dimmer"
@@ -431,7 +462,7 @@
             },
             "fader-9:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 7,
+                "bindingId": 6,
                 "does": {
                     "type": "tempo"
                 },
@@ -447,9 +478,11 @@
                 "shows": "The motor shows M2 · Chase's tempo across 60–180 BPM."
             },
             "enc-1:MAIN": {
-                "from": "STRIP",
-                "bindingId": 1,
-                "stripId": "strip-1",
+                "from": "JOB",
+                "jobId": 1,
+                "jobRegion": "strips",
+                "item": 0,
+                "jobLabel": "Groups as channel strips · item 1",
                 "does": {
                     "type": "level",
                     "attribute": "dimmer"
@@ -470,7 +503,8 @@
             },
             "enc-9:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 3,
+                "bindingId": 2,
+                "beats": "Wheels on the selection · item 1",
                 "does": {
                     "type": "level",
                     "attribute": "pan"
@@ -487,7 +521,7 @@
             },
             "enc-9:PUSH": {
                 "from": "DIRECT",
-                "bindingId": 4,
+                "bindingId": 3,
                 "does": {
                     "type": "locate"
                 },
@@ -501,10 +535,35 @@
                 "writesTo": "LOCAL",
                 "shows": "Lit while the selection is located."
             },
+            "enc-10:MAIN": {
+                "from": "JOB",
+                "jobId": 2,
+                "jobRegion": "encoders",
+                "item": 1,
+                "jobLabel": "Wheels on the selection · item 2",
+                "does": {
+                    "type": "tempo"
+                },
+                "on": {
+                    "type": "record",
+                    "kind": "MASTER",
+                    "uuid": "22222222-2222-4222-8222-222222222222"
+                },
+                "entry": "tempo",
+                "label": "Tempo · M2 · Chase",
+                "subjectLabel": "M2 · Chase",
+                "writesTo": "TEMPO",
+                "shows": "The ring shows M2 · Chase's tempo across 60–180 BPM."
+            },
+            "enc-10:PUSH": {
+                "from": "NONE"
+            },
             "btn-1:MAIN": {
-                "from": "STRIP",
-                "bindingId": 1,
-                "stripId": "strip-1",
+                "from": "JOB",
+                "jobId": 1,
+                "jobRegion": "strips",
+                "item": 0,
+                "jobLabel": "Groups as channel strips · item 1",
                 "does": {
                     "type": "flash",
                     "attribute": "dimmer"
@@ -522,7 +581,7 @@
             },
             "btn-3:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 5,
+                "bindingId": 4,
                 "does": {
                     "type": "go"
                 },
@@ -539,7 +598,7 @@
             },
             "btn-4:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 6,
+                "bindingId": 5,
                 "does": {
                     "type": "go"
                 },
@@ -563,9 +622,11 @@
                 "from": "NONE"
             },
             "btn-25:MAIN": {
-                "from": "STRIP",
-                "bindingId": 1,
-                "stripId": "strip-1",
+                "from": "JOB",
+                "jobId": 1,
+                "jobRegion": "strips",
+                "item": 0,
+                "jobLabel": "Groups as channel strips · item 1",
                 "does": {
                     "type": "select"
                 },
@@ -582,7 +643,7 @@
             },
             "btn-33:MAIN": {
                 "from": "DIRECT",
-                "bindingId": 8,
+                "bindingId": 7,
                 "does": {
                     "type": "blackout"
                 },
@@ -594,24 +655,61 @@
                 "label": "Blackout on",
                 "writesTo": "MASTER",
                 "shows": "Lit while blackout is on."
-            },
-            "strip-1:MAIN": {
-                "from": "DIRECT",
-                "bindingId": 1,
-                "does": {
-                    "type": "strip"
-                },
-                "on": {
-                    "type": "group",
-                    "key": "front-wash"
-                },
-                "entry": "strip",
-                "label": "Strip · Front wash",
-                "subjectLabel": "Front wash",
-                "colour": "blue",
-                "writesTo": "LOCAL",
-                "shows": "Its fader and encoder show what Local holds, or the stage; its select button is lit while selected."
             }
         }
-    }
+    },
+    "jobs": [
+        {
+            "id": 1,
+            "region": "strips",
+            "kind": "groupStrips",
+            "kindLabel": "Groups as channel strips",
+            "items": [
+                {
+                    "item": {
+                        "type": "group",
+                        "key": "front-wash"
+                    },
+                    "label": "Front wash",
+                    "colour": "blue"
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "region": "encoders",
+            "kind": "wheels",
+            "kindLabel": "Wheels on the selection",
+            "items": [
+                {
+                    "item": {
+                        "type": "function",
+                        "does": {
+                            "type": "level",
+                            "attribute": "rgbColour",
+                            "axis": "saturation"
+                        },
+                        "on": {
+                            "type": "selection"
+                        }
+                    },
+                    "label": "Saturation"
+                },
+                {
+                    "item": {
+                        "type": "function",
+                        "does": {
+                            "type": "tempo"
+                        },
+                        "on": {
+                            "type": "record",
+                            "kind": "MASTER",
+                            "uuid": "22222222-2222-4222-8222-222222222222"
+                        }
+                    },
+                    "label": "Tempo · M2 · Chase"
+                }
+            ]
+        }
+    ]
 }

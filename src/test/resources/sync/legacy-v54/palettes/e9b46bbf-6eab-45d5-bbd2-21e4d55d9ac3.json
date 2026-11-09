@@ -1,0 +1,15 @@
+{
+  "fadeDurationMs": 1500,
+  "name": "amber-key",
+  "notes": "warm key light",
+  "rows": [
+    {
+      "attribute": "rgbColour",
+      "targetKey": "",
+      "targetType": "deferred",
+      "uuid": "91b137d3-e608-479a-b861-b5ed97f9014f",
+      "value": "#ff9d4a;policy=extract"
+    }
+  ],
+  "uuid": "e9b46bbf-6eab-45d5-bbd2-21e4d55d9ac3"
+}

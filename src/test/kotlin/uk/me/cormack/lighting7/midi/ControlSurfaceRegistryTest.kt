@@ -158,23 +158,31 @@ class ControlSurfaceRegistryTest {
     }
 
     @Test
-    fun `x-touch declares eight strips plus a master, mapped to real controls`() {
+    fun `x-touch declares its six job regions, every bindable control in one`() {
         val info = ControlSurfaceRegistry.allTypes.single { it.typeKey == "x-touch-compact-standard" }
-        assertEquals(9, info.strips.size)
+        assertEquals(
+            listOf("Strips 1–8", "Encoders 9–16", "Buttons 9–16", "Buttons 17–24", "Buttons 34–39", "Master strip"),
+            info.jobRegions.map { it.name },
+        )
+        val strips = assertNotNull(info.jobRegion("strips"))
+        assertEquals(8, strips.slots.size)
+        assertEquals(
+            mapOf(
+                SlotRole.FADER to "fader-1", SlotRole.SELECT to "btn-25", SlotRole.ENCODER to "enc-1",
+                SlotRole.FLASH to "btn-1", SlotRole.PUSH to "enc-1",
+            ),
+            strips.slots.first().controls,
+        )
+        assertEquals(JobPlace("strips", 2, SlotRole.FADER), info.placeOf("fader-3", ControlPart.MAIN))
+        assertEquals(JobPlace("strips", 0, SlotRole.PUSH), info.placeOf("enc-1", ControlPart.PUSH))
+        assertEquals(JobPlace("encoders", 0, SlotRole.ENCODER), info.placeOf("enc-9", ControlPart.MAIN))
+        assertEquals(JobPlace("master", 0, SlotRole.SELECT), info.placeOf("btn-33", ControlPart.MAIN))
+        assertEquals(6, info.jobRegion("keys")!!.slots.size)
 
-        val strip1 = info.strips.single { it.id == "strip-1" }
-        assertEquals("fader-1", strip1.fader)
-        assertEquals("btn-25", strip1.select)
-        assertEquals("enc-1", strip1.encoder)
-        assertEquals("btn-1", strip1.flash)
-
-        val master = info.strips.single { it.id == "strip-master" }
-        assertEquals("fader-9", master.fader)
-        assertEquals("btn-33", master.select)
-        assertNull(master.encoder)
-
-        assertEquals(strip1, info.stripFor("enc-1"))
-        assertNull(info.stripFor("enc-9"))
+        // Every control but the layer keys is in exactly one region.
+        val claimed = info.jobRegions.flatMap { it.controlIds }
+        assertEquals(claimed.size, claimed.toSet().size)
+        assertEquals(info.controls.filterNot { it is BankButtonDescriptor }.map { it.controlId }.toSet(), claimed.toSet())
     }
 
     @Test
@@ -196,48 +204,64 @@ class ControlSurfaceRegistryTest {
     }
 
     @Test
-    fun `buildFromClasses fails fast on a strip naming an undeclared control`() {
+    fun `buildFromClasses fails fast on a job region naming an undeclared control`() {
         val exc = assertFailsWith<IllegalStateException> {
-            ControlSurfaceRegistry.buildFromClasses(listOf(StripMissingControlDevice::class))
+            ControlSurfaceRegistry.buildFromClasses(listOf(RegionMissingControlDevice::class))
         }
-        assertTrue(exc.message!!.contains("'strip-1'"), exc.message!!)
+        assertTrue(exc.message!!.contains("'strips'"), exc.message!!)
         assertTrue(exc.message!!.contains("'enc-9'"), exc.message!!)
-        assertTrue(exc.message!!.contains("StripMissingControlDevice"), exc.message!!)
+        assertTrue(exc.message!!.contains("RegionMissingControlDevice"), exc.message!!)
     }
 
     @Test
-    fun `buildFromClasses fails fast on a strip role of the wrong control kind`() {
+    fun `buildFromClasses fails fast on a slot role of the wrong control kind`() {
         val exc = assertFailsWith<IllegalStateException> {
-            ControlSurfaceRegistry.buildFromClasses(listOf(StripWrongKindDevice::class))
+            ControlSurfaceRegistry.buildFromClasses(listOf(RegionWrongKindDevice::class))
         }
         assertTrue(exc.message!!.contains("'btn-1'"), exc.message!!)
         assertTrue(exc.message!!.contains("fader"), exc.message!!)
     }
 
     @Test
-    fun `buildFromClasses fails fast on a control claimed by two strips`() {
+    fun `buildFromClasses fails fast on a push that is no encoder's push`() {
         val exc = assertFailsWith<IllegalStateException> {
-            ControlSurfaceRegistry.buildFromClasses(listOf(SharedControlStripDevice::class))
+            ControlSurfaceRegistry.buildFromClasses(listOf(RegionPushlessDevice::class))
+        }
+        assertTrue(exc.message!!.contains("'enc-1'"), exc.message!!)
+        assertTrue(exc.message!!.contains("no push"), exc.message!!)
+    }
+
+    @Test
+    fun `buildFromClasses fails fast on a control in two job regions`() {
+        val exc = assertFailsWith<IllegalStateException> {
+            ControlSurfaceRegistry.buildFromClasses(listOf(SharedControlRegionDevice::class))
         }
         assertTrue(exc.message!!.contains("'fader-1'"), exc.message!!)
-        assertTrue(exc.message!!.contains("'strip-2'"), exc.message!!)
+        assertTrue(exc.message!!.contains("'second'"), exc.message!!)
     }
 
     @Test
-    fun `buildFromClasses fails fast on a strip id colliding with a control id`() {
+    fun `buildFromClasses fails fast on a control part in two slots of one region`() {
         val exc = assertFailsWith<IllegalStateException> {
-            ControlSurfaceRegistry.buildFromClasses(listOf(StripIdCollisionDevice::class))
+            ControlSurfaceRegistry.buildFromClasses(listOf(DoubledSlotDevice::class))
         }
         assertTrue(exc.message!!.contains("'btn-1'"), exc.message!!)
-        assertTrue(exc.message!!.contains("collides"), exc.message!!)
     }
 
     @Test
-    fun `buildFromClasses fails fast on a duplicate strip id`() {
+    fun `buildFromClasses fails fast on a duplicate job region id`() {
         val exc = assertFailsWith<IllegalStateException> {
-            ControlSurfaceRegistry.buildFromClasses(listOf(DuplicateStripIdDevice::class))
+            ControlSurfaceRegistry.buildFromClasses(listOf(DuplicateRegionIdDevice::class))
         }
-        assertTrue(exc.message!!.contains("Duplicate strip id 'strip-1'"), exc.message!!)
+        assertTrue(exc.message!!.contains("Duplicate job region id 'strips'"), exc.message!!)
+    }
+
+    @Test
+    fun `buildFromClasses fails fast on an empty job region`() {
+        val exc = assertFailsWith<IllegalStateException> {
+            ControlSurfaceRegistry.buildFromClasses(listOf(EmptyRegionDevice::class))
+        }
+        assertTrue(exc.message!!.contains("has no slots"), exc.message!!)
     }
 
     @Test
@@ -306,53 +330,69 @@ class UnannotatedDevice : ControlSurfaceDevice() {
     }
 }
 
-@ControlSurfaceType(typeKey = "strip-missing", vendor = "Test", product = "StripMissing")
-class StripMissingControlDevice : ControlSurfaceDevice() {
+@ControlSurfaceType(typeKey = "region-missing", vendor = "Test", product = "RegionMissing")
+class RegionMissingControlDevice : ControlSurfaceDevice() {
     init {
         fader(id = "fader-1", cc = 1)
         button(id = "btn-1", note = 20)
-        strip(id = "strip-1", fader = "fader-1", select = "btn-1", encoder = "enc-9")
+        jobRegion("strips", "Strips") { slot(fader = "fader-1", select = "btn-1", encoder = "enc-9") }
     }
 }
 
-@ControlSurfaceType(typeKey = "strip-wrong-kind", vendor = "Test", product = "StripWrongKind")
-class StripWrongKindDevice : ControlSurfaceDevice() {
+@ControlSurfaceType(typeKey = "region-wrong-kind", vendor = "Test", product = "RegionWrongKind")
+class RegionWrongKindDevice : ControlSurfaceDevice() {
     init {
         button(id = "btn-1", note = 20)
         button(id = "btn-2", note = 21)
-        strip(id = "strip-1", fader = "btn-1", select = "btn-2")
+        jobRegion("strips", "Strips") { slot(fader = "btn-1", select = "btn-2") }
     }
 }
 
-@ControlSurfaceType(typeKey = "strip-shared", vendor = "Test", product = "StripShared")
-class SharedControlStripDevice : ControlSurfaceDevice() {
+@ControlSurfaceType(typeKey = "region-pushless", vendor = "Test", product = "RegionPushless")
+class RegionPushlessDevice : ControlSurfaceDevice() {
+    init {
+        encoder(id = "enc-1", cc = 1)
+        jobRegion("wheels", "Wheels") { slot(encoder = "enc-1", push = "enc-1") }
+    }
+}
+
+@ControlSurfaceType(typeKey = "region-shared", vendor = "Test", product = "RegionShared")
+class SharedControlRegionDevice : ControlSurfaceDevice() {
     init {
         fader(id = "fader-1", cc = 1)
         button(id = "btn-1", note = 20)
         button(id = "btn-2", note = 21)
-        strip(id = "strip-1", fader = "fader-1", select = "btn-1")
-        strip(id = "strip-2", fader = "fader-1", select = "btn-2")
+        jobRegion("first", "First") { slot(fader = "fader-1", select = "btn-1") }
+        jobRegion("second", "Second") { slot(fader = "fader-1", select = "btn-2") }
     }
 }
 
-@ControlSurfaceType(typeKey = "strip-collision", vendor = "Test", product = "StripCollision")
-class StripIdCollisionDevice : ControlSurfaceDevice() {
+@ControlSurfaceType(typeKey = "region-doubled", vendor = "Test", product = "RegionDoubled")
+class DoubledSlotDevice : ControlSurfaceDevice() {
     init {
-        fader(id = "fader-1", cc = 1)
         button(id = "btn-1", note = 20)
-        strip(id = "btn-1", fader = "fader-1", select = "btn-1")
+        jobRegion("row", "Row") {
+            slot(button = "btn-1")
+            slot(button = "btn-1")
+        }
     }
 }
 
-@ControlSurfaceType(typeKey = "strip-dup", vendor = "Test", product = "StripDup")
-class DuplicateStripIdDevice : ControlSurfaceDevice() {
+@ControlSurfaceType(typeKey = "region-dup", vendor = "Test", product = "RegionDup")
+class DuplicateRegionIdDevice : ControlSurfaceDevice() {
     init {
         fader(id = "fader-1", cc = 1)
         fader(id = "fader-2", cc = 2)
-        button(id = "btn-1", note = 20)
-        button(id = "btn-2", note = 21)
-        strip(id = "strip-1", fader = "fader-1", select = "btn-1")
-        strip(id = "strip-1", fader = "fader-2", select = "btn-2")
+        jobRegion("strips", "Strips") { slot(fader = "fader-1") }
+        jobRegion("strips", "Strips again") { slot(fader = "fader-2") }
+    }
+}
+
+@ControlSurfaceType(typeKey = "region-empty", vendor = "Test", product = "RegionEmpty")
+class EmptyRegionDevice : ControlSurfaceDevice() {
+    init {
+        fader(id = "fader-1", cc = 1)
+        jobRegion("strips", "Strips") { }
     }
 }
 

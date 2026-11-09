@@ -280,9 +280,9 @@ and its row marked *in review* with its branch. A session's PR is titled
 |---|---|---|---|---|---|
 | 1 | The binding and its migration | merged | `claude/hopeful-hamilton-eancf5` | [#407](https://github.com/cjcormack/lighting7/pull/407) | bd866bb |
 | 2 | Feedback | merged | `claude/happy-heisenberg-vh2hqw` | [#409](https://github.com/cjcormack/lighting7/pull/409) | 1c407f7 |
-| 3 | The served picture, and editors A and C | in review | `claude/beautiful-heisenberg-fvjsu7` | [#412](https://github.com/cjcormack/lighting7/pull/412) | 6f12ce6 |
-| 4 | New functions | in review | `claude/beautiful-turing-37vey4` | | |
-| 5 | Jobs | planned | | | |
+| 3 | The served picture, and editors A and C | merged | `claude/beautiful-heisenberg-fvjsu7` | [#412](https://github.com/cjcormack/lighting7/pull/412) | 6f12ce6 |
+| 4 | New functions | merged | `claude/beautiful-turing-37vey4` | [#414](https://github.com/cjcormack/lighting7/pull/414) | 67f8350 |
+| 5 | Jobs | in review | `claude/zen-mendel-10xked` | | |
 | 6 | Assign from the thing | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -600,7 +600,8 @@ session 2, and the screens keep today's shape until session 3.
 - **Sync (P2):** a `surfaceJobs/` folder: disposition in `SyncDispositions`, exporter and importer,
   `SyncCoverageTest`, a `RichProjectFixture` job with non-default items and layer; the format and
   `minReader` to `main`'s plus one; a frozen archive of the previous version with strip rows.
-- **Editor B:** the Jobs panel (§4), its items reordered with up and down buttons; A's *From
+- **Editor B:** the Jobs panel (§4), its items reordered with up and down buttons, × leaving a gap so
+  later items keep their slots (the operator's choice) and *Add* filling the first gap; A's *From
   Groups as strips · item 3*.
 - **Tests:** profile validation; each job kind's derivation; direct beating a job at each layer level;
   a live job following the selection and the busk page without re-arming pickup; step 16 over a frozen
@@ -609,6 +610,36 @@ session 2, and the screens keep today's shape until session 3.
   frontend `docs/midi-surface-engineering.md`; the root `CLAUDE.md`; `FU-MANUAL-SURFACE-SETUP-S5`.
 - **Local:** the full `./gradlew test` (a `formatVersion` bump and a migration) and
   `npm run check:quick`.
+
+**As built** (where the code led away from the text above):
+
+- **The database step is 17**: step 16 is venue-rig-fixes' `AutoNumberTidyMigration`, which landed
+  first. It is `state/SurfaceJobsMigration.kt`, over `src/test/resources/db/pre-surface-jobs.sql`; the
+  format and `minReader` are 55 (`legacy-v54/` the frozen archive).
+- **The region ids** are `strips`, `encoders`, `row-2`, `row-3`, `keys` and `master`; a slot names one
+  control per role, `FADER · SELECT · ENCODER · FLASH · BUTTON · PUSH`. The kind ids are `groupStrips`,
+  `fixtureStrips`, `headStrips`, `stackStrips`, `masterStrips`, `wheels`, `pagedWheels`, `palettes`,
+  `buskPage`, `gos`, `looks`, `encoderPages`, `transport`, `programmer` and `grandMaster`: a bare
+  `groups` reads as the old name the glossary test refuses.
+- **The translate makes one job per region and layer, not per device type and layer**: the master strip
+  is the `master` region's job. Strips of mixed kinds keep the majority's kind (groups win a tie), and a
+  strip of the other kind becomes its controls' own bindings where they have none of their own, so
+  nothing it did is lost. A strip's takeover policy is not carried: a job's controls take their part's
+  default. A job's uuid is derived from the strip rows it replaces, so two desks importing one archive
+  agree; a strip row on a profile this desk lacks is kept, unread.
+- **Wheels by encoder page** are the selection's first heads, one a wheel, each on the attribute the
+  encoder page names, since the page holds one attribute; **encoder pages** are buttons each setting the
+  page to its item's attribute.
+- **Jobs ride the map frame** (`SurfaceMapFrame.jobs`, each item by name with its health), beside the
+  `GET …/surface-jobs` list, so the panel needs no second read (P5); a write announces
+  `BindingChange.JobsChanged`, which the browser's `bindingsChanged` skips. The kinds are served by
+  `GET /surface-job-kinds` and pinned by `src/test/resources/surfaces/jobKinds.fixture.json`. `beats` is
+  the job's phrase, and `item` is 0-based.
+- **A strip id is an unknown control now**, refused as any undeclared control is; nothing replaces
+  `refuseWrongSlot`. The fixture and group sheets' bound-control badges stop counting strips (session 6
+  replaces them), and a rig key rename walks jobs' items as it walks bindings.
+- **A live job's slot health is always fine**: its subject follows the selection or the page, so there
+  is nothing stored to go missing.
 
 ### Session 6 — Assign from the thing
 

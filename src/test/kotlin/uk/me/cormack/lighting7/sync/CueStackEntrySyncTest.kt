@@ -234,7 +234,10 @@ class CueStackEntrySyncTest {
         assertEquals(listOf("1", "4.5", "5", "6", "7"), labels(projectId))
 
         val files = export(projectId)
-        assertEquals(54, canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")).formatVersion)
+        assertTrue(
+            canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")).formatVersion >= 54,
+            "typed numbers only, from v54 on; ProjectRoundTripTest pins the current version",
+        )
         val written = files.filterKeys { it.startsWith("cueStackEntries/") }
             .values.mapNotNull { canonicalDecode(CueStackEntryJson.serializer(), it).cueNumber }
         assertEquals(listOf("4.5"), written)

@@ -1,0 +1,8 @@
+{
+  "controlId": "enc-1",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 2,
+  "targetPayload": "{\"does\":{\"type\":\"level\",\"attribute\":\"pan\"},\"on\":{\"type\":\"selection\"}}",
+  "targetType": "level",
+  "uuid": "33b3145c-4c4d-4469-9727-c5683c4ab1cb"
+}

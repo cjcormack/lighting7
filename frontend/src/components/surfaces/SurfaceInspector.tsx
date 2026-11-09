@@ -13,6 +13,7 @@ import {
   type ControlState,
   type ControlSurfaceType,
   type IdentifyWait,
+  type JobRegionDefinition,
   type PickupChange,
   type ResolvedPart,
   type SurfaceBinding,
@@ -22,16 +23,17 @@ import {
 } from "@/store/surfaces"
 import { inputOf, partKey, partsOf } from "@/api/surfacesApi"
 import { DESK_OFFLINE_LABEL } from "@/api/wsGesture"
-import { BindingForm, WritesToPill, subjectValue, subjectOf, subjectOptions } from "./BindingForm"
+import { BindingForm, WritesToPill } from "./BindingForm"
 import { useBindingChoices } from "./useBindingChoices"
 import { midiPercent } from "./surfacePanelGeometry"
 
 /**
  * Editor A (surface-setup plan D12, §4): the control picked on the picture, or touched on the desk,
  * with one **Does · On · How** block per part — Turn and Push for an encoder — each with its
- * *Writes to* word, its layer chips and a line saying what it shows. A control a strip derives says
- * so and offers *Make this control its own*. Every write is the slot write; what the control then
- * does comes back on the map.
+ * *Writes to* word, its layer chips and a line saying what it shows. A part its region's job derives
+ * says which (*From Groups as channel strips · item 3*) and offers *Make this control its own*; a
+ * part bound by hand over a job says what it beats. Every write is the slot write; what the control
+ * then does comes back on the map.
  */
 export interface SurfaceInspectorProps {
   projectId: number
@@ -45,6 +47,8 @@ export interface SurfaceInspectorProps {
   pickup: PickupChange | undefined
   connected: boolean
   identify: { wait: IdentifyWait; begin: () => void; cancel: () => void }
+  /** Open the jobs panel on [region]; absent draws no link. */
+  onEditJob?: (region: string) => void
 }
 
 const PART_WORDS: Record<ControlDescriptor["type"], Partial<Record<ControlPart, string>>> = {
@@ -86,10 +90,11 @@ export function SurfaceInspector({
   pickup,
   connected,
   identify,
+  onEditJob,
 }: SurfaceInspectorProps) {
   const descriptor = profile.controls.find((c) => c.controlId === controlId)
   const layerParts = frame?.layers[viewedLayer ?? ""] ?? {}
-  const strip = profile.strips?.find((s) => [s.fader, s.select, s.encoder, s.flash].includes(controlId)) ?? null
+  const place = jobPlaceOf(profile, controlId)
   const choices = useBindingChoices(projectId)
   const [writeSlot] = useWriteSurfaceSlotMutation()
   const [clearSlot] = useClearSurfaceSlotMutation()
@@ -129,9 +134,14 @@ export function SurfaceInspector({
     <div className="space-y-0.5">
       <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{KIND_WORDS[descriptor.type](descriptor)}</div>
       <div className="text-sm font-semibold">{descriptor.label}</div>
-      {strip && (
-        <p className="text-[11px] text-muted-foreground">
-          Part of strip {stripNumber(strip.id)} · its {stripRole(strip, controlId)}.
+      {place && (
+        <p className="flex flex-wrap items-center gap-x-1 text-[11px] text-muted-foreground">
+          In {place.region.name} · slot {place.slot + 1}.
+          {onEditJob && (
+            <button type="button" className="underline-offset-2 hover:underline" onClick={() => onEditJob(place.region.id)}>
+              Its job…
+            </button>
+          )}
         </p>
       )}
     </div>
@@ -175,8 +185,6 @@ export function SurfaceInspector({
     )
   }
 
-  const stripPart = strip ? (layerParts[partKey(strip.id, "MAIN")] ?? NO_PART) : null
-
   return (
     <div className="space-y-3 overflow-y-auto p-4" data-testid="surface-inspector">
       {header}
@@ -188,13 +196,13 @@ export function SurfaceInspector({
           <section key={part} className="space-y-2 rounded-lg border p-3" data-part={part}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold">{word}</span>
-              {resolved.from === "STRIP" && <WritesToPill writesTo={resolved.writesTo} />}
+              {resolved.from === "JOB" && <WritesToPill writesTo={resolved.writesTo} />}
             </div>
-            {resolved.from === "STRIP" && strip ? (
+            {resolved.from === "JOB" ? (
               <div className="space-y-2">
                 <p className="text-xs">{resolved.label}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  From strip {stripNumber(strip.id)}. Change what the strip follows to move all of its controls together.
+                  From {resolved.jobLabel ?? "its region's job"}. Change the job to move every control it fills together.
                 </p>
                 <Button
                   variant="outline"
@@ -239,6 +247,9 @@ export function SurfaceInspector({
                 }}
               />
             )}
+            {resolved.from === "DIRECT" && resolved.beats && (
+              <p className="text-[11px] text-muted-foreground">Bound by hand over {resolved.beats}.</p>
+            )}
             {resolved.shows && <p className="text-[11px] text-muted-foreground">{resolved.shows}</p>}
             {resolved.healthText && (
               <p className="flex items-center gap-1 text-[11px] text-destructive">
@@ -249,19 +260,6 @@ export function SurfaceInspector({
           </section>
         )
       })}
-      {strip && stripPart && (
-        <StripFollows
-          stripId={strip.id}
-          part={stripPart}
-          choices={choices.subjects}
-          disabled={!connected}
-          onChange={(on) =>
-            on == null
-              ? clear({ deviceTypeKey: profile.typeKey, controlId: strip.id, part: "MAIN", layer: stripPart.bank ?? null })
-              : write({ deviceTypeKey: profile.typeKey, controlId: strip.id, part: "MAIN", layer: stripPart.bank ?? null }, { does: { type: "strip" }, on })
-          }
-        />
-      )}
       <LiveLine descriptor={descriptor} state={state} pickup={pickup} />
       <Separator />
       {footer}
@@ -269,52 +267,13 @@ export function SurfaceInspector({
   )
 }
 
-function stripNumber(stripId: string): string {
-  return stripId.replace(/^strip-/, "")
-}
-
-function stripRole(strip: NonNullable<ControlSurfaceType["strips"]>[number], controlId: string): string {
-  if (strip.fader === controlId) return "fader"
-  if (strip.select === controlId) return "select button"
-  if (strip.encoder === controlId) return "encoder"
-  return "flash button"
-}
-
-/** What the strip a control sits on follows — its group or fixture, or nothing. */
-function StripFollows({
-  stripId,
-  part,
-  choices,
-  disabled,
-  onChange,
-}: {
-  stripId: string
-  part: ResolvedPart
-  choices: Parameters<typeof subjectOptions>[1]
-  disabled: boolean
-  onChange: (on: ReturnType<typeof subjectOf>) => void
-}) {
-  const options = subjectOptions(["GROUP", "FIXTURE"], choices)
-  const current = part.from === "NONE" ? "" : subjectValue(part.on)
-  return (
-    <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
-      Strip {stripNumber(stripId)} follows
-      <select
-        aria-label={`Strip ${stripNumber(stripId)} follows`}
-        className="h-7 min-w-0 flex-1 rounded-md border bg-background px-1 text-xs text-foreground"
-        value={current}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value === "" ? null : subjectOf(e.target.value))}
-      >
-        <option value="">Nothing</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.group === "Groups" ? option.label : `${option.label} (fixture)`}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
+/** The job region [controlId] sits in, and its slot there; null when no region claims it. */
+export function jobPlaceOf(profile: ControlSurfaceType, controlId: string): { region: JobRegionDefinition; slot: number } | null {
+  for (const region of profile.jobRegions ?? []) {
+    const slot = region.slots.findIndex((s) => Object.values(s.roles).includes(controlId))
+    if (slot >= 0) return { region, slot }
+  }
+  return null
 }
 
 /** Where the control is now, as the hardware was told. */

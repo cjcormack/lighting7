@@ -129,6 +129,10 @@ import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.state.logConverted
 import uk.me.cormack.lighting7.state.logKept
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
+import uk.me.cormack.lighting7.sync.dto.SurfaceJobJson
+import uk.me.cormack.lighting7.midi.SurfaceStripJobs
+import uk.me.cormack.lighting7.models.DaoSurfaceJob
+import uk.me.cormack.lighting7.models.DaoSurfaceJobs
 import uk.me.cormack.lighting7.sync.dto.CueAdHocFxJson
 import uk.me.cormack.lighting7.sync.dto.StoredFxFields
 import uk.me.cormack.lighting7.sync.dto.CueJson
@@ -413,6 +417,10 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // because a v53 reader would derive other numbers from the same list; MIN stays at 5, since an older
 // archive's numbers import as typed.
 //
+// v55 adds surface jobs (surface-setup plan session 5): a `surfaceJobs/` folder, and a channel strip
+// no binding row of its own. SUPPORTED moved because a v54 reader would drop every job; MIN stays at
+// 5, since an older archive's strip rows are turned into jobs on read (`SurfaceStripJobs`).
+//
 // **These two constants are the real gate.** `FormatVersionJson.minReader` is *written* but never
 // read by the importer — `loadAndValidateArchive` compares against these — so bumping the DTO
 // alone leaves the gate wide open.
@@ -420,7 +428,7 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 54
+internal const val SUPPORTED_FORMAT_VERSION = 55
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -434,6 +442,7 @@ private val RESTORE_ORDER = with(RecordFolders) {
         STAGE_VIEWPOINTS, FIXTURE_PATCHES, FIXTURE_GROUPS, BUSK_RIG, CUE_STACKS, CUES, CUE_STACK_ENTRIES,
         CUE_ATTRIBUTE_ASSIGNMENTS, CUE_LAYERS, CUE_AD_HOC_FX, CUE_TRIGGERS, PROMPT_BOOKS, PROMPT_BOOK_ANCHORS,
         PROMPT_BOOK_ANNOTATIONS, CUE_SLOTS, BUSK_PAGES, PARKED_CHANNELS, SHOW_PARK_RELEASES, CONTROL_SURFACE_BINDINGS,
+        SURFACE_JOBS,
     )
 }
 
@@ -735,6 +744,7 @@ class ProjectImporter(private val state: State) {
             project.fxDefinitions.forEach { it.delete() }
             project.scripts.forEach { it.delete() }
             project.controlSurfaceBindings.forEach { it.delete() }
+            project.surfaceJobs.forEach { it.delete() }
             DaoShowHides.deleteWhere { DaoShowHides.project eq project.id }
             DaoShowOverrides.deleteWhere { DaoShowOverrides.project eq project.id }
             DaoShowColours.deleteWhere { DaoShowColours.project eq project.id }
@@ -864,6 +874,7 @@ class ProjectImporter(private val state: State) {
             importShowParkReleases(run, project)
         }
         if (has(RecordFolders.CONTROL_SURFACE_BINDINGS)) importControlSurfaceBindings(run, project)
+        if (has(RecordFolders.SURFACE_JOBS)) importSurfaceJobs(run, project)
         images[RecordKey(SyncDispositions.PROJECT_FOLDER, project.uuid)]?.let { restoreProjectRow(project, it) }
     }
 
@@ -986,6 +997,8 @@ class ProjectImporter(private val state: State) {
             RecordFolders.CONTROL_SURFACE_BINDINGS -> DaoControlSurfaceBinding.find {
                 (DaoControlSurfaceBindings.uuid eq uuid) and (DaoControlSurfaceBindings.project eq project.id)
             }.firstOrNull()?.delete()
+            RecordFolders.SURFACE_JOBS -> DaoSurfaceJob.find { (DaoSurfaceJobs.uuid eq uuid) and (DaoSurfaceJobs.project eq project.id) }
+                .firstOrNull()?.delete()
             RecordFolders.PROMPT_BOOKS -> DaoPromptBook.find { (DaoPromptBooks.uuid eq uuid) and (DaoPromptBooks.project eq project.id) }
                 .firstOrNull()?.delete()
             RecordFolders.PROMPT_BOOK_ANNOTATIONS -> DaoPromptBookAnnotation.find { DaoPromptBookAnnotations.uuid eq uuid }
@@ -1148,6 +1161,10 @@ class ProjectImporter(private val state: State) {
         importParkedChannels(run, project)
         importShowParkReleases(run, project)
         importControlSurfaceBindings(run, project)
+        importSurfaceJobs(run, project)
+        // An archive written before jobs holds its channel strips as binding rows: the translate
+        // database step 17 shares turns them into jobs (P4).
+        SurfaceStripJobs.convert(project)
         // Last, once the patches and groups exist to judge them by: an archive written before v21 may
         // still hold a row naming a one-shot trigger, and none may come back (stage-view session 9).
         val stripped = stripTriggerRows(project)
@@ -2727,6 +2744,35 @@ class ProjectImporter(private val state: State) {
                 targetPayload = b.targetPayload
                 takeoverPolicy = b.takeoverPolicy
                 sortOrder = b.sortOrder
+                this.uuid = uuid
+            }
+            uuid to Unit
+        }
+    }
+
+    private fun importSurfaceJobs(run: Run, project: DaoProject) {
+        run.read("surfaceJobs") { json ->
+            val j = canonicalDecode(SurfaceJobJson.serializer(), json)
+            val uuid = UUID.fromString(j.uuid)
+            // One job a region and layer: a record landing where another stands replaces it, as a job write does.
+            DaoSurfaceJob.find {
+                (DaoSurfaceJobs.project eq project.id) and (DaoSurfaceJobs.deviceTypeKey eq j.deviceTypeKey) and (DaoSurfaceJobs.region eq j.region)
+            }.filter { it.bank == j.bank && it.uuid != uuid }.forEach {
+                logger.warn("Import: surface job {} replaces job {} on {} {}", uuid, it.uuid, j.deviceTypeKey, j.region)
+                it.delete()
+            }
+            run.row(
+                DaoSurfaceJob, "surfaceJobs", uuid,
+                find = {
+                    DaoSurfaceJob.find { (DaoSurfaceJobs.uuid eq uuid) and (DaoSurfaceJobs.project eq project.id) }.firstOrNull()
+                },
+            ) {
+                this.project = project
+                deviceTypeKey = j.deviceTypeKey
+                region = j.region
+                bank = j.bank
+                kind = j.kind
+                items = j.items
                 this.uuid = uuid
             }
             uuid to Unit

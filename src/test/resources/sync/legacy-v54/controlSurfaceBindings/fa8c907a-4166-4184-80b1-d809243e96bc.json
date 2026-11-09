@@ -1,0 +1,8 @@
+{
+  "controlId": "button-1",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 1,
+  "targetPayload": "{\"does\":{\"type\":\"grandMaster\"}}",
+  "targetType": "grandMaster",
+  "uuid": "fa8c907a-4166-4184-80b1-d809243e96bc"
+}

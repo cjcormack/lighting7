@@ -28,6 +28,13 @@ import uk.me.cormack.lighting7.midi.Subject
 import uk.me.cormack.lighting7.midi.SubjectKind
 import uk.me.cormack.lighting7.midi.SurfaceCatalogue
 import uk.me.cormack.lighting7.midi.WritesTo
+import uk.me.cormack.lighting7.midi.CODE_BINDING_WRONG_CONTROL_KIND
+import uk.me.cormack.lighting7.midi.CODE_SURFACE_JOB_INVALID
+import uk.me.cormack.lighting7.midi.EncoderBankSelection
+import uk.me.cormack.lighting7.midi.JobItem
+import uk.me.cormack.lighting7.midi.JobItemKind
+import uk.me.cormack.lighting7.midi.JobKind
+import uk.me.cormack.lighting7.midi.JobSignal
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
@@ -35,6 +42,7 @@ import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -65,42 +73,16 @@ class SurfaceBindingRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a strip binding on an ordinary control is refused`() = testApplication {
+    fun `a strip id is no slot any more`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
 
         val response = client.post("/api/rest/projects/$projectId/surface-bindings") {
             contentType(ContentType.Application.Json)
-            setBody(create("fader-1", Binding(Does.Strip, wash)))
+            setBody(create("strip-1", Binding(Does.Level("dimmer"), wash)))
         }
         assertEquals(HttpStatusCode.BadRequest, response.status)
-        assertEquals(CODE_BINDING_STRIP_NEEDS_STRIP, response.body<ErrorResponse>().code)
-    }
-
-    @Test
-    fun `a non-strip binding on a strip slot is refused`() = testApplication {
-        mountTestApp(state)
-        val client = jsonClient()
-
-        val response = client.post("/api/rest/projects/$projectId/surface-bindings") {
-            contentType(ContentType.Application.Json)
-            setBody(create("strip-1", Binding(Does.Blackout)))
-        }
-        assertEquals(HttpStatusCode.BadRequest, response.status)
-        assertEquals(CODE_BINDING_CONTROL_NOT_STRIP, response.body<ErrorResponse>().code)
-    }
-
-    @Test
-    fun `a strip binding on a strip slot is accepted`() = testApplication {
-        mountTestApp(state)
-        val client = jsonClient()
-
-        val response = client.post("/api/rest/projects/$projectId/surface-bindings") {
-            contentType(ContentType.Application.Json)
-            setBody(create("strip-1", Binding(Does.Strip, wash)))
-        }
-        assertEquals(HttpStatusCode.Created, response.status)
-        assertEquals(Does.Strip, response.body<SurfaceBindingDto>().binding.does)
+        assertTrue("Unknown controlId 'strip-1'" in response.body<ErrorResponse>().error, response.body<ErrorResponse>().error)
     }
 
     @Test
@@ -108,33 +90,88 @@ class SurfaceBindingRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        val strip = client.post("/api/rest/projects/$projectId/surface-bindings") {
+        val fader = client.post("/api/rest/projects/$projectId/surface-bindings") {
             contentType(ContentType.Application.Json)
-            setBody(create("strip-1", Binding(Does.Strip, wash)))
+            setBody(create("fader-1", Binding(Does.Level("dimmer"), wash)))
         }.body<SurfaceBindingDto>()
 
-        // Moving a strip binding onto an ordinary control: refused, as it is on POST.
-        val moved = client.patch("/api/rest/projects/$projectId/surface-bindings/${strip.id}") {
+        // Moving it onto a button: refused, as it is on POST.
+        val moved = client.patch("/api/rest/projects/$projectId/surface-bindings/${fader.id}") {
             contentType(ContentType.Application.Json)
-            setBody(buildJsonObject { put("controlId", JsonPrimitive("fader-1")) })
+            setBody(buildJsonObject { put("controlId", JsonPrimitive("btn-2")) })
         }
         assertEquals(HttpStatusCode.BadRequest, moved.status)
-        assertEquals(CODE_BINDING_STRIP_NEEDS_STRIP, moved.body<ErrorResponse>().code)
+        assertEquals(CODE_BINDING_WRONG_CONTROL_KIND, moved.body<ErrorResponse>().code)
 
-        // And swapping the binding out from under a strip slot is refused the other way.
-        val retargeted = client.patch("/api/rest/projects/$projectId/surface-bindings/${strip.id}") {
-            contentType(ContentType.Application.Json)
-            setBody(buildJsonObject { put("binding", bindingJson(Binding(Does.Blackout))) })
-        }
-        assertEquals(HttpStatusCode.BadRequest, retargeted.status)
-        assertEquals(CODE_BINDING_CONTROL_NOT_STRIP, retargeted.body<ErrorResponse>().code)
-
-        // An unknown control is still refused, uncoded, as before.
-        val unknown = client.patch("/api/rest/projects/$projectId/surface-bindings/${strip.id}") {
+        // An unknown control is refused, uncoded.
+        val unknown = client.patch("/api/rest/projects/$projectId/surface-bindings/${fader.id}") {
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject { put("controlId", JsonPrimitive("no-such-control")) })
         }
         assertEquals(HttpStatusCode.BadRequest, unknown.status)
+    }
+
+    // ─── Jobs ───────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a region's job is put, read, listed and taken off, per layer`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val url = "/api/rest/projects/$projectId/surface-jobs/x-touch-compact-standard/strips"
+
+        val put = client.put(url) {
+            contentType(ContentType.Application.Json)
+            setBody(PutSurfaceJobRequest("groupStrips", listOf(JobItem.Group("front-wash"), null, JobItem.Group("back-wash"))))
+        }
+        assertEquals(HttpStatusCode.OK, put.status)
+        val job = put.body<SurfaceJobDto>()
+        assertEquals(listOf(JobItem.Group("front-wash"), null, JobItem.Group("back-wash")), job.items)
+        assertNull(job.layer)
+
+        client.put("$url?layer=layer-a") {
+            contentType(ContentType.Application.Json)
+            setBody(PutSurfaceJobRequest("headStrips"))
+        }
+        assertEquals(job.id, client.get(url).body<SurfaceJobDto>().id)
+        assertEquals("headStrips", client.get("$url?layer=layer-a").body<SurfaceJobDto>().kind)
+        assertEquals(2, client.get("/api/rest/projects/$projectId/surface-jobs").body<List<SurfaceJobDto>>().size)
+
+        // A control the job reaches resolves through it.
+        assertEquals(
+            Binding(Does.Level("dimmer"), Subject.Group("back-wash")),
+            state.controlSurfaceBindingService.resolve(projectId, "x-touch-compact-standard", "fader-3", null, EncoderBankSelection("dimmer"))?.binding,
+        )
+
+        assertEquals(HttpStatusCode.NoContent, client.delete(url).status)
+        assertEquals(HttpStatusCode.NotFound, client.delete(url).status)
+        assertEquals(HttpStatusCode.NotFound, client.get(url).status)
+        assertEquals(listOf("layer-a"), client.get("/api/rest/projects/$projectId/surface-jobs").body<List<SurfaceJobDto>>().map { it.layer })
+    }
+
+    @Test
+    fun `a job that does not fit is refused by name`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val response = client.put("/api/rest/projects/$projectId/surface-jobs/x-touch-compact-standard/row-2") {
+            contentType(ContentType.Application.Json)
+            setBody(PutSurfaceJobRequest("groupStrips", listOf(JobItem.Group("front-wash"))))
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val body = response.body<ErrorResponse>()
+        assertEquals(CODE_SURFACE_JOB_INVALID, body.code)
+        assertEquals("Groups as channel strips does not fit Buttons 9–16", body.error)
+        assertTrue(state.controlSurfaceBindingService.jobs(projectId).isEmpty())
+    }
+
+    @Test
+    fun `the job kinds are served whole`() = testApplication {
+        mountTestApp(state)
+        val kinds = jsonClient().get("/api/rest/surface-job-kinds").body<List<JobKindDto>>()
+        assertEquals(JobKind.entries.map { it.id }, kinds.map { it.id })
+        assertEquals(JobItemKind.GROUP, kinds.single { it.id == "groupStrips" }.item)
+        assertEquals(1, kinds.single { it.id == "transport" }.maxItems)
+        assertEquals(JobSignal.SELECTION, kinds.single { it.id == "headStrips" }.follows)
+        assertEquals(listOf("encoderPage"), kinds.single { it.id == "encoderPages" }.entries)
     }
 
     private fun slot(controlId: String, binding: Binding, part: ControlPart = ControlPart.MAIN, layer: String? = null, takeover: String? = null) =
@@ -224,11 +261,6 @@ class SurfaceBindingRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.BadRequest, fanOnOne.status)
         assertEquals("BINDING_WRONG_SUBJECT", fanOnOne.body<ErrorResponse>().code)
 
-        val stripOnControl = client.put(slotUrl) {
-            contentType(ContentType.Application.Json)
-            setBody(slot("fader-1", Binding(Does.Strip, wash)))
-        }
-        assertEquals(CODE_BINDING_STRIP_NEEDS_STRIP, stripOnControl.body<ErrorResponse>().code)
         assertTrue(state.controlSurfaceBindingService.list(projectId).isEmpty())
     }
 

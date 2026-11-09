@@ -37,6 +37,7 @@ object RecordFolders {
     const val PARKED_CHANNELS = "parkedChannels"
     const val SHOW_PARK_RELEASES = "showParkReleases"
     const val CONTROL_SURFACE_BINDINGS = "controlSurfaceBindings"
+    const val SURFACE_JOBS = "surfaceJobs"
 
     /** A cue's children, each its own folder, each naming its cue as `cueUuid`. */
     val CUE_CHILDREN: Set<String> = setOf(CUE_ATTRIBUTE_ASSIGNMENTS, CUE_LAYERS, CUE_AD_HOC_FX, CUE_TRIGGERS)

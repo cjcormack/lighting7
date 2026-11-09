@@ -16,11 +16,13 @@ A binding is `{does, on, how}` at a slot `(device type, control, part, layer)` �
 the desk serves replace what the client used to compute:
 
 - **`surfaceMap.state`** (`store/surfaces.ts`' `surfaceMaps` / `useSurfaceMap`): per device type, per
-  layer, per control part (`"btn-36:MAIN"`), what the part resolves to — `from` (`DIRECT`, `STRIP`,
-  `NONE`), the row's `bindingId` and `bank`, `does` / `on` / `how`, the catalogue `entry`, the
-  `label` (records by name: *GO · Act 1*), `subjectLabel`, `colour`, `writesTo`, the `shows` sentence,
-  `health` and `healthText`. Only the current project's maps are sent; the Surfaces tab is on the rig
-  only.
+  layer, per control part (`"btn-36:MAIN"`), what the part resolves to — `from` (`DIRECT`, `JOB`,
+  `NONE`), the row's `bindingId` and `bank`; on a `JOB` part its `jobId`, `jobRegion`, `item` (the
+  slot, 0-based) and `jobLabel` (*Groups as channel strips · item 3*), and on a `DIRECT` part `beats`,
+  what the job it beats would derive there; `does` / `on` / `how`, the catalogue `entry`, the `label`
+  (records by name: *GO · Act 1*), `subjectLabel`, `colour`, `writesTo`, the `shows` sentence, `health`
+  and `healthText`. The frame's `jobs` is every job stored for the type, its items named. Only the
+  current project's maps are sent; the Surfaces tab is on the rig only.
 - **`GET /surface-functions`** (`useSurfaceFunctionsQuery`): the function catalogue, read from the
   desk's specs — each entry's id, label, group, the inputs and subjects it takes, its Hows, its
   parameters with their options, where it writes and a line of help. The form draws any function from
@@ -69,9 +71,11 @@ nothing on the hardware.
 
 `SurfaceInspector` is the per-part editor: one block per part (*Move*, *Turn* and *Push*, *Press*),
 each a `BindingForm` over the part's slot, its *Writes to* word, its layer chips (*Both layers*, *A
-only*, *B only*) and the map's `shows` line; a dead part says why. A control a strip derives says
-*From strip 3* and offers **Make this control its own**, which writes the strip's derived binding at the
-control's own slot on the viewed layer; the strip's subject is a *Strip 3 follows* select. Moving a
+only*, *B only*) and the map's `shows` line; a dead part says why. A control a job derives says
+*From Groups as channel strips · item 3* (the map's `jobLabel`) and offers **Make this control its
+own**, which writes the job's derived binding at the control's own slot on the viewed layer; a control
+of its own over a job says *Bound by hand over* the job (`beats`). The header names the region and slot
+the control sits in (`jobPlaceOf`) and *Its job…* opens Editor B on that region. Moving a
 binding between layers writes the new slot first and clears the old one only once that landed.
 **Remove** names what it takes off — *Remove from both layers*, *Remove from Layer B only* — from the
 banks of the rows it clears, and a clear the desk refuses is toasted, in both editors.
@@ -89,17 +93,35 @@ draws the banner while the desk waits, and selects the control the `surfaceIdent
 names. The desk captures that touch **without dispatching it** — a bound GO is not fired — and sends it
 to this window only; 30 s without a touch ends the wait.
 
+## Editor B: jobs
+
+The view's *Jobs* tab (surface-setup plan D11, D12) draws the picture with `SurfaceJobsPanel` beside
+it: a card per **job region** the profile declares (`ControlSurfaceType.jobRegions`), the focused one
+tinted on the picture (`SurfacePanel`'s `highlighted`) and a click on the picture focusing the region of
+the control under it. Layer chips — *Both layers*, *Layer A only* — choose which layer's jobs the cards
+edit. Each card's select is the kinds that fit the region, from `GET /surface-job-kinds` and the region's
+own `kinds`, after *Nothing: bind each control yourself*; under it the kind's help line, then its items
+in slot order, each moved with up and down and taken off with ×, and an *Add* select drawn from what the
+kind takes — groups, fixtures, records of one kind (`itemOptions`, read back by `itemOf`), or for a
+kind of functions a `BindingForm` limited to the kind's catalogue entries, held until its *Add* button so
+the subject and parameters are chosen first (the form reports a whole binding as soon as it is one). ×
+leaves a gap: the item becomes null in the list sent, drawn as *Empty* in its place, so every later item
+keeps its slot; *Add* fills the first gap, else appends, and the desk trims trailing gaps. A region with no
+gap and every slot filled says *Every slot has an item.* Every change is one `PUT …/surface-jobs/{type}/{region}` of the whole job; *Nothing* is its
+`DELETE`. A new kind keeps the items only where it holds the same sort. The cards read the job and its
+items' names and health from the map frame's `jobs`, never from a copy of their own (P5); a job this
+desk cannot read says it is kept and does nothing.
+
 ## Editor C: the mapping sheet
 
-`SurfaceSheet` is one row per control part on the sheet kit, grouped by the picture's regions with the
-strips first: Control · Layer · Does · On · How · Writes to · Shows · Health. *Does* is the compound
+`SurfaceSheet` is one row per control part on the sheet kit, grouped by the picture's regions: Control · Layer · Does · On · How · Writes to · Shows · Health. *Does* is the compound
 cell, editing through the same `BindingForm`. *On* takes a marquee: a subject set over many rows, each
 row taking it only where its function takes that kind of subject — the kit's `SheetColumn.accepts`,
 which drops the refused rows before `write` and names them through `refused`. **Fill in order** is the
 bar's *Fill*, a `records` plan on `SpreadPanel` beside the address plan: groups, fixtures, cue stacks or
 speed masters laid down one to a row in their order, or the selection, a row that cannot take one
-skipped and named (`planFill`). A control its strip derives has no *On* of its own: the cell reads out
-the strip's subject, and a marquee or a fill skips it. *Dead first* brings the dead rows to the top. Live values are never in
+skipped and named (`planFill`). A control its job derives has no *On* of its own: the cell reads out
+the job's item, its layer reads *Job · Both*, and a marquee or a fill skips it (*follows its job*). *Dead first* brings the dead rows to the top. Live values are never in
 the rows, so a fader moving never re-renders the sheet.
 
 ## The desk selection
@@ -114,7 +136,7 @@ Read `components/fixtures-list/useDeskSelectionBridge.ts` before touching the li
 rules each fail silently, and the first is the one the plan names: **rows are published through
 `rowLocateTarget`** (via `selectedRowTargets`), never through the `programmer` scope's `targetKeys`,
 which `expandSelectionToTargets` has already flattened to member keys. Publish those and a marquee
-over *Front wash* arrives at the desk as eight loose fixtures, with the strip's group select LED
+over *Front wash* arrives at the desk as eight loose fixtures, with the group's select LED
 dark.
 
 Since the multi-screen plan's session 1 the selection is one fact with three parts —

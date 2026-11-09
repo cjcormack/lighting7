@@ -92,7 +92,7 @@ sealed interface Does {
 
     /**
      * A [Level] on whatever attribute, and colour axis, the encoder page of the device it is on names
-     * — the page a strip encoder follows, on any continuous control and subject.
+     * — the page a strip's encoder follows, on any continuous control and subject.
      */
     @Serializable
     @SerialName("pageLevel")
@@ -788,23 +788,6 @@ sealed interface Does {
     }
 
     /**
-     * One group or fixture on a whole channel strip, at a strip id rather than a control id. Never
-     * dispatched: the service derives it to what each of the strip's controls behaves as
-     * ([deriveStripBinding]). Jobs replace it in session 5.
-     */
-    @Serializable
-    @SerialName("strip")
-    data object Strip : Does {
-        override val spec get() = Spec(WritesTo.LOCAL, NAMED_HEADS, emptySet())
-        override fun led(binding: Binding, site: FeedbackSite): Led = Led.None
-
-        override fun act(on: Subject, op: Op, ctx: SurfaceContext): Acted {
-            logger.warn("A strip binding reached dispatch; the service should have derived it")
-            return wrongKind(op)
-        }
-    }
-
-    /**
      * A stored payload this build cannot read, kept verbatim ([rawPayload]) so a round trip through
      * an older desk loses nothing. Never written by a client; health marks it dead.
      */
@@ -839,7 +822,7 @@ val Does.named: Named?
         Does.Standby, Does.FxAmount, Does.Blackout, is Does.GrandMaster, is Does.Tempo, Does.Tap,
         is Does.TempoScale, is Does.Layer, is Does.Undo, is Does.BuskPage, is Does.WindowFocus,
         is Does.WindowSheet, is Does.SelectionStep, is Does.Clear, is Does.Blind, is Does.Release, Does.Record,
-        Does.Update, Does.Strip, is Does.Unknown,
+        Does.Update, is Does.Unknown,
             -> null
     }
 

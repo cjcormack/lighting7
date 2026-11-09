@@ -53,6 +53,7 @@ import uk.me.cormack.lighting7.models.warnMalformedBuskPad
 import uk.me.cormack.lighting7.models.warnMalformedBuskRigTile
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
+import uk.me.cormack.lighting7.sync.dto.SurfaceJobJson
 import uk.me.cormack.lighting7.sync.dto.CueAdHocFxJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.CueStackEntryJson
@@ -144,6 +145,7 @@ import uk.me.cormack.lighting7.models.entriesOf
  * /buskRig/{uuid}.json             -- v12+: one rig row per document, tiles embedded inline
  * /parkedChannels/{uuid}.json
  * /controlSurfaceBindings/{uuid}.json
+ * /surfaceJobs/{uuid}.json
  * /scripts/{uuid}.kts              -- raw script body for git-friendly diffs
  * /scripts/{uuid}.meta.json
  * /tombstones/{tableName}/{uuid}.json -- deletion markers; written by [SnapshotEngine]
@@ -981,6 +983,14 @@ class ProjectExporter(private val state: State) {
                     takeoverPolicy = b.takeoverPolicy,
                     sortOrder = b.sortOrder,
                 )
+            },
+
+            // v55: each region's job on a control surface.
+            kind(
+                "surfaceJobs", SurfaceJobJson.serializer(),
+                { project -> project.surfaceJobs.toList() }, { it.uuid },
+            ) { j ->
+                SurfaceJobJson(uuid = j.uuid.toString(), deviceTypeKey = j.deviceTypeKey, region = j.region, bank = j.bank, kind = j.kind, items = j.items)
             },
 
 

@@ -122,7 +122,8 @@ object SurfaceGrammar {
             )
             "clearSelection" -> Binding(Does.SelectionStep(SelectionMove.CLEAR))
             "locateSelection" -> Binding(Does.Locate, Subject.Selection)
-            "strip" -> Binding(Does.Strip, target(old) ?: return null)
+            // A strip row translates to a job, not a binding (SurfaceStripJobs).
+            "strip" -> null
             "encoderBankSet" -> Binding(Does.EncoderPage(old.req("attribute"), axis))
             "applyLook" -> Binding(Does.Look, record(RecordKind.LOOK, old.string("lookUuid")) ?: return null)
             "lookSet" -> Binding(Does.Look, record(RecordKind.LOOK, old.string("lookUuid")) ?: return null, onOff(old) ?: return null)

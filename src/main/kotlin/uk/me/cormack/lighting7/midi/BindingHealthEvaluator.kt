@@ -190,7 +190,7 @@ object BindingHealthEvaluator {
             is Does.Flash, Does.Select, Does.Locate, is Does.Fan, Does.FxSpeed, Does.Look, Does.Cue, Does.Pad,
             Does.PickUp, Does.Place, Does.Drop, Does.Go, Does.Back, Does.Pause, Does.Stop, Does.GoTo,
             Does.Standby, Does.FxAmount, is Does.Fire, Does.Blackout, is Does.GrandMaster, is Does.Tempo,
-            Does.Tap, is Does.TempoScale, is Does.Undo, is Does.BuskPage, is Does.SelectionStep, Does.Strip,
+            Does.Tap, is Does.TempoScale, is Does.Undo, is Does.BuskPage, is Does.SelectionStep,
             is Does.Unknown,
                 -> AssignmentHealth.Ok
         }

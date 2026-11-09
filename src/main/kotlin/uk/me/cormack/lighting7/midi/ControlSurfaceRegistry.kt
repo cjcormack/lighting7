@@ -40,23 +40,25 @@ object ControlSurfaceRegistry {
         val className: String,
         val controls: List<ControlDescriptor>,
         val banks: List<BankDefinition>,
-        /** Channel strips, if the profile declares any. A strip id is addressable as a binding slot. */
-        val strips: List<StripDescriptor> = emptyList(),
+        /** The regions a job fills (surface-setup plan D11), if the profile declares any. */
+        val jobRegions: List<JobRegion> = emptyList(),
         /** Where the controls sit when drawn as a picture; null means "render the grouped table". */
         val layout: SurfaceLayout? = null,
     ) {
-        private val stripControls: Map<String, StripControl> by lazy { stripControlsByControlId(strips) }
+        private val regionsById: Map<String, JobRegion> by lazy { jobRegions.associateBy { it.id } }
+        private val places: Map<Pair<String, ControlPart>, JobPlace> by lazy {
+            buildMap { for (region in jobRegions) putAll(region.places) }
+        }
 
-        /** The strip [controlId] belongs to, or null when it is not part of one. */
-        fun stripFor(controlId: String): StripDescriptor? = stripControls[controlId]?.strip
+        fun jobRegion(id: String): JobRegion? = regionsById[id]
 
-        /** True when [controlId] is a strip id rather than a control id — the two share one slot namespace. */
-        fun isStripId(controlId: String): Boolean = strips.any { it.id == controlId }
+        /** Where the control part sits in a job region, or null when no region claims it. */
+        fun placeOf(controlId: String, part: ControlPart): JobPlace? = places[controlId to part]
 
         /** Which control part each inbound event addresses, built once per profile. */
         val inputs: ControlInputIndex by lazy { ControlInputIndex(controls) }
 
-        /** The control [controlId] names, or null for a strip id or an unknown one. */
+        /** The control [controlId] names, or null for an unknown one. */
         fun control(controlId: String): ControlDescriptor? = controlsById[controlId]
 
         private val controlsById: Map<String, ControlDescriptor> by lazy { controls.associateBy { it.controlId } }
@@ -95,8 +97,10 @@ object ControlSurfaceRegistry {
      */
     fun matchFor(handle: MidiDeviceHandle): DeviceTypeInfo? = allTypes.firstOrNull { it.matches(handle) }
 
-    /** The registered profile for [typeKey], or null. The one spelling of a lookup four callers had. */
-    fun typeFor(typeKey: String): DeviceTypeInfo? = allTypes.firstOrNull { it.typeKey == typeKey }
+    private val typesByKey: Map<String, DeviceTypeInfo> by lazy { allTypes.associateBy { it.typeKey } }
+
+    /** The registered profile for [typeKey], or null. A map lookup, since the input path asks it per event. */
+    fun typeFor(typeKey: String): DeviceTypeInfo? = typesByKey[typeKey]
 
     private fun DeviceTypeInfo.matches(handle: MidiDeviceHandle): Boolean {
         compiledPortPattern?.let { return it.containsMatchIn(handle.displayName) }
@@ -146,7 +150,7 @@ object ControlSurfaceRegistry {
             }
 
             val controlsById = controls.associateBy { it.controlId }
-            validateStrips(instance.strips, controlsById, className)
+            validateJobRegions(instance.jobRegions, controlsById, className)
             instance.layout?.let { validateLayout(it, controls, className) }
 
             result += DeviceTypeInfo(
@@ -157,7 +161,7 @@ object ControlSurfaceRegistry {
                 className = className,
                 controls = controls.toList(),
                 banks = instance.banks.toList(),
-                strips = instance.strips.toList(),
+                jobRegions = instance.jobRegions.toList(),
                 layout = instance.layout,
             )
         }
@@ -166,50 +170,51 @@ object ControlSurfaceRegistry {
     }
 
     /**
-     * Strip declarations are as load-bearing as [ControlDescriptor.controlId]s: a strip id is
-     * persisted in a binding row and every control it claims resolves through it, so a typo has
-     * to fail the build rather than silently unbind a fader mid-show.
+     * Job regions are as load-bearing as [ControlDescriptor.controlId]s: a region id is persisted in a
+     * job row and every control it claims resolves through it, so a typo has to fail the build rather
+     * than silently unbind a fader mid-show.
      */
-    private fun validateStrips(
-        strips: List<StripDescriptor>,
+    private fun validateJobRegions(
+        regions: List<JobRegion>,
         controlsById: Map<String, ControlDescriptor>,
         className: String,
     ) {
-        val seenStripIds = mutableSetOf<String>()
+        val seenRegionIds = mutableSetOf<String>()
         val claimedBy = mutableMapOf<String, String>()
-
-        for (strip in strips) {
-            check(seenStripIds.add(strip.id)) { "Duplicate strip id '${strip.id}' on $className" }
-            check(strip.id !in controlsById) {
-                "Strip id '${strip.id}' on $className collides with a controlId — " +
-                    "strips and controls share one binding slot namespace"
-            }
-
-            for (role in StripRole.entries) {
-                val controlId = strip.controlFor(role) ?: continue
-                val control = controlsById[controlId]
-                checkNotNull(control) {
-                    "Strip '${strip.id}' on $className names undeclared control '$controlId' as its " +
-                        "${role.name.lowercase()}"
-                }
-                val expected = expectedDescriptor(role)
-                check(expected.isInstance(control)) {
-                    "Strip '${strip.id}' on $className names '$controlId' as its " +
-                        "${role.name.lowercase()}, but that control is a ${control::class.simpleName}"
-                }
-                val previousStrip = claimedBy.put(controlId, strip.id)
-                check(previousStrip == null) {
-                    "Control '$controlId' on $className is claimed by two strips — " +
-                        "'$previousStrip' and '${strip.id}'"
+        for (region in regions) {
+            check(seenRegionIds.add(region.id)) { "Duplicate job region id '${region.id}' on $className" }
+            check(region.slots.isNotEmpty()) { "Job region '${region.id}' on $className has no slots" }
+            val claimedHere = mutableSetOf<Pair<String, ControlPart>>()
+            region.slots.forEachIndexed { index, slot ->
+                check(slot.controls.isNotEmpty()) { "Slot ${index + 1} of job region '${region.id}' on $className has no role" }
+                for ((role, controlId) in slot.controls) {
+                    val control = controlsById[controlId]
+                    checkNotNull(control) {
+                        "Job region '${region.id}' on $className names undeclared control '$controlId' as slot " +
+                            "${index + 1}'s ${role.name.lowercase()}"
+                    }
+                    check(fits(role, control)) {
+                        "Job region '${region.id}' on $className names '$controlId' as slot ${index + 1}'s " +
+                            "${role.name.lowercase()}, but that control is a ${control::class.simpleName}" +
+                            if (role == SlotRole.PUSH) " with no push" else ""
+                    }
+                    check(claimedHere.add(controlId to role.part)) {
+                        "Control '$controlId' on $className has two roles of one part in job region '${region.id}'"
+                    }
+                    val previous = claimedBy.put(controlId, region.id)
+                    check(previous == null || previous == region.id) {
+                        "Control '$controlId' on $className is in two job regions — '$previous' and '${region.id}'"
+                    }
                 }
             }
         }
     }
 
-    private fun expectedDescriptor(role: StripRole): KClass<out ControlDescriptor> = when (role) {
-        StripRole.FADER -> FaderDescriptor::class
-        StripRole.ENCODER -> EncoderDescriptor::class
-        StripRole.SELECT, StripRole.FLASH -> ButtonDescriptor::class
+    private fun fits(role: SlotRole, control: ControlDescriptor): Boolean = when (role) {
+        SlotRole.FADER -> control is FaderDescriptor
+        SlotRole.ENCODER -> control is EncoderDescriptor
+        SlotRole.PUSH -> control is EncoderDescriptor && control.pushNote != null
+        SlotRole.SELECT, SlotRole.FLASH, SlotRole.BUTTON -> control is ButtonDescriptor
     }
 
     /**

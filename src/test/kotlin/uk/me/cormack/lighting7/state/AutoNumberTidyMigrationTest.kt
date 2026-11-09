@@ -87,7 +87,7 @@ class AutoNumberTidyMigrationTest {
         val (_, logs) = captureLogs("AutoNumberTidyMigration") { startDesk() }
         stopDesk()
 
-        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
+        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
         assertEquals(
             listOf("1" to true, "2" to true, "30" to false, "31" to true, "|Interval|" to false, "32" to true),
             stack("Act 1"),
@@ -118,7 +118,7 @@ class AutoNumberTidyMigrationTest {
         }
         val (_, logs) = captureLogs("AutoNumberTidyMigration") { startDesk() }
         stopDesk()
-        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
+        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
         assertTrue(backups().isEmpty())
         assertTrue(logs.isEmpty(), logs.joinToString("\n"))
     }
@@ -139,7 +139,7 @@ class AutoNumberTidyMigrationTest {
     fun `a fresh database is only marked`() {
         val (_, logs) = captureLogs("AutoNumberTidyMigration") { startDesk() }
         stopDesk()
-        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
+        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
         assertTrue(backups().isEmpty())
         assertTrue(logs.isEmpty(), logs.joinToString("\n"))
     }

@@ -37,6 +37,22 @@ internal fun buskPageContents(pageIds: List<Int>): BuskPageContents {
     return BuskPageContents(columns, banks, pads)
 }
 
+/**
+ * The pads of page [pageId] in the order the page draws them — rows, then columns, then banks, then
+ * pads — each a pad that names a record. What a surface job on the busk page showing follows. Must
+ * be called inside a transaction.
+ */
+internal fun buskPadsInOrder(pageId: Int): List<java.util.UUID> {
+    val contents = buskPageContents(listOf(pageId))
+    val banksByColumn = contents.banks.values.groupBy { it.column.id.value }
+    val padsByBank = contents.pads.values.filter { it.kind != null }.groupBy { it.bank.id.value }
+    return contents.columns.values.sortedWith(compareBy({ it.row }, { it.sortOrder })).flatMap { column ->
+        banksByColumn[column.id.value].orEmpty().sortedBy { it.sortOrder }.flatMap { bank ->
+            padsByBank[bank.id.value].orEmpty().sortedBy { it.sortOrder }.map { it.uuid }
+        }
+    }
+}
+
 /** The three levels under a page, each keyed by id. */
 internal data class BuskPageContents(
     val columns: Map<Int, DaoBuskColumn>,

@@ -8,6 +8,8 @@ import type {
   ControlSurfaceType,
   EncoderBankSelection,
   IdentifyCapture,
+  JobItem,
+  JobKindInfo,
   PickupChange,
   ScalerState,
   SurfaceBinding,
@@ -38,6 +40,12 @@ export type {
   FanAxis,
   How,
   IdentifyCapture,
+  JobItem,
+  JobItemKind,
+  JobKindInfo,
+  JobRegionDefinition,
+  JobSignal,
+  JobSlotDefinition,
   LayoutCell,
   LayoutRegion,
   LedState,
@@ -47,18 +55,32 @@ export type {
   ResolvedPart,
   RingState,
   ScalerState,
-  StripDefinition,
+  SlotRole,
   SubjectKind,
   SurfaceBinding,
   SurfaceControlStates,
   SurfaceDeviceInfo,
   SurfaceDoes,
+  SurfaceJobItemView,
+  SurfaceJobView,
   SurfaceLayout,
   SurfaceMapFrame,
   SurfaceSubject,
   TakeoverPolicy,
   WritesTo,
 } from "../api/surfacesApi"
+
+/** One job region on one layer: what the job write and its clear name. `layer` null is both. */
+export interface SurfaceJobSlot {
+  deviceTypeKey: string
+  region: string
+  layer: string | null
+}
+
+function jobUrl(projectId: number, slot: SurfaceJobSlot): string {
+  const path = `projects/${projectId}/surface-jobs/${encodeURIComponent(slot.deviceTypeKey)}/${encodeURIComponent(slot.region)}`
+  return slot.layer == null ? path : `${path}?layer=${encodeURIComponent(slot.layer)}`
+}
 
 /** One control part on one layer: what the slot write and its clear name. `layer` null is both. */
 export interface SurfaceSlot {
@@ -136,6 +158,28 @@ export const surfacesApi = restApi.injectEndpoints({
     surfaceFunctions: build.query<CatalogueEntry[], void>({
       query: () => 'surface-functions',
       keepUnusedDataFor: 3600,
+    }),
+
+    /** The job kinds (D11): static per build, so fetched once. */
+    surfaceJobKinds: build.query<JobKindInfo[], void>({
+      query: () => 'surface-job-kinds',
+      keepUnusedDataFor: 3600,
+    }),
+
+    /**
+     * A region's job: whatever it held becomes [kind] with [items]. The map, its jobs included, comes
+     * back on the socket.
+     */
+    putSurfaceJob: build.mutation<unknown, { projectId: number; slot: SurfaceJobSlot; kind: string; items: (JobItem | null)[] }>({
+      query: ({ projectId, slot, kind, items }) => ({
+        url: jobUrl(projectId, slot),
+        method: 'PUT',
+        body: { kind, items },
+      }),
+    }),
+
+    deleteSurfaceJob: build.mutation<void, { projectId: number; slot: SurfaceJobSlot }>({
+      query: ({ projectId, slot }) => ({ url: jobUrl(projectId, slot), method: 'DELETE' }),
     }),
 
     /**
@@ -262,7 +306,7 @@ export const surfacesApi = restApi.injectEndpoints({
       },
     }),
 
-    /** What each device's strip encoders drive, `displayKey` → selection; absent is `dimmer`. */
+    /** What each device's encoder page names, `displayKey` → selection; absent is `dimmer`. */
     surfaceEncoderBanks: build.query<Record<string, EncoderBankSelection>, void>({
       queryFn: () => ({ data: lightingApi.surfaces.getEncoderBanks() ?? NO_ENCODER_BANKS }),
       async onCacheEntryAdded(_, { cacheDataLoaded, updateCachedData, cacheEntryRemoved }) {
@@ -295,6 +339,9 @@ export const {
   useControlSurfaceTypeListQuery,
   useSurfaceBindingsQuery,
   useSurfaceFunctionsQuery,
+  useSurfaceJobKindsQuery,
+  usePutSurfaceJobMutation,
+  useDeleteSurfaceJobMutation,
   useWriteSurfaceSlotMutation,
   useClearSurfaceSlotMutation,
   useSurfaceMapsQuery,
@@ -333,7 +380,7 @@ export function useSurfaceControls(): SurfaceControlStates {
   return data ?? NO_CONTROLS
 }
 
-/** What each device's strip encoders drive, `displayKey` → selection; absent is `dimmer`. */
+/** What each device's encoder page names, `displayKey` → selection; absent is `dimmer`. */
 export function useEncoderBanks(): Record<string, EncoderBankSelection> {
   const { data } = useSurfaceEncoderBanksQuery()
   return data ?? NO_ENCODER_BANKS

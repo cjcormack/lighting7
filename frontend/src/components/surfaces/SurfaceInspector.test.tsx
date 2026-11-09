@@ -42,11 +42,11 @@ vi.mock('./useBindingChoices', async () => {
 
 import { SurfaceInspector } from './SurfaceInspector'
 
-/** Editor A: one block per part, strip controls offering to become their own, identify (D12, D14). */
+/** Editor A: one block per part, a job's controls offering to become their own, identify (D12, D14). */
 
 const identify = { wait: { waiting: false, endsAt: null as number | null, ended: null as string | null }, begin: vi.fn(), cancel: vi.fn() }
 
-function renderInspector(controlId: string, viewedLayer = 'layer-a', wait = identify.wait) {
+function renderInspector(controlId: string, viewedLayer = 'layer-a', wait = identify.wait, onEditJob?: (region: string) => void) {
   render(
     <SurfaceInspector
       projectId={1}
@@ -59,6 +59,7 @@ function renderInspector(controlId: string, viewedLayer = 'layer-a', wait = iden
       pickup={undefined}
       connected
       identify={{ ...identify, wait }}
+      onEditJob={onEditJob}
     />,
   )
 }
@@ -82,9 +83,13 @@ describe('SurfaceInspector', () => {
     expect(within(push).getByText('Writes to Local')).toBeInTheDocument()
   })
 
-  it('says a strip control is the strip\'s, and makes it its own on the viewed layer', () => {
-    renderInspector('fader-1')
-    expect(screen.getByText(/From strip 1/)).toBeInTheDocument()
+  it('says a control its region\'s job derives is the job\'s, and makes it its own on the viewed layer', () => {
+    const onEditJob = vi.fn()
+    renderInspector('fader-1', 'layer-a', identify.wait, onEditJob)
+    expect(screen.getByText(/From Groups as channel strips · item 1/)).toBeInTheDocument()
+    expect(screen.getByText(/In Strips 1–8 · slot 1/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Its job…' }))
+    expect(onEditJob).toHaveBeenCalledWith('strips')
     fireEvent.click(screen.getByRole('button', { name: 'Make this control its own' }))
     expect(writes).toEqual([
       {
@@ -94,6 +99,11 @@ describe('SurfaceInspector', () => {
         takeoverPolicy: undefined,
       },
     ])
+  })
+
+  it('says what a control bound by hand beats', () => {
+    renderInspector('fader-1', 'layer-b')
+    expect(screen.getByText('Bound by hand over Groups as channel strips · item 1.')).toBeInTheDocument()
   })
 
   it('edits the slot the row sits on, and moves it between layers by writing there first', async () => {

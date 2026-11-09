@@ -78,7 +78,7 @@ class BuskPadStackMigrationTest {
 
         val (desk, logs) = captureLogs("BuskPadStackMigration") { startDesk() }
 
-        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
+        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
         assertTrue("cue_stack_id" in BuskPadStackMigration.checkExpression(padsDdl())!!)
         transaction(desk.database) {
             val kinds = DaoBuskPad.all().sortedBy { it.id.value }.map { it.id.value to it.kind }
@@ -107,7 +107,7 @@ class BuskPadStackMigrationTest {
 
         startDesk()
 
-        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
+        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
         assertTrue("cue_stack_id" in BuskPadStackMigration.checkExpression(padsDdl())!!)
         assertTrue(backups().isEmpty())
     }
@@ -119,7 +119,7 @@ class BuskPadStackMigrationTest {
         desk.shutdown()
         state = null
         val ddl = padsDdl()
-        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
+        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
         assertTrue("cue_stack_id" in BuskPadStackMigration.checkExpression(ddl)!!)
         assertTrue(backups().isEmpty())
 

@@ -87,7 +87,7 @@ class MoveInDarkRowFlagMigrationTest {
 
         val (desk, logs) = captureLogs("MoveInDarkRowFlagMigration") { startDesk() }
 
-        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
+        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
         assertFalse(hasFlagColumn(), "the column is dropped")
         assertEquals(1, backups().size, "the database is backed up before anything moves")
         for (name in listOf("Flagged", "Twice flagged", "Loose flagged")) {
@@ -118,7 +118,7 @@ class MoveInDarkRowFlagMigrationTest {
 
         val desk = startDesk()
 
-        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
+        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
         assertFalse(hasFlagColumn())
         assertEquals(emptyList(), backups())
         transaction(desk.database) {
@@ -142,12 +142,12 @@ class MoveInDarkRowFlagMigrationTest {
     @Test
     fun `a fresh database is born past step 9`() {
         startDesk()
-        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
+        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
         assertFalse(hasFlagColumn())
         assertEquals(emptyList(), backups())
         stopDesk()
         setUserVersion(FX_SIBLINGS_USER_VERSION)
         startDesk()
-        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion(), "a database with no column is only marked")
+        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion(), "a database with no column is only marked")
     }
 }

@@ -289,6 +289,7 @@ internal object VenueRigChecks {
         "CUE" -> name
         "LOOK" -> "Look $name"
         "BINDING" -> "binding $name"
+        "SURFACE_JOB" -> "surface job $name"
         "SCRIPT" -> "script $name"
         else -> "palette $name"
     }

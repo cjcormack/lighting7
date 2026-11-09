@@ -49,9 +49,11 @@ class SurfaceInputRouterTest {
         latencyTracker: MidiLatencyTracker = MidiLatencyTracker(),
         scope: CoroutineScope? = null,
         selectHoldMs: Long = SurfaceDispatch.SELECT_HOLD_MS,
+        jobs: List<ControlSurfaceBindingService.StoredJob> = emptyList(),
+        live: () -> JobLive = { JobLive.EMPTY },
     ): SurfaceInputRouter {
-        val bindingService = ControlSurfaceBindingService(FakeDatabase.instance)
-        bindingService.seedCacheForTest(projectId, bindings)
+        val bindingService = ControlSurfaceBindingService(FakeDatabase.instance, jobLive = live)
+        bindingService.seedCacheForTest(projectId, bindings, jobs)
         // DeviceMatcher is not exercised via offerInputForTest; the router type still needs one.
         val matcher = DeviceMatcher(
             MidiDeviceRegistry(FakeMidiAccess(), pollIntervalMs = 60_000L, autoOpen = false),
@@ -317,7 +319,7 @@ class SurfaceInputRouterTest {
     @Test
     fun `a strip derives main parts only, so its encoder's push resolves nothing`() {
         val actions = RecordingSurfaceActions()
-        val router = buildRouter(actions, listOf(binding(1, "strip-1", Binding(Does.Strip, wash))))
+        val router = buildRouter(actions, emptyList(), jobs = listOf(washStrip()))
 
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 0, velocity = 127u))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 0, velocity = 0u))
@@ -625,12 +627,19 @@ class SurfaceInputRouterTest {
         )
     }
 
-    // ─── Strips, the encoder bank, and the select long press ───────────────
+    // ─── Jobs, the encoder bank, and the select long press ───────────────
+
+    /** A groups job with [wash] on strip 1. */
+    private fun washStrip(kind: JobKind = JobKind.GROUPS, items: List<JobItem?> = listOf(JobItem.Group("front-wash"))) =
+        ControlSurfaceBindingService.StoredJob(
+            id = 50, uuid = UUID.randomUUID(), projectId = projectId, deviceTypeKey = deviceTypeKey, region = "strips", bank = null,
+            kindId = kind.id, kind = kind, rawItems = encodeJobItems(items), items = items,
+        )
 
     @Test
-    fun `a strip binding drives the fader, select and flash of its own controls`() {
+    fun `a groups job drives the fader, select and flash of its strip`() {
         val actions = RecordingSurfaceActions()
-        val router = buildRouter(actions, listOf(binding(1, "strip-1", Binding(Does.Strip, wash))))
+        val router = buildRouter(actions, emptyList(), jobs = listOf(washStrip()))
 
         // fader-1 is CC 1; btn-25 (select) is note 40; btn-1 (flash) is note 16.
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
@@ -651,11 +660,7 @@ class SurfaceInputRouterTest {
     fun `a strip encoder writes whatever the device's encoder bank names`() {
         val actions = RecordingSurfaceActions()
         val encoderBank = EncoderBankState()
-        val router = buildRouter(
-            actions,
-            listOf(binding(1, "strip-1", Binding(Does.Strip, wash))),
-            encoderBankState = encoderBank,
-        )
+        val router = buildRouter(actions, emptyList(), encoderBankState = encoderBank, jobs = listOf(washStrip()))
 
         // enc-1 is CC 10.
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 10, value = 64u))
@@ -720,11 +725,9 @@ class SurfaceInputRouterTest {
         val encoderBank = EncoderBankState()
         val router = buildRouter(
             actions,
-            listOf(
-                binding(1, "strip-1", Binding(Does.Strip, wash)),
-                binding(2, "btn-2", Binding(Does.EncoderPage("rgbColour", ColourAxis.SATURATION))),
-            ),
+            listOf(binding(2, "btn-2", Binding(Does.EncoderPage("rgbColour", ColourAxis.SATURATION)))),
             encoderBankState = encoderBank,
+            jobs = listOf(washStrip()),
         )
 
         // btn-2 is note 17; enc-1 is CC 10.
@@ -745,15 +748,27 @@ class SurfaceInputRouterTest {
     }
 
     @Test
-    fun `a strip binding off a strip slot does nothing`() {
+    fun `a heads job writes the head the selection puts on each strip at the moment of the input`() {
         val actions = RecordingSurfaceActions()
-        // btn-2 belongs to no strip, so the Strip binding sits on it underived.
-        val router = buildRouter(actions, listOf(binding(1, "btn-2", Binding(Does.Strip, wash))))
+        var live = JobLive(heads = listOf("hex-1", "hex-2"))
+        val router = buildRouter(actions, emptyList(), jobs = listOf(washStrip(JobKind.HEADS, emptyList())), live = { live })
 
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
-        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 2, value = 50u))
+        // fader-2 is CC 2; btn-26 (strip 2's select) is note 41.
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 2, value = 90u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 41, velocity = 127u))
+        live = JobLive(heads = listOf("hex-2"))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 30u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 2, value = 20u))
 
-        assertTrue(actions.calls.isEmpty())
+        assertEquals(
+            listOf(
+                RecordedCall.WriteLevel(Subject.Fixture("hex-2"), "dimmer", 90u),
+                RecordedCall.SelectTarget(CueTargetDto("fixture", "hex-2"), replace = true),
+                RecordedCall.WriteLevel(Subject.Fixture("hex-2"), "dimmer", 30u),
+            ),
+            actions.calls.toList(),
+            "strip 2 has no head once the selection is one",
+        )
     }
 
     @Test

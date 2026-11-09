@@ -3,13 +3,13 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ControlSurfaceBinding, SurfaceDeviceInfo } from '@/store/surfaces'
-import { CATALOGUE, FIXTURE_PROFILE, MAP_FRAME } from '@/components/surfaces/surfaceFixtures'
+import { CATALOGUE, FIXTURE_PROFILE, JOB_KINDS, MAP_FRAME } from '@/components/surfaces/surfaceFixtures'
 
 /**
  * The Surfaces tab's structural claims: a matched device is drawn as a picture from the desk's map
  * and an unmatched one as the explain-yourself card, the dead count is a header badge, viewing a
- * layer moves nothing on the hardware (D13), the table is the other view, and `?binding=` lands on
- * the control it names.
+ * layer moves nothing on the hardware (D13), the jobs and the table are the other views, and
+ * `?binding=` lands on the control it names.
  */
 
 let devices: SurfaceDeviceInfo[] = []
@@ -28,6 +28,9 @@ vi.mock('@/store/surfaces', async (importOriginal) => {
     useControlSurfaceTypeListQuery: () => ({ data: [FIXTURE_PROFILE] }),
     useSurfaceBindingsQuery: () => ({ data: bindings }),
     useSurfaceFunctionsQuery: () => ({ data: CATALOGUE }),
+    useSurfaceJobKindsQuery: () => ({ data: JOB_KINDS }),
+    usePutSurfaceJobMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) })), {}],
+    useDeleteSurfaceJobMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve() })), {}],
     useSurfaceMap: () => MAP_FRAME,
     useWriteSurfaceSlotMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) })), {}],
     useClearSurfaceSlotMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve() })), {}],
@@ -139,7 +142,7 @@ describe('Surfaces', () => {
     const noLayer = screen.getByRole('button', { name: /^No layer/ })
     expect(noLayer.getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByText(/only bindings on both layers fire/)).toBeInTheDocument()
-    // The strip is on both layers; Layer B's own fader row is not.
+    // The job is on both layers; Layer B's own fader row is not.
     expect(within(screen.getByTitle('Fader 1')).queryByText('Dimmer · Hex 1')).toBeNull()
     expect(screen.getByTestId('surface-panel').getAttribute('data-dimmed')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /^Layer A/ }))
@@ -171,6 +174,17 @@ describe('Surfaces', () => {
     expect(within(screen.getByTestId('surface-inspector')).getByText('Fader 1')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Layer B/ }).getAttribute('aria-pressed')).toBe('true')
     expect(sent).toEqual([])
+  })
+
+  it('draws the Jobs panel beside the picture, lighting the region of a control clicked there', () => {
+    renderRoute()
+    fireEvent.click(screen.getByRole('button', { name: 'Jobs' }))
+    expect(screen.getByTestId('surface-jobs')).toBeInTheDocument()
+    expect(screen.queryByTestId('surface-inspector')).toBeNull()
+    fireEvent.click(screen.getByTitle('Fader 1'))
+    const lit = [...document.querySelectorAll('[data-in-job]')].map((el) => el.querySelector('[title]')?.getAttribute('title'))
+    expect(lit).toEqual(expect.arrayContaining(['Encoder 1', 'Button 1', 'Fader 1', 'Button 25']))
+    expect(lit).not.toContain('Fader 9')
   })
 
   it('swaps the picture for the table', () => {

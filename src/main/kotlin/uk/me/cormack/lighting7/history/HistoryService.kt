@@ -550,9 +550,11 @@ class HistoryService(
 
         /**
          * The folders whose records link to others by uuid, as foreign keys do: the restorable ones but a
-         * binding, whose payload is tolerant of a record gone (sync v11).
+         * binding and a surface job, whose payloads are tolerant of a record gone (sync v11).
          */
-        private val LINKING_FOLDERS: Set<String> by lazy { RESTORABLE_FOLDERS - RecordFolders.CONTROL_SURFACE_BINDINGS }
+        private val LINKING_FOLDERS: Set<String> by lazy {
+            RESTORABLE_FOLDERS - RecordFolders.CONTROL_SURFACE_BINDINGS - RecordFolders.SURFACE_JOBS
+        }
 
         /** A record another may link to, its uuid as the text a link carries. */
         private class Linked(val key: RecordKey) {
