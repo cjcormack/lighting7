@@ -9,7 +9,6 @@ import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.routes.canonicalCueNumber
 import uk.me.cormack.lighting7.routes.cueEntriesInOrder
-import uk.me.cormack.lighting7.routes.cueEntryIds
 import uk.me.cormack.lighting7.routes.flushPendingEntryWrites
 import uk.me.cormack.lighting7.routes.renumberAutoEntries
 import java.nio.file.Path
@@ -26,7 +25,7 @@ internal const val CUE_NUMBER_USER_VERSION = 11
  * already is one is written in its canonical spelling (`2.10` is `2.1`, `007` is `7`); one that is
  * not — `S1-3`, `14A`, `intro`, `1.2.3` — is cleared, and so is the later of two spellings of one
  * number in a stack, so each of those entries is numbered from its place again. Every stack it
- * touched is then renumbered, the auto numbers that did not change kept where they are (D11).
+ * touched then has its auto numbers derived again from position.
  *
  * Runs after step 10. A database whose numbers are all canonical (a fresh one among them) is only
  * marked; one that changes some is backed up first to `<db>.pre-cue-numbers-<utc>.db`, then changed
@@ -98,12 +97,11 @@ internal object CueNumberMigration {
     }
 
     private fun apply(stack: DaoCueStack) {
-        val before = cueEntryIds(stack)
         val targets = targets(stack)
         targets.forEach { it.entry.cueNumber = null }
         flushPendingEntryWrites()
         targets.forEach { it.entry.cueNumber = it.to }
-        renumberAutoEntries(stack, before)
+        renumberAutoEntries(stack)
     }
 
     private fun JdbcTransaction.mark() {

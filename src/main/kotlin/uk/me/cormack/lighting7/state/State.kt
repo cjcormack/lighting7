@@ -1526,6 +1526,10 @@ class State(val config: ApplicationConfig) {
         // the part, backed up first when it holds bindings. After step 14. `SurfaceGrammarMigration.kt`.
         SurfaceGrammarMigration.runIfNeeded(ds, database, dbPath)
 
+        // venue-rig-fixes plan step 16: every stack's auto numbers derived once from position, backed
+        // up first when one changes. After step 15. `AutoNumberTidyMigration.kt`.
+        AutoNumberTidyMigration.runIfNeeded(ds, database, dbPath)
+
         databaseInitWindow = startedAt to java.time.Instant.now()
         return database
     }

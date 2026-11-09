@@ -92,7 +92,7 @@ internal fun planNewEntryNumber(
     return when (placement) {
         CueNumberPlacement.HERE -> NewEntryNumberPlan.Place(number, position)
         CueNumberPlacement.BY_NUMBER -> NewEntryNumberPlan.Place(number, numberPosition(entries, number) ?: position)
-        CueNumberPlacement.ASK -> numberOutOfOrder(entries, number, at, inserted = true)
+        CueNumberPlacement.ASK -> numberOutOfOrder(entries, number, at)
             ?.let { NewEntryNumberPlan.Refused(EntryNumberRefusal.OutOfOrder(number, it)) }
             ?: NewEntryNumberPlan.Place(number, position)
     }
@@ -100,7 +100,7 @@ internal fun planNewEntryNumber(
 
 /** What an entry's number edit comes to, or why it cannot be made. */
 internal sealed interface EntryNumberEditPlan {
-    /** The number is the one the entry holds already: nothing to write, the auto flag left alone. */
+    /** The entry already holds this typed number, or is already auto-numbered: nothing to write. */
     data object Unchanged : EntryNumberEditPlan
     data class Write(val number: String?, val byNumber: Boolean) : EntryNumberEditPlan
     data class Refused(val refusal: EntryNumberRefusal) : EntryNumberEditPlan
@@ -109,7 +109,7 @@ internal sealed interface EntryNumberEditPlan {
 /** [entry]'s number typed as [raw] under [placement]. Writes nothing. Inside a transaction. */
 internal fun planEntryNumberEdit(entry: DaoCueStackEntry, raw: String?, placement: CueNumberPlacement): EntryNumberEditPlan {
     val number = parseTypedCueNumber(raw).getOrElse { return EntryNumberEditPlan.Refused(EntryNumberRefusal.Invalid(it.message!!)) }
-    if (number == entry.cueNumber) return EntryNumberEditPlan.Unchanged
+    if (number == entry.typedNumber) return EntryNumberEditPlan.Unchanged
     if (number == null) return EntryNumberEditPlan.Write(null, byNumber = false)
     val stack = entry.stack
     explicitNumberClash(stack, number, entry.id.value)?.let { return EntryNumberEditPlan.Refused(EntryNumberRefusal.Taken(it)) }
@@ -119,7 +119,7 @@ internal fun planEntryNumberEdit(entry: DaoCueStackEntry, raw: String?, placemen
         CueNumberPlacement.ASK -> {
             val all = entriesOf(stack)
             val others = all.filter { it.id != entry.id }
-            numberOutOfOrder(others, number, all.indexOfFirst { it.id == entry.id }, inserted = false)
+            numberOutOfOrder(others, number, all.indexOfFirst { it.id == entry.id })
                 ?.let { EntryNumberEditPlan.Refused(EntryNumberRefusal.OutOfOrder(number, it)) }
                 ?: EntryNumberEditPlan.Write(number, byNumber = false)
         }
@@ -135,27 +135,17 @@ private fun placingNumbers(entries: List<DaoCueStackEntry>, number: String): Lis
 
 /**
  * [outOfOrderAt] for a cue numbered [number] going in at [position] of [others] (the list without
- * it, markers included), read against the numbers the stack would then show: an auto number equal
- * to it released, and — when the cue is [inserted] — the auto entries after it relabelled, as
- * [renumberAutoEntries] does after the write.
+ * it, markers included), read against the numbers the stack would then show: its typed numbers, and
+ * its auto numbers derived again around the new one, as [renumberAutoEntries] does after the write.
  */
-private fun numberOutOfOrder(
-    others: List<DaoCueStackEntry>,
-    number: String,
-    position: Int,
-    inserted: Boolean,
-): OutOfOrderNeighbours? {
+private fun numberOutOfOrder(others: List<DaoCueStackEntry>, number: String, position: Int): OutOfOrderNeighbours? {
     val value = cueNumberValue(number) ?: return null
     val cues = others.withIndex().filter { !it.value.isMarker }
     val at = cues.count { it.index < position }
-    val inputs = cues.mapIndexed { i, (_, e) ->
-        val released = e.cueNumberAuto && number.equals(e.cueNumber, ignoreCase = true)
-        AutoNumberInput(e.cueNumber.takeUnless { released }, e.cueNumberAuto, keep = !inserted || i < at)
-    }.toMutableList()
-    inputs.add(at, AutoNumberInput(number, auto = false))
-    val labels = computeAutoCueNumbers(inputs)
-    val reads = inputs.mapIndexed { i, c -> if (!c.auto && !c.number.isNullOrEmpty()) c.number else labels[i] }
-    return outOfOrderAt(reads, at, value)
+    val typed = cues.map { (_, e) -> e.typedNumber }.toMutableList()
+    typed.add(at, number)
+    val labels = computeAutoCueNumbers(typed)
+    return outOfOrderAt(typed.mapIndexed { i, n -> n ?: labels[i] }, at, value)
 }
 
 /** [positionForNumber] over [others] (the list without the cue being placed). */
@@ -171,12 +161,10 @@ private fun numberPosition(others: List<DaoCueStackEntry>, number: String): Int?
  * in again from position. [byNumber] also moves the entry to its number's place. [number] must be
  * canonical (or null). Answers whether the entry moved. Must run inside a transaction.
  *
- * A number edit that moves nothing leaves every other auto entry's number alone (D11); one that
- * moves the entry relabels the auto entries it passed, as *Fix Order* does.
+ * Every auto number in the stack is then derived again from position ([renumberAutoEntries]).
  */
 internal fun setEntryNumber(entry: DaoCueStackEntry, number: String?, byNumber: Boolean = false): Boolean {
     val stack = entry.stack
-    val before = cueEntryIds(stack)
     releaseAutoNumber(stack, number, entry.id.value)
     entry.cueNumber = number
     entry.cueNumberAuto = false
@@ -190,7 +178,7 @@ internal fun setEntryNumber(entry: DaoCueStackEntry, number: String?, byNumber: 
             moved = true
         }
     }
-    renumberAutoEntries(stack, before)
+    renumberAutoEntries(stack)
     return moved
 }
 
@@ -223,7 +211,6 @@ internal fun renumberProblem(stack: DaoCueStack, entryIds: List<Int>, start: Lon
  * Check [renumberProblem] first. Must run inside a transaction.
  */
 internal fun renumberEntries(stack: DaoCueStack, entryIds: List<Int>, start: Long, step: Long) {
-    val before = cueEntryIds(stack)
     val named = entryIds.toSet()
     val ordered = cueEntriesInOrder(stack).filter { it.id.value in named }
     // Released first, so two of them trading numbers is never a transient duplicate.
@@ -235,5 +222,5 @@ internal fun renumberEntries(stack: DaoCueStack, entryIds: List<Int>, start: Lon
         entry.cueNumber = number
         entry.cueNumberAuto = false
     }
-    renumberAutoEntries(stack, before)
+    renumberAutoEntries(stack)
 }

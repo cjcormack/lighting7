@@ -114,7 +114,7 @@ class SurfaceGrammarMigrationTest {
         val (_, logs) = captureLogs("SurfaceGrammarMigration") { startDesk() }
         stopDesk()
 
-        assertEquals(SURFACE_GRAMMAR_USER_VERSION, userVersion())
+        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
         assertEquals(setOf("uq_surface_binding_part_slot"), indexes(), "the old slot index is gone, the new one has the part")
         val after = rows()
         assertEquals(61, after.size)
@@ -230,7 +230,7 @@ class SurfaceGrammarMigrationTest {
         sql { s -> s.executeUpdate("PRAGMA user_version = $BUSK_PAD_STACK_USER_VERSION") }
         val (_, logs) = captureLogs("SurfaceGrammarMigration") { startDesk() }
         stopDesk()
-        assertEquals(SURFACE_GRAMMAR_USER_VERSION, userVersion())
+        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
         assertTrue(backups().isEmpty(), "the two it cannot translate change nothing")
         assertTrue(logs.any { "0 bindings translated, 2 kept" in it }, logs.joinToString("\n"))
     }
@@ -251,7 +251,7 @@ class SurfaceGrammarMigrationTest {
     fun `a fresh database is only marked`() {
         val (_, logs) = captureLogs("SurfaceGrammarMigration") { startDesk() }
         stopDesk()
-        assertEquals(SURFACE_GRAMMAR_USER_VERSION, userVersion())
+        assertEquals(AUTO_NUMBER_TIDY_USER_VERSION, userVersion())
         assertEquals(setOf("uq_surface_binding_part_slot"), indexes())
         assertTrue(backups().isEmpty())
         assertTrue(logs.isEmpty(), logs.joinToString("\n"))

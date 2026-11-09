@@ -239,7 +239,6 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 val stack = DaoCueStack.findById(resource.parent.stackId)
                     ?.takeIf { it.project.id == project.id }
                     ?: return@transaction null
-                val before = cueEntryIds(stack)
                 val current = entriesOf(stack)
                 val byId = current.associateBy { it.id.value }
                 // The named entries in the order given, then any the request left out where they
@@ -248,7 +247,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 val namedIds = named.mapTo(HashSet()) { it.id.value }
                 writeEntryOrder(named + current.filter { it.id.value !in namedIds })
                 // Auto numbers are derived from position, so the moved entries take new ones.
-                renumberAutoEntries(stack, before)
+                renumberAutoEntries(stack)
                 stackEntryPositions(stack)
             }
             if (priorities != null) announceEntriesPlaced(state, resource.parent.stackId, priorities)
@@ -346,8 +345,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 } ?: CueNumberPlacement.HERE
                 // A typed number is explicit and wins any auto number a sibling was given; clearing
                 // it hands the entry back to the auto scheme, which fills it in again from position.
-                // An unchanged number leaves the auto flag alone, so a save that round-trips the
-                // current number cannot freeze an auto number as explicit.
+                // An auto entry given the number it shows becomes typed at that number.
                 val numberPlan = if ("cueNumber" in body) planEntryNumberEdit(entry, body["cueNumber"].nullableString(), placement) else null
                 if (numberPlan is EntryNumberEditPlan.Refused) {
                     refusal = numberPlan.refusal
@@ -662,7 +660,6 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 val stack = DaoCueStack.findById(resource.parent.stackId) ?: return@transaction null
                 if (stack.project.id != project.id) return@transaction null
 
-                val before = cueEntryIds(stack)
                 val all = entriesOf(stack)
                 val cueEntries = all.filter { !it.isMarker }
 
@@ -679,10 +676,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 }
                 val unnumbered = cueEntries.count { it.cueNumber.isNullOrEmpty() }
 
-                // The entries the sort moved take numbers from where they landed; the rest keep
-                // theirs, so *Fix Order* moves an out-of-order cue rather than renumbering its
-                // neighbours.
-                renumberAutoEntries(stack, before)
+                renumberAutoEntries(stack)
 
                 val details = stack.toCueStackDetails(isCurrentProject = true, manager)
                 SortByNumberResponse(
@@ -1164,8 +1158,6 @@ internal fun moveEntry(state: State, project: DaoProject, entry: DaoCueStackEntr
     val source = entry.stack
     val manager = state.show.cueStackManager
     val current = project.id == state.projectManager.currentProject.id
-    val beforeSource = cueEntryIds(source)
-    val beforeTarget = cueEntryIds(target)
     if (current) {
         val list = entriesOf(source)
         val survivors = list.mapNotNullTo(HashSet()) { e -> e.id.value.takeIf { it != entry.id.value } }
@@ -1182,8 +1174,8 @@ internal fun moveEntry(state: State, project: DaoProject, entry: DaoCueStackEntr
     val existing = entriesOf(target)
     entry.stack = target
     writeEntryOrder(existing + entry, fresh = listOf(entry))
-    renumberAutoEntries(source, beforeSource)
-    renumberAutoEntries(target, beforeTarget)
+    renumberAutoEntries(source)
+    renumberAutoEntries(target)
     val priorities = if (current) stackEntryPositions(source) + stackEntryPositions(target) else emptyMap()
     return EntryMove(
         entryId = entry.id.value,

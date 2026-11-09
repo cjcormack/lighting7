@@ -34,6 +34,10 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v54: auto numbers from position (venue-rig-fixes plan D6–D8). `CueStackEntryJson.cueNumber` is
+    // written only when typed. The writer and `minReader` move to **54**: a v53 reader would derive
+    // other auto numbers from the same list. See `docs/sync-engineering.md` §"Version 54 — Auto
+    // numbers from position".
     // v53: the surface binding grammar (surface-setup plan session 1, D18). A binding's
     // `targetPayload` is a `Binding` — `{does, on, how}` — rather than a `BindingTarget`, and
     // `ControlSurfaceBindingJson` gains `part`, an encoder's push its own binding. The importer reads
@@ -394,9 +398,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 53,
+    val formatVersion: Int = 54,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 53,
+    val minReader: Int = 54,
 )
 
 /**
@@ -1243,9 +1247,8 @@ data class LegacyCuePlacementJson(
  *  * [ordinal] is the entry's position (P6): ascending, ties broken by [uuid], so two desks that
  *    inserted into the same gap — the same midpoint — play the two entries in the same order. No
  *    default, so it is always written.
- *  * [cueNumber] is written when explicit, and an auto number only where a reader could not derive
- *    it from position (P5, as amended: `heldAutoNumbers`); a reader takes every number it finds as
- *    explicit. The rest are derived by every reader, so a drag changes one file rather than every
+ *  * [cueNumber] is written when typed, never when auto (v54); a reader takes every number it finds
+ *    as typed. The rest are derived by every reader, so a drag changes one file rather than every
  *    auto-numbered entry after it.
  *  * [autoAdvance] and [autoAdvanceDelayMs] are the entry's follow (D2).
  */

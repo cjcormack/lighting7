@@ -262,7 +262,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 53`, `minReader = 53`. Rules for future
+Current writer emits `formatVersion = 54`, `minReader = 54`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -449,6 +449,21 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 54 — Auto numbers from position
+
+Venue-rig-fixes plan session 2 (D6–D8): every auto cue number is derived from position and the typed
+numbers alone (`docs/cue-stacks-engineering.md` §"Auto Numbering"), so a reader can derive every one,
+and `cueStackEntries/{uuid}.json` carries `cueNumber` only when typed. No field and no folder is new.
+`heldAutoNumbers`, which wrote the auto numbers venue-visit D11 held in place, is gone. What changed is
+the rule a reader derives the left-out numbers by: two auto cues before a typed 30 are 1, 2 where a v53
+reader derives 28, 29.
+
+`SUPPORTED_FORMAT_VERSION = 54`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, and **`minReader` moves to
+54** with the writer: a v53 desk would show this desk's archives' auto numbers differently. A v53-or-older
+archive's carried numbers are typed or held autos, which nothing tells apart, so the importer takes every
+one as typed, as it always did (`CueStackEntrySyncTest`); an entry whose held number this desk no longer
+writes reads as a local change on the next sync, not a conflict.
 
 ### Version 53 — The surface binding grammar
 
@@ -820,16 +835,11 @@ a state is (D2), and each place in a list is its own record.
 * `cueStackEntries/{uuid}.json` (`CueStackEntryJson`), one file per entry: `{uuid, cueStackUuid,
   cueUuid?, kind?, label?, ordinal, cueNumber?, autoAdvance?, autoAdvanceDelayMs?}`. `kind` is
   omitted for a cue entry; a marker says `MARKER` and carries its `label` (D12). `ordinal` is a double
-  (§"Ordinal contract"). **`cueNumber` is written when explicit, and an auto number only where a
-  reader could not derive it** (P5, as amended 2026-10-16): every reader derives the rest from position
-  (`renumberAutoEntries` from scratch, per stack, after the entries land), so a drag changes one file
-  rather than every auto-numbered entry after it. The exception is a number venue-visit D11 holds in
-  place — an explicit renumber still waiting for *Fix Order* keeps its neighbours' labels (1, 4.5, 3, 4,
-  5) where a reader starting from nothing would anchor on the 4.5 (4, 4.5, 4.6, 4.7, 4.8).
-  `heldAutoNumbers` finds those, growing the set until the reader's derivation gives every number left
-  out, and the exporter writes them; the reader takes them as explicit, so a pull or a clone shows the
-  labels this desk does, and a held number stops renumbering by itself from the first import on. A
-  stack nothing holds writes no auto number at all. The exporter writes
+  (§"Ordinal contract"). **`cueNumber` is written when explicit** (P5): every reader derives the rest
+  from position (`renumberAutoEntries`, per stack, after the entries land), so a drag changes one file
+  rather than every auto-numbered entry after it. From 2026-10-16 to v54 the exporter also wrote the
+  auto numbers venue-visit D11 held in place, which a reader takes as explicit (§"Version 54"). The
+  exporter writes
   entries from the rows themselves, never through a cue's "one" entry, so a shared or loose
   cue (session 4) already travels: several entries may name one cue, and a cue no entry names is loose.
 * `promptBookAnchors/` names the entry it marks (`entryUuid`) instead of a cue (D4).

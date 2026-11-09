@@ -21,10 +21,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Venue-visit plan D11 through the routes an operator's gestures reach: a number typed into a cue
- * (`PATCH /cues/{id}`), *Fix Order* (`sort-by-cue-number`), Duplicate (`POST /cues` with no
- * `sortOrder`), and the list changes that must still relabel what they shift. `CueNumberingTest`
- * pins the rule; this pins that each handler hands it the order from before its change.
+ * Auto numbers from position (venue-rig-fixes plan D6–D7) through the routes an operator's gestures
+ * reach: a number typed into an entry, *Fix Order* (`sort-by-cue-number`), Duplicate (`POST /cues`
+ * with no `sortOrder`), the list changes that relabel what they shift, and the placements.
+ * `CueNumberingTest` pins the rule; this pins that each handler renumbers after its change.
  */
 class CueNumberingRouteTest : RouteIntegrationTest() {
 
@@ -76,54 +76,61 @@ class CueNumberingRouteTest : RouteIntegrationTest() {
     private fun outOfOrder(numbers: List<String?>) = detectCueNumbersOutOfOrder(numbers)
 
     @Test
-    fun `cue 2 set to 4·5 leaves its neighbours, and Fix Order moves it`() = testApplication {
+    fun `cue 2 set to 4·5 moves the cues after it, and reads in order`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val (stackId, ids) = fiveAutoCues(client)
 
         renumber(client, ids[1], "4.5")
-        assertEquals(listOf("1", "4.5", "3", "4", "5"), numbers(client, stackId))
-        assertTrue(outOfOrder(numbers(client, stackId)))
+        assertEquals(listOf("1", "4.5", "5", "6", "7"), numbers(client, stackId))
+        assertFalse(outOfOrder(numbers(client, stackId)))
 
         fixOrder(client, stackId)
-        assertEquals(listOf("Q1", "Q3", "Q4", "Q2", "Q5"), names(client, stackId), "the cue moved")
-        assertEquals(listOf("1", "2", "3", "4.5", "5"), numbers(client, stackId), "and kept its number")
-        assertFalse(outOfOrder(numbers(client, stackId)))
+        assertEquals(listOf("Q1", "Q2", "Q3", "Q4", "Q5"), names(client, stackId), "nothing to fix")
+        assertEquals(listOf("1", "4.5", "5", "6", "7"), numbers(client, stackId))
     }
 
     @Test
-    fun `cue 3 set to 10 leaves its neighbours, and Fix Order moves it to the end`() = testApplication {
+    fun `cue 3 set to 10 moves the cues after it`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val (stackId, ids) = fiveAutoCues(client)
 
         renumber(client, ids[2], "10")
-        assertEquals(listOf("1", "2", "10", "4", "5"), numbers(client, stackId))
-        assertTrue(outOfOrder(numbers(client, stackId)))
-
-        fixOrder(client, stackId)
-        assertEquals(listOf("Q1", "Q2", "Q4", "Q5", "Q3"), names(client, stackId))
-        assertEquals(listOf("1", "2", "3", "4", "10"), numbers(client, stackId))
+        assertEquals(listOf("1", "2", "10", "11", "12"), numbers(client, stackId))
+        assertFalse(outOfOrder(numbers(client, stackId)))
     }
 
     @Test
-    fun `cue 3 set to 1 takes cue 1's number, and Fix Order moves it to the front`() = testApplication {
+    fun `cue 3 set to 1 reads out of order, and Fix Order moves it to the front`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val (stackId, ids) = fiveAutoCues(client)
 
         renumber(client, ids[2], "1")
-        assertEquals(listOf("0", "2", "1", "4", "5"), numbers(client, stackId))
+        assertEquals(listOf("2", "3", "1", "5", "6"), numbers(client, stackId))
         assertTrue(outOfOrder(numbers(client, stackId)))
 
         fixOrder(client, stackId)
-        assertEquals(listOf("Q1", "Q3", "Q2", "Q4", "Q5"), names(client, stackId))
-        assertEquals(listOf("0", "1", "2", "4", "5"), numbers(client, stackId))
+        assertEquals(listOf("Q3", "Q1", "Q2", "Q4", "Q5"), names(client, stackId))
+        assertEquals(listOf("1", "2", "3", "4", "5"), numbers(client, stackId))
         assertFalse(outOfOrder(numbers(client, stackId)))
     }
 
     @Test
-    fun `a cue appended to a renumbered stack takes the next number and moves nothing`() = testApplication {
+    fun `a typed number reads as the auto cue after it follows`() = testApplication {
+        // The rig session's stack: a typed Q30, and the auto cue after it.
+        mountTestApp(state)
+        val client = jsonClient()
+        val stackId = createStack(client)
+        val ids = (1..2).map { createCue(client, stackId, "Q$it") }
+
+        renumber(client, ids[0], "30")
+        assertEquals(listOf("30", "31"), numbers(client, stackId))
+    }
+
+    @Test
+    fun `a cue appended to a renumbered stack takes the next number`() = testApplication {
         // Duplicate's gesture: a create with no sortOrder lands at the end of the stack.
         mountTestApp(state)
         val client = jsonClient()
@@ -131,7 +138,7 @@ class CueNumberingRouteTest : RouteIntegrationTest() {
         renumber(client, ids[2], "10")
 
         createCue(client, stackId, "Q3 (copy)")
-        assertEquals(listOf("1", "2", "10", "4", "5", "6"), numbers(client, stackId))
+        assertEquals(listOf("1", "2", "10", "11", "12", "13"), numbers(client, stackId))
     }
 
     @Test
@@ -204,19 +211,21 @@ class CueNumberingRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val (stackId, _) = fiveAutoCues(client)
         val second = cues(client, stackId)[1].entryId
+        val fourth = cues(client, stackId)[3].entryId
 
-        val resp = patchNumber(client, stackId, second, """{"cueNumber":"4.5","placement":"ASK"}""")
+        // Three cues before it fit neither 1 nor 0 below 1.5.
+        val resp = patchNumber(client, stackId, fourth, """{"cueNumber":"1.5","placement":"ASK"}""")
         assertEquals(HttpStatusCode.Conflict, resp.status)
         val body = resp.body<CueNumberOutOfOrderResponse>()
         assertEquals(CUE_NUMBER_OUT_OF_ORDER, body.code)
-        assertEquals("4.5", body.number)
-        assertEquals(null, body.previous)
-        assertEquals("3", body.next)
+        assertEquals("1.5", body.number)
+        assertEquals("3", body.previous)
+        assertEquals(null, body.next)
         assertEquals(listOf("1", "2", "3", "4", "5"), numbers(client, stackId), "nothing written")
 
-        // In order, ASK writes as HERE does.
-        assertEquals(HttpStatusCode.OK, patchNumber(client, stackId, second, """{"cueNumber":"1.5","placement":"ASK"}""").status)
-        assertEquals(listOf("1", "1.5", "3", "4", "5"), numbers(client, stackId))
+        // In order, ASK writes as HERE does, and the cues after it follow it.
+        assertEquals(HttpStatusCode.OK, patchNumber(client, stackId, second, """{"cueNumber":"4.5","placement":"ASK"}""").status)
+        assertEquals(listOf("1", "4.5", "5", "6", "7"), numbers(client, stackId))
     }
 
     @Test
@@ -240,8 +249,12 @@ class CueNumberingRouteTest : RouteIntegrationTest() {
         val (stackId, _) = fiveAutoCues(client)
         val second = cues(client, stackId)[1].entryId
 
-        assertEquals(HttpStatusCode.OK, patchNumber(client, stackId, second, """{"cueNumber":"4.5","placement":"HERE"}""").status)
-        assertEquals(listOf("1", "4.5", "3", "4", "5"), numbers(client, stackId))
+        val fourth = cues(client, stackId)[3].entryId
+        assertEquals(HttpStatusCode.OK, patchNumber(client, stackId, fourth, """{"cueNumber":"1.5","placement":"HERE"}""").status)
+        assertEquals(listOf("Q1", "Q2", "Q3", "Q4", "Q5"), names(client, stackId))
+        assertEquals(listOf("1", "2", "3", "1.5", "5"), numbers(client, stackId))
+        assertTrue(outOfOrder(numbers(client, stackId)))
+        assertEquals(second, cues(client, stackId)[1].entryId)
     }
 
     @Test
@@ -281,7 +294,7 @@ class CueNumberingRouteTest : RouteIntegrationTest() {
         }
         assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
         val after = cues(client, stackId)
-        assertEquals(listOf("1", "10", "20", "30", "5"), after.map { it.cueNumber })
+        assertEquals(listOf("1", "10", "20", "30", "31"), after.map { it.cueNumber })
         assertEquals(listOf(true, false, false, false, true), after.map { it.cueNumberAuto })
         assertEquals(rows.map { it.entryId }, after.map { it.entryId }, "nothing moves")
     }
@@ -312,7 +325,7 @@ class CueNumberingRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `ASK on a cue inserted mid-stack ignores the auto numbers it shifts`() = testApplication {
+    fun `ASK on a cue inserted mid-stack reads the numbers the stack will show`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val (stackId, _) = fiveAutoCues(client)
@@ -324,12 +337,13 @@ class CueNumberingRouteTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
         assertEquals(listOf("1", "2", "2.5", "3", "4", "5"), numbers(client, stackId))
 
-        // A number the shifted cues would still read out of order against is asked about.
+        // A number the typed one after it would read out of order against is asked about.
         val asked = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
-            setBody(NewCue(name = "Q10", cueStackId = stackId, sortOrder = 1, cueNumber = "10", placement = CueNumberPlacement.ASK))
+            setBody(NewCue(name = "Q3", cueStackId = stackId, sortOrder = 2, cueNumber = "3", placement = CueNumberPlacement.ASK))
         }
         assertEquals(HttpStatusCode.Conflict, asked.status, asked.bodyAsText())
+        assertEquals("2.5", asked.body<CueNumberOutOfOrderResponse>().next)
     }
 
     @Test
@@ -345,6 +359,6 @@ class CueNumberingRouteTest : RouteIntegrationTest() {
         assertEquals(listOf("1", "2", "3", "4", "5"), numbers(client, stackId))
 
         assertEquals(HttpStatusCode.OK, patchNumber(client, stackId, second, """{"cueNumber":"4.5","placement":null}""").status)
-        assertEquals(listOf("1", "4.5", "3", "4", "5"), numbers(client, stackId))
+        assertEquals(listOf("1", "4.5", "5", "6", "7"), numbers(client, stackId))
     }
 }

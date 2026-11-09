@@ -31,11 +31,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Numbering on entries (cue model plan §3.3, session 1): venue-visit S3's three D11 cases carried
- * across onto `renumberAutoEntries` unchanged, with a **marker entry** in the list — it neither
- * takes a number nor counts as an auto cue's neighbour, as a MARKER cue never did — and the
- * entry-only rules session 1 adds: a cue moved into another stack renumbers the stack it left as
- * well as the one it joined, and reorder and the marker routes address entries.
+ * Numbering on entries: auto numbers derived from position on every stack write (venue-rig-fixes
+ * plan D6–D7), with a **marker entry** in the list — it neither takes a number nor counts as an
+ * auto cue's neighbour — and the entry-only rules: a cue moved into another stack renumbers the
+ * stack it left as well as the one it joined, and reorder and the marker routes address entries.
  */
 class EntryNumberingTest : RouteIntegrationTest() {
 
@@ -102,41 +101,97 @@ class EntryNumberingTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `S3 case 1 on entries — cue 2 set to 4·5 leaves its neighbours, and Fix Order moves it`() = testApplication {
+    fun `a typed number between autos moves the autos after it, and reads in order`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val (stackId, ids) = fiveCuesAndAMarker(client)
 
         renumber(client, ids[1], "4.5")
-        assertEquals(listOf("1", "4.5", "|Interval|", "3", "4", "5"), list(client, stackId))
-        assertTrue(detectCueNumbersOutOfOrder(list(client, stackId).filter { it?.startsWith("|") != true }))
+        assertEquals(listOf("1", "4.5", "|Interval|", "5", "6", "7"), list(client, stackId))
+        assertFalse(detectCueNumbersOutOfOrder(list(client, stackId).filter { it?.startsWith("|") != true }))
 
-        // The marker keeps its slot; the cues sort through the slots the cue entries held.
+        // In order, so Fix Order moves nothing.
         fixOrder(client, stackId)
-        assertEquals(listOf("Q1", "Q3", "Interval", "Q4", "Q2", "Q5"), rows(client, stackId).map { it.name })
-        assertEquals(listOf("1", "2", "|Interval|", "3", "4.5", "5"), list(client, stackId))
+        assertEquals(listOf("Q1", "Q2", "Interval", "Q3", "Q4", "Q5"), rows(client, stackId).map { it.name })
+        assertEquals(listOf("1", "4.5", "|Interval|", "5", "6", "7"), list(client, stackId))
     }
 
     @Test
-    fun `S3 case 2 on entries — cue 3 set to 10 reads out of order and moves nothing`() = testApplication {
+    fun `cue 3 set to 10 moves the autos after it`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val (stackId, ids) = fiveCuesAndAMarker(client)
 
         renumber(client, ids[2], "10")
-        assertEquals(listOf("1", "2", "|Interval|", "10", "4", "5"), list(client, stackId))
-        fixOrder(client, stackId)
-        assertEquals(listOf("1", "2", "|Interval|", "3", "4", "10"), list(client, stackId))
+        assertEquals(listOf("1", "2", "|Interval|", "10", "11", "12"), list(client, stackId))
     }
 
     @Test
-    fun `S3 case 3 on entries — cue 3 set to 1 takes cue 1's number and leaves the rest`() = testApplication {
+    fun `an auto cue given the number it shows becomes typed, and keeps it through an insert before it`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val stackId = createStack(client)
+        val ids = (1..5).map { createCue(client, stackId, "Q$it") }
+        assertEquals(listOf("1", "2", "3", "4", "5"), list(client, stackId))
+
+        renumber(client, ids[4], "5")
+        val q5 = rows(client, stackId).last()
+        assertEquals("5" to false, q5.cueNumber to q5.cueNumberAuto)
+
+        val inserted = client.post("/api/rest/projects/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCue(name = "Q0", cueStackId = stackId, sortOrder = 0))
+        }
+        assertEquals(HttpStatusCode.Created, inserted.status, inserted.bodyAsText())
+        assertEquals(listOf("0", "1", "2", "3", "4", "5"), list(client, stackId))
+    }
+
+    @Test
+    fun `cue 3 set to 1 reads out of order, and Fix Order moves it to the top`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val (stackId, ids) = fiveCuesAndAMarker(client)
 
+        // Two cues before it fit neither 1 nor 0 below 1: the run counts from 1 through it, skipping 1.
         renumber(client, ids[2], "1")
-        assertEquals(listOf("0", "2", "|Interval|", "1", "4", "5"), list(client, stackId))
+        assertEquals(listOf("2", "3", "|Interval|", "1", "5", "6"), list(client, stackId))
+        assertTrue(detectCueNumbersOutOfOrder(list(client, stackId).filter { it?.startsWith("|") != true }))
+
+        fixOrder(client, stackId)
+        assertEquals(listOf("Q3", "Q1", "Interval", "Q2", "Q4", "Q5"), rows(client, stackId).map { it.name })
+        assertEquals(listOf("1", "2", "|Interval|", "3", "4", "5"), list(client, stackId))
+    }
+
+    @Test
+    fun `an insert, a delete and a move around a typed 30 follow position`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val stackId = createStack(client)
+        val ids = (1..4).map { createCue(client, stackId, "Q$it") }
+        renumber(client, ids[2], "30")
+        assertEquals(listOf("1", "2", "30", "31"), list(client, stackId))
+
+        val inserted = client.post("/api/rest/projects/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCue(name = "Q0", cueStackId = stackId, sortOrder = 0))
+        }
+        assertEquals(HttpStatusCode.Created, inserted.status, inserted.bodyAsText())
+        assertEquals(listOf("Q0", "Q1", "Q2", "Q3", "Q4"), rows(client, stackId).map { it.name })
+        assertEquals(listOf("1", "2", "3", "30", "31"), list(client, stackId))
+
+        val first = rows(client, stackId).first().entryId
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/cue-stacks/$stackId/entries/$first").status)
+        assertEquals(listOf("1", "2", "30", "31"), list(client, stackId))
+
+        // The auto cue after 30 moved to the top takes 1, and the two it passed follow it.
+        val order = rows(client, stackId).map { it.entryId }
+        val moved = client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/reorder") {
+            contentType(ContentType.Application.Json)
+            setBody(ReorderCuesRequest(entryIds = listOf(order[3]) + order.take(3)))
+        }
+        assertEquals(HttpStatusCode.OK, moved.status, moved.bodyAsText())
+        assertEquals(listOf("Q4", "Q1", "Q2", "Q3"), rows(client, stackId).map { it.name })
+        assertEquals(listOf("1", "2", "3", "30"), list(client, stackId))
     }
 
     @Test

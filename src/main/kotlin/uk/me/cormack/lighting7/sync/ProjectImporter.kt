@@ -176,7 +176,6 @@ import uk.me.cormack.lighting7.models.DaoCueStackEntries
 import uk.me.cormack.lighting7.models.CueStackEntryKind
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.routes.renumberAutoEntries
-import uk.me.cormack.lighting7.routes.cueEntryIds
 import uk.me.cormack.lighting7.models.entriesOf
 import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoLookRows
@@ -410,6 +409,10 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // unknown; MIN stays at 5, since an older archive's payloads are translated on read
 // (`LegacyNames.record`, through `SurfaceGrammar`).
 //
+// v54 derives every auto cue number from position (venue-rig-fixes plan D6–D8). SUPPORTED moved
+// because a v53 reader would derive other numbers from the same list; MIN stays at 5, since an older
+// archive's numbers import as typed.
+//
 // **These two constants are the real gate.** `FormatVersionJson.minReader` is *written* but never
 // read by the importer — `loadAndValidateArchive` compares against these — so bumping the DTO
 // alone leaves the gate wide open.
@@ -417,7 +420,7 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 53
+internal const val SUPPORTED_FORMAT_VERSION = 54
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -778,15 +781,13 @@ class ProjectImporter(private val state: State) {
         require(unknown.isEmpty()) { "No restore for folder(s) $unknown" }
 
         val leaving = targets.filterValues { it == null }.keys
-        // A stack that loses an entry renumbers from its order before, as the write that added it did.
         val shrunk = leaving.filter { it.tableName == CUE_STACK_ENTRIES }
             .mapNotNull { findEntry(project, it.uuid)?.stack }
             .distinctBy { it.id.value }
-            .associateWith { cueEntryIds(it) }
         for (folder in RESTORE_ORDER.asReversed()) {
             leaving.filter { it.tableName == folder }.forEach { deleteRecord(project, it) }
         }
-        shrunk.forEach { (stack, before) -> renumberAutoEntries(stack, before) }
+        shrunk.forEach { renumberAutoEntries(it) }
 
         val images = targets.mapNotNull { (key, image) -> image?.let { key to it } }.toMap()
         if (images.isEmpty()) return
@@ -2031,8 +2032,8 @@ class ProjectImporter(private val state: State) {
      *    never sees the pair and a pull never aborts on it.
      *  * **Auto numbers are derived, never read** (P5): each stack is numbered from scratch once its
      *    entries are in, from position and the numbers the archive carries, so every desk reading it
-     *    numbers it alike. A number the archive carries is explicit — including one the writer held
-     *    as auto but a reader could not derive (`heldAutoNumbers`).
+     *    numbers it alike. A number the archive carries is typed: from v54 every one is, and an older
+     *    archive's may be an auto number its writer held, which nothing tells apart.
      */
     private fun importCueStackEntries(
         run: Run,
@@ -2078,8 +2079,7 @@ class ProjectImporter(private val state: State) {
         legacyPlaces.forEach { pending.putIfAbsent(it.uuid, it) }
 
         val clashes = resolveNumberClashes(pending.values)
-        // An upsert renumbers only the stacks it touched — the ones an entry joins or leaves — from
-        // their order before it, so an auto number elsewhere in the list stays where it was.
+        // An upsert renumbers only the stacks it touched — the ones an entry joins or leaves.
         val existing = if (run.upsert) {
             pending.values.associate { p ->
                 p.uuid to DaoCueStackEntry.find { DaoCueStackEntries.uuid eq p.uuid }.firstOrNull { it.stack.project.id == p.stack.project.id }
@@ -2088,11 +2088,9 @@ class ProjectImporter(private val state: State) {
             emptyMap()
         }
         val renumber = if (run.upsert) {
-            (pending.values.map { it.stack } + existing.values.mapNotNull { it?.stack })
-                .distinctBy { it.id.value }
-                .associateWith { cueEntryIds(it) }
+            (pending.values.map { it.stack } + existing.values.mapNotNull { it?.stack }).distinctBy { it.id.value }
         } else {
-            cueStackMap.values.associateWith { emptyList() }
+            cueStackMap.values.toList()
         }
         if (run.upsert) {
             // Free every number the upsert writes before it writes one, as `renumberAutoEntries` does: two
@@ -2115,7 +2113,7 @@ class ProjectImporter(private val state: State) {
                 uuid = p.uuid
             }
         }
-        renumber.forEach { (stack, before) -> renumberAutoEntries(stack, before) }
+        renumber.forEach { renumberAutoEntries(it) }
         clashes.forEach { logger.warn("Import: {}", it.describe()) }
         return entries to clashes
     }

@@ -40,6 +40,7 @@ import uk.me.cormack.lighting7.sync.dto.ShowHideJson
 import uk.me.cormack.lighting7.sync.dto.ShowParkReleaseJson
 import uk.me.cormack.lighting7.sync.dto.ShowOverrideJson
 import uk.me.cormack.lighting7.venue.VenuePins
+import uk.me.cormack.lighting7.routes.typedNumber
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.models.cueSceneryOf
 import uk.me.cormack.lighting7.models.cueEventsOf
@@ -100,7 +101,6 @@ import java.nio.file.Path
 import java.util.UUID
 import uk.me.cormack.lighting7.models.CueStackEntryKind
 import uk.me.cormack.lighting7.models.entriesOf
-import uk.me.cormack.lighting7.routes.heldAutoNumbers
 
 /**
  * Exports a project's portable graph as canonical JSON: to a folder of files ([export]), or any of
@@ -420,11 +420,9 @@ class ProjectExporter(private val state: State) {
             },
 
             // v32: each place in a stack's list is its own record, written from the entry itself, so a
-            // shared or loose cue travels as it is. The
-            // number when explicit, and an auto one only where a reader deriving from position could
-            // not give it (P5, as amended 2026-10-16: `heldAutoNumbers`).
+            // shared or loose cue travels as it is. The number only when typed: a reader derives every
+            // auto number from position (v54).
             RecordKind("cueStackEntries") { project, sink ->
-                val heldNumbers = project.cueStacks.flatMap { heldAutoNumbers(it).entries }.associate { it.key to it.value }
                 project.cueStacks.flatMap { entriesOf(it) }.forEach { e ->
                     val json = CueStackEntryJson(
                         uuid = e.uuid.toString(),
@@ -433,11 +431,7 @@ class ProjectExporter(private val state: State) {
                         kind = CueStackEntryKind.MARKER.name.takeIf { e.isMarker },
                         label = e.label.takeIf { e.isMarker },
                         ordinal = e.ordinal,
-                        cueNumber = when {
-                            e.isMarker -> null
-                            !e.cueNumberAuto && !e.cueNumber.isNullOrEmpty() -> e.cueNumber
-                            else -> heldNumbers[e.id.value]
-                        },
+                        cueNumber = e.typedNumber.takeIf { !e.isMarker },
                         autoAdvance = e.autoAdvance && !e.isMarker,
                         autoAdvanceDelayMs = e.autoAdvanceDelay?.toMillis()?.takeIf { !e.isMarker },
                     )

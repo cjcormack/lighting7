@@ -70,7 +70,6 @@ import uk.me.cormack.lighting7.routes.normaliseKindOverride
 import uk.me.cormack.lighting7.routes.placeCueInStack
 import uk.me.cormack.lighting7.routes.announceEntriesPlaced
 import uk.me.cormack.lighting7.routes.cueEntriesInOrder
-import uk.me.cormack.lighting7.routes.cueEntryIds
 import uk.me.cormack.lighting7.routes.renumberAutoEntries
 import uk.me.cormack.lighting7.routes.unlinkRegionFromPlatforms
 import uk.me.cormack.lighting7.routes.validateCueChildren
@@ -1786,7 +1785,6 @@ class SetupTools(
             // Each row is an entry appended to the stack: a marker entry labelled with its name (a
             // marker is no cue — cue model plan D12), or a new cue placed by `placeCueInStack`, which
             // takes its number from its numbered neighbours when it has none.
-            val before = cueEntryIds(stack)
             val created = cues.map { spec ->
                 if (spec.marker) {
                     val marker = DaoCueStackEntry.new {
@@ -1822,7 +1820,7 @@ class SetupTools(
             }
             stackSet?.let { replaceStackScenery(stack, it) }
             // Unnumbered cues take their labels from their numbered neighbours.
-            renumberAutoEntries(stack, before)
+            renumberAutoEntries(stack)
 
             var anchors = 0
             val book = if (created.any { it.third.place != null }) {

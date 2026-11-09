@@ -224,11 +224,10 @@ importer's own per-kind code in `UPSERT` mode (sync-engineering.md §"Importer m
 explicit numbers it writes first — and every unique key or name it rewrites (a patch's key; a group's,
 rigging's, element's, region's, viewpoint's, script's, Look's, palette's, busk page's or speed master's
 name; a master's index; a definition's FX id), so two records that traded can take each other's back.
-Each stack it touched is then renumbered as its records say (`RecordRestorer.renumberAsWritten`,
-through `renumberAsArchived`): an entry whose image carries a number takes it, and every other auto
-entry is derived as an import derives it, which a renumber by position, run backwards, would not give.
-The export leaves a derivable auto number out, so an entry a delete renumbered may be in no entry at
-all, and must still come back to the number its export implies. A stack the undo takes away is stopped
+Each stack an entry joins or leaves then has its auto numbers derived again from position
+(`renumberAutoEntries`, which `removeEntries` and `ProjectImporter.restore` both run): an entry's image
+carries its number only when typed (sync v54), so the auto numbers come back as position gives them,
+as an import derives them. A stack the undo takes away is stopped
 on the live project, and stops being any project's playhead, once nothing can refuse the undo.
 
 Deleting a record takes its embedded children with it (a patch's placements, a group's members) and

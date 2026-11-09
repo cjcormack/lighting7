@@ -96,11 +96,16 @@ class CueNumberingTest {
 
     // ─── Auto numbering ─────────────────────────────────────────────────
 
-    private fun auto(vararg cues: Pair<String?, Boolean>): Map<Int, String> =
-        computeAutoCueNumbers(cues.map { AutoNumberInput(it.first, it.second) })
+    private fun auto(vararg cues: String?): Map<Int, String> = computeAutoCueNumbers(cues.toList())
 
-    private fun explicit(number: String) = number as String? to false
-    private fun blank() = null as String? to false
+    private fun explicit(number: String): String? = number
+    private fun blank(): String? = null
+
+    /** The stack as it reads: each cue's typed number, else the label it was given. */
+    private fun reads(vararg cues: String?): List<String?> {
+        val labels = auto(*cues)
+        return cues.mapIndexed { i, n -> n ?: labels[i] }
+    }
 
     @Test
     fun `a fresh stack counts from one`() {
@@ -154,17 +159,11 @@ class CueNumberingTest {
     @Test
     fun `a cue with no room even in four places stays blank`() {
         assertEquals(emptyMap(), auto(explicit("3"), blank(), explicit("3.0001")))
-    }
-
-    @Test
-    fun `a run with nothing before it counts up to the cue that follows`() {
-        assertEquals(mapOf(0 to "1", 1 to "2"), auto(blank(), blank(), explicit("3")))
-        assertEquals(mapOf(0 to "0"), auto(blank(), explicit("1")))
-    }
-
-    @Test
-    fun `two cues before 1 are 0 and the midpoint after it`() {
-        assertEquals(mapOf(0 to "0", 1 to "0.5"), auto(blank(), blank(), explicit("1")))
+        // Nor between a typed number and the highest there is, nor between two decimals four places apart.
+        assertEquals(emptyMap(), auto(explicit("9999.9999"), blank(), blank()))
+        assertEquals(emptyMap(), auto(explicit("2.5"), blank(), explicit("2.5001")))
+        // A blank cue is still a step: the cue after it counts on from the typed number.
+        assertEquals(listOf("3", null, "3.0001", "4"), reads(explicit("3"), blank(), explicit("3.0001"), blank()))
     }
 
     @Test
@@ -173,128 +172,72 @@ class CueNumberingTest {
         assertEquals(mapOf(1 to "2", 2 to "3", 3 to "4", 5 to "21"), labels)
     }
 
-    // ─── D11: an auto number stays put while its cue does ───────────────
-    //
-    // venue-visit plan D11, carried onto stack entries unchanged by cue-model plan D14 (§3.3). The
-    // three number-edit cases are the plan's: a number edit moves nothing, so the handler passes
-    // the order as it stands and every other auto cue is `kept`.
-
-    private fun autoOf(vararg cues: AutoNumberInput): Map<Int, String> = computeAutoCueNumbers(cues.toList())
-
-    /** An auto cue at the same place as before the change, holding [number]. */
-    private fun kept(number: String?) = AutoNumberInput(number, auto = true, keep = true)
-
-    /** An auto cue the change moved (or shifted), still holding the number it had. */
-    private fun moved(number: String?) = AutoNumberInput(number, auto = true, keep = false)
-
-    private fun explicitCue(number: String) = AutoNumberInput(number, auto = false)
-
-    /** The stack as it reads: each cue's explicit number, else the label it was given. */
-    private fun reads(cues: List<AutoNumberInput>, labels: Map<Int, String>): List<String?> =
-        cues.mapIndexed { i, c -> if (!c.auto && !c.number.isNullOrEmpty()) c.number else labels[i] }
+    // ─── From position (venue-rig-fixes plan D6–D7) ─────────────────────
 
     @Test
-    fun `D11 — five auto cues, cue 2 set to 4·5, reads 1, 4·5, 3, 4, 5 and out of order`() {
-        val cues = listOf(kept("1"), explicitCue("4.5"), kept("3"), kept("4"), kept("5"))
-        val read = reads(cues, autoOf(*cues.toTypedArray()))
-        assertEquals(listOf("1", "4.5", "3", "4", "5"), read)
-        assertTrue(detectCueNumbersOutOfOrder(read), "the banner shows")
+    fun `an auto cue after a typed number follows it`() {
+        // The stack that started it: an auto cue a typed Q30 left behind at Q40.
+        assertEquals(listOf("30", "31"), reads(explicit("30"), blank()))
     }
 
     @Test
-    fun `D11 — five auto cues, cue 3 set to 10, reads 1, 2, 10, 4, 5 and out of order`() {
-        val cues = listOf(kept("1"), kept("2"), explicitCue("10"), kept("4"), kept("5"))
-        val read = reads(cues, autoOf(*cues.toTypedArray()))
-        assertEquals(listOf("1", "2", "10", "4", "5"), read)
-        assertTrue(detectCueNumbersOutOfOrder(read), "the banner shows")
-    }
-
-    @Test
-    fun `D11 — five auto cues, cue 3 set to 1, takes cue 1's number and leaves the rest`() {
-        // `releaseAutoNumber` freed "1" from cue 1, which is the one cue that has to move: the
-        // highest free integer below its neighbour is 0. Cues 2, 4 and 5 keep theirs.
-        val cues = listOf(kept(null), kept("2"), explicitCue("1"), kept("4"), kept("5"))
-        val read = reads(cues, autoOf(*cues.toTypedArray()))
-        assertEquals(listOf("0", "2", "1", "4", "5"), read)
-        assertTrue(detectCueNumbersOutOfOrder(read), "the banner shows")
-    }
-
-    @Test
-    fun `D11 — Fix Order moves the renumbered cue and the cues it passed follow their places`() {
-        // After `sort-by-cue-number`: the cues whose index the sort changed are not kept.
-        val afterHalf = listOf(kept("1"), moved("3"), moved("4"), explicitCue("4.5"), kept("5"))
-        assertEquals(listOf("1", "2", "3", "4.5", "5"), reads(afterHalf, autoOf(*afterHalf.toTypedArray())))
-
-        val afterTen = listOf(kept("1"), kept("2"), moved("4"), moved("5"), explicitCue("10"))
-        assertEquals(listOf("1", "2", "3", "4", "10"), reads(afterTen, autoOf(*afterTen.toTypedArray())))
-
-        val afterOne = listOf(kept("0"), explicitCue("1"), moved("2"), kept("4"), kept("5"))
-        val read = reads(afterOne, autoOf(*afterOne.toTypedArray()))
-        assertEquals(listOf("0", "1", "2", "4", "5"), read)
+    fun `a typed number between autos moves the autos after it`() {
+        // Five auto cues, the second typed 4.5.
+        val read = reads(blank(), explicit("4.5"), blank(), blank(), blank())
+        assertEquals(listOf("1", "4.5", "5", "6", "7"), read)
         assertFalse(detectCueNumbersOutOfOrder(read))
     }
 
     @Test
-    fun `D11 — an out-of-order renumber neither anchors nor bounds a later relabel`() {
-        // A cue inserted above the renumbered one shifts everything after it, and the shifted cues
-        // count through the 10 rather than continuing from it — anchoring on it would relabel them
-        // 11, 12 and quietly put the stack back in order around a cue nobody moved.
-        val cues = listOf(kept("1"), moved(null), moved("2"), explicitCue("10"), moved("4"), moved("5"))
-        assertEquals(
-            listOf("1", "2", "3", "10", "5", "6"),
-            reads(cues, autoOf(*cues.toTypedArray())),
-        )
-        // And a cue appended to the renumbered stack takes the next number, nothing else moving.
-        val appended = listOf(kept("1"), explicitCue("4.5"), kept("3"), kept("4"), kept("5"), moved(null))
-        assertEquals(
-            listOf("1", "4.5", "3", "4", "5", "6"),
-            reads(appended, autoOf(*appended.toTypedArray())),
-        )
+    fun `a leading run counts up from one where it fits`() {
+        assertEquals(listOf("1", "2", "30"), reads(blank(), blank(), explicit("30")))
+        assertEquals(listOf("1", "2", "3"), reads(blank(), blank(), explicit("3")))
+        // 29 cues fit the whole numbers from 1 below 30.
+        val twentyNine = reads(*arrayOfNulls<String>(29), explicit("30"))
+        assertEquals((1..29).map(Int::toString) + "30", twentyNine)
     }
 
     @Test
-    fun `D11 — an insert, a delete or a move still relabels the cues it shifts`() {
-        val inserted = listOf(kept("1"), moved(null), moved("2"), moved("3"))
-        assertEquals(listOf("1", "2", "3", "4"), reads(inserted, autoOf(*inserted.toTypedArray())))
-
-        val deleted = listOf(kept("1"), kept("2"), moved("4"), moved("5"))
-        assertEquals(listOf("1", "2", "3", "4"), reads(deleted, autoOf(*deleted.toTypedArray())))
-
-        val swapped = listOf(kept("1"), moved("3"), moved("2"), kept("4"), kept("5"))
-        assertEquals(listOf("1", "2", "3", "4", "5"), reads(swapped, autoOf(*swapped.toTypedArray())))
+    fun `a leading run that fits only from zero takes the highest whole numbers below`() {
+        assertEquals(listOf("0", "1"), reads(blank(), explicit("1")))
+        assertEquals(listOf("0", "0.5"), reads(blank(), explicit("0.5")))
+        // 30 cues before a typed 30 are 0–29.
+        val thirty = reads(*arrayOfNulls<String>(30), explicit("30"))
+        assertEquals((0..29).map(Int::toString) + "30", thirty)
     }
 
     @Test
-    fun `D11 — a stack the old rule numbered reads the same under the new one`() {
-        // A stack's numbers do not change unless its list does. Every shape below is what the
-        // derive-from-scratch rule writes; kept, each is left exactly as it is.
-        val act1 = listOf(
-            kept("0"),
-            explicitCue("1"), explicitCue("2"), explicitCue("3.1"),
-            explicitCue("3.2"), explicitCue("4"),
-            kept("5"), kept("6"), kept("7"),
-        )
-        assertEquals(
-            listOf("0", "1", "2", "3.1", "3.2", "4", "5", "6", "7"),
-            reads(act1, autoOf(*act1.toTypedArray())),
-        )
-        // The old rule's answer to "cue 3 set to 10": a relabelled stack, now in order, stays so.
-        val oldTen = listOf(kept("8"), kept("9"), explicitCue("10"), kept("11"), kept("12"), moved(null))
-        assertEquals(
-            listOf("8", "9", "10", "11", "12", "13"),
-            reads(oldTen, autoOf(*oldTen.toTypedArray())),
-        )
-        // Derived from scratch, an in-order explicit number still anchors the run after it.
-        val scratch = listOf(explicitCue("14"), moved(null), moved(null))
-        assertEquals(listOf("14", "15", "16"), reads(scratch, autoOf(*scratch.toTypedArray())))
+    fun `a typed number too low for the cues before it reads out of place and the run counts through it`() {
+        // 38 auto cues before a typed 30, then one more: 1–29 and 31–39, the 30 out of place, and 41.
+        val read = reads(*arrayOfNulls<String>(38), explicit("30"), blank())
+        assertEquals((1..29).map(Int::toString) + (31..39).map(Int::toString) + "30" + "41", read)
+        assertTrue(detectCueNumbersOutOfOrder(read), "the stack offers Fix Order")
+        // Two auto cues before a typed 1: neither 1 nor 0 below it holds two.
+        assertEquals(listOf("2", "3", "1"), reads(blank(), blank(), explicit("1")))
     }
 
     @Test
-    fun `D11 — a kept number an explicit one has since claimed is relabelled`() {
-        // `releaseAutoNumber` normally clears it first; this is the backstop if it did not.
-        val cues = listOf(kept("1"), kept("2"), explicitCue("2"))
-        val labels = autoOf(*cues.toTypedArray())
-        assertEquals("1", labels[0])
-        assertNotEquals("2", labels[1])
+    fun `a typed number not above the one before it is out of place`() {
+        // The 3 neither anchors the cue after it nor bounds the run: the run counts on from 5 through it.
+        val read = reads(explicit("5"), explicit("3"), blank())
+        assertEquals(listOf("5", "3", "7"), read)
+        assertTrue(detectCueNumbersOutOfOrder(read))
+        // Five auto cues, the third typed 1: out of place after two cues it cannot hold.
+        val third = reads(blank(), blank(), explicit("1"), blank(), blank())
+        assertEquals(listOf("2", "3", "1", "5", "6"), third)
+        assertTrue(detectCueNumbersOutOfOrder(third))
+    }
+
+    @Test
+    fun `a later typed number in place bounds the run through an earlier one out of place`() {
+        // The 30 out of place, the 50 in place: the run before 50 counts from 1 and stops below it.
+        val read = reads(*arrayOfNulls<String>(38), explicit("30"), blank(), explicit("50"), blank())
+        assertEquals((1..29).map(Int::toString) + (31..39).map(Int::toString) + listOf("30", "41", "50", "51"), read)
+    }
+
+    @Test
+    fun `typed numbers in order anchor and bound the runs between them`() {
+        assertEquals(listOf("10", "11", "12", "20", "21"), reads(explicit("10"), blank(), blank(), explicit("20"), blank()))
+        assertEquals(listOf("3", "3.5", "4"), reads(explicit("3"), blank(), explicit("4")))
     }
 }

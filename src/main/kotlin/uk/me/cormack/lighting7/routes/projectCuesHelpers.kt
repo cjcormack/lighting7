@@ -1018,9 +1018,8 @@ internal fun categoryFromAttributeName(attribute: String): String {
  * unnumbered cue takes one from where it landed. Must run inside a transaction.
  *
  * Every path that adds a cue to a stack goes through this — a new cue, or one shared into another
- * stack (`add-cue`, cue model plan D1). A caller placing several cues in one gesture passes [renumber] false and renumbers once, from
- * the [cueEntryIds] it took before the first, so the new cues are labelled together — as one run
- * between their numbered neighbours — rather than each from the ones placed before it.
+ * stack (`add-cue`, cue model plan D1). A caller placing several cues in one gesture passes
+ * [renumber] false and renumbers once, after the last.
  */
 internal fun placeCueInStack(
     stack: DaoCueStack,
@@ -1031,7 +1030,6 @@ internal fun placeCueInStack(
     autoAdvanceDelay: java.time.Duration? = null,
     renumber: Boolean = true,
 ): DaoCueStackEntry {
-    val before = if (renumber) cueEntryIds(stack) else emptyList()
     cueNumber?.takeIf { it.isNotEmpty() }?.let { releaseAutoNumber(stack, it, exceptEntryId = -1) }
     val existing = entriesOf(stack)
     val entry = DaoCueStackEntry.new {
@@ -1046,7 +1044,7 @@ internal fun placeCueInStack(
     }
     val at = position?.coerceIn(0, existing.size) ?: existing.size
     writeEntryOrder(existing.take(at) + entry + existing.drop(at), fresh = listOf(entry))
-    if (renumber) renumberAutoEntries(stack, before)
+    if (renumber) renumberAutoEntries(stack)
     return entry
 }
 

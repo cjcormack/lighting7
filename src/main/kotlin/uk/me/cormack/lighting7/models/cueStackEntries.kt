@@ -56,9 +56,8 @@ object DaoCueStackEntries : IntIdTable("cue_stack_entries") {
     val cueNumber = varchar("cue_number", 20).nullable()
     /**
      * True when [cueNumber] was derived from the entry's position rather than typed by the
-     * operator. An auto number stays put while its entry keeps its place in the stack, and is
-     * derived again when a change to the stack's list moves or shifts it (venue-visit plan D11, see
-     * `renumberAutoEntries`); explicit ones are never touched.
+     * operator. Every auto number is derived again from position on each change to the stack's list
+     * or numbers (`renumberAutoEntries`); typed ones are never touched.
      */
     val cueNumberAuto = bool("cue_number_auto").default(false)
     val autoAdvance = bool("auto_advance").default(false)
