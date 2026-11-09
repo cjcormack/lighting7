@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cueRow, markerRow } from '@/test/cueEntries'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import type { CueStack, CueStackCueEntry, CueStackCueRow, CueStackMarkerRow } from '@/api/cueStacksApi'
 
@@ -24,7 +24,7 @@ vi.mock('@/store/cueStacks', () => ({
 // entries, so the probe is keyed by entry id.
 const rowProps = new Map<
   number,
-  { isStandby?: boolean; isActive?: boolean; expanded?: boolean; locked?: boolean; onSetStandby?: () => void }
+  { isStandby?: boolean; isActive?: boolean; expanded?: boolean; locked?: boolean; onSetStandby?: () => void; onDuplicated?: (ids: number[]) => void }
 >()
 // The header's Move in dark chip reads the store; its words are `StackMovingChip.test.tsx`'s.
 vi.mock('@/components/cues/StackMovingChip', () => ({
@@ -38,6 +38,7 @@ vi.mock('./CueCardEditor', () => ({
     expanded?: boolean
     locked?: boolean
     onSetStandby?: () => void
+    onDuplicated?: (ids: number[]) => void
   }) => {
     rowProps.set(p.cue.entryId, {
       isStandby: p.isStandby,
@@ -45,6 +46,7 @@ vi.mock('./CueCardEditor', () => ({
       expanded: p.expanded,
       locked: p.locked,
       onSetStandby: p.onSetStandby,
+      onDuplicated: p.onDuplicated,
     })
     return <div data-entry-row={p.cue.entryId} data-testid={`cue-${p.cue.id}`} />
   },
@@ -135,6 +137,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  vi.restoreAllMocks()
 })
 
 describe('StackDetail', () => {
@@ -145,16 +148,46 @@ describe('StackDetail', () => {
     expect(screen.getByTestId('marker-102')).toBeTruthy()
   })
 
-  it('scrolls the active cue into view on mount', () => {
+  /** The list 0..100 and every card 36 high, each at [cardTop]; a centred card's top lands at 32. */
+  function stubList(cardTop: (entryId: number) => number) {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const entry = this.getAttribute('data-entry-row')
+      const top = entry == null ? 0 : cardTop(Number(entry))
+      const height = entry == null ? 100 : 36
+      return { top, bottom: top + height, left: 0, right: 100, width: 100, height, x: 0, y: top, toJSON: () => ({}) } as DOMRect
+    })
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(function (this: Element) {
+      return this.hasAttribute('data-entry-row') ? 36 : 100
+    })
+  }
+  const list = () => screen.getByTestId('cue-1').closest('.overflow-y-auto') as HTMLElement
+
+  it('centres the live card on entering a running stack, within the list alone (venue-rig-fixes plan D10)', () => {
+    stubList((entry) => (entry - 101) * 36)
     render(view({ activeEntryId: 102 }))
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+    expect(list().scrollTop).toBe(36 - 32)
+    expect(scrollIntoView).not.toHaveBeenCalled()
   })
 
-  it('re-scrolls when the active cue moves', () => {
-    const { rerender } = render(view({ activeEntryId: 102 }))
-    scrollIntoView.mockClear()
+  it('a GO centres the live card only when it is outside the list', () => {
+    // Q3's card below the list, every other card inside.
+    stubList((entry) => (entry === 103 ? 400 : 0))
+    const { rerender } = render(view({ activeEntryId: 101 }))
+    list().scrollTop = 0
+    rerender(view({ activeEntryId: 102 }))
+    expect(list().scrollTop).toBe(0)
     rerender(view({ activeEntryId: 103 }))
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+    expect(list().scrollTop).toBe(400 - 32)
+  })
+
+  it('brings Duplicate’s first copy into view once the refetch draws it, and opens nothing (D12)', () => {
+    stubList((entry) => (entry === 104 ? 500 : 0))
+    const { rerender } = render(view())
+    act(() => rowProps.get(101)!.onDuplicated!([104, 105]))
+    expect(list().scrollTop).toBe(0)
+    rerender(view({ stack: mkStack({ cues: [cue(1), cue(2), cue(3), cue(4), cue(5)] }) }))
+    expect(list().scrollTop).toBe(500 - 32)
+    expect(rowProps.get(104)?.expanded).toBe(false)
   })
 
   it('does not scroll when no cue is active', () => {

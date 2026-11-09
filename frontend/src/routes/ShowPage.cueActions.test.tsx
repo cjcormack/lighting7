@@ -293,12 +293,13 @@ describe('the Show position survives a round trip through the switcher (S3)', ()
 })
 
 describe('the cue card’s actions (S3, show-cue-editing plan session 3)', () => {
-  it('Duplicate appends the copy to the end of the stack and opens it by its entry', async () => {
+  it('Duplicate appends the copy to the end of the stack and stays put (venue-rig-fixes plan D12)', async () => {
     draw(['/projects/1/show/stacks/10?cue=42'])
     fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
-    // The desk's route: the copy goes to the end of the source's stack (D12), with its entry's follow.
+    // The desk's route: the copy goes to the end of the source's stack, with its entry's follow.
     await waitFor(() => expect(duplicateCue).toHaveBeenCalledWith({ projectId: 1, cueId: 42, stackId: 10, entryId: 142 }))
-    await waitFor(() => expect(where()).toBe('/projects/1/show/stacks/10?cue=77&entry=177'))
+    await act(async () => {})
+    expect(where()).toBe('/projects/1/show/stacks/10?cue=42')
   })
 
   it('Edit in programmer includes the cue and then opens the programmer', async () => {

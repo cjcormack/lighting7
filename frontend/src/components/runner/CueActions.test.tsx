@@ -58,10 +58,12 @@ vi.mock('@/components/programmer/RecordSheet', () => ({
   RecordSheet: (p: { targetCueId: number }) => <div data-testid="record-sheet">{p.targetCueId}</div>,
 }))
 const toastError = vi.fn()
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: (m: string) => toastError(m) } }))
+const toastSuccess = vi.fn()
+vi.mock('sonner', () => ({ toast: { success: (m: string) => toastSuccess(m), error: (m: string) => toastError(m) } }))
 
 import { CueActions, ONE_CUE_REASON, type CueActionRow } from './CueActions'
 import { CueActionDialogsProvider } from './cueActionDialogs'
+import { cuePaneOpenStore } from './CueEditorPane'
 import { resetShowIncludeForTests } from '@/lib/showInclude'
 import { setRemoteLinkForTests, type RemoteLink } from '@/lib/remoteMode'
 
@@ -135,22 +137,50 @@ describe('CueActions', () => {
     expect(duplicateCue.mock.calls[0][0]).toEqual({ projectId: 1, cueId: 3, stackId: null, entryId: null })
   })
 
-  it('opens one copy on the Timeline from the Timeline, and on the stack’s sticky view elsewhere', async () => {
+  it('opens one copy on the stack’s sticky view from outside the Show view', async () => {
     const Where = () => <span data-testid="where">{useLocation().pathname + useLocation().search}</span>
-    for (const [host, path] of [
-      ['timeline', '/projects/1/show/stacks/7/timeline?cue=51&entry=151'],
-      ['bar', '/projects/1/show/stacks/7?cue=51&entry=151'],
-    ] as const) {
+    render(
+      <MemoryRouter>
+        <CueActions projectId={1} host="menu" rows={[ROWS[0]]} locked={false} />
+        <Where />
+      </MemoryRouter>,
+    )
+    openMenu(screen.getByRole('button', { name: 'Cue actions' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Duplicate' }))
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/projects/1/show/stacks/7?cue=51&entry=151'))
+  })
+
+  it('stays put in the Show view, hands the copies to the host and leaves the pane alone (venue-rig-fixes plan D12)', async () => {
+    const Where = () => <span data-testid="where">{useLocation().pathname + useLocation().search}</span>
+    for (const host of ['bar', 'timeline', 'strip'] as const) {
+      const onDuplicated = vi.fn()
+      cuePaneOpenStore.set(false)
       render(
-        <MemoryRouter>
-          <CueActions projectId={1} host={host} rows={[ROWS[0]]} locked={false} />
+        <MemoryRouter initialEntries={['/projects/1/show/stacks/7/table']}>
+          <CueActions projectId={1} host={host} rows={ROWS} locked={false} fromShowView onDuplicated={onDuplicated} />
           <Where />
         </MemoryRouter>,
       )
       fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
-      await waitFor(() => expect(screen.getByTestId('where').textContent).toBe(path))
+      await waitFor(() => expect(onDuplicated).toHaveBeenCalledExactlyOnceWith([151, 152]))
+      expect(screen.getByTestId('where').textContent).toBe('/projects/1/show/stacks/7/table')
+      expect(toastSuccess).toHaveBeenLastCalledWith('Duplicated 2 cues')
+      expect(cuePaneOpenStore.getSnapshot()).toBe(false)
       cleanup()
     }
+  })
+
+  it('says a loose copy in the Show view landed in no stack, and hands the host nothing', async () => {
+    duplicateCue.mockImplementation(({ cueId }) => landed({ cueId: cueId + 50, name: 'copy', stackId: null, entryId: null }))
+    const onDuplicated = vi.fn()
+    render(
+      <MemoryRouter>
+        <CueActions projectId={1} host="strip" rows={[ROWS[0]]} locked={false} fromShowView onDuplicated={onDuplicated} />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+    await waitFor(() => expect(toastSuccess).toHaveBeenLastCalledWith('Duplicated as “copy”, in no stack'))
+    expect(onDuplicated).not.toHaveBeenCalled()
   })
 
   it('removes each entry from its stack — never the cue — and asks nothing', () => {

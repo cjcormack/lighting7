@@ -82,7 +82,7 @@ function FamilyTab({
   const familyList = useMemo(() => [family], [family])
   return (
     <div data-family-sheet={family} className="flex min-h-0 flex-1 flex-col border-l">
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3">
         {above}
         <PaletteBand
           projectId={projectId}

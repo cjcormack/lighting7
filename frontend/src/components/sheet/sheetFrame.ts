@@ -41,9 +41,10 @@ export const CHROME_ROW_CLASS = 'flex h-10 shrink-0 items-center gap-2 border-b 
  * The sheet's scroller. `bg-background` explicitly: the sticky first column has to be opaque to
  * cover the cells sliding under it, and with the sheet itself transparent it took its colour from
  * whatever the page happened to be — over `<main>`'s `bg-muted/40` the name column read as a dark
- * block laid over the rows. No `border-t`: the row above owns that line.
+ * block laid over the rows. No `border-t`: the row above owns that line. `overscroll-contain` so a
+ * scroll past either end stops here rather than moving the page (venue-rig-fixes plan D13).
  */
-export const SHEET_SCROLLER_CLASS = 'min-h-0 flex-1 overflow-auto bg-background'
+export const SHEET_SCROLLER_CLASS = 'min-h-0 flex-1 overflow-auto overscroll-contain bg-background'
 
 /** The sticky header row: 30px, one line under it, the sheet ground. */
 export const SHEET_HEADER_ROW_CLASS = 'sticky top-0 z-20 grid border-b border-border bg-background'

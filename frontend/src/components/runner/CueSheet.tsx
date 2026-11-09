@@ -6,6 +6,7 @@ import { CueEditorPane, cuePaneOpenStore, useCuePaneOpen } from './CueEditorPane
 import { paneContentOf, useHeldPaneContent } from './cuePaneContent'
 import type { CueEditorTab } from '@/components/cues/editor/cueEditorTab'
 import { CueActions, type CueActionRow } from './CueActions'
+import { entryRowId, useSheetFollow } from './useSheetFollow'
 import { cn } from '@/lib/utils'
 import { usePatchProjectCueMutation } from '@/store/cues'
 import { usePatchCueStackEntryMutation } from '@/store/cueStacks'
@@ -60,10 +61,6 @@ export type CueColumnKey = 'cueNumber' | 'name' | 'fade' | 'curve' | 'follow' | 
  */
 export interface CueSheetRow extends SheetRow {
   entry: CueStackCueEntry
-}
-
-export function entryRowId(entryId: number): string {
-  return `entry:${entryId}`
 }
 
 /**
@@ -771,6 +768,17 @@ export function CueSheet({
     scrollTo(id)
   }, [openedEntryId, rows, scrollTo, setRows])
 
+  const onDuplicated = useSheetFollow({
+    stack,
+    rows,
+    activeEntryId,
+    standbyEntryId,
+    linkedEntryId: openedEntryId,
+    sheetRef,
+    setRows,
+    scrollTo,
+  })
+
   /** Arming is what a click on the row head means while locked — the cards' body-click rule. */
   const onRowClick = useCallback(
     (id: string, e: React.MouseEvent) => {
@@ -857,6 +865,7 @@ export function CueSheet({
             onRequestUnlock={onRequestUnlock}
             lockedReason={LOCKED_REASON}
             fromShowView
+            onDuplicated={onDuplicated}
           />
         )}
         <Button variant="ghost" size="sm" onClick={sheet.clearByLadder} title="Deselect all">

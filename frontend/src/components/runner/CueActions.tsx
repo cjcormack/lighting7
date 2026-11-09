@@ -133,8 +133,11 @@ interface CueActionsProps {
   /**
    * The host is the Show view (the card, the cue sheet, the phone runner there): its Includes are
    * recorded for the programmer's *← Show* (D16). The Prompt Book's and the busk view's are not.
+   * Its Duplicate also stays put rather than opening the copy.
    */
   fromShowView?: boolean
+  /** The Show view's copies, by entry, after Duplicate — the host selects or scrolls to them. */
+  onDuplicated?: (entryIds: number[]) => void
   className?: string
 }
 
@@ -153,7 +156,8 @@ interface CueActionsProps {
  *   Record sheet on the cue. In the ⋯ menu, **Update stage…** follows it while the one cue is edited
  *   since GO (§4.4), opening its confirm. **Duplicate** is `POST /cues/{id}/duplicate`, the copy appended to the
  *   end of its stack (D12), with its entry's follow, and opened — loose without one, and never opened
- *   from the table, which lists it; over several rows, each in row order. **Remove from stack**
+ *   from the table, which lists it, or from the Show view, which is handed the copies through
+ *   `onDuplicated`; over several rows, each in row order. **Remove from stack**
  *   deletes the entry and keeps the cue. **Delete…** is the D8 confirm, one for all the rows.
  *   **⋯** holds *Add to stack…*, *Move to stack…* — the entry whole, number, follow and anchor with
  *   it — and *Copy link*.
@@ -172,6 +176,7 @@ export function CueActions({
   onRequestUnlock,
   lockedReason = DEFAULT_LOCKED_REASON,
   fromShowView = false,
+  onDuplicated,
   className,
 }: CueActionsProps) {
   const navigate = useNavigate()
@@ -257,11 +262,15 @@ export function CueActions({
     if (host === 'table') {
       if (copies.length === 1) toast.success(`Duplicated as “${copy.name}”${copy.stackId == null ? ', in no stack' : ''}`)
       else if (copies.length > 1) toast.success(`Duplicated ${copies.length} cues`)
+    } else if (fromShowView) {
+      if (copies.length === 1 && copy.entryId == null) toast.success(`Duplicated as “${copy.name}”, in no stack`)
+      else if (copies.length > 0) toast.success(`Duplicated ${copies.length} cue${copies.length === 1 ? '' : 's'}`)
+      const entryIds = copies.flatMap((c) => (c.entryId != null ? [c.entryId] : []))
+      if (entryIds.length > 0) onDuplicated?.(entryIds)
     } else if (rows.length === 1 && copy != null) {
       if (copy.entryId != null && copy.stackId != null) {
-        // The Timeline opens its copy on itself; the bare path lands on the window's sticky view.
-        const view = host === 'timeline' ? '/timeline' : ''
-        navigate(`/projects/${projectId}/show/stacks/${copy.stackId}${view}?cue=${copy.cueId}&entry=${copy.entryId}`)
+        // The bare path lands on the window's sticky view.
+        navigate(`/projects/${projectId}/show/stacks/${copy.stackId}?cue=${copy.cueId}&entry=${copy.entryId}`)
       } else {
         toast.success(`Duplicated as “${copy.name}”, in no stack`)
       }
@@ -409,8 +418,8 @@ export function CueActions({
       title:
         host === 'table'
           ? 'Copy each cue to the end of its stack, or in no stack where it has none or several'
-          : rows.length > 1
-            ? 'Copy each cue to the end of its stack'
+          : rows.length > 1 || fromShowView
+            ? `Copy ${rows.length > 1 ? 'each cue' : 'this cue'} to the end of its stack`
             : 'Copy this cue to the end of its stack and open it',
       onSelect: guarded(() => void duplicate()),
       reason: reasons.duplicate,

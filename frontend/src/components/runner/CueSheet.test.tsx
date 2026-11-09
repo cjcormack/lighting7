@@ -75,6 +75,7 @@ vi.mock('@dnd-kit/core', async (importOriginal) => {
     },
   }
 })
+const virtual = vi.hoisted(() => ({ scrollToIndex: vi.fn() }))
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count, estimateSize }: { count: number; estimateSize: () => number }) => ({
     getTotalSize: () => count * estimateSize(),
@@ -85,7 +86,7 @@ vi.mock('@tanstack/react-virtual', () => ({
         start: index * estimateSize(),
         size: estimateSize(),
       })),
-    scrollToIndex: () => {},
+    scrollToIndex: virtual.scrollToIndex,
   }),
 }))
 
@@ -205,6 +206,7 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   patchCue.mockClear()
+  virtual.scrollToIndex.mockClear()
   patchEntry.mockClear()
   renumberEntries.mockClear()
 })
@@ -521,6 +523,61 @@ describe('CueSheet', () => {
     window.dispatchEvent(space)
     expect(space.defaultPrevented).toBe(false)
   })
+})
+
+describe('CueSheet · following the show (venue-rig-fixes plan D10, D12)', () => {
+  /** Over the flat layout: a 100px scroller, Q1 and Q2 inside it and every later row below it. */
+  function stubScroller() {
+    const spy = vi.mocked(Element.prototype.getBoundingClientRect)
+    const base = spy.getMockImplementation()!
+    spy.mockImplementation(function (this: Element) {
+      const box = (top: number, height: number) => ({ left: 0, top, right: 1100, bottom: top + height, width: 1100, height, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
+      if (this.hasAttribute('data-sheet-scroller')) return box(0, 100)
+      const id = this.getAttribute('data-row-id')
+      if (id != null) return Number(id.slice('entry:'.length)) <= 102 ? box(30, 36) : box(400, 36)
+      return base.call(this)
+    })
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(function (this: Element) {
+      return this.hasAttribute('data-sheet-scroller') ? 100 : 0
+    })
+  }
+  beforeEach(stubScroller)
+
+  it('centres the live row on entering a running stack', () => {
+    draw({ activeEntryId: 104 })
+    expect(virtual.scrollToIndex).toHaveBeenCalledExactlyOnceWith(3, { align: 'center' })
+  })
+
+  it('a GO to a row outside the sheet centres it, and one to a row in view does not', () => {
+    const view = draw({ activeEntryId: 101 })
+    virtual.scrollToIndex.mockClear()
+    view.rerender(<CueSheet stack={STACK} projectId={1} activeEntryId={102} />)
+    expect(virtual.scrollToIndex).not.toHaveBeenCalled()
+    view.rerender(<CueSheet stack={STACK} projectId={1} activeEntryId={102} standbyEntryId={105} />)
+    expect(virtual.scrollToIndex).toHaveBeenCalledExactlyOnceWith(4, { align: 'center' })
+  })
+})
+
+describe('CueSheet · Duplicate stays put (venue-rig-fixes plan D12)', () => {
+  it('selects Duplicate’s copies once the refetch draws them, scrolls to the first, and leaves the pane off', () => {
+    cuePaneOpenStore.set(false)
+    const view = draw()
+    const onDuplicated = cueActionsOf().onDuplicated as (ids: number[]) => void
+    act(() => onDuplicated([106, 107]))
+    expect(virtual.scrollToIndex).not.toHaveBeenCalled()
+    view.rerender(<CueSheet stack={{ ...STACK, cues: [...STACK.cues, cue(6), cue(7)] }} projectId={1} activeEntryId={null} />)
+    expect(row(6)).toHaveAttribute('data-state', 'selected')
+    expect(row(7)).toHaveAttribute('data-state', 'selected')
+    expect(virtual.scrollToIndex).toHaveBeenCalledExactlyOnceWith(5, { align: 'center' })
+    expect(cuePaneOpenStore.getSnapshot()).toBe(false)
+  })
+
+  /** The props the bar hands the action set, once Q1 and Q2's fades are selected to draw it. */
+  function cueActionsOf(): Record<string, unknown> {
+    cueActions.last = undefined
+    dragFade(0, 1)
+    return cueActions.last!
+  }
 })
 
 describe('CueSheet · Cue # (show-view-fixes plan D7–D12)', () => {

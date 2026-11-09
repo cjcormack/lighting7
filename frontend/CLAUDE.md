@@ -3796,6 +3796,23 @@ Three surface rules, each pinned by its test:
   the Follow column and the editor's header read it through `parseFollowDelay`, blank or *off* being
   none, where `parseFadeDuration` reads 0 as a snap.
 
+  **The sheet follows the show** (venue-rig-fixes plan D10, D11; `runner/useFollowShow.ts`, which
+  the Timeline and the Cards list mount too): entering a running stack centres its live row, and each
+  later change of the live or armed entry — a GO, GO back, GO to, a follow, arming — centres that row
+  only when it is outside the scroller, through `sheet.scrollTo` (`SheetTable` marks its scroller
+  `data-sheet-scroller`). A `?cue=` link wins: it scrolls instead, and following starts from it. A
+  hand scroll holds following off for 10 s, told by its input and never by a scroll event — a wheel or
+  a touch move over the scroller, a press on the scroller itself, or a scrolling key in the list that
+  nothing else took — so the sheet's own scrolls (the pane row kept in view, the link, the keyboard
+  cursor) never pause it, and a click, which selects a row already in view, never scrolls. A GO
+  during the pause is not caught up when it ends; the next GO or arm is followed.
+  **Duplicate stays put** (D12): `CueActions` hands the copies' entries to the host through
+  `onDuplicated`, and once the stack's refetch lists them the sheet selects those it draws and
+  scrolls to the first (`runner/useSheetFollow.ts`), once — `runner/useLandCopies.ts` forgets them on
+  leaving the stack or after 5 s; the pane keeps its toggle and shows what the selection says. The
+  toast says *Duplicated n cues* (one loose copy *Duplicated as “X”, in no stack*), with no Undo: each
+  copy is its own history entry. The Timeline does the same, and Cards, which has no selection, scrolls to the first.
+
   **A cell that cannot be selected is blank**, not an em-dash: the em-dash is the mark an *empty but
   settable* cell wears (Follow, Notes), and wearing it on a read-out and on a snap cue's Curve made
   half the sheet's dashes look editable.
@@ -7611,6 +7628,19 @@ would be a *write* that replaces the desk's selection and makes a reconnecting t
 - Route components in `src/routes/`
 - Shared/utility components in `src/`
 - Use Radix UI primitives (via `src/components/ui/`) and Tailwind for UI
+
+**The desk's shell is one fixed screen** (venue-rig-fixes plan D13). While `Layout` is mounted it
+sets `desk-shell` on `html`, and `index.css` gives `html`, `body` and `#root` full height and `html`
+and `body` `overflow: hidden` and `overscroll-behavior: none`, so the document never scrolls or
+rubber-bands; only a view's own scrollers do. The pages drawn beside `Layout` (onboarding, a reset
+link, a device login) have no class and scroll the document as before. The kit's scrollers
+(`SheetTable`'s, the Cards list, `EditorSurface`'s popover, `SheetBody` and the busk side sheets'
+bodies) take `overscroll-contain`, so a wheel past a list's end stops at it. **A scroller must be
+positioned (`relative`) when an absolute descendant could outrun it**: an `overflow` box clips an
+absolute child only when it is that child's containing block, and the Cards list was not, so each
+cue number's `sr-only` copy hung off `body` and stretched the document to 3098px on a 60-cue stack
+at 1440×900. Check `document.scrollingElement.scrollHeight` against the window after building a
+scrolling view.
 
 #### What may live in `routes/`
 

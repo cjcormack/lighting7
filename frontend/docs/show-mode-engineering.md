@@ -467,6 +467,22 @@ elsewhere is left where they were.
 A stale `:stackId` redirects to the overview — but **not while the stack list is refetching**, or the
 refetch that follows creating a stack would bounce the operator straight back out of it.
 
+**Inside a stack the list follows the show** (venue-rig-fixes plan D10, D11;
+`runner/useFollowShow.ts`), on Cards, the Table and the Timeline alike. Entering a running stack
+centres its live entry; each later change of the live or armed entry centres that entry only when it
+is outside the scroller. A hand scroll — a wheel, a touch move, a press on the scrollbar, a scrolling
+key in the list — holds following off for 10 s; the view's own scrolls never do. A GO during the
+pause is not caught up when it ends: the next GO or arm is followed.
+
+**A `?cue=` link wins over following.** On arrival the link's row is scrolled to (smoothly, on
+Cards) and selected or opened, the entry centring does nothing, and following starts from there: the
+next GO or arm is followed as usual. The bare stack path's redirect to the sticky Table or Timeline
+carries the link; the view switcher's own links drop it.
+
+**Duplicate does not navigate from the Show view** (D12): every host there stays put, and the copies
+are selected (the Table, the Timeline, those the sheet draws) or scrolled to (Cards) once the stack's
+refetch lists them — once, and forgotten on leaving the stack or after five seconds (`useLandCopies`).
+
 ### Sync with runner state
 
 - **Live pill on the active stack** in the overview — findable at a glance.

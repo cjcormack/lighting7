@@ -402,9 +402,9 @@ run `./gradlew compileTestKotlin` and the touched packages' tests where they tou
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | OSC sender ranges and the address list | in review | `claude/magical-ritchie-84882h` | [#410](https://github.com/cjcormack/lighting7/pull/410) | `7296801` |
-| 2 | Auto numbers from position | in review | `claude/gallant-meitner-7xk6a8` | | |
-| 3 | The Show view follows the show | planned | | | |
+| 1 | OSC sender ranges and the address list | merged | `claude/magical-ritchie-84882h` | [#410](https://github.com/cjcormack/lighting7/pull/410) | `7296801` |
+| 2 | Auto numbers from position | merged | `claude/gallant-meitner-7xk6a8` | [#411](https://github.com/cjcormack/lighting7/pull/411) | `210c26d` |
+| 3 | The Show view follows the show | in review | `claude/zen-dirac-kc1wi2` | | |
 | 4 | Include, and Record's cue list and placement | planned | | | |
 | 5 | One colour editor for FX | planned | | | |
 | 6 | Path's Size | planned | | | |
@@ -530,6 +530,30 @@ D10–D13.
   `frontend/docs/show-mode-engineering.md` §"Auto-drill and deep links" (following, and the link
   winning).
 - Local: `check:quick`.
+- *As built*: measured against this desk run by `scripts/cloud-session.sh` with a 60-cue stack, in
+  Chromium at 1440×900 through Vite dev servers on the base and the branch. **Cards overflowed**:
+  `document.scrollingElement.scrollHeight` was 3098 against 900, from each cue number's `sr-only`
+  copy, absolutely positioned with `body` as its containing block because the Cards scroller was not
+  positioned, so its `overflow-y-auto` never clipped them; the Table and the Timeline read 900, inside
+  `SheetTable`'s `relative` wrapper. The list is `relative` now and reads 900 with the shell class
+  taken off. A GO on the live desk to Q50 centred its row on the Table and on Cards, a wheel then held
+  a GO to Q30 off, and the document stayed at 0. `useFollowShow` takes `enabled`, so Cards counts as
+  entering when its view mounts (`StackDetail` stays mounted across a view switch), and the hook
+  finds the sheet's scroller by a new `data-sheet-scroller` on `SheetTable`. Duplicate's copies wait in
+  `useLandCopies` until the stack's refetch lists them, then the sheet selects those it draws
+  (`useSheetFollow`, the Table's and the Timeline's one wiring), since its selection drops ids it has
+  no row for; they are forgotten on leaving the stack or after 5 s, so a copy a filter hides never
+  lands later. Cards centres by the list's own `scrollTop`, since `scrollIntoView` scrolls every
+  ancestor too. The phone runner's ⋯ menu is a Show view host too, so its Duplicate stays put, with no
+  `onDuplicated`; the Prompt Book's still opens the copy. Scrolling keys pause following only when no
+  handler took them (`defaultPrevented`, read once the handlers have run), so the sheet cursor's
+  arrows are the sheet's own scroll. The overscroll rule is on `SHEET_SCROLLER_CLASS` (which
+  `FixturesTable` shares), `SheetBody`, `EditorSurface`'s popover and the busk side sheets' bodies.
+  Every other page in the shell was measured the same way, with the shell class taken off, and none
+  overflowed in either direction: at 1440×900 and 390×844 the programmer, the Show overview and all
+  three stack views, the Prompt Book, Busk, Stage, Patches, Fixtures, Groups, Looks, Cues, Palettes,
+  Speed masters, Settings, Channels, Scripts, the FX library, Install and Projects, and at 1440×900
+  also Settings' Surfaces and Sync and Install's Diagnostics and Sync. Cards was the only overflow.
 
 ### Session 4 — Include, and Record's cue list and placement
 

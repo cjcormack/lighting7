@@ -31,6 +31,8 @@ import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
 import { ShowStackViewSwitcher, TIMELINE_MIN_WIDTH, effectiveStackView, type CardsListView } from '@/components/ViewSwitcher'
 import { useContainerBand } from '@/hooks/useContainerBand'
 import { CueSheet } from './CueSheet'
+import { useFollowShow } from './useFollowShow'
+import { useLandCopies } from './useLandCopies'
 import { StackTimeline } from './StackTimeline'
 import { cuePaneOpenStore, useCuePaneOpen } from './CueEditorPane'
 import { OwnerEditor } from '@/components/stage/OwnerEditor'
@@ -156,16 +158,35 @@ export function StackDetail({
   const [dismissedFor, setDismissedFor] = useState<number | null>(null)
   const showOutOfOrder = outOfOrder && dismissedFor !== stack.id
 
-  // Scroll the active cue into view when drilling in or when the active cue
-  // changes for this stack.
   const listRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (activeEntryId == null || !listRef.current) return
-    const row = listRef.current.querySelector(`[data-entry-row="${activeEntryId}"]`)
-    if (row instanceof HTMLElement) {
-      row.scrollIntoView({ block: 'nearest' })
-    }
-  }, [stack.id, activeEntryId])
+  const cardOf = useCallback(
+    (entryId: number) => listRef.current?.querySelector(`[data-entry-row="${entryId}"]`) ?? null,
+    [],
+  )
+  const centreCard = useCallback(
+    (entryId: number) => {
+      const list = listRef.current
+      const card = cardOf(entryId)
+      if (list == null || card == null) return
+      const box = card.getBoundingClientRect()
+      list.scrollTop += box.top - list.getBoundingClientRect().top - (list.clientHeight - box.height) / 2
+    },
+    [cardOf],
+  )
+  // The Table and the Timeline follow the show themselves; this is the cards'.
+  useFollowShow({
+    enabled: !awaitingWidth && shownView === 'cards',
+    stackId: stack.id,
+    activeEntryId,
+    standbyEntryId,
+    linkedEntryId: openedEntryId,
+    getScroller: () => listRef.current,
+    getRow: cardOf,
+    scrollTo: centreCard,
+  })
+  // Duplicate's first copy brought into view; the cards have no selection to put it in.
+  const entries = useMemo(() => stack.cues.map((c) => c.entryId), [stack.cues])
+  const onDuplicated = useLandCopies(stack.id, entries, (ids) => centreCard(ids[0]))
 
   // Scroll a card the operator just opened into view. Keyed on the *addressed* cue rather than on
   // every open card: the derived live card opens on its own as the show advances, and scrolling to
@@ -364,10 +385,10 @@ export function StackDetail({
           onShowAll={onShowAllCues}
         />
       ) : (
-      /* Cue list — scrolls within the recessed Row 4 surface set on the root above. */
+      /* Cue list — scrolls within the recessed Row 4 surface set on the root above; `relative` clips the cards' `sr-only` copies. */
       <div
         ref={listRef}
-        className="flex-1 overflow-y-auto py-1"
+        className="relative flex-1 overflow-y-auto overscroll-contain py-1"
         style={{ '--cue-num-chars': cueNumChars } as CSSProperties}
       >
         <DndContext
@@ -409,6 +430,7 @@ export function StackDetail({
                   onSetStandby={onSetStandby ? () => onSetStandby(cue.id, cue.entryId) : undefined}
                   locked={locked}
                   onRequestUnlock={onRequestUnlock}
+                  onDuplicated={onDuplicated}
                 />
               )
             })}
