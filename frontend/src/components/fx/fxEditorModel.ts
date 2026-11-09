@@ -6,7 +6,7 @@ import { fxAttributeFamily } from '@/lib/attributeFamily'
 import { compatibleFxFor } from '@/lib/fxTargetAttributes'
 import { isPaletteSteps } from '@/lib/stepFx'
 import { normalizeFxName } from '../busking/buskingTypes'
-import { CENTRE_BYTE, CENTRE_PARAMS, centreModeOf, hasCentre, defaultParameters, withCentreMode } from './centreMode'
+import { CENTRE_BYTE, CENTRE_PARAMS, centreModeOf, hasCentre, conditionHolds, defaultParameters, isParamShown, withCentreMode } from './centreMode'
 import { STORED_ELEMENT_MODE } from './fxConstants'
 
 export {
@@ -345,6 +345,86 @@ function guessedView(entry: Pick<FxLibraryEntry, 'family' | 'parameters'>, param
 
 export function clampByte(n: number): number {
   return Math.max(0, Math.min(255, Math.round(n)))
+}
+
+/** A number as [param]'s type stores it: a byte clamped, an int whole, a double as it is. */
+export function storedNumber(param: FxParameterDef, v: number): string {
+  const type = param.type.toLowerCase()
+  return type === 'ubyte' ? String(clampByte(v)) : type === 'int' ? String(Math.round(v)) : String(v)
+}
+
+/** A control over several parameters as the editor draws it (venue-rig-fixes plan D20, D21). */
+export interface ControlView {
+  name: string
+  label: string
+  members: { param: FxParameterDef; view: ParamView }[]
+  /** The members' unit where they share one. */
+  unit: FxParamUnit | null
+  /** The members' widest range, and their finest step. */
+  min: number
+  max: number
+  step: number
+}
+
+/**
+ * [entry]'s controls drawn over [parameters]: each whose `shownWhen` holds and whose members are all
+ * shown and not [hidden]. A member of a drawn control folds under *More*.
+ */
+export function controlViews(
+  entry: Pick<FxLibraryEntry, 'family' | 'parameters' | 'controls'>,
+  parameters: Record<string, string>,
+  hidden: (param: FxParameterDef) => boolean = () => false,
+): ControlView[] {
+  const views: ControlView[] = []
+  for (const control of entry.controls ?? []) {
+    if (!conditionHolds(entry, control.shownWhen, parameters)) continue
+    const params = control.scales.map((name) => entry.parameters.find((p) => p.name === name))
+    if (params.some((p) => p == null || hidden(p) || !isParamShown(entry, p, parameters))) continue
+    const members = (params as FxParameterDef[]).map((param) => ({ param, view: paramView(entry, param) }))
+    const units = new Set(members.map((m) => m.view.unit))
+    views.push({
+      name: control.name,
+      label: control.label,
+      members,
+      unit: units.size === 1 ? members[0].view.unit : null,
+      min: Math.min(...members.map((m) => m.view.min)),
+      max: Math.max(...members.map((m) => m.view.max)),
+      step: Math.min(...members.map((m) => m.view.step)),
+    })
+  }
+  return views
+}
+
+/** A double or float on [step]'s grid, at its decimals; a byte or an int is left to [storedNumber]. */
+function snapToStep(param: FxParameterDef, step: number, v: number): number {
+  const type = param.type.toLowerCase()
+  if ((type !== 'double' && type !== 'float') || !(step > 0)) return v
+  const decimals = (String(step).split('.')[1] ?? '').length
+  return Number((Math.round(v / step) * step).toFixed(decimals))
+}
+
+/** What a control reads: the largest of its members (D21). */
+export function controlValue(values: readonly number[]): number {
+  return values.length === 0 ? 0 : Math.max(...values)
+}
+
+/**
+ * A control moved to [v] from [base], its members' values at the gesture's start (D21): each member
+ * at `base × v / largest`, rounded as its type stores it (a double or float to its step) and clamped to its own range, so a drag
+ * through 0 and back keeps the ratio. A base all zero sets every member to [v].
+ */
+export function scaleControl(
+  members: ControlView['members'],
+  base: readonly number[],
+  v: number,
+): Record<string, string> {
+  const largest = controlValue(base)
+  return Object.fromEntries(
+    members.map(({ param, view }, i) => {
+      const raw = largest > 0 ? ((base[i] ?? 0) * v) / largest : v
+      return [param.name, storedNumber(param, Math.max(view.min, Math.min(view.max, snapToStep(param, view.step, raw))))]
+    }),
+  )
 }
 
 // ─── The draft and its write ───────────────────────────────────────────────────────────────────

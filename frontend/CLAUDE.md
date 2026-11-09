@@ -848,7 +848,10 @@ Release folds to its glyph and the scope line drops the fade.
   as one two-thumb range with a field at each end, one whose `shownWhen` is false not at all, and `detail`
   ones folded under **More**, its summary line saying what is in it; `paramRole` and the board's label table guess these
   only for a parameter that declares none (a script FX's), whose curves, switches and ratios beside levels fold under
-  *More* too. The parameters are **the FX's own section**, named for what it holds (`fxSectionName`: *Levels* for a Wave
+  *More* too. A **control** the desk declares over several parameters (venue-rig-fixes plan D20–D21,
+  `controlViews` / `scaleControl`) is one slider before its first member — Path's *Size* over its two
+  sizes on a Circle, Figure 8 or Random — reading the largest and scaling every member from their values
+  at the gesture's start, the members folded under *More*. The parameters are **the FX's own section**, named for what it holds (`fxSectionName`: *Levels* for a Wave
   or a level FX, *Colours*, *Path*, *Steps*, *Flicker* for the Flicker family, *Parameters* for a script FX), its header's
   FX name the **type switcher** (`FxTypeSwap`): the FX this attribute takes, a pick swapping it as the picker does
   (`swappedDraft` — the new type's starting parameters and blend, a blend changed from the old type's start kept, the

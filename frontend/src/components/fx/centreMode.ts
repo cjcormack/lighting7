@@ -42,7 +42,15 @@ export function isParamShown(
   param: FxParameterDef,
   parameters: Record<string, string>,
 ): boolean {
-  const when = param.shownWhen
+  return conditionHolds(entry, param.shownWhen, parameters)
+}
+
+/** Whether a `shownWhen` holds while the FX holds [parameters], against the library's defaults; none always does. */
+export function conditionHolds(
+  entry: Pick<FxLibraryEntry, 'parameters'>,
+  when: FxParameterDef['shownWhen'],
+  parameters: Record<string, string>,
+): boolean {
   if (when == null) return true
   const other = paramNamed(entry, when.param)
   if (other == null) return true

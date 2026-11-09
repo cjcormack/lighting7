@@ -236,6 +236,7 @@ class FxFileLoader(
                     legacy = p.metadata.legacy,
                     ownPace = p.metadata.ownPace,
                     stepsFrom = p.metadata.stepsFrom,
+                    controls = p.metadata.controls,
                     factory = factory,
                 ))
 
@@ -277,6 +278,9 @@ class FxFileLoader(
         /** The keys a `presets:` list item may carry. */
         private val PRESET_KEYS = setOf("name", "attribute", "parameters", "cycle", "direction")
 
+        /** The keys a `controls:` list item may carry. */
+        private val CONTROL_KEYS = setOf("name", "label", "scales", "shownWhen")
+
         /** The keys an `attributeDefaults:` list item may carry. */
         private val ATTRIBUTE_DEFAULT_KEYS = setOf("attribute", "parameters")
 
@@ -284,12 +288,13 @@ class FxFileLoader(
         private val TOP_LEVEL_KEYS = setOf(
             "id", "name", "family", "outputType", "fxMode", "defaultTiming", "defaultDirection", "defaultCycle",
             "timingSource", "compatibleAttributes", "aliases", "parameters", "presets", "attributeDefaults", "legacy", "ownPace",
-            "stepsFrom",
+            "stepsFrom", "controls",
         )
 
-        /** The frontmatter's three lists, each item a map of one of these key sets. */
+        /** The frontmatter's lists, each item a map of one of these key sets. */
         private val LIST_KEYS = mapOf(
             "parameters" to PARAM_KEYS,
+            "controls" to CONTROL_KEYS,
             "presets" to PRESET_KEYS,
             "attributeDefaults" to ATTRIBUTE_DEFAULT_KEYS,
         )
@@ -429,7 +434,7 @@ class FxFileLoader(
                     "ownPace" -> ownPace = value.toBooleanStrictOrNull()
                         ?: throw IllegalArgumentException("ownPace must be true or false, got '$value'")
                     "stepsFrom" -> stepsFrom = value.takeIf { it.isNotEmpty() }
-                    "parameters", "presets", "attributeDefaults" -> {
+                    "parameters", "presets", "attributeDefaults", "controls" -> {
                         // An inline empty array opens no list
                         inList = key.takeUnless { value == "[]" }
                     }
@@ -442,6 +447,9 @@ class FxFileLoader(
 
             val problems = parameterMetadataProblems(parameters.map(FxFileParameter::toParameterInfo))
             require(problems.isEmpty()) { "FX '$id': ${problems.joinToString("; ")}" }
+            val controls = items.getValue("controls").map(::parseControl)
+            val controlProblems = fxControlProblems(parameters.map(FxFileParameter::toParameterInfo), controls)
+            require(controlProblems.isEmpty()) { "FX '$id': ${controlProblems.joinToString("; ")}" }
             val presets = items.getValue("presets").map(::parsePreset)
             val attributeDefaults = items.getValue("attributeDefaults").associate { map ->
                 val attribute = map["attribute"]?.takeIf { it.isNotBlank() }
@@ -480,7 +488,37 @@ class FxFileLoader(
                 legacy = legacy,
                 ownPace = ownPace,
                 stepsFrom = stepsFrom,
+                controls = controls,
             )
+        }
+
+        /**
+         * One `controls:` item (venue-rig-fixes plan D20): a control the editor draws over several
+         * parameters, which is never a parameter itself.
+         *
+         * ```
+         * - name: size
+         *   label: Size
+         *   scales: [panSize, tiltSize]
+         *   shownWhen: shape = [CIRCLE, FIGURE_8]
+         * ```
+         */
+        private fun parseControl(map: Map<String, String>): FxControl {
+            val name = map["name"] ?: ""
+            return FxControl(
+                name = name,
+                label = map["label"] ?: "",
+                scales = parseYamlArray(map["scales"].orEmpty()),
+                shownWhen = map["shownWhen"]?.let { parseCondition("control '$name'", it) },
+            )
+        }
+
+        /** `other = [values]` or `other = value`. */
+        private fun parseCondition(at: String, value: String): ParameterCondition {
+            val (param, values) = value.split("=", limit = 2).takeIf { it.size == 2 }
+                ?: throw IllegalArgumentException("$at: shownWhen is `other = [values]`, got '$value'")
+            val list = values.trim()
+            return ParameterCondition(param.trim(), if (list.startsWith("[")) parseYamlArray(list) else listOf(list))
         }
 
         /**
@@ -577,12 +615,7 @@ class FxFileLoader(
                     }
                 },
                 role = map["role"],
-                shownWhen = map["shownWhen"]?.let { value ->
-                    val (param, values) = value.split("=", limit = 2).takeIf { it.size == 2 }
-                        ?: throw IllegalArgumentException("parameter '$name': shownWhen is `other = [values]`, got '$value'")
-                    val list = values.trim()
-                    ParameterCondition(param.trim(), if (list.startsWith("[")) parseYamlArray(list) else listOf(list))
-                },
+                shownWhen = map["shownWhen"]?.let { parseCondition("parameter '$name'", it) },
                 pair = map["pair"],
             )
         }
@@ -626,6 +659,8 @@ data class FxFileMetadata(
     val ownPace: Boolean = false,
     /** The list parameter whose entries are this FX's steps (fx-settings plan D6): `stepsFrom: colours`. */
     val stepsFrom: String? = null,
+    /** Controls drawn over several parameters (venue-rig-fixes plan D20): `controls:`. */
+    val controls: List<FxControl> = emptyList(),
 )
 
 data class FxFileParameter(

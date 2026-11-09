@@ -99,6 +99,11 @@ parameters:
     label: Curve
     role: detail
     shownWhen: shape = [LINE]
+controls:
+  - name: size
+    label: Size
+    scales: [panSize, tiltSize]
+    shownWhen: shape = [CIRCLE, FIGURE_8, RANDOM]
 presets:
   - name: Sweep
     attribute: position
