@@ -8,6 +8,8 @@ import { makeActiveFx } from '@/test/fixtureFactories'
 import {
   centreFlip,
   centreModeOf,
+  controlValue,
+  controlViews,
   hasCentre,
   isAroundSpelling,
   storedCentreMode,
@@ -26,6 +28,7 @@ import {
   paramView,
   pickerFamilyForSheet,
   pickerFamilyOf,
+  scaleControl,
   startingSpec,
   fxSwapOptions,
   swappedDraft,
@@ -534,5 +537,65 @@ describe('fxSwapOptions', () => {
     const library = [PULSE, entry({ ...CIRCLE, compatibleAttributes: ['position'] }), steps, legacy]
     expect(fxSwapOptions(library, 'dimmer', PULSE).map((e) => e.name)).toEqual(['Pulse'])
     expect(fxSwapOptions(library, 'dimmer', legacy).map((e) => e.name)).toEqual(['Old Pulse', 'Pulse'])
+  })
+})
+
+describe('a control over several parameters (venue-rig-fixes plan D20, D21)', () => {
+  const shape = { ...p('shape', 'choice', 'CIRCLE'), options: [{ value: 'CIRCLE', label: 'Circle' }, { value: 'LINE', label: 'Line' }] }
+  const size = (name: string) => ({ ...p(name, 'ubyte', '64'), min: 0, max: 255, unit: 'dmx' as const, shownWhen: { param: 'shape', values: ['CIRCLE'] } })
+  const path = entry({
+    family: 'position',
+    parameters: [shape, size('panSize'), size('tiltSize')],
+    controls: [{ name: 'size', label: 'Size', scales: ['panSize', 'tiltSize'], shownWhen: { param: 'shape', values: ['CIRCLE'] } }],
+  })
+  const [control] = controlViews(path, { shape: 'CIRCLE' })
+  const scale = (base: number[], v: number) => scaleControl(control.members, base, v)
+
+  it('is drawn while its shownWhen holds, over the members’ range', () => {
+    expect(control).toMatchObject({ label: 'Size', unit: 'dmx', min: 0, max: 255, step: 1 })
+    expect(control.members.map((m) => m.param.name)).toEqual(['panSize', 'tiltSize'])
+    expect(controlViews(path, { shape: 'LINE' })).toEqual([])
+    expect(controlViews(path, { shape: 'CIRCLE' }, (param) => param.name === 'tiltSize')).toEqual([])
+  })
+
+  it('reads the largest member', () => {
+    expect(controlValue([40, 80])).toBe(80)
+    expect(controlValue([0, 0])).toBe(0)
+  })
+
+  it('scales every member keeping their ratio', () => {
+    expect(scale([40, 80], 160)).toEqual({ panSize: '80', tiltSize: '160' })
+    expect(scale([40, 80], 20)).toEqual({ panSize: '10', tiltSize: '20' })
+    expect(scale([30, 90], 100)).toEqual({ panSize: '33', tiltSize: '100' })
+  })
+
+  it('keeps the ratio through a drag to 0 and back, scaling from the gesture’s start', () => {
+    const base = [40, 80]
+    expect(scale(base, 0)).toEqual({ panSize: '0', tiltSize: '0' })
+    expect(scale(base, 80)).toEqual({ panSize: '40', tiltSize: '80' })
+  })
+
+  it('clamps each member to its own range', () => {
+    const narrow = entry({
+      parameters: [{ ...p('a', 'ubyte', '10'), min: 0, max: 100 }, { ...p('b', 'ubyte', '50'), min: 0, max: 255 }],
+      controls: [{ name: 'both', label: 'Both', scales: ['a', 'b'] }],
+    })
+    const [both] = controlViews(narrow, {})
+    expect(both.max).toBe(255)
+    expect(scaleControl(both.members, [50, 100], 255)).toEqual({ a: '100', b: '255' })
+  })
+
+  it('snaps a double member to its step', () => {
+    const ratios = entry({
+      parameters: [{ ...p('a', 'double', '0.3'), min: 0, max: 1, step: 0.05 }, { ...p('b', 'double', '0.9'), min: 0, max: 1, step: 0.05 }],
+      controls: [{ name: 'both', label: 'Both', scales: ['a', 'b'] }],
+    })
+    const [both] = controlViews(ratios, {})
+    expect(scaleControl(both.members, [0.3, 0.9], 0.5)).toEqual({ a: '0.15', b: '0.5' })
+    expect(scaleControl(both.members, [0.3, 0.9], 0.7)).toEqual({ a: '0.25', b: '0.7' })
+  })
+
+  it('sets every member to the value from a base all zero', () => {
+    expect(scale([0, 0], 64)).toEqual({ panSize: '64', tiltSize: '64' })
   })
 })

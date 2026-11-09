@@ -406,8 +406,8 @@ run `./gradlew compileTestKotlin` and the touched packages' tests where they tou
 | 2 | Auto numbers from position | merged | `claude/gallant-meitner-7xk6a8` | [#411](https://github.com/cjcormack/lighting7/pull/411) | `210c26d` |
 | 3 | The Show view follows the show | merged | `claude/zen-dirac-kc1wi2` | [#413](https://github.com/cjcormack/lighting7/pull/413) | `5a7f5cc` |
 | 4 | Include, and Record's cue list and placement | merged | `claude/sharp-lamport-6erbz0` | [#415](https://github.com/cjcormack/lighting7/pull/415) | `0015e0e` |
-| 5 | One colour editor for FX | in review | `claude/venue-rig-fixes-1fe92b` | | |
-| 6 | Path's Size | planned | | | |
+| 5 | One colour editor for FX | in review | `claude/venue-rig-fixes-1fe92b` | [#417](https://github.com/cjcormack/lighting7/pull/417) | `35394c6` |
+| 6 | Path's Size | in review | `claude/lucid-keller-q7h8l3` | | |
 | 7 | Move in dark's instant rows | planned | | | |
 | 8 | A show's name for a venue fixture | planned | | | |
 | 9 | Selecting in the Prompt Book while the show plays | planned | | | |
@@ -653,8 +653,8 @@ D20, D21.
 - `fx/FxFileLoader.kt`: the `controls:` key parsed; `fx/ParameterMetadata.kt`: its checks;
   `fx/FxRegistry.kt`: a `controls` list on `FxRegistration` and on `FxTypeInfo` (declared at `:97`, built at
   `:259` by `getLibrary`, `:255`), which `routes/lightFx.kt:117` serves as the FX library; `Path.fx.kts`
-  declares `size`. (`routes/fxDefinitions.kt` is the CRUD of user FX definitions, which take
-  `controls` only if their source's frontmatter declares one.)
+  declares `size`. (`routes/fxDefinitions.kt` is the CRUD of user FX definitions. Their source
+  is a script body with no frontmatter, so they carry no `controls`; corrected in session 6.)
 - `fxEditorModel.ts` `paramView` and `FxFields.tsx`: the Size slider, scaled from the gesture's
   start, its members under More.
 - Tests: `ParameterMetadataTest` (new: a valid control; refused: one member, mixed types, a member

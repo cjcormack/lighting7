@@ -83,9 +83,9 @@ abstract class FxDefinitionScript(
                 "'${registration.id}': stepsFrom names '$it', but the FX its factory builds counts no steps (Fx.stepCount)"
             }
         }
-        parameterMetadataProblems(registration.parameters).takeIf { it.isNotEmpty() }?.let {
-            throw IllegalArgumentException("'${registration.id}': ${it.joinToString("; ")}")
-        }
+        (parameterMetadataProblems(registration.parameters) + fxControlProblems(registration.parameters, registration.controls))
+            .takeIf { it.isNotEmpty() }
+            ?.let { throw IllegalArgumentException("'${registration.id}': ${it.joinToString("; ")}") }
         val scriptReg = registration.copy(source = FxSource.USER, sourceDefinitionId = scriptId)
         show.fxRegistry.register(scriptReg)
         registeredFxIds.add(scriptReg.id)

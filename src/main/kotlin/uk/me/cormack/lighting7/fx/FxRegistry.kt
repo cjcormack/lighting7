@@ -86,6 +86,11 @@ data class FxRegistration(
      * `colours` — or null: only an FX that names one takes a [SpreadUnit.STEP] spread.
      */
     val stepsFrom: String? = null,
+    /**
+     * Controls the editor draws over several parameters (venue-rig-fixes plan D20) — Path's Size over
+     * its two sizes. Never parameters: nothing stores one. [fxControlProblems] is what they must pass.
+     */
+    val controls: List<FxControl> = emptyList(),
     /** Factory to create an Effect instance from string parameters */
     val factory: FxFactory,
 )
@@ -117,6 +122,21 @@ data class FxTypeInfo(
     val ownPace: Boolean = false,
     /** [FxRegistration.stepsFrom]; absent for an FX with no steps. */
     val stepsFrom: String? = null,
+    /** [FxRegistration.controls]; empty for an FX with none. */
+    val controls: List<FxControl> = emptyList(),
+)
+
+/**
+ * One control the editor draws over [scales], two or more parameters of one numeric type
+ * (venue-rig-fixes plan D20): a slider that reads the largest and scales them all together, keeping
+ * their ratio. Drawn only while [shownWhen] holds, as a parameter's.
+ */
+@Serializable
+data class FxControl(
+    val name: String,
+    val label: String,
+    val scales: List<String>,
+    val shownWhen: ParameterCondition? = null,
 )
 
 /**
@@ -274,6 +294,7 @@ class FxRegistry {
                     legacy = reg.legacy,
                     ownPace = reg.ownPace,
                     stepsFrom = reg.stepsFrom,
+                    controls = reg.controls,
                 )
             }
     }

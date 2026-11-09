@@ -187,6 +187,19 @@ export interface FxLibraryEntry {
    * `colours` — absent for an FX with none: only one that names it takes a `STEP` spread.
    */
   stepsFrom?: string
+  /**
+   * Controls drawn over several parameters (venue-rig-fixes plan D20) — Path's Size over its two
+   * sizes. Never stored: a control writes its members. Absent from an older desk.
+   */
+  controls?: FxControlDef[]
+}
+
+/** A slider over [scales], two or more numbers of one type, drawn while [shownWhen] holds. */
+export interface FxControlDef {
+  name: string
+  label: string
+  scales: string[]
+  shownWhen?: { param: string; values: string[] } | null
 }
 
 /**

@@ -720,6 +720,124 @@ describe('FxFields', () => {
     expect(set).toHaveBeenLastCalledWith({ parameters: { fewest: '5', most: '8' } }, true)
   })
 
+  const PATH: FxLibraryEntry = {
+    ...PULSE,
+    name: 'Path',
+    family: 'position',
+    compatibleAttributes: ['position'],
+    parameters: [
+      {
+        name: 'shape',
+        type: 'choice',
+        defaultValue: 'CIRCLE',
+        description: '',
+        label: 'Shape',
+        options: [
+          { value: 'CIRCLE', label: 'Circle' },
+          { value: 'LINE', label: 'Line' },
+        ],
+      },
+      ...['panSize', 'tiltSize'].map((name) => ({
+        name,
+        type: 'ubyte',
+        defaultValue: '64',
+        description: '',
+        label: name === 'panSize' ? 'Pan size' : 'Tilt size',
+        min: 0,
+        max: 255,
+        step: 1,
+        unit: 'dmx' as const,
+        shownWhen: { param: 'shape', values: ['CIRCLE'] },
+      })),
+      { name: 'startPan', type: 'ubyte', defaultValue: '64', description: '', label: 'Start pan', min: 0, max: 255, unit: 'position', shownWhen: { param: 'shape', values: ['LINE'] } },
+    ],
+    controls: [{ name: 'size', label: 'Size', scales: ['panSize', 'tiltSize'], shownWhen: { param: 'shape', values: ['CIRCLE'] } }],
+  }
+
+  it('draws Size for a Circle, its sizes under More, and not for a Line (venue-rig-fixes plan D21)', () => {
+    fields(PATH, waveDraft({ shape: 'CIRCLE', panSize: '40', tiltSize: '80' }))
+    expect(screen.getByRole('slider', { name: 'Size' }).getAttribute('value')).toBe('80')
+    expect(screen.queryByRole('slider', { name: 'Pan size' })).toBeNull()
+    const more = screen.getByRole('button', { name: /^More/ })
+    expect(more.textContent).toContain('pan size 40')
+    fireEvent.click(more)
+    expect(screen.getByRole('slider', { name: 'Pan size' })).toBeTruthy()
+    cleanup()
+    fields(PATH, waveDraft({ shape: 'LINE' }))
+    expect(screen.queryByRole('slider', { name: 'Size' })).toBeNull()
+    expect(screen.getByRole('slider', { name: 'Start pan' })).toBeTruthy()
+  })
+
+  it('scales both sizes from the drag’s start, so a drag through 0 and back keeps their ratio', () => {
+    const set = vi.fn()
+    function Host() {
+      const [d, setD] = useState(waveDraft({ shape: 'CIRCLE', panSize: '40', tiltSize: '80' }))
+      return (
+        <FxFields
+          entry={PATH}
+          timingSource={PATH.timingSource}
+          draft={d}
+          scope={SCOPE}
+          extendedChannels={undefined}
+          settingAttribute={undefined}
+          readOnly={false}
+          set={(patch, release) => {
+            set(patch, release)
+            setD((was) => ({ ...was, ...patch }))
+          }}
+          setParam={() => {}}
+        />
+      )
+    }
+    render(<Host />)
+    const slider = screen.getByRole('slider', { name: 'Size' })
+    fireEvent.change(slider, { target: { value: '0' } })
+    expect(set).toHaveBeenLastCalledWith({ parameters: expect.objectContaining({ panSize: '0', tiltSize: '0' }) }, false)
+    fireEvent.change(slider, { target: { value: '160' } })
+    expect(set).toHaveBeenLastCalledWith({ parameters: expect.objectContaining({ panSize: '80', tiltSize: '160' }) }, false)
+    fireEvent.pointerUp(slider)
+    expect(set).toHaveBeenLastCalledWith({ parameters: expect.objectContaining({ panSize: '80', tiltSize: '160' }) }, true)
+    const field = screen.getByRole('spinbutton', { name: 'Size' })
+    fireEvent.change(field, { target: { value: '40' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(set).toHaveBeenLastCalledWith({ parameters: expect.objectContaining({ panSize: '20', tiltSize: '40' }) }, true)
+  })
+
+  it('scales from the members’ values at each gesture’s start, though a drag back to its start never committed', () => {
+    const set = vi.fn()
+    function Host() {
+      const [d, setD] = useState(waveDraft({ shape: 'CIRCLE', panSize: '40', tiltSize: '80' }))
+      return (
+        <FxFields
+          entry={PATH}
+          timingSource={PATH.timingSource}
+          draft={d}
+          scope={SCOPE}
+          extendedChannels={undefined}
+          settingAttribute={undefined}
+          readOnly={false}
+          set={(patch, release) => {
+            set(patch, release)
+            setD((was) => ({ ...was, ...patch }))
+          }}
+          setParam={(name, value) => setD((was) => ({ ...was, parameters: { ...was.parameters, [name]: value } }))}
+        />
+      )
+    }
+    render(<Host />)
+    const size = screen.getByRole('slider', { name: 'Size' })
+    fireEvent.pointerDown(size)
+    fireEvent.change(size, { target: { value: '0' } })
+    fireEvent.change(size, { target: { value: '80' } })
+    fireEvent.click(screen.getByRole('button', { name: /^More/ }))
+    const pan = screen.getByRole('slider', { name: 'Pan size' })
+    fireEvent.change(pan, { target: { value: '20' } })
+    fireEvent.pointerUp(pan)
+    fireEvent.pointerDown(size)
+    fireEvent.change(size, { target: { value: '160' } })
+    expect(set).toHaveBeenLastCalledWith({ parameters: expect.objectContaining({ panSize: '40', tiltSize: '160' }) }, false)
+  })
+
   it('hides a parameter whose shownWhen is false, and folds a detail one under More', () => {
     fields(WAVE, waveDraft({ shape: 'SINE' }))
     expect(screen.queryByRole('button', { name: /^More/ })).toBeNull()

@@ -436,6 +436,12 @@ still the pinned 128, else the blend and centres it held, so an *Absolute* circl
 comes back Absolute); a pad face never reads a Line as *around* (`isAroundSpelling`); the desk's stacking
 start does the same through `shownParameters` (`routes/programmerFx.kt`).
 
+**Size** (venue-rig-fixes plan D20–D21) is Path's one control, `controls:` in its frontmatter
+(§"Controls"): a slider over `panSize` and `tiltSize` on Circle, Figure 8 and Random, the two sizes
+folded under *More*. It reads the larger, and a gesture scales both from their values at its start, so
+the ratio between them survives a drag through 0 and back. Nothing stores it: the FX still holds the
+two sizes, and every door that reads Path reads them.
+
 **Colour Cycle** gains `between`, a `choice` of `CUT`, `FADE` and `SMOOTH`, and `fade`, the share of
 each colour's step a Fade crosses over — the old `fadeRatio`, computed exactly as it was, so even a
 ratio outside 0–1 runs as it ran. Smooth eases from each colour to the next on a cosine across the
@@ -902,6 +908,35 @@ list them. `describe_rig`'s FX library lines carry the metadata in brackets
 The keys are additive in canonical JSON, so a user FX definition carrying them syncs without a
 `formatVersion` change: an older reader imports the definition without them, and its next push drops
 them (`docs/sync-engineering.md` §"Format versioning" says why that is no degraded record).
+
+### Controls
+
+A **control** (venue-rig-fixes plan D20) is a slider the editor draws over two or more parameters
+of one numeric type — Path's Size over its two sizes. It is declared beside `parameters:` and is
+never a parameter: nothing stores one, so the FX routes, MCP, scripts and stored FX see the same
+parameters as before, and a control rides beside them as `FxRegistration.controls` and the library's
+`controls` (`FxControl`: `name`, `label`, `scales`, an optional `shownWhen`).
+
+```
+controls:
+  - name: size
+    label: Size
+    scales: [panSize, tiltSize]
+    shownWhen: shape = [CIRCLE, FIGURE_8, RANDOM]
+```
+
+`fxControlProblems` (`fx/ParameterMetadata.kt`) is what one must pass: a name and a label, the name
+no parameter's, two or more members, every member a known parameter of one numeric type, none in a
+`pair` or in two controls, every member shown exactly when the control is (the same `shownWhen`, or
+none on both), and a `shownWhen` checked as a parameter's that names none of its members. A built-in that breaks one fails
+to load and a script's `registerFx` throws. A user FX definition has no frontmatter, so carries none.
+
+The editor (`controlViews` and `scaleControl` in `fxEditorModel.ts`) draws a control before its first
+member, over the members' widest range, while its `shownWhen` holds and every member is shown; its
+members then fold under *More*. It reads the largest member, and a gesture — a drag, a key, a typed
+value — takes the members' values at its start as its base and sets each to `base × v / largest`,
+rounded as its type stores it (a double or float snapped to its step) and clamped to its own range;
+from a base all zero, each to `v`.
 
 ### Three Script Base Classes
 
