@@ -10,7 +10,6 @@ import { Label } from '@/components/ui/label'
 import { formatError } from '@/lib/formatError'
 import { useAuthStatusQuery } from '@/store/auth'
 import {
-  useLazyOscAddressesQuery,
   useOscSettingsQuery,
   useOscState,
   useSaveOscSettingsMutation,
@@ -18,16 +17,17 @@ import {
   type OscSettingsRequest,
 } from '@/store/osc'
 import type { OscAddressWarning, OscLogRow, OscOutcome, OscState } from '@/api/oscWsApi'
-import { useCurrentProjectQuery } from '@/store/projects'
 import { describeAddressChange } from '@/lib/oscAddresses'
-import { openCheatSheetWindow, printOscCheatSheet } from '@/lib/oscCheatSheet'
+import { senderRangeLabel } from '@/lib/oscSenderRange'
+import { OscAddressList } from './OscAddressList'
 
 /**
  * The OSC tab (lighting7 OSC plan §4, `docs/osc-engineering.md`): whether the desk is listening for
  * QLab and other show-control senders, and the log of what each message did. Every window on the
  * desk's own listener sees the status and the log, from `osc.state` alone, so the operator at the
  * desk can see that a QLab cue did nothing (D12); an admin also sees the settings and the senders,
- * from `GET /install/osc`, and may allow a refused sender in one step.
+ * from `GET /install/osc`, and may allow a refused sender in one step. Under them, every address the
+ * current show answers to.
  */
 export function OscPanel() {
   const { data: authStatus } = useAuthStatusQuery()
@@ -50,7 +50,7 @@ export function OscPanel() {
       {state != null && state.refusedSenders.length > 0 && (
         <RefusedCard state={state} isAdmin={isAdmin} onAllow={setAllowing} />
       )}
-      <CheatSheetCard />
+      <OscAddressList state={state} />
       {(state?.warnings?.length ?? 0) > 0 && <WarningsCard warnings={state!.warnings!} />}
       <LogCard rows={state?.recent ?? []} />
     </div>
@@ -211,6 +211,10 @@ function SettingsCard({
         {senders.length === 0 && (
           <p className="text-xs text-muted-foreground">No senders yet: every packet is refused.</p>
         )}
+        <p className="text-xs text-muted-foreground">
+          A sender is one address or a range, such as <code>192.168.1.0/24</code>; a range is saved as its
+          network, so <code>192.168.1.7/24</code> saves as <code>192.168.1.0/24</code>.
+        </p>
         {senders.length > 0 && (
           <p className="text-xs text-muted-foreground">
             A sender with <em>Replies</em> is answered with <code>/lighting7/reply</code>: the address, its
@@ -227,10 +231,11 @@ function SettingsCard({
             />
             <Input
               aria-label="Sender address"
-              placeholder="192.168.1.20"
+              placeholder="192.168.1.20 or 192.168.1.0/24"
               value={sender.address}
               onChange={(e) => setSenders(senders.map((s, j) => (j === i ? { ...s, address: e.target.value } : s)))}
             />
+            <RangeChip address={sender.address} />
             <label
               className="flex shrink-0 items-center gap-1.5 text-xs"
               title="Answer each message with /lighting7/reply, saying what it did"
@@ -268,6 +273,16 @@ function SettingsCard({
         </Button>
       </div>
     </Card>
+  )
+}
+
+function RangeChip({ address }: { address: string }) {
+  const label = senderRangeLabel(address)
+  if (label == null) return null
+  return (
+    <Badge variant="outline" className="shrink-0 whitespace-nowrap">
+      {label}
+    </Badge>
   )
 }
 
@@ -317,42 +332,6 @@ function OutcomeChip({ outcome }: { outcome: OscOutcome }) {
   return <Badge variant={variant}>{OUTCOME_WORDS[outcome]}</Badge>
 }
 
-/** The addresses the current show answers to, as a printable page for the sound department. */
-function CheatSheetCard() {
-  const { data: project } = useCurrentProjectQuery()
-  const [read, { isFetching }] = useLazyOscAddressesQuery()
-  const open = async () => {
-    if (project == null) return
-    const win = openCheatSheetWindow()
-    if (win == null) {
-      toast.error('The browser blocked the cheat sheet’s window')
-      return
-    }
-    try {
-      printOscCheatSheet(win, await read(project.id).unwrap(), project.name)
-    } catch (err) {
-      win.close()
-      toast.error(`Couldn’t read the addresses: ${formatError(err)}`)
-    }
-  }
-  return (
-    <Card className="p-4 space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm font-medium">Addresses</div>
-        <Button variant="outline" size="sm" disabled={project == null || isFetching} onClick={() => void open()}>
-          {isFetching && <Loader2 className="size-3.5 animate-spin" />}
-          Print cheat sheet
-        </Button>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Every address {project != null ? <em>{project.name}</em> : 'this show'} answers to, for the sound
-        department. A stack&rsquo;s, a cue&rsquo;s, a Look&rsquo;s and a busk pad&rsquo;s menu each have{' '}
-        <em>Copy OSC address</em>.
-      </p>
-    </Card>
-  )
-}
-
 /** Addresses a sender has used that a change since moved: newest first, as the desk keeps them. */
 function WarningsCard({ warnings }: { warnings: OscAddressWarning[] }) {
   return (
@@ -393,7 +372,10 @@ function LogCard({ rows }: { rows: OscLogRow[] }) {
                   {row.address}
                   {row.args.length > 0 && ` ${row.args.join(' ')}`}
                 </span>
-                <span className="text-xs text-muted-foreground">{row.sender}</span>
+                <span className="text-xs text-muted-foreground">
+                  {row.sender}
+                  <span className="font-mono"> · {row.source}</span>
+                </span>
               </span>
               <span />
               <span className="text-xs text-muted-foreground">{row.detail}</span>

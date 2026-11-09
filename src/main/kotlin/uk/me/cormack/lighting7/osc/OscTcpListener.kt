@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger
 internal class OscTcpListener(
     val bindAddress: InetAddress?,
     val port: Int,
-    private val senders: () -> Map<String, OscSender>,
+    private val senders: () -> OscSenderMatcher,
     private val deliver: (OscInbound) -> Unit,
     private val onRefused: (address: String) -> Unit,
 ) : AutoCloseable {
@@ -65,7 +65,7 @@ internal class OscTcpListener(
                 continue
             }
             val source = canonicalIp(socket.inetAddress)
-            if (senders()[source] == null) {
+            if (senders().match(socket.inetAddress) == null) {
                 runCatching { socket.close() }
                 onRefused(source)
                 continue
@@ -93,7 +93,7 @@ internal class OscTcpListener(
     /** Close every connection whose sender is no longer on the allowlist. */
     fun closeUnlisted() {
         val allowed = senders()
-        for (connection in connections) if (allowed[connection.source] == null) connection.close()
+        for (connection in connections) if (allowed.match(connection.address) == null) connection.close()
     }
 
     override fun close() {
@@ -103,6 +103,8 @@ internal class OscTcpListener(
     }
 
     private inner class Connection(private val socket: Socket, val source: String, number: Int) {
+        val address: InetAddress = socket.inetAddress
+
         /** When this connection last read anything, in nanos. */
         @Volatile
         var lastActive: Long = System.nanoTime()
@@ -147,7 +149,7 @@ internal class OscTcpListener(
          * what it sent to be written; one the collector has not reached by then is not.
          */
         private fun lingerForReplies() {
-            if (senders()[source]?.replies != true) return
+            if (senders().match(address)?.replies != true) return
             try {
                 Thread.sleep(REPLY_LINGER_MS)
             } catch (_: InterruptedException) {
@@ -157,7 +159,7 @@ internal class OscTcpListener(
 
         /** One frame, or null for one longer than [MAX_FRAME]. */
         private fun frame(bytes: ByteArray?) {
-            val sender = senders()[source]
+            val sender = senders().match(address)
             if (sender == null) {
                 close()
                 return
@@ -165,7 +167,7 @@ internal class OscTcpListener(
             val at = Instant.now()
             val reply = if (sender.replies) replyTo else null
             val items = if (bytes == null) listOf(OscPacket.Item.Bad(null, "frame longer than $MAX_FRAME bytes")) else OscPacket.parse(bytes)
-            for (item in items) deliver(OscInbound(at, sender, item, reply))
+            for (item in items) deliver(OscInbound(at, sender, item, reply, source))
         }
 
         fun close() {

@@ -187,6 +187,54 @@ class OscServiceTest {
     }
 
     @Test
+    fun `a range is saved as its network, an address and its 32 are one entry, and a spelling twice is refused`() {
+        val stored = service.update(
+            OscSettingsRequest(
+                enabled = false, port = 8415,
+                senders = listOf(
+                    OscSenderRequest(name = "Booth", address = "192.168.0.77/24"),
+                    OscSenderRequest(name = "QLab", address = "192.168.1.20/32"),
+                ),
+            ),
+        )
+        assertEquals(listOf("192.168.0.0/24", "192.168.1.20"), stored.senders.map { it.address })
+
+        val twice = service.problems(
+            OscSettingsRequest(
+                enabled = true, port = 8415,
+                senders = listOf(
+                    OscSenderRequest(name = "A", address = "10.0.0.1/8"),
+                    OscSenderRequest(name = "B", address = "10.9.9.9/8"),
+                    OscSenderRequest(name = "C", address = "192.168.1.20"),
+                    OscSenderRequest(name = "D", address = "192.168.1.20/32"),
+                    OscSenderRequest(name = "E", address = "10.1.0.0/16"),
+                ),
+            ),
+        )
+        assertEquals(listOf("`10.9.9.9/8` is listed twice", "`192.168.1.20/32` is listed twice"), twice)
+        assertEquals(
+            listOf("Sender 1's address `10.0.0.0/33` is not an IP address or a range"),
+            service.problems(OscSettingsRequest(enabled = true, port = 8415, senders = listOf(OscSenderRequest(name = "A", address = "10.0.0.0/33")))),
+        )
+    }
+
+    @Test
+    fun `a range that admits a refused address clears its row`() {
+        val port = enable(listOf(OscSenderRequest(name = "Sound desk", address = "10.9.9.9")))
+        await("listening") { it.listening }
+        send(port, OscPacket.encode("/lighting7/stack/act-1/go"))
+        assertEquals(listOf("127.0.0.1"), await("the refusal") { it.refused == 1L }.refusedSenders.map { it.address })
+
+        enable(listOf(OscSenderRequest(name = "Sound desk", address = "10.9.9.9"), OscSenderRequest(name = "Loopback", address = "127.0.0.0/8")), port)
+        await("the row cleared") { it.refusedSenders.isEmpty() }
+        send(port, OscPacket.encode("/lighting7/stack/act-1/go"))
+        val row = await("the row") { it.recent.size == 1 }.recent.single()
+        assertEquals("Loopback", row.sender)
+        assertEquals("127.0.0.1", row.source)
+        assertEquals(OscOutcome.DONE, row.outcome)
+    }
+
+    @Test
     fun `a port already in use is an error in the state, never a failed start`() {
         DatagramSocket(InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0)).use { taken ->
             enable(emptyList(), port = taken.localPort)

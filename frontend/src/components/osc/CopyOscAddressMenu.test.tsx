@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   refetch: [] as unknown[],
   success: vi.fn(),
   error: vi.fn(),
+  message: vi.fn(),
 }))
 
 vi.mock('@/store/osc', () => ({
@@ -16,7 +17,7 @@ vi.mock('@/store/osc', () => ({
     return { data: mocks.list, isLoading: false, isError: false }
   },
 }))
-vi.mock('sonner', () => ({ toast: { success: mocks.success, error: mocks.error } }))
+vi.mock('sonner', () => ({ toast: { success: mocks.success, error: mocks.error, message: mocks.message } }))
 
 const { CopyOscAddressButton } = await import('./CopyOscAddressMenu')
 const { setRemoteLinkForTests } = await import('@/lib/remoteMode')
@@ -58,6 +59,60 @@ describe('Copy OSC address', () => {
     fireEvent.click(items[1])
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('/lighting7/look/haze-fill/off'))
     await waitFor(() => expect(mocks.success).toHaveBeenCalledWith('Copied /lighting7/look/haze-fill/off'))
+  })
+
+  it('falls back to the browser’s own copy where the clipboard is refused, putting the address on the copy event', async () => {
+    mocks.list = list
+    const writeText = vi.fn(() => Promise.reject(new Error('denied')))
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const setData = vi.fn()
+    let copyEvent: Event | null = null
+    const execCommand = vi.fn(() => {
+      // What a browser does: a copy event at the focused element, which a focus trap may have moved.
+      const event = new Event('copy', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', { value: { setData } })
+      copyEvent = event
+      document.body.dispatchEvent(event)
+      return true
+    })
+    Object.defineProperty(document, 'execCommand', { value: execCommand, configurable: true })
+    try {
+      render(<CopyOscAddressButton projectId={7} records={[{ kind: 'LOOK', id: 3 }]} />)
+      openMenu()
+      fireEvent.click(screen.getAllByRole('menuitem')[0])
+      await waitFor(() => expect(mocks.success).toHaveBeenCalledWith('Copied /lighting7/look/haze-fill/on'))
+      expect(execCommand).toHaveBeenCalledWith('copy')
+      expect(setData).toHaveBeenCalledWith('text/plain', '/lighting7/look/haze-fill/on')
+      expect(copyEvent!.defaultPrevented).toBe(true)
+      expect(document.querySelector('textarea')).toBeNull()
+    } finally {
+      Object.defineProperty(document, 'execCommand', { value: undefined, configurable: true })
+    }
+  })
+
+  it('does not say Copied when the browser’s copy reports success but fires no copy event', async () => {
+    mocks.list = list
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    const execCommand = vi.fn(() => true)
+    Object.defineProperty(document, 'execCommand', { value: execCommand, configurable: true })
+    try {
+      render(<CopyOscAddressButton projectId={7} records={[{ kind: 'LOOK', id: 3 }]} />)
+      openMenu()
+      fireEvent.click(screen.getAllByRole('menuitem')[0])
+      await waitFor(() => expect(mocks.error).toHaveBeenCalledWith('Couldn’t copy /lighting7/look/haze-fill/on'))
+      expect(mocks.success).not.toHaveBeenCalled()
+    } finally {
+      Object.defineProperty(document, 'execCommand', { value: undefined, configurable: true })
+    }
+  })
+
+  it('says it could not copy from a menu when neither copy works', async () => {
+    mocks.list = list
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    render(<CopyOscAddressButton projectId={7} records={[{ kind: 'LOOK', id: 3 }]} />)
+    openMenu()
+    fireEvent.click(screen.getAllByRole('menuitem')[0])
+    await waitFor(() => expect(mocks.error).toHaveBeenCalledWith('Couldn’t copy /lighting7/look/haze-fill/on'))
   })
 
   it('says why a record has no address, in the desk’s words', () => {

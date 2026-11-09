@@ -132,7 +132,7 @@ object OscPacket {
         return bytes
     }
 
-    // ─── Encoding (tests and the cheat sheet) ──────────────────────────────────────────────────
+    // ─── Encoding (replies and tests) ──────────────────────────────────────────────────────────
 
     /** One message as its packet. */
     fun encode(message: OscMessage): ByteArray {

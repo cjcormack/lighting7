@@ -12,9 +12,6 @@ const mocks = vi.hoisted(() => ({
   state: null as unknown,
   role: 'ADMIN' as string,
   skip: [] as boolean[],
-  readAddresses: vi.fn((projectId: number) => ({ unwrap: () => Promise.resolve({ projectId }) })),
-  openWindow: vi.fn(() => ({ close: vi.fn() }) as unknown as Window),
-  printSheet: vi.fn((_win: unknown, _list: unknown, _name: string) => {}),
 }))
 
 vi.mock('@/store/osc', () => ({
@@ -24,16 +21,10 @@ vi.mock('@/store/osc', () => ({
   },
   useSaveOscSettingsMutation: () => [mocks.save, { isLoading: false }],
   useOscState: () => mocks.state,
-  useLazyOscAddressesQuery: () => [mocks.readAddresses, { isFetching: false }],
 }))
 
-vi.mock('@/store/projects', () => ({
-  useCurrentProjectQuery: () => ({ data: { id: 7, name: 'Tempest' } }),
-}))
-
-vi.mock('@/lib/oscCheatSheet', () => ({
-  openCheatSheetWindow: () => mocks.openWindow(),
-  printOscCheatSheet: (win: unknown, list: unknown, name: string) => mocks.printSheet(win, list, name),
+vi.mock('./OscAddressList', () => ({
+  OscAddressList: ({ state }: { state: OscState | null }) => <div data-testid="address-list">port {state?.port}</div>,
 }))
 
 vi.mock('@/store/auth', () => ({
@@ -58,6 +49,7 @@ function state(over: Partial<OscState> = {}): OscState {
       {
         at: '2026-11-07 20:01:00.000Z',
         sender: 'QLab',
+        source: '192.168.1.20',
         address: '/lighting7/stack/act-1/cue/5/go',
         args: [],
         outcome: 'DONE',
@@ -66,6 +58,7 @@ function state(over: Partial<OscState> = {}): OscState {
       {
         at: '2026-11-07 20:00:58.000Z',
         sender: 'QLab',
+        source: '192.168.1.20',
         address: '/lighting7/stack/act-3/go',
         args: [],
         outcome: 'NOT_FOUND',
@@ -249,16 +242,50 @@ describe('OscPanel', () => {
     expect((screen.getByLabelText('Replies to QLab') as HTMLInputElement).checked).toBe(true)
   })
 
-  it('prints the current show’s cheat sheet from the listing, for either role', async () => {
+  it('shows the address list under the settings, for either role, on the listener’s port', () => {
     mocks.role = 'OPERATOR'
     render(<OscPanel />)
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Print cheat sheet' }))
+    expect(screen.getByTestId('address-list').textContent).toBe('port 8415')
+    expect(screen.queryByRole('button', { name: 'Print cheat sheet' })).toBeNull()
+  })
+
+  it('marks a range sender with how many addresses it admits, and a single address with nothing', () => {
+    mocks.settings = settings({
+      senders: [
+        { id: 1, name: 'QLab', address: '192.168.1.20' },
+        { id: 2, name: 'Booth', address: '192.168.1.0/24' },
+      ],
     })
-    // The window opens in the click, before the listing's round trip, which a browser would block.
-    expect(mocks.openWindow.mock.invocationCallOrder[0]).toBeLessThan(mocks.readAddresses.mock.invocationCallOrder[0])
-    expect(mocks.readAddresses).toHaveBeenCalledWith(7)
-    expect(mocks.printSheet).toHaveBeenCalledWith(expect.anything(), { projectId: 7 }, 'Tempest')
+    render(<OscPanel />)
+    expect(screen.getAllByText(/^range · /).map((el) => el.textContent)).toEqual(['range · 256 addresses'])
+    expect((screen.getAllByLabelText('Sender address')[0] as HTMLInputElement).placeholder).toBe('192.168.1.20 or 192.168.1.0/24')
+  })
+
+  it('marks a range as it is typed', () => {
+    render(<OscPanel />)
+    fireEvent.change(screen.getByLabelText('Sender address'), { target: { value: '10.0.0.0/16' } })
+    expect(screen.getByText('range · 65,536 addresses')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Sender address'), { target: { value: '10.0.0.1/32' } })
+    expect(screen.queryByText(/^range · /)).toBeNull()
+  })
+
+  it('says which machine sent a logged message', () => {
+    mocks.role = 'OPERATOR'
+    mocks.state = state({
+      recent: [
+        {
+          at: '2026-11-07 20:01:00.000Z',
+          sender: 'Booth',
+          source: '192.168.1.44',
+          address: '/lighting7/stack/act-1/go',
+          args: [],
+          outcome: 'DONE',
+          detail: 'GO Act 1',
+        },
+      ],
+    })
+    render(<OscPanel />)
+    expect(screen.getByText('· 192.168.1.44')).toBeTruthy()
   })
 
   it('lists the addresses a change moved, newest first, in words', () => {

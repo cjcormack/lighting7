@@ -173,6 +173,24 @@ class OscTransportTest {
     }
 
     @Test
+    fun `a sender a range admits is heard over UDP and TCP, its row naming the machine`() {
+        val port = enable(replies = true, address = "127.0.0.0/8")
+        udpClient().use { client ->
+            client.sendTo(port, OscPacket.encode("/lighting7/stack/act-1/go"))
+            assertEquals(reply("/lighting7/stack/act-1/go", "done", "GO Act 1"), client.receiveMessage().first)
+        }
+        Socket(loopback, port).use { socket ->
+            socket.soTimeout = 3_000
+            socket.getOutputStream().apply { write(OscSlip.encode(OscPacket.encode("/lighting7/stack/act-1/go"))); flush() }
+            val replies = readFrames(socket, 1).map { (OscPacket.parse(it).single() as OscPacket.Item.Message).message }
+            assertEquals(reply("/lighting7/stack/act-1/go", "done", "GO Act 1"), replies.single())
+        }
+        val rows = await("two rows") { it.recent.size == 2 }.recent
+        assertEquals(listOf("QLab" to "127.0.0.1", "QLab" to "127.0.0.1"), rows.map { it.sender to it.source })
+        assertEquals(0, service.state.value.refused)
+    }
+
+    @Test
     fun `a TCP frame longer than a datagram is a bad message, and the connection reads on`() {
         val port = enable(replies = false)
         Socket(loopback, port).use { socket ->

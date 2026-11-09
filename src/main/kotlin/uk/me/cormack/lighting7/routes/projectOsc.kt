@@ -14,7 +14,7 @@ import uk.me.cormack.lighting7.state.State
 /**
  * `GET /projects/{id}/osc/addresses` (OSC plan session 2): every OSC address the project answers to,
  * made from the address table and answered by its resolver (P2), so the listing says exactly what a
- * message would do. Any project, both roles: it is what *Copy OSC address* and the cheat sheet read.
+ * message would do. Any project, both roles: it is what *Copy OSC address* and the address list read.
  * Never on the public listener (D5): OSC is the show network's, and 403 `OSC_LOCAL_ONLY` there.
  */
 internal fun Route.routeApiRestProjectOsc(state: State) {
