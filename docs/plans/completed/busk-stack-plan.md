@@ -1,6 +1,7 @@
 # Stack pads: a busk stack run from a pad, over the show or in place of it
 
-> **Document status: READY — written 2026-11-07 from the page Chris and Claude agreed that day.**
+> **Document status: DONE — sessions 1–4 merged (2026-11-08).** Written 2026-11-07 from the page
+> Chris and Claude agreed that day.
 > Four sessions, each one PR, each stacked on the one before while that one is unmerged, each run
 > by `/next-session` (§5). Sessions 3 and 4 need the OSC plan's session 1 merged first, and in their base. The page
 > and the record are in [`busk-stack-design/INDEX.md`](busk-stack-design/INDEX.md).
@@ -394,7 +395,7 @@ written, and its row marked *in review* with its branch. A session's PR is title
 | 1 | Busk stacks and the running order | merged | `claude/blissful-pasteur-r0ys12` | [#392](https://github.com/cjcormack/lighting7/pull/392) | `d1a99f6` |
 | 2 | Over the show | merged | `claude/busk-stack-s8cddn` | [#395](https://github.com/cjcormack/lighting7/pull/395) | `e1c4094` |
 | 3 | Stack pads | merged | `claude/busk-stack-t9q7si` | [#398](https://github.com/cjcormack/lighting7/pull/398) | `ed8b961` |
-| 4 | Surfaces | in review | `claude/adoring-davinci-y7dtej` | | |
+| 4 | Surfaces | merged | `claude/adoring-davinci-y7dtej` | [#400](https://github.com/cjcormack/lighting7/pull/400) | `7612925` |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -648,18 +649,20 @@ that branch with a merge commit, never a rebase (root `CLAUDE.md` §"Git workflo
 
 ## 6. Operator checks
 
-One row in `manual-validation.md` per merged session, on the rig:
+One row in [`manual-validation.md`](../manual-validation.md) per merged session, on the rig:
 
-- `FU-MANUAL-BUSK-STACK-S1`: a song stack out of the running order; Act 1's last GO goes to Act 2,
-  not the song; the song's own GO and a follow off its last cue release it over its release time;
-  the Show view's stop fades.
-- `FU-MANUAL-BUSK-STACK-S2`: Carabossy on Replaces takes the front wash from 80 % to 0, holds the
-  movers' chase back, and fades the kitchen back on release with the chase growing back in phase; a
-  song on Adds lifts heads over the base and never darkens them; a GO on Act 1 during Carabossy
-  lands under her.
-- `FU-MANUAL-BUSK-STACK-S3`: a stack pad steps a song by taps, solo releases a sibling song, and
-  moving the stack back into the running order asks first.
-- `FU-MANUAL-BUSK-STACK-S4`: a bound `PressPad` lights with its stack; `CueStackStop` fades.
+- Session 1, [`FU-MANUAL-BUSK-STACK-S1`](../manual-validation.md#fu-manual-busk-stack-s1): a song
+  stack out of the running order; Act 1's last GO goes to Act 2, not the song; the song's own GO and
+  a follow off its last cue release it over its release time; the Show view's stop fades.
+- Session 2, [`FU-MANUAL-BUSK-STACK-S2`](../manual-validation.md#fu-manual-busk-stack-s2): Carabossy
+  on Replaces takes the front wash from 80 % to 0, holds the movers' chase back, and fades the
+  kitchen back on release with the chase growing back in phase; a song on Adds lifts heads over the
+  base and never darkens them; a GO on Act 1 during Carabossy lands under her.
+- Session 3, [`FU-MANUAL-BUSK-STACK-S3`](../manual-validation.md#fu-manual-busk-stack-s3): a stack
+  pad steps a song by taps, solo releases a sibling song, and moving the stack back into the running
+  order asks first.
+- Session 4, [`FU-MANUAL-BUSK-STACK-S4`](../manual-validation.md#fu-manual-busk-stack-s4): a bound
+  `PressPad` lights with its stack; `CueStackStop` fades.
 
 ## 7. Explicitly out of scope
 

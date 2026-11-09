@@ -276,7 +276,7 @@ whole too (session 5: a transmitting collider is never a landing plane, `isLandi
 the region, wall and floor cookie instances are gone. The haze governor gives up march steps before frame rate.
 
 **The View button opens a 320 px popover with two tabs** (stage-view menu plan D1–D5, D10, D11;
-`stage3d/StageViewMenu.tsx`, the boards in `../docs/plans/stage-view-menu-design/`). **View** is
+`stage3d/StageViewMenu.tsx`, the boards in `../docs/plans/completed/stage-view-menu-design/`). **View** is
 this window's: Source, Show, Haze, Labels, Work lights, Bodies, Moves in dark. **Performance** is what it costs: a live block (fps and ms
 a frame, the lights packed of lit, the haze tier), then the machine's light budget, *Gobos on
 surfaces* and *Box shadows* (their `localStorage` keys unchanged), then Test recovery. Every group
@@ -3965,7 +3965,7 @@ not have the header row and the gutter. `/settings/patches` redirects there, `?a
 
 **The five libraries — Scripts, FX Library, Looks, Palettes, Speed Masters — are sheets on the
 sheet kit, each on the route it always had** (`../docs/plans/completed/library-sheets-plan.md`;
-the boards are `../docs/plans/library-sheets-design/`, where the plan won on behaviour and the
+the boards are `../docs/plans/completed/library-sheets-design/`, where the plan won on behaviour and the
 boards on layout and copy). Four sessions built it: the kit's library half with **Speed Masters** on
 it (1), **Looks and Palettes** (2), a generic value palette's **Value** edited in the cell (3), and
 **Scripts and the FX Library** (4). The rules, which every one of the five keeps (the Cues table,
@@ -4301,7 +4301,7 @@ deleted, and with them `scriptUtils`' usage-glyph helpers, which only ever read 
 ### The editor kit
 
 **Every value editor is built from the same five pieces, exported once from `components/editor/`**
-(editor-kit plan D8, D9; the design record is `../docs/plans/editor-kit-design/`, whose
+(editor-kit plan D8, D9; the design record is `../docs/plans/completed/editor-kit-design/`, whose
 `Editors.dc.html` draws the anatomy and each editor on it). They were the busk sheet's anatomy —
 9px uppercase labels, 28px fields with the unit inside, a read-out line, a static footer with the
 save first — and the programmer's four cell editors and the kit's four each answered the count
@@ -5443,7 +5443,7 @@ table has to be mounted for).
 ### The programmer's tables
 
 **The programmer is the table** (tables-colours plan D1, session 1; the design record is
-`../docs/plans/tables-colours-design/`, whose `Programmer.dc.html` strips A–D are this session's
+`../docs/plans/completed/tables-colours-design/`, whose `Programmer.dc.html` strips A–D are this session's
 layout). Row B starts with a tab segment, **Values · Stack · FX · Scenery**
 (`programmer/ProgrammerTableTabs.tsx`), Stack, FX and Scenery each with its live count — layers,
 running FX, held scenery. The tables were the applied tables (venue-visit plan S14) at
@@ -5884,7 +5884,7 @@ when it mounts again (`AppliedTableShell`'s `initialSelection`).
 ### Fixture colours
 
 **A fixture or group carries one of ten named colours, as identity only** (tables-colours plan
-D7–D11; the design record is `../docs/plans/tables-colours-design/`, `Colours.dc.html` §B and §C;
+D7–D11; the design record is `../docs/plans/completed/tables-colours-design/`, `Colours.dc.html` §B and §C;
 the desk's contract is lighting7 `docs/fixtures-engineering.md` §"Fixture colours"). The keys,
 labels, the reserved hues and the digit keymap are `lib/fixtureColours.ts`, pinned against the
 desk's `models/fixtureColours.kt` by `fixtureColours.test.ts`, which reads the Kotlin source; each key

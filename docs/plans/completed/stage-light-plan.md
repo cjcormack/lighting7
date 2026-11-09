@@ -5,8 +5,8 @@
 > ([PR #65](https://github.com/cjcormack/lighting7/pull/65)) and was built in §5's order; its
 > approval was never written into this header. The survey behind it (how each
 > characteristic should behave, what the Stage view does instead, the options and the numbers) is
-> in [`stage-light-design/INDEX.md`](../stage-light-design/INDEX.md). The same survey for human
-> readers is [`stage-light-design/stage-light.html`](../stage-light-design/stage-light.html), with a
+> in [`stage-light-design/INDEX.md`](stage-light-design/INDEX.md). The same survey for human
+> readers is [`stage-light-design/stage-light.html`](stage-light-design/stage-light.html), with a
 > live copy at <https://claude.ai/artifact/X2ZDbbo6d39wwvUgXJAege> (the checked-in file is the
 > authority).
 >

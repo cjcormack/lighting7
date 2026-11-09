@@ -3,8 +3,8 @@
 > **Document status: DONE — sessions 0–8 shipped 2026-10-02 to 2026-10-05, the last as `ec58d85`
 > ([PR #55](https://github.com/cjcormack/lighting7/pull/55)).** Approved by Chris, 2026-10-02. The survey behind it
 > (what the manual says, what each fixture type declares, what the Stage view reads, with the numbers)
-> is in [`fixture-optics-design/INDEX.md`](../fixture-optics-design/INDEX.md). The same plan for human
-> readers is [`fixture-optics-design/fixture-optics.html`](../fixture-optics-design/fixture-optics.html), with a live
+> is in [`fixture-optics-design/INDEX.md`](fixture-optics-design/INDEX.md). The same plan for human
+> readers is [`fixture-optics-design/fixture-optics.html`](fixture-optics-design/fixture-optics.html), with a live
 > copy at <https://claude.ai/artifact/3iPfQt9esafgbnonifFGxk> (the checked-in file is the authority).
 >
 > This document is the engineering half. Where it and the record disagree, this plan wins.

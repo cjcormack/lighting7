@@ -12,7 +12,7 @@ import { BODIES_FLUSH_PRIORITY } from './bodies/StageBodies'
 import { BODY_LENS_COLOR, lensColour } from './bodies/palette'
 
 /**
- * The prototype's look (`docs/plans/stage-view-design/prototype.html`): no post-processing, every
+ * The prototype's look (`docs/plans/completed/stage-view-design/prototype.html`): no post-processing, every
  * fragment encoded for the canvas so beams and pools add as the eye sees them, a beam that thins
  * along its throw, and a pool that falls off from the lens.
  */

@@ -1,6 +1,7 @@
 # Snapshot restore: go back to an earlier cloud-sync snapshot
 
-> **Document status: READY — written 2026-11-07 from the page Chris and Claude agreed that day.**
+> **Document status: DONE — sessions 1–3 merged (2026-11-08).** Written 2026-11-07 from the page
+> Chris and Claude agreed that day.
 > Three sessions, each one PR, each stacked on the one before while that one is unmerged, each run
 > by `/next-session` (§5). The page and the record are in
 > [`sync-restore-design/INDEX.md`](sync-restore-design/INDEX.md).
@@ -323,7 +324,7 @@ written, and its row marked *in review* with its branch. A session's PR is title
 |---|---|---|---|---|---|
 | 1 | Review and restore on the desk | merged | `claude/relaxed-planck-rbdr44` | [#393](https://github.com/cjcormack/lighting7/pull/393) | `7ac6eaa` |
 | 2 | The History panel and the review | merged | `claude/sync-restore-fy9kx9` | [#396](https://github.com/cjcormack/lighting7/pull/396) | `60c7a18` |
-| 3 | Bring back selected records | in review | `claude/dazzling-brown-snoxsv` | | |
+| 3 | Bring back selected records | merged | `claude/dazzling-brown-snoxsv` | [#399](https://github.com/cjcormack/lighting7/pull/399) | `7f42714` |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -474,13 +475,17 @@ the next; whoever merges the last fills its own.
 
 ## 6. Operator checks
 
-One row in `manual-validation.md` per merged session, on a show synced between two desks:
+One row in [`manual-validation.md`](../manual-validation.md) per merged session, on a show synced
+between two desks:
 
-- `FU-MANUAL-RESTORE-S1`: restore an older snapshot through the API while the show runs; the rig
-  crossfades and never dips; the other desk takes it on *Sync now*; restoring `before` puts it back.
-- `FU-MANUAL-RESTORE-S2`: the same from the History panel; the review's counts match what changed; the
-  toast's *Undo* works; a restore with the network off goes out on the next sync.
-- `FU-MANUAL-RESTORE-S3`: bring back a cue deleted last week, with its Look; ⌘Z takes it back.
+- Session 1, [`FU-MANUAL-RESTORE-S1`](../manual-validation.md#fu-manual-restore-s1): restore an
+  older snapshot through the API while the show runs; the rig crossfades and never dips; the other
+  desk takes it on *Sync now*; restoring `before` puts it back.
+- Session 2, [`FU-MANUAL-RESTORE-S2`](../manual-validation.md#fu-manual-restore-s2): the same from
+  the History panel; the review's counts match what changed; the toast's *Undo* works; a restore
+  with the network off goes out on the next sync.
+- Session 3, [`FU-MANUAL-RESTORE-S3`](../manual-validation.md#fu-manual-restore-s3): bring back a
+  cue deleted last week, with its Look; ⌘Z takes it back.
 
 ## 7. Explicitly out of scope
 

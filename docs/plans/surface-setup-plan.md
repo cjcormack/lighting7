@@ -291,7 +291,7 @@ the next; whoever merges the last fills its own.
 
 ### Session 1 — The binding and its migration
 
-**Needs:** cjcormack/lighting7 docs/plans/busk-stack-plan.md session 4 merged
+**Needs:** cjcormack/lighting7 docs/plans/completed/busk-stack-plan.md session 4 merged
 
 That session changed `SurfaceFeedbackPublisher`'s pad LEDs and `CueStackStop`, both of which this one
 rewrites; it merged as [#400](https://github.com/cjcormack/lighting7/pull/400) before this plan was written. Session 1's base is always `main` (P1), so `/next-session` §1.5's check on `main` is the

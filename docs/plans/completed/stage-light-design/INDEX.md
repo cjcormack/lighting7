@@ -9,7 +9,7 @@ the Stage view:
 2. How surfaces reflect light does not look natural, the black backcloth at pan 40 especially.
 3. How focus looks is weird.
 
-This record holds the diagnosis. The plan is [`../completed/stage-light-plan.md`](../completed/stage-light-plan.md); the
+This record holds the diagnosis. The plan is [`../completed/stage-light-plan.md`](../stage-light-plan.md); the
 HTML version for human readers is [`stage-light.html`](stage-light.html).
 
 **Status: done — all four sessions shipped 2026-10-05 to 2026-10-06 (`4eea82ed`, `263bee57`,

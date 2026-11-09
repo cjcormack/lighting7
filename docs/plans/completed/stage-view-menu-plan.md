@@ -5,7 +5,7 @@
 > the boards and answered §10's questions the same day: work lights are announced, `render_view`
 > draws them off unless asked, level *a*, and the group is called *Work lights* (§10). The boards,
 > the measurements and the record are in
-> [`stage-view-menu-design/INDEX.md`](../stage-view-menu-design/INDEX.md).
+> [`stage-view-menu-design/INDEX.md`](stage-view-menu-design/INDEX.md).
 >
 > This document is the engineering half. Where it and the record disagree, this plan wins on
 > behaviour and the boards on layout and copy.

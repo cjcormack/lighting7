@@ -13,7 +13,7 @@ plus other ideas. The outcome asked for was these boards; the plan document foll
 are agreed.
 
 **Status: approved 2026-09-22 (Chris: "the designs look good"); sessions 1–3 shipped 2026-09-22 (lighting-react `b12887ab`, `a976489e`, `679bd1ae`; lighting7 `8fc8fcb`); session 4 shipped 2026-09-23 (lighting-react `53b0c57b`), calls 8–12 as drawn — plan complete.** The
-implementation plan is [`../completed/editor-kit-plan.md`](../completed/editor-kit-plan.md); the seven calls on
+implementation plan is [`../completed/editor-kit-plan.md`](../editor-kit-plan.md); the seven calls on
 `Model.dc.html` stand as drawn and are recorded in its §11, the rail tabs' five with them. The live copy of these boards is at
 <https://claude.ai/artifact/UECPcKmhVPZ2FFhvxtTHMd> — private to Chris, a convenience; the files here are
 the authority.

@@ -5,7 +5,7 @@ holds, how it is adopted and unadopted, the control channel it keeps open while 
 session through it is authorised, and the rules that keep the cloud off the show's path. The wire
 contract is [cloud-protocol.md](cloud-protocol.md); the plans are
 [`plans/completed/cloud-p0-plan.md`](plans/completed/cloud-p0-plan.md), whose decisions (D1, D2, …)
-this doc cites bare, and [`plans/cloud-p1-plan.md`](plans/cloud-p1-plan.md), cited as P1's D-items. The code is `src/main/kotlin/uk/me/cormack/lighting7/cloud/`,
+this doc cites bare, and [`plans/completed/cloud-p1-plan.md`](plans/completed/cloud-p1-plan.md), cited as P1's D-items. The code is `src/main/kotlin/uk/me/cormack/lighting7/cloud/`,
 `…/link/` for the desk's end of the sidecar, and `link/` (Go) for the sidecar itself.
 
 The desk works with no cloud, no account and through any outage. Nothing here is needed to run a
