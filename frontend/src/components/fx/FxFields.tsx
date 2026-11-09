@@ -56,7 +56,7 @@ import { FX_SHAPES, matchesShape, shapeOf, spreadFieldsOf, type FxShape } from '
 import { useFingerSized } from '../fixtureSheet/sheetContext'
 import { useFxGraphLink, type GraphMark, type MatchSource } from './fxGraphLink'
 import type { AttributeFamily } from '@/lib/attributeFamily'
-import type { detectExtendedChannels } from './colourUtils'
+import type { ExtendedChannelFlags } from './colourUtils'
 import {
   ORDER_OPTIONS,
   isMirroredOrder,
@@ -212,7 +212,7 @@ export function FxFields({
   timingSource: string | null | undefined
   draft: FxDraft
   scope: FxScope
-  extendedChannels: ReturnType<typeof detectExtendedChannels>
+  extendedChannels: ExtendedChannelFlags | undefined
   /** The setting the effect drives, where it drives one — a setting effect's `level`, Slot Steps' slots. */
   settingAttribute: SettingAttributeDescriptor | undefined
   /** The property the effect drives, where it has one — Palette Steps offers palettes naming it. */
@@ -1876,7 +1876,7 @@ function ParamControl({
   param: FxParameterDef
   view: ParamView
   value: string
-  extendedChannels: ReturnType<typeof detectExtendedChannels>
+  extendedChannels: ExtendedChannelFlags | undefined
   settingAttribute: SettingAttributeDescriptor | undefined
   /** The setting a slot list names options of, where the effect drives one. */
   slotSetting?: SettingAttributeDescriptor

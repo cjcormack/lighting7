@@ -121,7 +121,7 @@ export default [
       "src/components/busking/SideSheetFold.tsx",
       "src/components/busking/useBuskingSelection.ts",
       "src/components/cues/CueValueGrid.tsx",
-      "src/components/editor/ColourEditor.tsx",
+      "src/components/editor/ColourEditorCore.tsx",
       "src/components/fixtureSheet/HeadStrip.tsx",
       "src/components/fixtures-list/useClearCellFx.ts",
       "src/components/fixtures-list/useListSelectionWrites.ts",

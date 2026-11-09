@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useMemo, useState } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { FxLibraryEntry } from '@/store/fixtureFx'
-import { chan, makeActiveFx, makeFixture, sliderProp } from '@/test/fixtureFactories'
+import { chan, colourProp, makeActiveFx, makeFixture, sliderProp } from '@/test/fixtureFactories'
 
 /**
  * Radix's slider computes a value from the pointer against its track's box, which jsdom lays out at
@@ -125,12 +125,8 @@ vi.mock('./FxColourPalettes', () => ({
   useColourPalettes: () => colourPalettes,
   FxColourPaletteRow: () => null,
 }))
-/** react-colorful reads the pointer against a box jsdom lays out at zero: `change` is a move. */
-vi.mock('react-colorful', () => ({
-  HexColorPicker: ({ color, onChange }: { color: string; onChange: (hex: string) => void }) => (
-    <input aria-label="Colour picker" value={color} onChange={(e) => onChange(e.target.value)} />
-  ),
-}))
+/** react-colorful reads the pointer against a box jsdom lays out at zero: `change` is a move, in hex. */
+vi.mock('react-colorful', async () => (await import('@/test/colourPickerMock')).colourPickerMock())
 
 import { FxEditor } from './FxEditor'
 import { FxGraphLinkContext, createHoveredRowStore, type FxGraphLink, type LinkedEditor } from './fxGraphLink'
@@ -938,6 +934,26 @@ describe('FxEditor’s colour pickers (programmer-fixes plan D23)', () => {
       vi.advanceTimersByTime(200)
     })
     expect(updateFx).toHaveBeenCalledTimes(sentDuringDrag + 1)
+  })
+
+  // A Shehds 24-channel keeps its colour and white on its zones (venue-rig-fixes plan D19).
+  it('offers a Colour Cycle on a Shehds 24-channel its zones’ white', () => {
+    colourPickers.real = true
+    library.entries = [COLOUR_CYCLE]
+    lookup.fixtures = [
+      makeFixture('shehds-1', [sliderProp('dimmer', 'dimmer', chan(7))], {
+        elements: [1, 2, 3].map((n) => ({
+          index: n - 1,
+          key: `shehds-1.zone-${n}`,
+          displayName: `Zone ${n}`,
+          attributes: [colourProp('rgbColour', chan(5 + 4 * n), chan(6 + 4 * n), chan(7 + 4 * n), { whiteChannel: chan(8 + 4 * n) })],
+        })),
+      }),
+    ]
+    const effect = makeActiveFx({ id: 33, fxType: 'ColourCycle', targetKey: 'shehds-1', attribute: 'rgbColour', parameters: { colours: '#ff0000,#00ff00' } })
+    render(<FxEditor effect={effect} onDone={() => {}} onStop={() => {}} />)
+    fireEvent.click(screen.getByTitle('#ff0000'))
+    expect(within(screen.getByRole('dialog')).getByRole('spinbutton', { name: 'W value' })).toBeInTheDocument()
   })
 
   it('lands one colour’s drag on its release, not on the floor’s timer', () => {

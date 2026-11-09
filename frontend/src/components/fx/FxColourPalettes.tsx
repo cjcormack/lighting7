@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from 'react'
-import { useParams } from 'react-router'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { formatError } from '@/lib/formatError'
+import { cn } from '@/lib/utils'
 import { DEFERRED_TARGET_TYPE, type PaletteSummary } from '@/api/palettesApi'
 import { useCreatePaletteMutation, usePaletteListQuery } from '@/store/palettes'
 import {
@@ -15,6 +15,7 @@ import {
   EMITTER_ATTRIBUTES,
 } from '@/lib/paletteIntent'
 import { parsePaletteRefUuid, serializePaletteRef } from './colourUtils'
+import { useRouteProjectId } from './useRouteProjectId'
 
 /**
  * The colour templates an FX colour parameter may reference, and the row of chips that offers them.
@@ -102,11 +103,10 @@ export interface ColourPalettes {
  * literals, so the form degrades rather than breaking.
  */
 export function useColourPalettes(): ColourPalettes {
-  const { projectId } = useParams<{ projectId: string }>()
-  const projectIdNum = projectId ? Number(projectId) : NaN
+  const projectId = useRouteProjectId()
   const { data, isLoading } = usePaletteListQuery(
-    { projectId: projectIdNum, family: 'COLOUR' },
-    { skip: !Number.isFinite(projectIdNum) },
+    { projectId: projectId ?? 0, family: 'COLOUR' },
+    { skip: projectId == null },
   )
 
   const templates = useMemo(() => (data ?? []).filter(isOfferable), [data])
@@ -169,28 +169,30 @@ export function FxColourPaletteRow({
   onPick,
   /** Highlighted chip, when the parameter already references a template. */
   selectedUuid,
+  /** The row's frame; absent, a rule above it. */
+  className = 'pt-2 border-t border-border',
 }: {
   palettes: PaletteSummary[]
   currentHex: string
   currentEmitters?: Partial<Record<string, number>>
   onPick: (value: string) => void
   selectedUuid?: string | null
+  className?: string
 }) {
-  const { projectId } = useParams<{ projectId: string }>()
-  const projectIdNum = projectId ? Number(projectId) : NaN
+  const projectId = useRouteProjectId()
   const [createPalette, { isLoading: isCreating }] = useCreatePaletteMutation()
   const [naming, setNaming] = useState(false)
   const [name, setName] = useState('')
 
-  const canCreate = Number.isFinite(projectIdNum)
+  const canCreate = projectId != null
 
   const handleCreate = useCallback(async () => {
     const trimmed = name.trim()
-    if (!trimmed) return
+    if (!trimmed || projectId == null) return
     try {
       const emitters = EMITTER_ATTRIBUTES.filter((name) => (currentEmitters?.[name] ?? 0) > 0)
       const created = await createPalette({
-        projectId: projectIdNum,
+        projectId,
         name: trimmed,
         rows: [
           {
@@ -220,12 +222,12 @@ export function FxColourPaletteRow({
     } catch (err) {
       toast.error(formatError(err))
     }
-  }, [createPalette, currentEmitters, currentHex, name, onPick, projectIdNum])
+  }, [createPalette, currentEmitters, currentHex, name, onPick, projectId])
 
   if (!canCreate && templates.length === 0) return null
 
   return (
-    <div className="space-y-1.5 pt-2 border-t border-border">
+    <div data-colour-references className={cn('space-y-1.5', className)}>
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Palettes</p>
       {templates.length > 0 && (
         <div className="flex gap-1 flex-wrap">

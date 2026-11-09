@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FxLibraryEntry } from '@/store/fixtureFx'
 import type { PaletteInput, PaletteSummary } from '@/api/palettesApi'
+import { chan, colourProp } from '@/test/fixtureFactories'
 
 /**
  * The editor's two identity choices and the write boundary's first rule.
@@ -141,6 +142,7 @@ vi.mock('@/store/palettes', () => ({
     { isLoading: false },
   ],
   usePaletteListQuery: () => ({ data: wire.templates, isLoading: false }),
+  useCreatePaletteMutation: () => [vi.fn(), { isLoading: false }],
 }))
 vi.mock('react-router', () => ({ useParams: () => ({ projectId: '1' }) }))
 // The footer's *Add to busk page* control subscribes to the page document. This suite is about the
@@ -383,6 +385,29 @@ describe('the effect branch', () => {
     expect(screen.getByRole('option', { name: 'Colour Pulse' })).toBeTruthy()
     expect(screen.getByRole('option', { name: 'Rainbow Cycle' })).toBeTruthy()
     expect(screen.queryByRole('option', { name: 'Sine Dim' })).toBeNull()
+  })
+
+  // A palette has no head, so its colour FX offers the emitters any patched head has — a
+  // Shehds 24-channel's white on its zones included (venue-rig-fixes plan D19).
+  it('offers a colour FX the white a patched head’s zones have, and none the rig lacks', () => {
+    const zone = (n: number) => ({
+      index: n,
+      key: `shehds-1.zone-${n}`,
+      displayName: `Zone ${n}`,
+      attributes: [colourProp('rgbColour', chan(8 + 4 * n), chan(9 + 4 * n), chan(10 + 4 * n), { whiteChannel: chan(11 + 4 * n) })],
+    })
+    for (const [fixtures, offered] of [
+      [[{ key: 'shehds-1', name: 'Shehds 1', typeKey: 'shehds-led19-rgbw-24ch', attributes: [], elements: [1, 2, 3].map(zone) }], true],
+      [[{ key: 'par-1', name: 'Par 1', typeKey: 'par', attributes: [colourProp('rgbColour', chan(1), chan(2), chan(3))] }], false],
+    ] as const) {
+      wire.fixtures = [...fixtures]
+      renderEditor()
+      fireEvent.click(screen.getByRole('button', { name: 'FX' }))
+      chooseFx('Colour Pulse')
+      fireEvent.click(screen.getByRole('button', { name: /#ff9d4a/i }))
+      expect(screen.queryByRole('spinbutton', { name: 'W value' }) != null).toBe(offered)
+      cleanup()
+    }
   })
 
   it('hides Fade, which an effect has no arrival to time', () => {
