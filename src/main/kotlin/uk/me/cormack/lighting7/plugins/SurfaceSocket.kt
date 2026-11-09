@@ -22,6 +22,8 @@ import uk.me.cormack.lighting7.midi.SoftTakeoverStateMachine
 import uk.me.cormack.lighting7.midi.SurfaceIdentify
 import uk.me.cormack.lighting7.midi.SurfaceMapFrame
 import uk.me.cormack.lighting7.midi.SurfaceJobView
+import uk.me.cormack.lighting7.midi.SurfaceUse
+import uk.me.cormack.lighting7.midi.SurfaceUsesFrame
 
 // ─── Inbound ────────────────────────────────────────────────────────────
 
@@ -117,6 +119,20 @@ data class SurfaceMapStateOutMessage(
     val jobs: List<SurfaceJobView> = emptyList(),
 ) : SurfaceOutMessage() {
     constructor(frame: SurfaceMapFrame) : this(frame.projectId, frame.deviceTypeKey, frame.layers, frame.jobs)
+}
+
+/**
+ * What each group, fixture and record is bound to (D15): the map's reverse index, keyed
+ * `group:<key>`, `fixture:<key>` or `record:<KIND>:<uuid>`. `StateFlow`-backed beside the map, so the
+ * subscription is the snapshot; sent again only when it changed.
+ */
+@Serializable
+@SerialName("surfaceUses.state")
+data class SurfaceUsesStateOutMessage(
+    val projectId: Int,
+    val uses: Map<String, List<SurfaceUse>>,
+) : SurfaceOutMessage() {
+    constructor(frame: SurfaceUsesFrame) : this(frame.projectId, frame.uses)
 }
 
 @Serializable
@@ -314,11 +330,16 @@ fun setupSurfaceSubscriptions(scope: SocketScope) {
     // The map is a StateFlow, so the first emission is the connect snapshot; after it only a frame
     // that changed is sent, since one change moves one device type's map at most.
     val sentMaps = HashMap<String, SurfaceMapFrame>()
+    var sentUses: SurfaceUsesFrame? = null
     scope.subscribe(state.surfaceMapService.maps.filterNotNull()) { maps ->
         for ((typeKey, frame) in maps.frames) {
             if (sentMaps[typeKey] == frame) continue
             sentMaps[typeKey] = frame
             scope.send(SurfaceMapStateOutMessage(frame))
+        }
+        if (maps.uses != sentUses) {
+            sentUses = maps.uses
+            scope.send(SurfaceUsesStateOutMessage(maps.uses))
         }
     }
 

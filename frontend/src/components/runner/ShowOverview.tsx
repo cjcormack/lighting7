@@ -54,6 +54,8 @@ import { InlineEditField } from '@/components/InlineEditField'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
 import { isCueRow, type CueStack, type CueStackInput } from '@/api/cueStacksApi'
 import { CopyOscAddressMenu } from '@/components/osc/CopyOscAddressMenu'
+import { AssignToSurfaceMenuItem, type AssignTarget } from '@/components/surfaces/AssignToSurface'
+import { BoundOnChip } from '@/components/surfaces/BoundOnChip'
 
 /** An empty set, stable, so the form's set editor does not re-seed on every render. */
 const NO_SCENERY: SceneryChange[] = []
@@ -99,6 +101,8 @@ function SortableStackEntry({
   }
 
   const cueCount = stack.cues.filter((c) => c.cueType === 'STANDARD').length
+  const surfaceTarget: AssignTarget | null =
+    stack.uuid == null ? null : { name: stack.name, subjects: [{ type: 'record', kind: 'STACK', uuid: stack.uuid }], projectId }
 
   return (
     <div
@@ -158,6 +162,13 @@ function SortableStackEntry({
         {cueCount} cues &middot; {stack.loop ? 'Loop' : 'Sequential'}
       </span>
       <StackMovingChip stackId={stack.id} className="hidden @[480px]:inline-flex" />
+      {surfaceTarget != null && (
+        <BoundOnChip
+          subjects={surfaceTarget.subjects}
+          projectId={projectId}
+          className="hidden @[640px]:inline-flex shrink-0"
+        />
+      )}
       <StackFxAmountControl
         stackId={stack.id}
         stackName={stack.name}
@@ -190,6 +201,7 @@ function SortableStackEntry({
             <ArrowDownAZ className="size-3.5 mr-2" /> Sort by cue number
           </DropdownMenuItem>
           <CopyOscAddressMenu projectId={projectId} records={[{ kind: 'STACK', id: stack.id }]} menu="dropdown" />
+          {surfaceTarget != null && <AssignToSurfaceMenuItem target={surfaceTarget} menu="dropdown" />}
           <DropdownMenuItem
             className="text-destructive focus:text-destructive"
             onClick={() => onRemove(stack)}

@@ -1,36 +1,18 @@
 import { Radio } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  ContextMenuItem,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-} from '@/components/ui/context-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { MENU_PARTS as MENUS, type MenuKind } from '@/components/menus/menuAdapter'
 import { useOscAddressesQuery } from '@/store/osc'
 import { noOscAddressReason, oscAddressesFor, oscAddressVerb, type OscRecordKey } from '@/lib/oscAddresses'
 import { isRemoteMode } from '@/lib/remoteMode'
-
-const MENUS = {
-  dropdown: { Sub: DropdownMenuSub, Trigger: DropdownMenuSubTrigger, Content: DropdownMenuSubContent, Item: DropdownMenuItem },
-  context: { Sub: ContextMenuSub, Trigger: ContextMenuSubTrigger, Content: ContextMenuSubContent, Item: ContextMenuItem },
-} as const
 
 interface CopyOscAddressMenuProps {
   projectId: number
   /** The records whose addresses it lists, in this order — an entry's GO TO before its cue's loose hold. */
   records: readonly OscRecordKey[]
   /** Which menu it sits in. */
-  menu: keyof typeof MENUS
+  menu: MenuKind
 }
 
 /**

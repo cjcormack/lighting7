@@ -414,6 +414,24 @@ class SocketMessageWireFormatTest {
     }
 
     @Test
+    fun `surface domain — surfaceUses state carries each subject's parts`() {
+        val use = uk.me.cormack.lighting7.midi.SurfaceUse(
+            deviceTypeKey = "x-touch-compact-standard",
+            deviceLabel = "X-Touch Compact",
+            controlId = "btn-3",
+            part = uk.me.cormack.lighting7.midi.ControlPart.MAIN,
+            layer = "layer-a",
+            label = "Button 3 · A",
+            does = "GO · Act 1",
+        )
+        val out = SurfaceUsesStateOutMessage(7, mapOf("record:STACK:11111111-1111-4111-8111-111111111111" to listOf(use)))
+        val encoded = json.encodeToString<OutMessage>(out)
+        assertTrue(encoded.contains(""""type":"surfaceUses.state""""), encoded)
+        assertTrue(encoded.contains(""""label":"Button 3 · A""""), encoded)
+        assertEquals(out, assertIs<SurfaceUsesStateOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+    }
+
+    @Test
     fun `surface domain — SurfacePickupChangedOutMessage round-trips with discriminator`() {
         val out = SurfacePickupChangedOutMessage(
             displayKey = "akai:0",

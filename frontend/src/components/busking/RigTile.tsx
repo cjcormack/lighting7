@@ -28,6 +28,7 @@ import { RIG_DROP_DEPTH, type RigDropData, type RigTileDragData } from './buskDn
 import { NameField } from './NameField'
 import { useRigEdit } from './RigEditProvider'
 import { sheetTargetOfTile, useOpenBuskFixtureSheet } from './BuskFixtureSheet'
+import { AssignToSurfaceMenuItem } from '@/components/surfaces/AssignToSurface'
 
 /**
  * One rig tile: a group, a fixture, one cell, or a run of cells.
@@ -348,6 +349,9 @@ export function RigTile({
           <PanelRight className="mr-2 size-4" />
           {sheetLabel}
         </ContextMenuItem>
+        {tile.kind !== 'run' && (
+          <AssignToSurfaceMenuItem target={{ name: tile.name, subjects: [{ type: tile.target.type, key: tile.target.key }] }} menu="context" />
+        )}
       </ContextMenuContent>
     </ContextMenu>
   )

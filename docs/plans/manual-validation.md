@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-SURFACE-SETUP-S6`](#fu-manual-surface-setup-s6) | *Assign to surface…* from a stack card by touching a button, which does not fire; *Bound on* on the card; a palette pressed from an encoder's push; the picture's click in remote mode | Surface setup session 6, 2026-11-09 |
 | [`FU-MANUAL-SURFACE-SETUP-S5`](#fu-manual-surface-setup-s5) | an upgraded show's strips are a groups job; the heads job follows the selection with the faders still; the busk-page row follows a page button; a control made its own beats its job; the Jobs panel's up and down | Surface setup session 5, 2026-11-09 |
 | [`FU-MANUAL-SURFACE-SETUP-S4`](#fu-manual-surface-setup-s4) | Record from a button makes a cue at the end of its stack; Update writes back into it; Blind while held; Release on a group; Locate, a fan and FX speed bound on a group; an encoder following the encoder page | Surface setup session 4, 2026-11-09 |
 | [`FU-MANUAL-SURFACE-SETUP-S1`](#fu-manual-surface-setup-s1) | an upgraded show's bindings all still work; a pan encoder beats a running Circle; a strip encoder's push does nothing; a flash on a capped head lands at its percentage; the blinder takes a colour move; QLab's OSC cues unchanged; a layer B binding fires | Surface setup session 1, 2026-11-09 |
@@ -248,6 +249,31 @@ allowlist:
    each does what it did.
 7. **Layer B.** Switch the device to Layer B with its own button and press a button bound on layer B
    only: it fires. The profile maps Layer A's MIDI only, so if it does not, note what the device sends.
+
+---
+
+## `FU-MANUAL-SURFACE-SETUP-S6`
+
+**What it proves**: *Assign to surface…* (surface-setup plan session 6) — a record's own door onto a
+control of the X-Touch, and the *Bound on* chip that names it.
+
+**Why it is here**: the tests drive identify mode with a stubbed socket; only the X-Touch shows that a
+touch while the sheet waits is captured and not fired, and that the chip follows a binding made
+elsewhere.
+
+**Test**, on the dev desk with the X-Touch Compact attached:
+
+1. **Touch.** In the Show view, a stack row's ⋯ › *Assign to surface…*. Press a button on the desk: the
+   stack does **not** GO; the sheet names the button and offers *GO*, *Replaces …* where it held
+   something. Pick *A only*, *Assign*. Press it on Layer A: the stack GOes; on Layer B it does not.
+2. **Bound on.** The stack row says *Bound on Button n · A*; its hover names the device and what it
+   does; a click opens Settings › Surfaces on that button, viewing Layer A, the desk's layer unmoved.
+3. **Elsewhere.** In Settings › Surfaces, bind another button to the same stack: the row's chip says
+   *+1* without a reload.
+4. **Push.** A palette's sheet › *Assign to surface…*, push an encoder: *Encoder n push*, *Palette*, on
+   the selection. Assign; select heads and push it: the palette goes on.
+5. **Remote.** Open the desk from the portal: the sheet asks for a click on the picture, and a click
+   picks the control.
 
 ---
 

@@ -59,6 +59,7 @@ vi.mock('../../store/speedMasters', () => ({
 }))
 
 import { SpeedMasterDetailSheet } from './SpeedMasterDetailSheet'
+import { assignTargetNow, closeAssignToSurface } from '@/components/surfaces/AssignToSurface'
 
 afterEach(() => {
   cleanup()
@@ -86,6 +87,16 @@ function renderSheet(m: SpeedMaster) {
 }
 
 describe('SpeedMasterDetailSheet', () => {
+  it('opens Assign to surface… on the master', () => {
+    renderSheet(master())
+    fireEvent.click(screen.getByRole('button', { name: 'Assign to surface…' }))
+    expect(assignTargetNow()).toMatchObject({
+      name: 'M5 · Slow Wash',
+      subjects: [{ type: 'record', kind: 'MASTER', uuid: 'aaaaaaaa-0000-0000-0000-000000000005' }],
+    })
+    closeAssignToSurface()
+  })
+
   it('seeds the form from the master', () => {
     renderSheet(master({ notes: 'half-time position waves' }))
 

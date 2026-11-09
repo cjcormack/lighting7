@@ -125,7 +125,116 @@ class SurfaceCatalogueTest {
         assertEquals(setOf("x-touch-compact-standard"), maps.maps.value!!.frames.keys, "built before, so still built")
     }
 
+    @Test
+    fun `the uses fixture is the reverse index the desk serves for the sample`() {
+        pinned("uses.fixture.json", json.encodeToString(SurfaceUsesFrame.serializer(), sampleUses()))
+    }
+
+    @Test
+    fun `uses index each part under the group, fixture or record it acts on, once per layer it reaches`() {
+        val uses = sampleUses().uses
+        val go = uses.getValue(SurfaceUses.recordKey(RecordKind.STACK, stack.toString()))
+        assertEquals(listOf("Button 3"), go.map { it.label }, "a row on both layers is one use, on every layer")
+        assertNull(go.single().layer)
+        assertEquals("GO · Act 1", go.single().does)
+
+        val hex = uses.getValue("fixture:hex-1").single()
+        assertEquals("layer-b", hex.layer, "a row on one layer says which")
+        assertEquals("Fader 1 · B", hex.label)
+
+        val front = uses.getValue("group:front-wash")
+        assertTrue(front.all { it.fromJob })
+        val fader = front.single { it.controlId == "fader-1" }
+        assertEquals("layer-a", fader.layer, "the job reaches only the layer no row of its own beats")
+        assertNull(front.first { it.controlId == "btn-1" }.layer, "a strip control nothing beats is on every layer")
+
+        val pressed = uses.getValue(SurfaceUses.recordKey(RecordKind.PALETTE, palette.toString())).single()
+        assertEquals("Button 6", pressed.label, "a palette named in a parameter is indexed too")
+        assertTrue(uses.keys.none { it.startsWith("selection") || it == "none" }, "the selection names nothing")
+    }
+
+    @Test
+    fun `an encoder's push is its own use`() {
+        val service = ControlSurfaceBindingService(FakeDatabase.instance)
+        val typeKey = "x-touch-compact-standard"
+        service.seedCacheForTest(
+            7,
+            listOf(
+                ControlSurfaceBindingService.ResolvedBinding(
+                    id = 1, projectId = 7, deviceTypeKey = typeKey, controlId = "enc-9", bank = null,
+                    binding = Binding(Does.Go, Subject.Record(RecordKind.STACK, stack)), takeoverPolicy = null, sortOrder = 0,
+                    part = ControlPart.PUSH,
+                ),
+            ),
+        )
+        val profile = ControlSurfaceRegistry.typeFor(typeKey)!!
+        val frame = SurfaceMaps.build(7, profile, service, SurfaceNames.EMPTY, EncoderBankSelection("dimmer"))
+        val use = SurfaceUses.build(7, mapOf(typeKey to frame)) { profile }.uses.getValue(SurfaceUses.recordKey(RecordKind.STACK, stack.toString())).single()
+        assertEquals(ControlPart.PUSH, use.part)
+        assertTrue(use.label.endsWith(" push"), use.label)
+    }
+
+    @Test
+    fun `the service keeps the uses beside the frames`() {
+        val service = ControlSurfaceBindingService(FakeDatabase.instance)
+        val maps = SurfaceMapService(
+            bindingService = service,
+            projectIdProvider = { 7 },
+            namesFor = { SurfaceNames.EMPTY },
+            encoderPageFor = { EncoderBankState.DEFAULT },
+            attachedTypes = { emptySet() },
+        )
+        service.seedCacheForTest(
+            7,
+            listOf(
+                ControlSurfaceBindingService.ResolvedBinding(
+                    id = 1, projectId = 7, deviceTypeKey = "x-touch-compact-standard", controlId = "btn-3", bank = null,
+                    binding = Binding(Does.Look, Subject.Record(RecordKind.LOOK, palette)), takeoverPolicy = null, sortOrder = 0,
+                ),
+            ),
+        )
+        maps.rebuild()
+        assertEquals(setOf(SurfaceUses.recordKey(RecordKind.LOOK, palette.toString())), maps.maps.value!!.uses.uses.keys)
+    }
+
+    @Test
+    fun `a part only the no-layer map has is a use on every layer`() {
+        val typeKey = "x-touch-compact-standard"
+        val go = ResolvedPart(PartSource.DIRECT, bindingId = 1, does = Does.Go, on = Subject.Record(RecordKind.STACK, stack), label = "GO · Act 1")
+        val frame = SurfaceMapFrame(7, typeKey, mapOf("layer-a" to emptyMap(), "layer-b" to emptyMap(), "" to mapOf("btn-3:MAIN" to go)))
+        val use = SurfaceUses.build(7, mapOf(typeKey to frame), ControlSurfaceRegistry::typeFor).uses
+            .getValue(SurfaceUses.recordKey(RecordKind.STACK, stack.toString())).single()
+        assertNull(use.layer)
+        assertEquals("Button 3", use.label)
+    }
+
+    @Test
+    fun `a slot preview says where the slot is and what assigning there changes`() {
+        val frame = sampleFrame(trimmed = false)
+        val profile = ControlSurfaceRegistry.typeFor("x-touch-compact-standard")!!
+        fun preview(controlId: String, layer: String?) = SurfaceUses.slotPreview(frame, profile, controlId, ControlPart.MAIN, layer)
+
+        assertEquals(SurfaceSlotPreview("Button 3", listOf("Replaces GO · Act 1.")), preview("btn-3", null), "a row on both layers is said once")
+        assertEquals(listOf("Beats GO · Act 1 on Layer A; every other layer keeps it."), preview("btn-3", "layer-a").replaces)
+        assertEquals("Button 3 · A", preview("btn-3", "layer-a").place)
+
+        val own = frame.layers.getValue("layer-b").getValue("fader-1:MAIN").label
+        assertEquals(
+            listOf("Takes it out of Groups as channel strips · item 1 (Dimmer · Front wash).", "Layer B keeps its own: $own."),
+            preview("fader-1", null).replaces,
+        )
+        assertEquals(listOf("Replaces $own."), preview("fader-1", "layer-b").replaces)
+        assertEquals(emptyList(), preview("btn-2", null).replaces)
+        assertEquals(emptyList(), SurfaceUses.slotPreview(null, profile, "btn-3", ControlPart.MAIN, null).replaces)
+    }
+
+    private fun sampleUses(): SurfaceUsesFrame {
+        val typeKey = "x-touch-compact-standard"
+        return SurfaceUses.build(7, mapOf(typeKey to sampleFrame(trimmed = false)), ControlSurfaceRegistry::typeFor)
+    }
+
     private val stack = UUID.fromString("11111111-1111-4111-8111-111111111111")
+    private val palette = UUID.fromString("33333333-3333-4333-8333-333333333333")
     private val missingStack = UUID.fromString("99999999-1111-4111-8111-111111111111")
     private val master = UUID.fromString("22222222-2222-4222-8222-222222222222")
 
@@ -134,7 +243,7 @@ class SurfaceCatalogueTest {
      * over its job on one layer, wheels on the right-hand encoders, an encoder's push, a selection
      * level, a tempo on a named master, a dead GO.
      */
-    private fun sampleFrame(): SurfaceMapFrame {
+    private fun sampleFrame(trimmed: Boolean = true): SurfaceMapFrame {
         val typeKey = "x-touch-compact-standard"
         val profile = ControlSurfaceRegistry.typeFor(typeKey)!!
         val service = ControlSurfaceBindingService(FakeDatabase.instance)
@@ -159,6 +268,7 @@ class SurfaceCatalogueTest {
                 row("btn-4", Binding(Does.Go, Subject.Record(RecordKind.STACK, missingStack)), health = AssignmentHealth.MissingStack(0, missingStack.toString())),
                 row("fader-9", Binding(Does.Tempo(), Subject.Record(RecordKind.MASTER, master))),
                 row("btn-33", Binding(Does.Blackout, how = How.ON)),
+                row("btn-6", Binding(Does.Palette(palette), Subject.Selection)),
             ),
             listOf(
                 job(1, "strips", JobKind.GROUPS, listOf(JobItem.Group("front-wash"))),
@@ -179,6 +289,7 @@ class SurfaceCatalogueTest {
             masterOne = "M1 · Main",
         )
         val full = SurfaceMaps.build(7, profile, service, names, EncoderBankSelection("dimmer"))
+        if (!trimmed) return full
         // Only the parts the sample binds, and strip 1's other controls, so the fixture stays readable.
         val keep = setOf("fader-1:MAIN", "btn-25:MAIN", "enc-1:MAIN", "btn-1:MAIN", "enc-1:PUSH",
             "enc-9:MAIN", "enc-9:PUSH", "enc-10:MAIN", "enc-10:PUSH", "btn-3:MAIN", "btn-4:MAIN", "fader-9:MAIN", "btn-33:MAIN", "btn-5:MAIN")

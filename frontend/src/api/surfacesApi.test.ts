@@ -68,6 +68,20 @@ describe('the served map', () => {
   })
 })
 
+describe('the uses index', () => {
+  it('keeps the latest frame whole and replays it to a late subscriber', () => {
+    const fake = fakeConnection()
+    const api = createSurfacesWsApi(fake.conn)
+    expect(api.getUses()).toBeNull()
+    fake.message({ type: 'surfaceUses.state', projectId: 1, uses: { 'group:a': [] } })
+    fake.message({ type: 'surfaceUses.state', projectId: 1, uses: { 'group:b': [] } })
+    expect(api.getUses()).toEqual({ projectId: 1, uses: { 'group:b': [] } })
+    const seen: unknown[] = []
+    api.subscribeUses((frame) => seen.push(frame))
+    expect(seen).toEqual([{ projectId: 1, uses: { 'group:b': [] } }])
+  })
+})
+
 describe('identify', () => {
   it('asks for a touch and relays its wait and its capture', () => {
     const fake = fakeConnection()

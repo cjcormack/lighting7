@@ -90,6 +90,29 @@ class SurfaceSocketTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `an assign elsewhere reaches every window's uses under the record it names`() = testApplication {
+        mountTestApp(state)
+        val stack = seedStack("Act 2")
+        val rest = jsonClient()
+        val client = createWsClient()
+
+        client.webSocket("/api") {
+            awaitOfType<SurfaceBankStateOutMessage>()
+            rest.put("/api/rest/projects/$projectId/surface-bindings/slot") {
+                contentType(ContentType.Application.Json)
+                setBody(slot("btn-7", Binding(Does.Go, Subject.Record(RecordKind.STACK, stack)), layer = "layer-b"))
+            }
+            val key = "record:STACK:$stack"
+            val uses = awaitOfType<SurfaceUsesStateOutMessage> { it.uses.containsKey(key) }
+            assertEquals(projectId, uses.projectId)
+            val use = uses.uses.getValue(key).single()
+            assertEquals("Button 7 · B", use.label)
+            assertEquals("layer-b", use.layer)
+            assertEquals("GO · Act 2", use.does)
+        }
+    }
+
+    @Test
     fun `a control in a job region is drawn from its job until it is bound on its own`() = testApplication {
         mountTestApp(state)
         val rest = jsonClient()

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ControlSurfaceBinding, SurfaceDeviceInfo } from '@/store/surfaces'
 import { CATALOGUE, FIXTURE_PROFILE, JOB_KINDS, MAP_FRAME } from '@/components/surfaces/surfaceFixtures'
@@ -9,7 +9,7 @@ import { CATALOGUE, FIXTURE_PROFILE, JOB_KINDS, MAP_FRAME } from '@/components/s
  * The Surfaces tab's structural claims: a matched device is drawn as a picture from the desk's map
  * and an unmatched one as the explain-yourself card, the dead count is a header badge, viewing a
  * layer moves nothing on the hardware (D13), the jobs and the table are the other views, and
- * `?binding=` lands on the control it names.
+ * a *Bound on* link (`?type=&control=&layer=`) lands on the control it names.
  */
 
 let devices: SurfaceDeviceInfo[] = []
@@ -155,25 +155,25 @@ describe('Surfaces', () => {
     expect(screen.queryByRole('button', { name: /^No layer/ })).toBeNull()
   })
 
-  it('opens the inspector on a ?binding= link\'s control and views its layer, moving nothing', () => {
-    bindings = [
-      {
-        id: 7,
-        projectId: 1,
-        deviceTypeKey: FIXTURE_PROFILE.typeKey,
-        controlId: 'fader-1',
-        part: 'MAIN',
-        bank: 'layer-b',
-        binding: { does: { type: 'level', attribute: 'dimmer' }, on: { type: 'fixture', key: 'hex-1' } },
-        takeoverPolicy: null,
-        sortOrder: 0,
-        health: { type: 'ok' },
-      },
-    ]
-    renderRoute('/?binding=7')
+  it('opens the inspector on a Bound on link\'s control and views its layer, moving nothing', () => {
+    renderRoute(`/?type=${FIXTURE_PROFILE.typeKey}&control=fader-1&layer=layer-b`)
     expect(within(screen.getByTestId('surface-inspector')).getByText('Fader 1')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Layer B/ }).getAttribute('aria-pressed')).toBe('true')
     expect(sent).toEqual([])
+  })
+
+  it('consumes a Bound on link to a surface with no device attached, selecting nothing', () => {
+    function Search() {
+      return <span data-testid="search">{useLocation().search}</span>
+    }
+    render(
+      <MemoryRouter initialEntries={['/?type=other-surface&control=fader-1&layer=layer-b']}>
+        <SurfacesContent projectId={1} />
+        <Search />
+      </MemoryRouter>,
+    )
+    expect(screen.getByTestId('search')).toHaveTextContent(/^$/)
+    expect(screen.queryByTestId('surface-inspector')).toBeNull()
   })
 
   it('draws the Jobs panel beside the picture, lighting the region of a control clicked there', () => {

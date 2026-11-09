@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FxLibraryEntry } from '@/store/fixtureFx'
 import type { PaletteInput, PaletteSummary } from '@/api/palettesApi'
+import { assignTargetNow, closeAssignToSurface } from '@/components/surfaces/AssignToSurface'
 
 /**
  * The editor's two identity choices and the write boundary's first rule.
@@ -230,6 +231,18 @@ async function savedRows(onSave: ReturnType<typeof vi.fn>) {
   const body = onSave.mock.calls[onSave.mock.calls.length - 1][0] as PaletteInput
   return Object.fromEntries((body.rows ?? []).map((row) => [row.attribute, row.value]))
 }
+
+describe('Assign to surface…', () => {
+  it('opens the sheet on a palette that exists, and is not offered on a new one', () => {
+    renderEditor()
+    expect(screen.queryByRole('button', { name: 'Assign to surface…' })).toBeNull()
+    cleanup()
+    renderEditor({ palette: template() })
+    fireEvent.click(screen.getByRole('button', { name: 'Assign to surface…' }))
+    expect(assignTargetNow()?.subjects).toEqual([{ type: 'record', kind: 'PALETTE', uuid: 'u1' }])
+    closeAssignToSurface()
+  })
+})
 
 describe('the colour control', () => {
   it('seeds the policy from the stored value, not from a UI default', () => {

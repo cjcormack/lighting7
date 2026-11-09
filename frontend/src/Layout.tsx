@@ -49,6 +49,7 @@ import { HistoryDialogs, HistoryHost } from "./components/history/HistoryMove"
 import { VIEW_OPTION_VIEWPOINT } from "./lib/stageViewpoint"
 import { useWindowsBridge } from "./components/screens/useWindowsBridge"
 import { StageRenderHost } from "./components/stageRender/StageRenderHost"
+import { AssignToSurfaceHost } from "./components/surfaces/AssignToSurface"
 import { AppBarSwitcher } from "./components/appBar/AppBarSwitcher"
 import { DeskName, useDocumentTitle } from "./components/appBar/DeskName"
 
@@ -370,6 +371,7 @@ export default function Layout() {
             asked to draw a Stage viewpoint offscreen. Draws nothing of its own; the render itself
             is a lazy chunk loaded on the first request, so three.js stays out of this shell. */}
         <StageRenderHost />
+        <AssignToSurfaceHost />
 
         {/* Command Palette */}
         <CommandPalette

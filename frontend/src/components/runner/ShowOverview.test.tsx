@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { CueStack } from '@/api/cueStacksApi'
 
 const reorderStacks = vi.fn()
@@ -30,6 +30,7 @@ vi.mock('./StackFxAmountControl', () => ({ StackFxAmountControl: () => null }))
 vi.mock('@/components/cues/StackMovingChip', () => ({ StackMovingChip: () => null }))
 
 import { ShowOverview } from './ShowOverview'
+import { assignTargetNow, closeAssignToSurface } from '@/components/surfaces/AssignToSurface'
 
 const mkStack = (over: Partial<CueStack>): CueStack => ({
   id: 10,
@@ -56,6 +57,14 @@ afterEach(() => {
 })
 
 describe('ShowOverview', () => {
+  it('opens Assign to surface… on a stack from its menu', async () => {
+    render(<ShowOverview projectId={1} stacks={[mkStack({ id: 2, uuid: 'st-2', name: 'Act 1' })]} activeStackId={null} onDrillStack={vi.fn()} />)
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Stack actions' }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Assign to surface…' }))
+    expect(assignTargetNow()).toEqual({ name: 'Act 1', subjects: [{ type: 'record', kind: 'STACK', uuid: 'st-2' }], projectId: 1 })
+    closeAssignToSurface()
+  })
+
   it('lists the busk stacks after a Busk divider, whatever their place in the order', () => {
     const stacks = [
       mkStack({ id: 1, name: 'Song 3', sortOrder: 0, inRunningOrder: false }),

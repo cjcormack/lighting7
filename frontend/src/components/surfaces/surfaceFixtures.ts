@@ -1,7 +1,8 @@
 import catalogueJson from '../../../../src/test/resources/surfaces/catalogue.fixture.json'
 import mapJson from '../../../../src/test/resources/surfaces/map.fixture.json'
 import jobKindsJson from '../../../../src/test/resources/surfaces/jobKinds.fixture.json'
-import type { CatalogueEntry, ControlSurfaceType, JobKindInfo, SurfaceMapFrame } from '@/store/surfaces'
+import usesJson from '../../../../src/test/resources/surfaces/uses.fixture.json'
+import type { CatalogueEntry, ControlSurfaceType, JobKindInfo, SurfaceMapFrame, SurfaceUsesFrame } from '@/store/surfaces'
 
 /**
  * The desk's own answers, for this side's tests (surface-setup plan P5): the function catalogue as
@@ -11,6 +12,8 @@ import type { CatalogueEntry, ControlSurfaceType, JobKindInfo, SurfaceMapFrame }
  */
 export const CATALOGUE = catalogueJson as unknown as CatalogueEntry[]
 export const MAP_FRAME = mapJson as unknown as SurfaceMapFrame
+/** The reverse index (`surfaceUses.state`) the desk builds from the same sample, untrimmed. */
+export const USES_FRAME = usesJson as unknown as SurfaceUsesFrame
 /** The job kinds as `GET /surface-job-kinds` serves them. */
 export const JOB_KINDS = jobKindsJson as unknown as JobKindInfo[]
 

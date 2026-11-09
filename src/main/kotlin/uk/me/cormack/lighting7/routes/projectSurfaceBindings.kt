@@ -18,6 +18,7 @@ import uk.me.cormack.lighting7.midi.BindingRefused
 import uk.me.cormack.lighting7.midi.ControlPart
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
+import uk.me.cormack.lighting7.midi.SurfaceUses
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.state.State
 
@@ -31,6 +32,7 @@ import uk.me.cormack.lighting7.state.State
  *   - `DELETE /api/rest/projects/{projectId}/surface-bindings/{bindingId}`
  *   - `PUT    /api/rest/projects/{projectId}/surface-bindings/slot` — the editors' one write
  *   - `DELETE /api/rest/projects/{projectId}/surface-bindings/slot`
+ *   - `GET    /api/rest/projects/{projectId}/surface-bindings/slot/preview` — what a slot write would change
  *
  * All mutations go through [ControlSurfaceBindingService], which keeps an in-memory cache
  * in sync with the DB and broadcasts [ControlSurfaceBindingService.BindingChange] events.
@@ -127,6 +129,23 @@ internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
             val existing = service.rowAt(project.id.value, request.deviceTypeKey, request.controlId, request.part, request.layer)
             if (existing != null && service.delete(project.id.value, existing.id)) call.respond(HttpStatusCode.NoContent)
             else call.respond(HttpStatusCode.NotFound, ErrorResponse("Nothing is bound there"))
+        }
+    }
+
+    get<ProjectSurfaceBindingSlotPreviewResource> { resource ->
+        withProject(state, resource.parent.parent.projectId) { project ->
+            validateRequestShape(resource.deviceTypeKey, resource.controlId, resource.layer)?.let {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(it.message, code = it.code))
+                return@withProject
+            }
+            val part = ControlPart.entries.firstOrNull { it.name == resource.part }
+            if (part == null) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Unknown part: ${resource.part}"))
+                return@withProject
+            }
+            val profile = ControlSurfaceRegistry.typeFor(resource.deviceTypeKey)!!
+            val frame = state.surfaceMapService.frameFor(project.id.value, resource.deviceTypeKey)
+            call.respond(SurfaceUses.slotPreview(frame, profile, resource.controlId, part, resource.layer))
         }
     }
 
@@ -256,6 +275,16 @@ data class ProjectSurfaceBindingResource(val parent: ProjectSurfaceBindingsResou
 /** `PUT` / `DELETE .../surface-bindings/slot` — one control part on one layer, named in the body. */
 @Resource("/slot")
 data class ProjectSurfaceBindingSlotResource(val parent: ProjectSurfaceBindingsResource)
+
+/** `GET .../surface-bindings/slot/preview?deviceTypeKey=&controlId=&part=&layer=` — [SurfaceUses.slotPreview]. */
+@Resource("/preview")
+data class ProjectSurfaceBindingSlotPreviewResource(
+    val parent: ProjectSurfaceBindingSlotResource,
+    val deviceTypeKey: String,
+    val controlId: String,
+    val part: String = "MAIN",
+    val layer: String? = null,
+)
 
 // ─── DTOs ──────────────────────────────────────────────────────────────────
 

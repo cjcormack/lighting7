@@ -2978,8 +2978,15 @@ on the desk is captured without firing** (D14): `useIdentify` and the desk's `su
 job is a region's** (D11): every write is the whole job (`PUT` / `DELETE …/surface-jobs/{type}/{region}`),
 and a control it derives is labelled from the map's `jobLabel`, never worked out here.
 
+**Every record has a door onto a control** (editor D, session 6): *Assign to surface…* in a stack's,
+a cue's, a busk pad's or page's and a rig tile's menu, and on the Look, palette, speed master, fixture
+and group sheets, all opening one sheet (`AssignToSurfaceHost` in `Layout`) that waits for a touch, or
+a click on the picture in remote mode, and offers only what fits the record and the part
+(`assignOffer.ts`). *Bound on Button 36 · A* (`BoundOnChip`) is the desk's `surfaceUses.state`, read
+off the socket without the store, so a door draws it wherever it is mounted.
+
 `BindingForm` asks Does · On · How for any catalogue entry; `SurfaceInspector` mounts one per part;
-`SurfaceSheet` mounts it in its *Does* cell. The fixtures pinned by lighting7's `SurfaceCatalogueTest`
+`SurfaceSheet` mounts it in its *Does* cell; the assign sheet over a catalogue narrowed to its record. The fixtures pinned by lighting7's `SurfaceCatalogueTest`
 (`src/test/resources/surfaces/`) are read by every surface test through `surfaceFixtures.ts`.
 
 **One desk, one selection, server-owned** (`store/selection.ts`), and three surfaces move it: the

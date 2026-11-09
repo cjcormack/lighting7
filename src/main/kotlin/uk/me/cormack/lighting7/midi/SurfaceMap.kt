@@ -199,8 +199,15 @@ object SurfaceMaps {
     }
 }
 
-/** Every device type's map for the current project; [maps] is null before the first build. */
-data class SurfaceMapsState(val projectId: Int, val frames: Map<String, SurfaceMapFrame>)
+/**
+ * Every device type's map for the current project, and the reverse index read from it (`surfaceUses.state`);
+ * [SurfaceMapService.maps] is null before the first build.
+ */
+data class SurfaceMapsState(
+    val projectId: Int,
+    val frames: Map<String, SurfaceMapFrame>,
+    val uses: SurfaceUsesFrame = SurfaceUsesFrame(projectId, emptyMap()),
+)
 
 /**
  * Keeps [maps] current: rebuilt off the input path, at most once per [debounceMs], whenever a
@@ -252,7 +259,15 @@ class SurfaceMapService(
     /** Build now, on the caller's thread. */
     fun rebuild() {
         val projectId = projectIdProvider() ?: return
-        _maps.value = SurfaceMapsState(projectId, buildFrames(projectId))
+        val frames = buildFrames(projectId)
+        val profiles = types().associateBy { it.typeKey }
+        _maps.value = SurfaceMapsState(projectId, frames, SurfaceUses.build(projectId, frames, profiles::get))
+    }
+
+    /** [deviceTypeKey]'s map for [projectId], built now; null for a type the desk does not know. */
+    fun frameFor(projectId: Int, deviceTypeKey: String): SurfaceMapFrame? {
+        val profile = types().firstOrNull { it.typeKey == deviceTypeKey } ?: return null
+        return SurfaceMaps.build(projectId, profile, bindingService, namesFor(projectId), encoderPageFor(deviceTypeKey))
     }
 
     fun buildFrames(projectId: Int): Map<String, SurfaceMapFrame> {

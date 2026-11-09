@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { inputOf, partKey } from '@/api/surfacesApi'
+import { inputOf, partKey, surfaceUseKey } from '@/api/surfacesApi'
 import { entriesFor, isWhole, doesFor } from './BindingForm'
-import { CATALOGUE, FIXTURE_PROFILE, MAP_FRAME } from './surfaceFixtures'
+import { CATALOGUE, FIXTURE_PROFILE, MAP_FRAME, USES_FRAME } from './surfaceFixtures'
 
 /**
  * The two fixtures lighting7's `SurfaceCatalogueTest` pins, read the way this side reads them
@@ -75,5 +75,26 @@ describe('the map fixture', () => {
         expect(CATALOGUE.some((entry) => entry.id === part.entry), part.label ?? '').toBe(true)
       }
     }
+  })
+})
+
+describe('the uses fixture', () => {
+  it('files every subject the map names under the key this side reads', () => {
+    for (const parts of Object.values(MAP_FRAME.layers)) {
+      for (const part of Object.values(parts)) {
+        const key = surfaceUseKey(part.on)
+        if (key == null || part.from === 'NONE') continue
+        expect(USES_FRAME.uses[key], key).toBeDefined()
+      }
+    }
+  })
+
+  it('says where each use is in the desk\'s words, a layer named only where it is one layer\'s', () => {
+    const hex = USES_FRAME.uses['fixture:hex-1']
+    expect(hex.map((use) => [use.label, use.layer])).toEqual([['Fader 1 · B', 'layer-b']])
+    const stack = USES_FRAME.uses['record:STACK:11111111-1111-4111-8111-111111111111']
+    expect(stack.map((use) => use.label)).toEqual(['Button 3'])
+    expect(stack[0].layer ?? null).toBeNull()
+    expect(USES_FRAME.uses['record:PALETTE:33333333-3333-4333-8333-333333333333']?.[0].label).toBe('Button 6')
   })
 })

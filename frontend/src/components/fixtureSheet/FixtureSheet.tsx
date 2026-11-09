@@ -22,7 +22,7 @@ import { FixtureCommandsMenu } from '../fixtures/FixtureCommandsMenu'
 import { FixtureParkButton, ParkButton } from '../fixtures/FixtureParkButton'
 import { LocateTargetsButton } from '../fixtures/LocateButton'
 import { GelSwatch } from '../fixtures/GelSwatch'
-import { FixtureBoundControlsRow, GroupBoundControlsRow } from '../surfaces/FixtureBoundControlsRow'
+import { SurfaceAssignRow } from '../surfaces/SurfaceAssignRow'
 import { GroupMembersSection } from '../groups/GroupMembersSection'
 import { useVisibleGroupMembers } from '../groups/useVisibleGroupMembers'
 import { EditorLabel } from '../editor/EditorLabel'
@@ -274,6 +274,7 @@ function FixtureTargetSheet({ fixture, host, titleComponent, focus, aim }: Sheet
                 headGroups={headGroups}
                 write={write}
                 connected={connected}
+                assignable={host !== 'card'}
               />
             )}
             {shownView === 'channels' && (
@@ -300,6 +301,7 @@ function FixtureValues({
   headGroups,
   write,
   connected,
+  assignable,
 }: {
   fixture: Fixture
   groups: readonly SheetRowGroup[]
@@ -310,6 +312,8 @@ function FixtureValues({
   headGroups: readonly PickRowGroup[]
   write: ReturnType<typeof pickWrite>
   connected: boolean
+  /** Draw *Assign to surface…*; the cards page's card leaves it to the pop-up its corner opens. */
+  assignable: boolean
 }) {
   // A confetti cannon's tubes and a head's resets are not values: the cannon's panel and the
   // Commands menu, above the rows as before.
@@ -329,7 +333,12 @@ function FixtureValues({
   return (
     <div className="flex flex-col">
       <div className="flex flex-col gap-2 px-3 empty:hidden [&>*:first-child]:mt-2">
-        <FixtureBoundControlsRow fixtureKey={fixture.key} />
+        <SurfaceAssignRow
+          name={fixture.name}
+          subject={{ type: 'fixture', key: fixture.key }}
+          also={(fixture.elements ?? []).map((element) => ({ type: 'fixture' as const, key: element.key }))}
+          assignable={assignable}
+        />
         {triggers.length > 0 && <CannonPanel fixtureKey={fixture.key} triggers={triggers} canFire={connected} />}
         {commands.length > 0 && (
           <FixtureCommandsMenu fixtureKey={fixture.key} fixtureName={fixture.name} commands={commands} canRun={connected} />
@@ -421,7 +430,7 @@ function GroupSheet({ group, host, titleComponent, onOpenMember }: SheetProps & 
   const values = (
     <div className="flex flex-col">
       <div className="flex flex-col gap-2 px-3 empty:hidden [&>*:first-child]:mt-2">
-        <GroupBoundControlsRow groupName={group.name} />
+        <SurfaceAssignRow name={group.name} subject={{ type: 'group', key: group.name }} assignable={!card} />
       </div>
       {isLoading && members.length === 0 ? (
         <div className="flex justify-center py-4">
