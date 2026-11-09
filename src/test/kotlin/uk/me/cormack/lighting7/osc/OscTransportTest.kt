@@ -11,7 +11,6 @@ import org.junit.Test
 import org.junit.rules.Timeout
 import uk.me.cormack.lighting7.midi.ActiveBankState
 import uk.me.cormack.lighting7.midi.EncoderBankState
-import uk.me.cormack.lighting7.midi.FlashStateTracker
 import uk.me.cormack.lighting7.midi.SurfaceDispatch
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
@@ -50,7 +49,7 @@ class OscTransportTest {
         state = State(testAppConfig())
         val projectId = seedMinimalProject(state)
         transaction(state.database) { DaoCueStack.new { name = "Act 1"; project = DaoProject[projectId] } }
-        val dispatch = SurfaceDispatch(RecordingSurfaceActions(), ActiveBankState(), EncoderBankState(), FlashStateTracker())
+        val dispatch = SurfaceDispatch(RecordingSurfaceActions(), ActiveBankState(), EncoderBankState())
         service = OscService(state.database, OscHandler(state.database, { projectId }, dispatch), DeskMetrics())
         service.start()
     }

@@ -62,6 +62,15 @@ import uk.me.cormack.lighting7.models.DaoBuskColumn
 import uk.me.cormack.lighting7.models.DaoBuskPad
 import uk.me.cormack.lighting7.models.DaoBuskPage
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
+import uk.me.cormack.lighting7.midi.Binding
+import uk.me.cormack.lighting7.midi.ColourAxis
+import uk.me.cormack.lighting7.midi.ControlPart
+import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.How
+import uk.me.cormack.lighting7.midi.RecordKind
+import uk.me.cormack.lighting7.midi.SelectionMove
+import uk.me.cormack.lighting7.midi.Subject
+import uk.me.cormack.lighting7.midi.encodePayload
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
@@ -1172,144 +1181,43 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project; universe = 1; channel = 7; value = 255
     }
 
-    // control surface bindings — one bank-scoped, one global (null bank), then one of each
-    // selection-relative variant (midi-surface plan, session 1) and a cue binding carrying the
-    // uuid beside the int (v11). Non-default fields throughout: canonical JSON omits defaults, so
-    // a field left at its default is invisible to the round-trip and clone tests.
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "fader-1"; bank = "bank-a"
-        targetType = "fixtureAttribute"
-        targetPayload = """{"type":"fixtureAttribute","fixtureKey":"hex-1","attribute":"dimmer"}"""
-        takeoverPolicy = "PICKUP"
-        sortOrder = 0
-    }
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "fader-3"
-        targetType = "groupAttribute"
-        targetPayload = """{"type":"groupAttribute","groupName":"front-wash","attribute":"rgbColour","colourAxis":"saturation"}"""
-        sortOrder = 30
-    }
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "button-13"
-        targetType = "flash"
-        targetPayload = """{"type":"flash","target":{"type":"fixtureAttribute","fixtureKey":"hex-1","attribute":"dimmer"},"max":200}"""
-        sortOrder = 31
-    }
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "button-1"
-        targetType = "grandMasterToggle"
-        targetPayload = """{"type":"grandMasterToggle"}"""
-        sortOrder = 1
-    }
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "enc-1"
-        targetType = "selectionAttribute"
-        targetPayload = """{"type":"selectionAttribute","attribute":"pan"}"""
-        sortOrder = 2
-    }
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "button-2"
-        targetType = "selectTarget"
-        targetPayload = """{"type":"selectTarget","target":{"type":"group","key":"front-wash"},"mode":"replace"}"""
-        sortOrder = 3
-    }
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "button-3"
-        targetType = "clearSelection"
-        targetPayload = """{"type":"clearSelection"}"""
-        sortOrder = 4
-    }
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "button-4"
-        targetType = "locateSelection"
-        targetPayload = """{"type":"locateSelection"}"""
-        sortOrder = 5
-    }
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "button-5"
-        targetType = "fireCue"
-        targetPayload = """{"type":"fireCue","cueId":${cue1.id.value},"cueUuid":"${cue1.uuid}"}"""
-        sortOrder = 6
-    }
-    // A whole strip on one row, and an encoder-bank button (midi-surface plan, session 2).
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "strip-1"; bank = "bank-a"
-        targetType = "strip"
-        targetPayload = """{"type":"strip","target":{"type":"group","key":"front-wash"}}"""
-        takeoverPolicy = "PICKUP"
-        sortOrder = 7
-    }
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "button-6"
-        targetType = "encoderBankSet"
-        targetPayload = """{"type":"encoderBankSet","attribute":"pan"}"""
-        sortOrder = 8
-    }
-    // One of each **record** variant and each busk-page variant (midi-surface plan, session 4).
-    // Every one is uuid-addressed, which is exactly what the export remapper rewrites and the clone
-    // test checks: an int here would survive the round trip and point at the source project's row.
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "button-7"
-        targetType = "applyLook"
-        targetPayload = """{"type":"applyLook","lookUuid":"${boundLook.uuid}"}"""
-        sortOrder = 9
-    }
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "button-8"
-        targetType = "pressPalette"
-        targetPayload = """{"type":"pressPalette","paletteUuid":"${colourPalette.uuid}"}"""
-        sortOrder = 10
-    }
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "button-9"
-        targetType = "pressPad"
-        targetPayload = """{"type":"pressPad","padUuid":"${cuePad.uuid}"}"""
-        sortOrder = 11
-    }
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "button-10"
-        targetType = "buskPageSet"
-        targetPayload = """{"type":"buskPageSet","pageUuid":"${actOne.uuid}"}"""
-        sortOrder = 12
-    }
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "button-11"
-        targetType = "buskPageNext"
-        targetPayload = """{"type":"buskPageNext"}"""
-        sortOrder = 13
-    }
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "button-12"
-        targetType = "buskPagePrev"
-        targetPayload = """{"type":"buskPagePrev"}"""
-        sortOrder = 14
-    }
-
-    // A stack's FX amount on a fader: the other binding name the terminology plan renamed (§4.3).
-    DaoControlSurfaceBinding.new {
-        this.project = project
-        deviceTypeKey = "xtouch-mini"; controlId = "fader-2"
-        targetType = "stackFxAmount"
-        targetPayload = """{"type":"stackFxAmount","stackId":${stack1.id.value},"stackUuid":"${stack1.uuid}"}"""
-        sortOrder = 15
-    }
+    // control surface bindings in the grammar (surface-setup plan session 1): one bank-scoped, one
+    // global (null bank), every subject shape, a push part, Hows of On and Replace, a flash at a
+    // percentage, a strip and a stack's FX amount. Non-default fields throughout: canonical JSON omits
+    // defaults, so a field left at its default is invisible to the round-trip and clone tests. Every
+    // record is uuid-addressed, which is what the export remapper rewrites and the clone test checks.
+    fun bind(controlId: String, binding: Binding, bank: String? = null, part: ControlPart = ControlPart.MAIN, takeover: String? = null, sortOrder: Int) =
+        DaoControlSurfaceBinding.new {
+            this.project = project
+            deviceTypeKey = "xtouch-mini"; this.controlId = controlId; this.bank = bank
+            this.part = part.name
+            targetType = binding.functionId
+            targetPayload = binding.encodePayload()
+            takeoverPolicy = takeover
+            this.sortOrder = sortOrder
+        }
+    bind("fader-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")), bank = "bank-a", takeover = "PICKUP", sortOrder = 0)
+    bind("fader-3", Binding(Does.Level("rgbColour", ColourAxis.SATURATION), Subject.Group("front-wash")), sortOrder = 30)
+    bind("button-13", Binding(Does.Flash("dimmer", percent = 78), Subject.Fixture("hex-1")), sortOrder = 31)
+    bind("button-1", Binding(Does.GrandMaster()), sortOrder = 1)
+    bind("enc-1", Binding(Does.Level("pan"), Subject.Selection), sortOrder = 2)
+    bind("enc-1", Binding(Does.Select, Subject.Group("front-wash")), part = ControlPart.PUSH, sortOrder = 16)
+    bind("button-2", Binding(Does.Select, Subject.Group("front-wash"), How.REPLACE), sortOrder = 3)
+    bind("button-3", Binding(Does.SelectionStep(SelectionMove.CLEAR)), sortOrder = 4)
+    bind("button-4", Binding(Does.Locate, Subject.Selection), sortOrder = 5)
+    bind("button-5", Binding(Does.Cue, Subject.Record(RecordKind.CUE, cue1.uuid)), sortOrder = 6)
+    // A whole strip on one row, and an encoder-page button (midi-surface plan, session 2).
+    bind("strip-1", Binding(Does.Strip, Subject.Group("front-wash")), bank = "bank-a", takeover = "PICKUP", sortOrder = 7)
+    bind("button-6", Binding(Does.EncoderPage("pan")), sortOrder = 8)
+    // A Look on, a palette, a pad and the busk page functions (midi-surface plan, session 4).
+    bind("button-7", Binding(Does.Look, Subject.Record(RecordKind.LOOK, boundLook.uuid), How.ON), sortOrder = 9)
+    bind("button-8", Binding(Does.Palette(colourPalette.uuid), Subject.Selection), sortOrder = 10)
+    bind("button-9", Binding(Does.Pad, Subject.Record(RecordKind.PAD, cuePad.uuid)), sortOrder = 11)
+    bind("button-10", Binding(Does.BuskPage(), Subject.Record(RecordKind.PAGE, actOne.uuid)), sortOrder = 12)
+    bind("button-11", Binding(Does.BuskPage(1)), sortOrder = 13)
+    bind("button-12", Binding(Does.BuskPage(-1)), sortOrder = 14)
+    // A stack's FX amount on a fader.
+    bind("fader-2", Binding(Does.FxAmount, Subject.Record(RecordKind.STACK, stack1.uuid)), sortOrder = 15)
 
     // Wire up the show playhead to the first stack.
     project.activeStackId = stack1.id.value

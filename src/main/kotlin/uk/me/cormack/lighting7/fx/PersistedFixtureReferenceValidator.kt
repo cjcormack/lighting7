@@ -25,9 +25,8 @@ object PersistedFixtureReferenceValidator {
      *
      * [allowElements] lets a fixture-typed [target] name a **cell** — an element key of a
      * multi-head fixture, validated against the head's own properties. A cue row may (a cell-target
-     * row, which `buildCueAssignmentsForCue` resolves); a control-surface binding may not, since
-     * the surface resolves its fixture through the register alone, and a binding reported healthy
-     * there would do nothing.
+     * row, which `buildCueAssignmentsForCue` resolves), and so may a surface binding's health, per
+     * head the write reaches (`BindingHealthEvaluator`).
      */
     fun validateTargetedReference(
         fixtures: Fixtures,

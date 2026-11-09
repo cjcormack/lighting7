@@ -16,6 +16,11 @@ describe('describeHealth', () => {
     expect(describeHealth({ type: 'missingWindow', windowName: 'Screen 2' })).toBe('“Screen 2” is not signed in on any screen')
   })
 
+  it('names a dead stack or cue without a number, since a binding holds only its uuid', () => {
+    expect(describeHealth({ type: 'missingStack', stackId: 0, stackUuid: 'a' })).toBe('The cue stack this binding names no longer exists')
+    expect(describeHealth({ type: 'missingCue', cueId: 0, cueUuid: 'b' })).toBe('The cue this binding names no longer exists')
+  })
+
   it('keeps a variant this build does not know visible as a problem', () => {
     expect(describeHealth({ type: 'missingSomethingNew' } as never)).toBe('This reference no longer resolves')
   })

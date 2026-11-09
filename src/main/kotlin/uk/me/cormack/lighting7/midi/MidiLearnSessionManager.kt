@@ -70,10 +70,11 @@ class MidiLearnSessionManager(
         val deadlineMs: Long,
     )
 
-    /** Resolved address of a captured control. */
+    /** Resolved address of a captured control part. */
     data class Capture(
         val deviceTypeKey: String,
         val controlId: String,
+        val part: ControlPart = ControlPart.MAIN,
     )
 
     sealed class SessionEvent {
@@ -224,7 +225,13 @@ class MidiLearnSessionManager(
     }
 
     private fun captureIfPending(deviceTypeKey: String, event: MidiInputEvent) {
-        val candidateControlId = extractCapturableControlId(deviceTypeKey, event) ?: return
+        val profile = try {
+            ControlSurfaceRegistry.typeFor(deviceTypeKey)
+        } catch (e: Exception) {
+            logger.warn("Failed to resolve profile $deviceTypeKey: ${e.message}")
+            null
+        } ?: return
+        val (controlId, part) = profile.inputs.capture(event) ?: return
 
         // Find the first pending session whose filter matches.
         val session = _sessions.value.values.firstOrNull {
@@ -236,62 +243,10 @@ class MidiLearnSessionManager(
             if (current.state != SessionState.Pending) return@transition null
             current.copy(
                 state = SessionState.Captured,
-                captured = Capture(deviceTypeKey = deviceTypeKey, controlId = candidateControlId),
+                captured = Capture(deviceTypeKey = deviceTypeKey, controlId = controlId, part = part),
             )
         } ?: return
         _events.tryEmit(SessionEvent.Captured(transitioned.sessionId, transitioned))
-    }
-
-    /**
-     * Extract a stable `controlId` from an inbound [MidiInputEvent] by consulting the device
-     * profile registered under [deviceTypeKey]. Returns null if the event is not "captureable"
-     * (e.g. a CC with value 0 on a fader that still sits at rest, an unknown CC / note,
-     * a Program Change — no descriptor type captures those, since bank buttons are
-     * deliberately not user-bindable).
-     */
-    private fun extractCapturableControlId(deviceTypeKey: String, event: MidiInputEvent): String? {
-        val profile = try {
-            ControlSurfaceRegistry.typeFor(deviceTypeKey)
-        } catch (e: Exception) {
-            logger.warn("Failed to resolve profile $deviceTypeKey: ${e.message}")
-            null
-        } ?: return null
-
-        for (control in profile.controls) {
-            val match = when (control) {
-                is FaderDescriptor -> {
-                    if (event is MidiInputEvent.ControlChange &&
-                        event.cc == control.cc &&
-                        event.channel == control.channel &&
-                        event.value.toInt() > 0
-                    ) control.controlId else null
-                }
-                is EncoderDescriptor -> when {
-                    event is MidiInputEvent.ControlChange &&
-                        event.cc == control.cc &&
-                        event.channel == control.channel -> control.controlId
-                    event is MidiInputEvent.NoteOn &&
-                        control.pushNote != null &&
-                        event.note == control.pushNote &&
-                        event.channel == control.channel &&
-                        event.velocity.toInt() > 0 -> control.controlId
-                    else -> null
-                }
-                is ButtonDescriptor -> {
-                    if (event is MidiInputEvent.NoteOn &&
-                        event.note == control.note &&
-                        event.channel == control.channel &&
-                        event.velocity.toInt() > 0
-                    ) control.controlId else null
-                }
-                is BankButtonDescriptor -> {
-                    // Bank buttons are not user-bindable; never capture them during Learn.
-                    null
-                }
-            }
-            if (match != null) return match
-        }
-        return null
     }
 
     private fun transition(sessionId: String, mutate: (Session) -> Session?): Session? {

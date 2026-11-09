@@ -1,0 +1,58 @@
+{
+  "compatibleAttributes": [
+    "dimmer"
+  ],
+  "defaultTiming": "HEAD",
+  "family": "intensity",
+  "fxId": "custom-flicker",
+  "name": "Custom Flicker",
+  "outputType": "SLIDER",
+  "parameters": [
+    {
+      "defaultValue": "0.8",
+      "description": "flicker depth",
+      "label": "Depth",
+      "max": 1.0,
+      "min": 0.0,
+      "name": "depth",
+      "pair": "depthMax",
+      "role": "detail",
+      "shownWhen": {
+        "param": "mode",
+        "values": [
+          "DEEP"
+        ]
+      },
+      "step": 0.05,
+      "type": "double",
+      "unit": "ratio"
+    },
+    {
+      "defaultValue": "1.0",
+      "name": "depthMax",
+      "type": "double"
+    },
+    {
+      "defaultValue": "DEEP",
+      "name": "mode",
+      "options": [
+        {
+          "label": "Deep",
+          "value": "DEEP"
+        },
+        {
+          "label": "Shallow",
+          "value": "SHALLOW"
+        }
+      ],
+      "type": "choice"
+    },
+    {
+      "defaultValue": "7",
+      "name": "seed",
+      "type": "int"
+    }
+  ],
+  "script": "// effect",
+  "uuid": "afa0ab11-0992-4357-8010-5347d6965e83"
+}

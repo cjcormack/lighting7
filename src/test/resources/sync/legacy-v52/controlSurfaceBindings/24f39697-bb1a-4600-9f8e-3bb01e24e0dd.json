@@ -1,0 +1,8 @@
+{
+  "controlId": "button-3",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 4,
+  "targetPayload": "{\"type\":\"clearSelection\"}",
+  "targetType": "clearSelection",
+  "uuid": "24f39697-bb1a-4600-9f8e-3bb01e24e0dd"
+}

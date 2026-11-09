@@ -1,0 +1,9 @@
+{
+  "displayName": "Bar 1",
+  "fixtureTypeKey": "led-lightbar-12-pixel-48ch",
+  "key": "bar-1",
+  "sortOrder": 5,
+  "startChannel": 100,
+  "universeConfigUuid": "8476fcfd-7d21-481e-ac88-6c32bc3e0c4a",
+  "uuid": "01aec8e9-023e-45c3-b794-d08f155679b7"
+}

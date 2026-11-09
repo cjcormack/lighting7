@@ -1,0 +1,11 @@
+{
+  "amount": 0.5,
+  "attributeMask": "COLOUR",
+  "blendMode": "MULTIPLY",
+  "cueUuid": "2774f31c-e8c8-4001-a0fa-771b6d1915f4",
+  "enabled": false,
+  "lookUuid": "3b4f5f28-b507-4a75-ab62-7346ee95e00a",
+  "sortOrder": 3,
+  "stomp": true,
+  "uuid": "bd8a148d-6786-4002-8014-c31f64cfe0ca"
+}

@@ -14,7 +14,7 @@ import io.ktor.server.testing.testApplication
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
-import uk.me.cormack.lighting7.midi.BindingTarget
+import uk.me.cormack.lighting7.midi.Does
 import uk.me.cormack.lighting7.routes.BuskLayoutBank
 import uk.me.cormack.lighting7.routes.BuskLayoutColumn
 import uk.me.cormack.lighting7.routes.BuskLayoutPad
@@ -117,12 +117,12 @@ class OscAddressListTest : RouteIntegrationTest() {
                 else -> emptyList()
             }
             val resolved = transaction(state.database) { OscAddresses.resolve(row.address, args, lookup) }
-            val target = when (resolved) {
-                is OscResolution.Press -> resolved.target
-                is OscResolution.Level -> resolved.target
+            val binding = when (resolved) {
+                is OscResolution.Press -> resolved.binding
+                is OscResolution.Level -> resolved.binding
                 else -> null
             }
-            assertEquals(row.target, target, row.address)
+            assertEquals(row.binding, binding, row.address)
         }
         // Every pattern of the table has at least one address in a show holding one of each record.
         val reached = list.addresses.map { it.pattern }.toSet()
@@ -155,8 +155,8 @@ class OscAddressListTest : RouteIntegrationTest() {
         assertEquals("???", noSlug.name)
         val noNumber = assertNotNull(list.unaddressed.singleOrNull { it.kind == OscRecordKind.ENTRY && it.id == entryId }, list.unaddressed.toString())
         assertEquals("It has no cue number", noNumber.reason)
-        // The listing carries each target in the binding wire's shape, which the client matches on.
-        val goTo = list.addresses.first { it.target is BindingTarget.CueStackGo }
+        // The listing carries each address's binding, which the client matches on.
+        val goTo = list.addresses.first { it.binding.does == Does.Go }
         assertEquals(OscRecordKind.STACK, goTo.record?.kind)
     }
 }

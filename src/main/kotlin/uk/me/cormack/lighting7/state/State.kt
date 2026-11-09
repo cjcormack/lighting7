@@ -33,7 +33,7 @@ import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
 import uk.me.cormack.lighting7.midi.DefaultSurfaceActions
 import uk.me.cormack.lighting7.midi.DeviceMatcher
-import uk.me.cormack.lighting7.midi.FlashStateTracker
+import uk.me.cormack.lighting7.midi.SurfaceHolds
 import uk.me.cormack.lighting7.midi.SurfaceDispatch
 import uk.me.cormack.lighting7.midi.GlobalScalerStateHolder
 import uk.me.cormack.lighting7.midi.CoreMidiHotPlug
@@ -670,8 +670,6 @@ class State(val config: ApplicationConfig) {
         }
         return BindingHealthEvaluator.Context(
             fixtures = fixtures,
-            validStackIds = snapshot.stacks.mapTo(HashSet()) { it.first },
-            validCueIds = snapshot.cues.mapTo(HashSet()) { it.first },
             deviceTypes = ControlSurfaceRegistry.allTypes,
             validSpeedMasterUuids = snapshot.speedMasterUuids,
             validStackUuids = snapshot.stacks.mapTo(HashSet()) { it.second },
@@ -910,10 +908,10 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
-     * Per-binding flash press tracker (Phase 3). Keyed by `bindingId`; a press that's
-     * already active is ignored so MIDI retriggers don't double-apply.
+     * What every surface's While held presses hold now, keyed by control part — the flash LEDs read
+     * it. One for the router's dispatch and the feedback publisher.
      */
-    val flashStateTracker: FlashStateTracker by lazy { FlashStateTracker() }
+    val surfaceHolds: SurfaceHolds by lazy { SurfaceHolds() }
 
     /**
      * Per-project [GlobalScalerStateHolder] registry (Phase 9). Lives above the [Show]
@@ -998,7 +996,7 @@ class State(val config: ApplicationConfig) {
             bindingService = controlSurfaceBindingService,
             bankState = activeBankState,
             encoderBankState = encoderBankState,
-            flashTracker = flashStateTracker,
+            holds = surfaceHolds,
             projectIdProvider = { projectManager.currentProject.id.value },
             fixturesProvider = { show.fixtures },
             globalScalerStateProvider = { show.globalScalerState },
@@ -1065,7 +1063,7 @@ class State(val config: ApplicationConfig) {
             handler = uk.me.cormack.lighting7.osc.OscHandler(
                 database = database,
                 currentProjectId = { projectManager.currentProject.id.value },
-                dispatch = SurfaceDispatch(DefaultSurfaceActions(this), activeBankState, encoderBankState, flashStateTracker),
+                dispatch = SurfaceDispatch(DefaultSurfaceActions(this), activeBankState, encoderBankState),
                 ensureHistory = { history.ensure(it) },
             ),
         )
@@ -1096,7 +1094,7 @@ class State(val config: ApplicationConfig) {
             bindingService = controlSurfaceBindingService,
             bankState = activeBankState,
             encoderBankState = encoderBankState,
-            flashTracker = flashStateTracker,
+            holds = surfaceHolds,
             projectIdProvider = { projectManager.currentProject.id.value },
             actions = DefaultSurfaceActions(this),
             feedbackHooks = surfaceFeedbackPublisher,
@@ -1152,6 +1150,7 @@ class State(val config: ApplicationConfig) {
                     // attribute the new rig has no fixture for would leave every strip encoder dark.
                     deskSelection.clear()
                     encoderBankState.clearAll()
+                    surfaceHolds.clearAll()
                     // A page id belongs to one project's page list, so carrying one across would show
                     // a page that is not there — or, worse, another project's page by id collision.
                     buskPageState.clear()
@@ -1522,6 +1521,10 @@ class State(val config: ApplicationConfig) {
         // busk-stack plan step 14: `busk_pads` rebuilt so its CHECK admits a pad naming a cue stack,
         // backed up first when it holds pads. After step 13. `BuskPadStackMigration.kt`.
         BuskPadStackMigration.runIfNeeded(ds, database, dbPath)
+
+        // surface-setup plan step 15: every surface binding in the grammar and its slot's index given
+        // the part, backed up first when it holds bindings. After step 14. `SurfaceGrammarMigration.kt`.
+        SurfaceGrammarMigration.runIfNeeded(ds, database, dbPath)
 
         databaseInitWindow = startedAt to java.time.Instant.now()
         return database

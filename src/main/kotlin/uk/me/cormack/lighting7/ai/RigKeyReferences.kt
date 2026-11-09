@@ -6,8 +6,9 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.select
-import uk.me.cormack.lighting7.midi.BindingTarget
-import uk.me.cormack.lighting7.midi.BindingTargetJson
+import uk.me.cormack.lighting7.midi.Binding
+import uk.me.cormack.lighting7.midi.Subject
+import uk.me.cormack.lighting7.midi.decodeBinding
 import uk.me.cormack.lighting7.midi.encodePayload
 import uk.me.cormack.lighting7.models.DaoBuskRigRows
 import uk.me.cormack.lighting7.models.DaoBuskRigTile
@@ -242,8 +243,7 @@ internal object RigKeyReferences {
         }
 
         DaoControlSurfaceBinding.find { DaoControlSurfaceBindings.project eq project.id }.forEach { binding ->
-            val target = runCatching { BindingTargetJson.decodeFromString<BindingTarget>(binding.targetPayload) }.getOrNull()
-                ?: return@forEach
+            val target = decodeBinding(binding.targetPayload, binding.targetType)
             val user = User(
                 "BINDING", binding.id.value,
                 listOfNotNull(binding.deviceTypeKey, binding.controlId, binding.bank?.let { "bank $it" }).joinToString(" "),
@@ -255,14 +255,10 @@ internal object RigKeyReferences {
         }
     }
 
-    /** This target with every fixture or group it names passed through [rename]; null when nothing changed. */
-    private fun BindingTarget.renamed(rename: (String, String) -> String?): BindingTarget? = when (this) {
-        is BindingTarget.FixtureAttribute -> rename(TargetRef.Fixture.TYPE, fixtureKey)?.let { copy(fixtureKey = it) }
-        is BindingTarget.FireTrigger -> rename(TargetRef.Fixture.TYPE, fixtureKey)?.let { copy(fixtureKey = it) }
-        is BindingTarget.GroupAttribute -> rename(TargetRef.Group.TYPE, groupName)?.let { copy(groupName = it) }
-        is BindingTarget.Flash -> target.renamed(rename)?.let { copy(target = it) }
-        is BindingTarget.SelectTarget -> rename(target.type, target.key)?.let { copy(target = target.copy(key = it)) }
-        is BindingTarget.Strip -> rename(target.type, target.key)?.let { copy(target = target.copy(key = it)) }
+    /** This binding with the fixture or group it acts on passed through [rename]; null when nothing changed. */
+    private fun Binding.renamed(rename: (String, String) -> String?): Binding? = when (val subject = on) {
+        is Subject.Fixture -> rename(TargetRef.Fixture.TYPE, subject.key)?.let { copy(on = Subject.Fixture(it)) }
+        is Subject.Group -> rename(TargetRef.Group.TYPE, subject.key)?.let { copy(on = Subject.Group(it)) }
         else -> null
     }
 }

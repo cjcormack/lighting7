@@ -1,0 +1,18 @@
+{
+  "colour": "green",
+  "members": [
+    {
+      "fixturePatchUuid": "bcd336cc-bd7d-44c6-af43-81a04a9220d5",
+      "uuid": "a69b28d8-4b15-43db-94a5-4d0cb14589d2"
+    },
+    {
+      "fixturePatchUuid": "ba490636-bb35-4aff-af27-c41645f66f79",
+      "panOffset": 30.0,
+      "sortOrder": 1,
+      "tiltOffset": -5.0,
+      "uuid": "b9e9fb8b-6d41-4240-b0c8-00a6ec907e37"
+    }
+  ],
+  "name": "front-wash",
+  "uuid": "3c162cf8-0f7d-491e-a169-93bda0672ec9"
+}

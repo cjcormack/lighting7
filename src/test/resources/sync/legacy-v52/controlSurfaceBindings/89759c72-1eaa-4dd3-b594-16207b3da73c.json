@@ -1,0 +1,8 @@
+{
+  "controlId": "button-4",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 5,
+  "targetPayload": "{\"type\":\"locateSelection\"}",
+  "targetType": "locateSelection",
+  "uuid": "89759c72-1eaa-4dd3-b594-16207b3da73c"
+}

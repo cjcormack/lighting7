@@ -1,0 +1,11 @@
+{
+  "cueUuid": "2774f31c-e8c8-4001-a0fa-771b6d1915f4",
+  "delayMs": 250,
+  "intervalMs": 500,
+  "lookUuid": "de826da4-eddc-42f6-b103-0ba42e73e1c5",
+  "randomWindowMs": 125,
+  "rateSpeedMasterUuid": "102984c9-805a-48e4-adcc-1762802bf7fe",
+  "sortOrder": 2,
+  "speedMasterUuid": "102984c9-805a-48e4-adcc-1762802bf7fe",
+  "uuid": "ef883a8f-011b-4f9c-a46d-6e4cc2585607"
+}

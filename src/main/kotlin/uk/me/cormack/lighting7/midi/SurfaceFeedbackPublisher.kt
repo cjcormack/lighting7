@@ -22,7 +22,6 @@ import uk.me.cormack.lighting7.fx.ProgrammerLayerStack
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.fx.FxSpeed
 import uk.me.cormack.lighting7.fx.StackFxAmounts
-import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -117,7 +116,7 @@ class SurfaceFeedbackPublisher(
     private val bindingService: ControlSurfaceBindingService,
     private val bankState: ActiveBankState,
     private val encoderBankState: EncoderBankState,
-    private val flashTracker: FlashStateTracker,
+    private val holds: SurfaceHolds,
     private val projectIdProvider: () -> Int,
     private val fixturesProvider: () -> Fixtures,
     private val globalScalerStateProvider: () -> GlobalScalerState,
@@ -444,7 +443,7 @@ class SurfaceFeedbackPublisher(
             encoderBankState.changes.collect { onEncoderBankChanged(it) }
         }
         jobs += scope.launch(CoroutineName("FeedbackPublisher-flash")) {
-            flashTracker.changes.collect { onFlashChanged(it) }
+            holds.changes.collect { onFlashChanged(it) }
         }
         deskSelection?.let { selection ->
             // A StateFlow replays its current value on subscribe: the first collect is a
@@ -709,7 +708,7 @@ class SurfaceFeedbackPublisher(
         }
         val controller = controllerLookup(displayKey) ?: return
         val on = ledOn(entry) ?: run {
-            logger.debug("onButtonRelease: unexpected target {} for led entry", entry.binding.target::class.simpleName)
+            logger.debug("onButtonRelease: unexpected function {} for led entry", entry.binding.binding.functionId)
             return
         }
         logger.debug("onButtonRelease: reasserting LED {}/{} note={} on={}", displayKey, controlId, entry.control.note, on)
@@ -816,17 +815,14 @@ class SurfaceFeedbackPublisher(
         }
     }
 
-    private fun onFlashChanged(change: FlashStateTracker.FlashChange) {
+    private fun onFlashChanged(change: SurfaceHolds.HoldChange) {
         val entry = index.get().flashByBindingId[change.bindingId] ?: return
-        sendLed(entry, change.pressed)
+        sendLed(entry, change.held)
     }
 
     private fun onScalerChanged(blackoutEnabled: Boolean, grandMasterEnabled: Boolean) {
         val idx = index.get()
-        for (entry in idx.blackoutLeds) {
-            val target = entry.binding.target
-            sendLed(entry, if (target is BindingTarget.BlackoutSet) blackoutEnabled == target.on else blackoutEnabled)
-        }
+        for (entry in idx.blackoutLeds) sendLed(entry, blackoutLit(entry, blackoutEnabled))
         // Grand Master LED: "ON" = grand master engaged (normal output). Some consoles invert
         // this; we follow the `enabled` flag so a lit button means "lights are live".
         for (entry in idx.grandMasterLeds) sendLed(entry, grandMasterEnabled)
@@ -871,8 +867,8 @@ class SurfaceFeedbackPublisher(
     /**
      * Uuid → record, for one [rebuildIndex] pass.
      *
-     * A Look's and a template's uuid need no lookup at all — `appliedState` reports the record's own
-     * uuid, so parsing the string is the whole of it. Only a pad and a page need the database, and
+     * A Look's and a palette's uuid need no lookup at all — `appliedState` reports the record's own
+     * uuid. Only a pad and a page need the database, and
      * [refs] is `lazy` so a desk with neither bound never touches it: a rebuild runs on every
      * selection change, and an unconditional read there would be a query per press of a select
      * button.
@@ -887,12 +883,10 @@ class SurfaceFeedbackPublisher(
             }
         }
 
-        fun lookUuid(raw: String): UUID? = uuidOrNull(raw)
-        fun paletteUuid(raw: String): UUID? = uuidOrNull(raw)
-        fun pageId(raw: String): Int? = uuidOrNull(raw)?.let { refs.pageIds[it] }
+        fun pageId(page: UUID): Int? = refs.pageIds[page]
 
-        fun padLed(entry: LedEntry, raw: String): RecordLedEntry =
-            when (val ref = uuidOrNull(raw)?.let { refs.pads[it] }) {
+        fun padLed(entry: LedEntry, pad: UUID?): RecordLedEntry =
+            when (val ref = pad?.let { refs.pads[it] }) {
                 is PadRef.Layer -> RecordLedEntry(
                     entry,
                     // A palette pad's ring is the busk view's selection-scoped fold; a Look pad's is
@@ -905,12 +899,6 @@ class SurfaceFeedbackPublisher(
                 // The pad is gone; health says so and the LED stays dark.
                 null -> RecordLedEntry(entry, RecordLedKind.COVERS_SELECTION, null)
             }
-
-        private fun uuidOrNull(raw: String): UUID? = try {
-            UUID.fromString(raw)
-        } catch (_: IllegalArgumentException) {
-            null
-        }
     }
 
     private fun rebuildIndex() {
@@ -943,7 +931,7 @@ class SurfaceFeedbackPublisher(
         // batch below rather than one lookup per button.
         val recordRefs = RecordRefResolver(projectId)
         // Expanded once per rebuild, not once per bound control.
-        val selectedHeads = deskSelection?.coverage().orEmpty()
+        val selection: () -> List<CueTargetDto> = { deskSelection?.state?.value?.targets.orEmpty() }
 
         for ((displayKey, a) in attached) {
             val profile = profilesByKey[a.typeKey] ?: continue
@@ -959,41 +947,41 @@ class SurfaceFeedbackPublisher(
                     } else {
                         BindingTakeoverPolicy.IMMEDIATE
                     }
-                    (binding.target as? BindingTarget.SpeedMasterBpm)?.let { tempo ->
+                    val does = binding.binding.does
+                    val on = binding.binding.on
+                    (does as? Does.Tempo)?.takeIf { it.bpm == null }?.let { tempo ->
                         speedMasterEntries += SpeedMasterEntry(
                             displayKey = displayKey,
                             control = control,
-                            masterUuid = tempo.masterUuid?.let { speedMasterUuidOrNull(it) },
+                            masterUuid = on.recordUuid(RecordKind.MASTER),
                             minBpm = tempo.minBpm,
                             maxBpm = tempo.maxBpm,
                             policy = binding.takeoverPolicy ?: classDefault,
                         )
                     }
-                    if (binding.target == BindingTarget.GrandMasterFader) {
+                    if (does is Does.GrandMaster && does.level == null) {
                         grandMasterEntries += GrandMasterEntry(
                             displayKey = displayKey,
                             control = control,
                             policy = binding.takeoverPolicy ?: classDefault,
                         )
                     }
-                    (binding.target as? BindingTarget.SelectionFan)?.let { fan ->
+                    (does as? Does.Fan)?.let { fan ->
                         fanEntries += FanEntry(displayKey, control, fan.axis, binding.takeoverPolicy ?: classDefault)
                     }
-                    if (binding.target == BindingTarget.FxSpeed) {
+                    if (does == Does.FxSpeed) {
                         fxSpeedEntries += FxSpeedEntry(displayKey, control, binding.takeoverPolicy ?: classDefault)
                     }
-                    (binding.target as? BindingTarget.StackFxAmount)?.let { stack ->
+                    if (does == Does.FxAmount) {
                         stackFxAmountEntries += StackFxAmountEntry(
                             displayKey = displayKey,
                             control = control,
-                            // The input path's rule: a uuid that resolves to nothing here is no stack,
-                            // never the int beside it, which may name another one.
-                            stackId = stack.stackUuid?.let(::resolveStackUuid) ?: stack.stackId.takeIf { stack.stackUuid == null },
+                            stackId = on.recordUuid(RecordKind.STACK)?.let { resolveStackUuid(it.toString()) },
                             policy = binding.takeoverPolicy ?: classDefault,
                         )
                     }
-                    val axis = binding.target.colourAxisOrNull()
-                    val heads = fixtures?.let { findHeads(it, binding.target, selectedHeads, axis) }
+                    val axis = (does as? Does.Level)?.axis
+                    val heads = fixtures?.let { findHeads(it, binding.binding, selection, axis) }
                     if (heads != null) {
                         val entry = ContinuousEntry(
                             displayKey = displayKey,
@@ -1012,47 +1000,38 @@ class SurfaceFeedbackPublisher(
                     }
                 }
                 if (control is ButtonDescriptor && control.ledFeedback != LedFeedback.NONE) {
-                    val target = binding.target
+                    val does = binding.binding.does
+                    val on = binding.binding.on
                     val entry = LedEntry(displayKey, control, binding)
-                    val listed = when (target) {
-                        is BindingTarget.Flash -> { flashByBindingId[binding.id] = entry; true }
-                        is BindingTarget.Blackout -> { blackoutLeds += entry; true }
-                        is BindingTarget.BlackoutSet -> { blackoutLeds += entry; true }
-                        is BindingTarget.GrandMasterToggle -> { grandMasterLeds += entry; true }
-                        is BindingTarget.SelectTarget -> { selectLeds += entry; true }
-                        is BindingTarget.LocateSelection -> { locateLeds += entry; true }
-                        is BindingTarget.EncoderBankSet -> { encoderBankLeds += entry; true }
+                    val listed = when (does) {
+                        is Does.Flash -> { flashByBindingId[binding.id] = entry; true }
+                        Does.Blackout -> { blackoutLeds += entry; true }
+                        is Does.GrandMaster -> if (does.level == null) { grandMasterLeds += entry; true } else false
+                        Does.Select -> { selectLeds += entry; true }
+                        Does.Locate -> { locateLeds += entry; true }
+                        is Does.EncoderPage -> { encoderBankLeds += entry; true }
                         // The record and page arms, and the one place in this class where an
                         // omission is silent rather than a compile error: this `when` and [ledOn]
-                        // both end in `else`, so a variant with no arm here is simply never
-                        // indexed and never lit, on hardware no browser can show.
-                        is BindingTarget.ApplyLook -> {
-                            recordLeds += RecordLedEntry(
-                                entry, RecordLedKind.LOOK_APPLIED, recordRefs.lookUuid(target.lookUuid),
-                            )
+                        // both end in `else`, so a function with no arm here is simply never
+                        // indexed and never lit, on hardware no browser can show. Session 2 puts
+                        // the LED on the function.
+                        // Lit while the Look is on, whichever way the button presses it.
+                        Does.Look -> {
+                            recordLeds += RecordLedEntry(entry, RecordLedKind.LOOK_APPLIED, on.recordUuid(RecordKind.LOOK))
                             true
                         }
-                        // Lit while the Look is on, as an `ApplyLook` button is, whichever way it presses.
-                        is BindingTarget.LookSet -> {
-                            recordLeds += RecordLedEntry(
-                                entry, RecordLedKind.LOOK_APPLIED, recordRefs.lookUuid(target.lookUuid),
-                            )
+                        is Does.Palette -> {
+                            recordLeds += RecordLedEntry(entry, RecordLedKind.COVERS_SELECTION, does.palette)
                             true
                         }
-                        is BindingTarget.PressPalette -> {
-                            recordLeds += RecordLedEntry(
-                                entry, RecordLedKind.COVERS_SELECTION, recordRefs.paletteUuid(target.paletteUuid),
-                            )
+                        Does.Pad -> {
+                            recordLeds += recordRefs.padLed(entry, on.recordUuid(RecordKind.PAD))
                             true
                         }
-                        is BindingTarget.PressPad -> {
-                            recordLeds += recordRefs.padLed(entry, target.padUuid)
+                        is Does.BuskPage -> on.recordUuid(RecordKind.PAGE)?.let { page ->
+                            buskPageLeds += entry to recordRefs.pageId(page)
                             true
-                        }
-                        is BindingTarget.BuskPageSet -> {
-                            buskPageLeds += entry to recordRefs.pageId(target.pageUuid)
-                            true
-                        }
+                        } ?: false
                         else -> false
                     }
                     if (listed) ledsByDisplay.getOrPut(displayKey) { mutableListOf() }.add(entry)
@@ -1116,41 +1095,17 @@ class SurfaceFeedbackPublisher(
      */
     private fun findHeads(
         fixtures: Fixtures,
-        target: BindingTarget,
-        selectedHeads: List<CueTargetDto>,
+        binding: Binding,
+        selection: () -> List<CueTargetDto>,
         axis: ColourAxis?,
     ): List<AttributeChannelResolver.AttributeRead>? {
-        fun describe(fixture: Fixture, attribute: String): AttributeChannelResolver.AttributeRead? {
-            val read = AttributeChannelResolver.describeAttributeRead(fixture, attribute) ?: return null
-            if (axis != null && read !is AttributeChannelResolver.AttributeRead.Colour) return null
-            return read
+        val level = binding.does as? Does.Level ?: return null
+        val reads = Heads.of(fixtures, binding.on, level.attribute, selection).mapNotNull { head ->
+            val read = AttributeChannelResolver.describeAttributeRead(head.fixture, level.attribute) ?: return@mapNotNull null
+            if (axis != null && AttributeChannelResolver.isColour(head.fixture, level.attribute) != true) return@mapNotNull null
+            read
         }
-        return when (target) {
-            is BindingTarget.FixtureAttribute -> {
-                val fixture = try {
-                    fixtures.untypedFixture(target.fixtureKey)
-                } catch (_: Exception) { null }
-                fixture?.let { describe(it, target.attribute) }?.let { listOf(it) }
-            }
-            is BindingTarget.GroupAttribute -> {
-                val group = try {
-                    fixtures.untypedGroup(target.groupName)
-                } catch (_: Exception) { null }
-                group?.fixtures?.filterIsInstance<Fixture>()
-                    ?.mapNotNull { describe(it, target.attribute) }
-                    ?.takeIf { it.isNotEmpty() }
-            }
-            is BindingTarget.SelectionAttribute -> selectedHeads.mapNotNull { head ->
-                if (head.type != TargetRef.Fixture.TYPE) return@mapNotNull null
-                val fixture = try {
-                    fixtures.untypedFixture(head.key)
-                } catch (_: Exception) { null }
-                fixture?.let { describe(it, target.attribute) }
-            }
-            // Never seen here: resolve() derives a strip to one of the property targets above.
-            is BindingTarget.Strip -> null
-            else -> null
-        }
+        return if (binding.on == Subject.Selection) reads else reads.takeIf { it.isNotEmpty() }
     }
 
     /** Resync one specific control — motor catch-up on touch-off. */
@@ -1221,40 +1176,38 @@ class SurfaceFeedbackPublisher(
      * than edge events — so a Flash held at the moment a device attaches lights up immediately.
      * Null for a target that carries no LED semantics.
      */
-    private fun ledOn(entry: LedEntry, applied: List<AppliedSource>? = null): Boolean? = when (val target = entry.binding.target) {
-        is BindingTarget.Flash -> flashTracker.isActive(entry.binding.id)
+    private fun ledOn(entry: LedEntry, applied: List<AppliedSource>? = null): Boolean? = when (val does = entry.binding.binding.does) {
+        is Does.Flash -> holds.isHeldBinding(entry.binding.id)
         // The scaler facade is per show; before the show is up there is nothing to read.
-        is BindingTarget.Blackout -> runCatching { globalScalerStateProvider().blackoutEnabled.value }.getOrDefault(false)
-        // Lit while blackout is in the state the button sets.
-        is BindingTarget.BlackoutSet ->
-            runCatching { globalScalerStateProvider().blackoutEnabled.value == target.on }.getOrDefault(!target.on)
-        is BindingTarget.GrandMasterToggle -> runCatching { globalScalerStateProvider().grandMasterEnabled.value }.getOrDefault(false)
-        is BindingTarget.SelectTarget -> deskSelection?.covers(target.target) ?: false
-        is BindingTarget.LocateSelection -> selectionLocated(
+        Does.Blackout -> runCatching { blackoutLit(entry, globalScalerStateProvider().blackoutEnabled.value) }
+            .getOrDefault(entry.binding.binding.how == How.OFF)
+        is Does.GrandMaster -> if (does.level != null) null
+            else runCatching { globalScalerStateProvider().grandMasterEnabled.value }.getOrDefault(false)
+        Does.Select -> entry.binding.binding.on.asTarget()?.let { deskSelection?.covers(it) } ?: false
+        Does.Locate -> selectionLocated(
             runCatching { locateManagerProvider?.invoke()?.activeTargets?.value }.getOrNull().orEmpty(),
         )
         // Both halves, through the effective axis: a hue button and a saturation button on one
-        // colour property are two banks, and (rgbColour, null) is the same bank as (rgbColour, HUE).
-        is BindingTarget.EncoderBankSet -> encoderBankState.selectionFor(entry.binding.deviceTypeKey).let {
-            it.attribute == target.attribute && it.colourAxis.effective == target.colourAxis.effective
+        // colour property are two pages, and (rgbColour, null) is the same page as (rgbColour, HUE).
+        is Does.EncoderPage -> encoderBankState.selectionFor(entry.binding.deviceTypeKey).let {
+            it.attribute == does.attribute && it.colourAxis.effective == does.axis.effective
         }
-        // Never indexed: resolve() derives a strip to the target of the control it stands on.
-        is BindingTarget.Strip -> null
         // Answered from the *index*, which carries each button's record already resolved: this
         // function has only the binding, and a uuid → record lookup here would be a database read
         // per LED per resync.
-        is BindingTarget.ApplyLook,
-        is BindingTarget.LookSet,
-        is BindingTarget.PressPalette,
-        is BindingTarget.PressPad,
+        Does.Look, is Does.Palette, Does.Pad,
             -> index.get().recordLedByBindingId[entry.binding.id]
                 ?.let { recordLedOn(it, applied ?: appliedSources()) }
-        is BindingTarget.BuskPageSet -> {
+        is Does.BuskPage -> {
             val pageId = index.get().buskPageIdByBindingId[entry.binding.id]
             pageId != null && buskPageState?.pageId?.value == pageId
         }
         else -> null
     }
+
+    /** A blackout button is lit while blackout is in the state it sets: on for a toggle or On, off for Off. */
+    private fun blackoutLit(entry: LedEntry, blackoutEnabled: Boolean): Boolean =
+        if (entry.binding.binding.how == How.OFF) !blackoutEnabled else blackoutEnabled
 
     /**
      * A record button's LED, read from the state the busk view's ring reads.

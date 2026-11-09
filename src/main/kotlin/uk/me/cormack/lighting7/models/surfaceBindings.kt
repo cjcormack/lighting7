@@ -7,14 +7,12 @@ import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.core.java.javaUUID
 
 /**
- * Per-project persisted mapping from a physical control on a control-surface device to a
- * [uk.me.cormack.lighting7.midi.BindingTarget]. Keyed by
- * `(projectId, deviceTypeKey, controlId, bank)` — bank may be NULL for global bindings that
- * apply regardless of active bank.
+ * Per-project persisted mapping from one part of a physical control on a control-surface device to
+ * a [uk.me.cormack.lighting7.midi.Binding]. Keyed by `(projectId, deviceTypeKey, controlId, part,
+ * bank)` — bank may be NULL for a binding on both layers.
  *
- * The target payload is stored as a JSON string (serialized via [BindingTargetJson]) rather
- * than Exposed's `json<T>` helper so the discriminated union survives future sealed-class
- * additions without column migrations.
+ * The binding is stored as a JSON string ([uk.me.cormack.lighting7.midi.BindingJson]) rather than
+ * Exposed's `json<T>` helper, so a payload this build cannot read is kept byte for byte.
  */
 object DaoControlSurfaceBindings : IntIdTable("control_surface_bindings") {
     val project = reference("project_id", DaoProjects)
@@ -22,16 +20,19 @@ object DaoControlSurfaceBindings : IntIdTable("control_surface_bindings") {
     /** References `@ControlSurfaceType.typeKey` as a stable contract — bindings survive profile refactors only as long as the typeKey doesn't change. */
     val deviceTypeKey = varchar("device_type_key", 100)
 
-    /** Stable `ControlDescriptor.controlId` from the device profile. */
+    /** Stable `ControlDescriptor.controlId` from the device profile, or a strip id (until session 5). */
     val controlId = varchar("control_id", 100)
+
+    /** The control's part, a [uk.me.cormack.lighting7.midi.ControlPart] name: `MAIN`, or an encoder's `PUSH`. */
+    val part = varchar("part", 10).default("MAIN")
 
     /** App-side bank id (matches a [uk.me.cormack.lighting7.midi.BankDefinition.id]); null = global. */
     val bank = varchar("bank", 100).nullable()
 
-    /** Discriminator mirror of the JSON payload for cheap list-view queries. */
+    /** The binding's function id, mirrored from the payload for cheap queries; an unreadable row keeps the type it was written with. */
     val targetType = varchar("target_type", 50)
 
-    /** JSON serialization of the full [uk.me.cormack.lighting7.midi.BindingTarget]. */
+    /** JSON serialization of the [uk.me.cormack.lighting7.midi.Binding]. */
     val targetPayload = text("target_payload")
 
     /** `null` = inherit device class default; otherwise one of [BindingTakeoverPolicy] names. */
@@ -42,7 +43,9 @@ object DaoControlSurfaceBindings : IntIdTable("control_surface_bindings") {
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
-        uniqueIndex("uq_surface_binding_slot", project, deviceTypeKey, controlId, bank)
+        // Named apart from the old `uq_surface_binding_slot`, which had no part: the reconciliation
+        // adds this one beside it, and step 15 drops the old one.
+        uniqueIndex("uq_surface_binding_part_slot", project, deviceTypeKey, controlId, part, bank)
     }
 }
 
@@ -52,6 +55,7 @@ class DaoControlSurfaceBinding(id: EntityID<Int>) : IntEntity(id) {
     var project by DaoProject referencedOn DaoControlSurfaceBindings.project
     var deviceTypeKey by DaoControlSurfaceBindings.deviceTypeKey
     var controlId by DaoControlSurfaceBindings.controlId
+    var part by DaoControlSurfaceBindings.part
     var bank by DaoControlSurfaceBindings.bank
     var targetType by DaoControlSurfaceBindings.targetType
     var targetPayload by DaoControlSurfaceBindings.targetPayload

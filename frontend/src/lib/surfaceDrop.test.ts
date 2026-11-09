@@ -87,7 +87,10 @@ function binding(
     projectId: 1,
     deviceTypeKey: 'xtc',
     controlId,
+    part: 'MAIN',
     bank,
+    // The screens read `target`; the binding is the desk's, which these tests never read.
+    binding: { does: { type: 'unknown', storedType: target.type, rawPayload: '' } },
     target,
     targetType: target.type,
     takeoverPolicy: null,

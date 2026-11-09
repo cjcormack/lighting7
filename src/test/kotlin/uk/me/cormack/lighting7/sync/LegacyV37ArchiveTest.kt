@@ -83,8 +83,8 @@ class LegacyV37ArchiveTest {
             assertEquals(listOf("intensity", "position"), DaoSpeedMaster.all().filter { it.project.id.value == imported }.mapNotNull { it.family }.sorted())
 
             val press = DaoControlSurfaceBinding.all().single { it.project.id.value == imported && it.controlId == "button-8" }
-            assertEquals("pressPalette", press.targetType)
-            assertTrue(press.targetPayload.startsWith("""{"type":"pressPalette","paletteUuid":"""), press.targetPayload)
+            assertEquals("palette", press.targetType)
+            assertTrue(press.targetPayload.startsWith("""{"does":{"type":"palette","palette":"""), press.targetPayload)
         }
     }
 

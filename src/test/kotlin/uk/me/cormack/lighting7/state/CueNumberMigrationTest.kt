@@ -89,7 +89,7 @@ class CueNumberMigrationTest {
     @Test
     fun `every cue number becomes a number, the rest numbered from their places, backed up first`() {
         val desk = startDesk()
-        assertEquals(BUSK_PAD_STACK_USER_VERSION, userVersion(), "a fresh database is marked")
+        assertEquals(SURFACE_GRAMMAR_USER_VERSION, userVersion(), "a fresh database is marked")
         val projectId = seedMinimalProject(desk)
         val stackId = seedStack(
             desk, projectId,
@@ -112,7 +112,7 @@ class CueNumberMigrationTest {
         sql { it.execute("PRAGMA user_version = $PALETTE_LAYER_USER_VERSION") }
 
         val (again, logs) = captureLogs("CueNumberMigration") { startDesk() }
-        assertEquals(BUSK_PAD_STACK_USER_VERSION, userVersion())
+        assertEquals(SURFACE_GRAMMAR_USER_VERSION, userVersion())
         assertEquals(1, backups().size, "backed up first")
         assertEquals(
             listOf(
@@ -140,7 +140,7 @@ class CueNumberMigrationTest {
         sql { it.execute("PRAGMA user_version = $PALETTE_LAYER_USER_VERSION") }
 
         startDesk()
-        assertEquals(BUSK_PAD_STACK_USER_VERSION, userVersion())
+        assertEquals(SURFACE_GRAMMAR_USER_VERSION, userVersion())
         assertEquals(emptyList(), backups(), "nothing to change, nothing backed up")
     }
 }

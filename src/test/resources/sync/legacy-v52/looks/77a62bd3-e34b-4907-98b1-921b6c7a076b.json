@@ -1,0 +1,22 @@
+{
+  "fx": [
+    {
+      "attribute": "rgbColour",
+      "blendMode": "OVERRIDE",
+      "cycle": 4.0,
+      "family": "colour",
+      "fxType": "ColourCycle",
+      "order": "NORMAL",
+      "parameters": {
+        "colours": "#ff0000,#00ff00,#0000ff"
+      },
+      "spread": 2.0,
+      "spreadUnit": "STEP",
+      "targetKey": "front-wash",
+      "targetType": "group",
+      "uuid": "0d1a351c-13be-40b1-bbda-40372628b5d7"
+    }
+  ],
+  "name": "Steps chase",
+  "uuid": "77a62bd3-e34b-4907-98b1-921b6c7a076b"
+}

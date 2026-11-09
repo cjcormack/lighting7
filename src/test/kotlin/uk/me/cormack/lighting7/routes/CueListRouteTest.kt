@@ -1,5 +1,12 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.midi.Binding
+import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.RecordKind
+import uk.me.cormack.lighting7.midi.Subject
+import uk.me.cormack.lighting7.midi.encodePayload
+import uk.me.cormack.lighting7.midi.How
+
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -65,16 +72,18 @@ class CueListRouteTest : RouteIntegrationTest() {
             DaoControlSurfaceBinding.new {
                 this.project = project
                 deviceTypeKey = "xtouch-mini"; controlId = "button-7"
-                targetType = "fireCue"
-                targetPayload = """{"type":"fireCue","cueId":$storm,"cueUuid":"${DaoCue[storm].uuid}"}"""
+                val bound = Binding(Does.Cue, Subject.Record(RecordKind.CUE, DaoCue[storm].uuid))
+                targetType = bound.functionId
+                targetPayload = bound.encodePayload()
                 sortOrder = 0
             }
-            // A loose cue's explicit form (OSC plan D4) names its cue too.
+            // A loose cue's On form (OSC plan D4) names its cue too.
             DaoControlSurfaceBinding.new {
                 this.project = project
                 deviceTypeKey = "xtouch-mini"; controlId = "button-8"
-                targetType = "looseCueSet"
-                targetPayload = """{"type":"looseCueSet","cueUuid":"${DaoCue[loose].uuid}","on":true}"""
+                val bound = Binding(Does.Cue, Subject.Record(RecordKind.CUE, DaoCue[loose].uuid), How.ON)
+                targetType = bound.functionId
+                targetPayload = bound.encodePayload()
                 sortOrder = 1
             }
         }

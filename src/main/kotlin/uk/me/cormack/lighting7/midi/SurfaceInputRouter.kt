@@ -5,7 +5,6 @@ import uk.me.cormack.lighting7.history.WriteOrigin
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.AssignmentHealth
@@ -27,17 +26,16 @@ import java.util.concurrent.ConcurrentHashMap
  *   - [stop] cancels all running collectors.
  *
  * Hot path per inbound event:
- *   1. Look up the event against the device's [ControlSurfaceRegistry] profile to resolve
- *      a stable `controlId`. Bank-button presses short-circuit straight to
- *      [ActiveBankState.setBank] — they are intentionally not user-bindable.
+ *   1. Look the event up in the device profile's [ControlInputIndex] to find the control part it
+ *      addresses. Layer-button presses short-circuit straight to [ActiveBankState.setBank] — they
+ *      are intentionally not user-bindable.
  *   2. For fader / encoder continuous input: consult [SurfaceFeedbackHooks] soft takeover.
  *      If pickup hasn't occurred, drop the event silently but record the physical position
  *      so subsequent events can trigger pickup.
  *   3. Resolve the binding via [ControlSurfaceBindingService.resolve] using
- *      `(deviceTypeKey, controlId, activeBank)`. Exact-bank wins over bank-agnostic.
- *   4. Dispatch the [BindingTarget] through [SurfaceDispatch], which the OSC collector shares,
- *      inside its per-event guard. Flash press / release is tracked per-binding by
- *      [FlashStateTracker] so overlapping holds don't corrupt each other's release state.
+ *      `(deviceTypeKey, controlId, part, activeBank)`. Exact-bank wins over bank-agnostic.
+ *   4. Dispatch the [Binding] through [SurfaceDispatch], which the OSC collector shares, inside its
+ *      per-event guard. Holds — a flash's, a select's pending replace — are keyed by control part.
  *   5. Touch events pass through to the feedback hooks so motor writes are suppressed
  *      while a fader is held.
  */
@@ -47,7 +45,7 @@ class SurfaceInputRouter(
     private val bindingService: ControlSurfaceBindingService,
     private val bankState: ActiveBankState,
     private val encoderBankState: EncoderBankState,
-    private val flashTracker: FlashStateTracker,
+    holds: SurfaceHolds,
     private val projectIdProvider: () -> Int,
     private val actions: SurfaceActions,
     private val types: () -> List<ControlSurfaceRegistry.DeviceTypeInfo> = { ControlSurfaceRegistry.allTypes },
@@ -55,8 +53,8 @@ class SurfaceInputRouter(
     private val feedbackHooks: SurfaceFeedbackHooks? = null,
     /** Records per-stage wall-clock duration of `dispatchContinuous` / `dispatchButton*`. */
     private val latencyTracker: MidiLatencyTracker = MidiLatencyTracker(),
-    /** How long a select button must be held before it replaces the selection. See [SELECT_HOLD_MS]. */
-    private val selectHoldMs: Long = SELECT_HOLD_MS,
+    /** How long a select button must be held before it replaces the selection. See [SurfaceDispatch.SELECT_HOLD_MS]. */
+    selectHoldMs: Long = SurfaceDispatch.SELECT_HOLD_MS,
     /** Gives the project a record cache before an input writes to it, so the write is journaled (undo plan §3.2). */
     private val ensureHistory: (Int) -> Unit = {},
 ) {
@@ -74,28 +72,14 @@ class SurfaceInputRouter(
 
         /** Capped to prevent unbounded growth in a long-running process with many churned bindings. */
         private const val DEAD_WARN_STATE_MAX = 1024
-
-        /**
-         * How long a `SelectTarget(TOGGLE)` button must be held before it *also* replaces the
-         * selection. Toggling still happens on press, so the LED is immediate; keeping the
-         * button down then narrows the selection to that one target, which is how every fader
-         * wing surveyed in `docs/plans/completed/midi-surface-plan.md` §1 behaves.
-         */
-        const val SELECT_HOLD_MS = 500L
     }
 
-    private val dispatch = SurfaceDispatch(actions, bankState, encoderBankState, flashTracker)
-
-    private val inputJobs = ConcurrentHashMap<String /* displayKey */, Job>()
-
-    /**
-     * Pending long-press replacements, keyed by `(displayKey, controlId)` — the physical button,
-     * not the binding, so a release always finds its own job even if the binding changed or went
-     * dead while the operator was holding it down.
-     */
-    private val holdJobs = ConcurrentHashMap<Pair<String, String>, Job>()
     private var matcherJob: Job? = null
     private var scope: CoroutineScope? = null
+
+    private val dispatch = SurfaceDispatch(actions, bankState, encoderBankState, holds, { scope }, selectHoldMs)
+
+    private val inputJobs = ConcurrentHashMap<String /* displayKey */, Job>()
 
     /**
      * Keyed by binding id; value is (lastWarnNanos, signature) for the 30s throttle.
@@ -126,8 +110,7 @@ class SurfaceInputRouter(
         matcherJob = null
         inputJobs.values.forEach { it.cancel() }
         inputJobs.clear()
-        holdJobs.values.forEach { it.cancel() }
-        holdJobs.clear()
+        dispatch.cancelPending()
     }
 
     private fun handleMatcherEvent(event: DeviceMatcher.SurfaceEvent) {
@@ -135,9 +118,9 @@ class SurfaceInputRouter(
             is DeviceMatcher.SurfaceEvent.DeviceAttached -> attachCollector(event.handle.displayKey, event.typeKey)
             is DeviceMatcher.SurfaceEvent.DeviceDetached -> {
                 inputJobs.remove(event.handle.displayKey)?.cancel()
-                // Unplugging mid-hold must not replace the selection half a second later.
-                holdJobs.keys.filter { it.first == event.handle.displayKey }
-                    .forEach { holdJobs.remove(it)?.cancel() }
+                // Unplugging mid-hold must not replace the selection half a second later, nor leave
+                // a flash on.
+                dispatch.releaseDevice(event.handle.displayKey)
             }
             is DeviceMatcher.SurfaceEvent.UnmatchedDeviceConnected -> Unit
         }
@@ -168,75 +151,100 @@ class SurfaceInputRouter(
 
     private fun route(displayKey: String, deviceTypeKey: String, event: MidiInputEvent) {
         val profile = types().firstOrNull { it.typeKey == deviceTypeKey } ?: return
-        val match = matchEvent(profile, event) ?: return
+        val input = profile.inputs.match(event) ?: return
         // Each input is one step of the programmer's history, the surface's own; a fader or encoder
         // moved on one control folds into one (undo plan §3.2, §3.6).
+        val control = when (input) {
+            is ControlInputIndex.Input.Move -> input.control.controlId
+            is ControlInputIndex.Input.Press -> input.control.controlId
+            is ControlInputIndex.Input.Release -> input.control.controlId
+            else -> null
+        }
         val origin = WriteOrigin(HistorySource.surface(displayKey)).apply {
-            label = "$displayKey ${match.historyControl ?: "input"}"
-            if (match is ResolvedInput.Continuous) coalesceKey = "surface|$displayKey|${match.controlId}"
+            label = "$displayKey ${control ?: "input"}"
+            if (input is ControlInputIndex.Input.Move) coalesceKey = "surface|$displayKey|$control"
         }
         runCatching { ensureHistory(projectIdProvider()) }
         // Per event (`FU-MIDI-SHOW-GUARD`): a throw — `state.show` mid-switch among them — must not
         // end the device's collector.
         SurfaceDispatch.guarded("Surface input on $displayKey") {
-            WriteOrigin.with(origin) { routeMatched(deviceTypeKey, displayKey, match) }
+            WriteOrigin.with(origin) { routeMatched(deviceTypeKey, displayKey, input) }
             ActionOutcome.DONE
         }
     }
 
-    private val ResolvedInput.historyControl: String?
-        get() = when (this) {
-            is ResolvedInput.Continuous -> controlId
-            is ResolvedInput.ButtonPress -> controlId
-            is ResolvedInput.ButtonRelease -> controlId
-            else -> null
-        }
-
-    private fun routeMatched(deviceTypeKey: String, displayKey: String, match: ResolvedInput) {
-        when (match) {
-            is ResolvedInput.BankButton -> {
-                // Bank buttons short-circuit binding resolution — they're never user-bindable.
-                if (match.pressed) bankState.setBank(deviceTypeKey, match.bankId)
-            }
-            is ResolvedInput.Continuous -> {
+    private fun routeMatched(deviceTypeKey: String, displayKey: String, input: ControlInputIndex.Input) {
+        when (input) {
+            // Layer buttons short-circuit binding resolution — they're never user-bindable.
+            is ControlInputIndex.Input.Layer -> bankState.setBank(deviceTypeKey, input.bankId)
+            is ControlInputIndex.Input.Move -> {
+                val controlId = input.control.controlId
                 // Soft-takeover check for faders / encoders. Non-motor controls may suppress
                 // the event until pickup; motor controls always pass through.
                 val accepted = feedbackHooks?.acceptInboundFader(
-                    displayKey, deviceTypeKey, match.controlId, match.value7Bit,
+                    displayKey, deviceTypeKey, controlId, input.value7Bit,
                 ) ?: true
                 if (!accepted) return
-                val binding = resolveBinding(deviceTypeKey, match.controlId) ?: return
+                val binding = resolveBinding(deviceTypeKey, controlId, ControlPart.MAIN) ?: return
                 if (isDeadBinding(binding)) return
                 latencyTracker.measure(MidiLatencyStage.INGRESS_CONTINUOUS) {
-                    dispatchContinuous(binding, match.value7Bit) { isEncoder(deviceTypeKey, match.controlId) }
+                    val move = SurfaceDispatch.Input.Move(input.value7Bit, encoder = input.control is EncoderDescriptor)
+                    val outcome = dispatch.dispatch(binding.binding, move, origin(deviceTypeKey, displayKey, binding, ControlPart.MAIN))
+                    // Continuous input is control rate: what it did not do is a debug line, never a warning per move.
+                    if (outcome !is ActionOutcome.Done) {
+                        logger.debug("surface-in: binding {} → {}: {}", binding.id, binding.binding.functionId, outcome)
+                    }
                 }
             }
-            is ResolvedInput.ButtonPress -> {
-                val binding = resolveBinding(deviceTypeKey, match.controlId) ?: return
+            is ControlInputIndex.Input.Press -> {
+                val binding = resolveBinding(deviceTypeKey, input.control.controlId, input.part) ?: return
                 if (isDeadBinding(binding)) return
                 latencyTracker.measure(MidiLatencyStage.INGRESS_BUTTON) {
-                    dispatchButtonPress(deviceTypeKey, displayKey, binding)
+                    report(binding, dispatch.dispatch(binding.binding, SurfaceDispatch.Input.Press, origin(deviceTypeKey, displayKey, binding, input.part)))
                 }
-                armSelectHold(displayKey, match.controlId, binding)
             }
-            is ResolvedInput.ButtonRelease -> {
-                // Unconditionally, and before anything that can return early: a release must
-                // always cancel its own pending replacement.
-                cancelSelectHold(displayKey, match.controlId)
-                val binding = resolveBinding(deviceTypeKey, match.controlId) ?: return
-                if (isDeadBinding(binding)) return
+            is ControlInputIndex.Input.Release -> {
+                // Unconditionally, and before anything that can return early: a release must always
+                // cancel its own pending replace and let go of its own hold.
+                val controlId = input.control.controlId
                 latencyTracker.measure(MidiLatencyStage.INGRESS_BUTTON) {
-                    dispatchButtonRelease(binding)
+                    dispatch.releasePart(SurfaceDispatch.HoldKey(displayKey, controlId, input.part))
                 }
-                feedbackHooks?.onButtonRelease(displayKey, match.controlId)
+                if (input.part == ControlPart.MAIN) feedbackHooks?.onButtonRelease(displayKey, controlId)
             }
-            is ResolvedInput.Touch -> {
-                feedbackHooks?.onTouch(displayKey, match.controlId, match.down)
-            }
+            is ControlInputIndex.Input.Touch -> feedbackHooks?.onTouch(displayKey, input.control.controlId, input.down)
         }
     }
 
-    private fun resolveBinding(deviceTypeKey: String, controlId: String): ControlSurfaceBindingService.ResolvedBinding? {
+    private fun origin(
+        deviceTypeKey: String,
+        displayKey: String,
+        binding: ControlSurfaceBindingService.ResolvedBinding,
+        part: ControlPart,
+    ) = SurfaceDispatch.Origin(
+        deviceTypeKey,
+        HistorySource.surface(displayKey),
+        SurfaceDispatch.HoldKey(displayKey, binding.controlId, part),
+        binding.id,
+    )
+
+    /** A MIDI press has no reply channel, so a press that did nothing says why in the log. */
+    private fun report(binding: ControlSurfaceBindingService.ResolvedBinding, outcome: ActionOutcome) {
+        when (outcome) {
+            is ActionOutcome.Done -> Unit
+            is ActionOutcome.Refused ->
+                if (outcome.code == ActionOutcome.WRONG_KIND) logger.debug("surface-in: binding {}: {}", binding.id, outcome.message)
+                else logger.warn("surface-in: binding {} refused: {}", binding.id, outcome.message)
+            is ActionOutcome.NotFound -> logger.warn("surface-in: binding {}: {}", binding.id, outcome.message)
+            is ActionOutcome.Failed -> logger.warn("surface-in: binding {} failed: {}", binding.id, outcome.message)
+        }
+    }
+
+    private fun resolveBinding(
+        deviceTypeKey: String,
+        controlId: String,
+        part: ControlPart,
+    ): ControlSurfaceBindingService.ResolvedBinding? {
         val projectId = try {
             projectIdProvider()
         } catch (e: Exception) {
@@ -245,7 +253,7 @@ class SurfaceInputRouter(
         }
         val bank = bankState.bankFor(deviceTypeKey)
         return bindingService.resolve(
-            projectId, deviceTypeKey, controlId, bank, encoderBankState.selectionFor(deviceTypeKey),
+            projectId, deviceTypeKey, controlId, bank, encoderBankState.selectionFor(deviceTypeKey), part,
         )
     }
 
@@ -269,159 +277,5 @@ class SurfaceInputRouter(
             )
         }
         return true
-    }
-
-    /** Whether [controlId] on [deviceTypeKey]'s profile is an encoder, which an *FX speed* reads as detents. */
-    private fun isEncoder(deviceTypeKey: String, controlId: String): Boolean =
-        types().firstOrNull { it.typeKey == deviceTypeKey }?.controls
-            ?.firstOrNull { it.controlId == controlId } is EncoderDescriptor
-
-    private fun dispatchContinuous(
-        binding: ControlSurfaceBindingService.ResolvedBinding,
-        value7Bit: UByte,
-        isEncoder: () -> Boolean,
-    ) {
-        logger.debug(
-            "surface-in: binding={} control={} value7Bit={} target={}",
-            binding.id, binding.controlId, value7Bit.toInt(), binding.target::class.simpleName,
-        )
-        val outcome = dispatch.continuous(binding.target, value7Bit, isEncoder)
-        // Continuous input is control rate: what it did not do is a debug line, never a warning per move.
-        if (outcome !is ActionOutcome.Done) {
-            logger.debug("surface-in: binding {} → {}: {}", binding.id, binding.target::class.simpleName, outcome)
-        }
-    }
-
-    private fun dispatchButtonPress(
-        deviceTypeKey: String,
-        displayKey: String,
-        binding: ControlSurfaceBindingService.ResolvedBinding,
-    ) {
-        val origin = SurfaceDispatch.Origin(deviceTypeKey, binding.id, HistorySource.surface(displayKey))
-        // A MIDI press has no reply channel, so a press that did nothing says why in the log.
-        when (val outcome = dispatch.press(binding.target, origin)) {
-            is ActionOutcome.Done -> Unit
-            is ActionOutcome.Refused ->
-                if (outcome.code == ActionOutcome.WRONG_KIND) logger.debug("surface-in: binding {}: {}", binding.id, outcome.message)
-                else logger.warn("surface-in: binding {} refused: {}", binding.id, outcome.message)
-            is ActionOutcome.NotFound -> logger.warn("surface-in: binding {}: {}", binding.id, outcome.message)
-            is ActionOutcome.Failed -> logger.warn("surface-in: binding {} failed: {}", binding.id, outcome.message)
-        }
-    }
-
-    /**
-     * A `SelectTarget(TOGGLE)` press has already toggled; if the operator keeps holding it,
-     * replace the selection with that one target. A `SelectTarget(REPLACE)` binding has already
-     * done exactly that on press, so it arms nothing.
-     */
-    private fun armSelectHold(
-        displayKey: String,
-        controlId: String,
-        binding: ControlSurfaceBindingService.ResolvedBinding,
-    ) {
-        val target = binding.target
-        if (target !is BindingTarget.SelectTarget || target.mode != BindingTarget.SelectMode.TOGGLE) return
-        val scope = this.scope ?: return
-        val key = displayKey to controlId
-        val job = scope.launch {
-            delay(selectHoldMs)
-            holdJobs.remove(key)
-            actions.selectTarget(target.target, BindingTarget.SelectMode.REPLACE)
-        }
-        holdJobs.put(key, job)?.cancel()
-    }
-
-    private fun cancelSelectHold(displayKey: String, controlId: String) {
-        holdJobs.remove(displayKey to controlId)?.cancel()
-    }
-
-    private fun dispatchButtonRelease(binding: ControlSurfaceBindingService.ResolvedBinding) {
-        dispatch.release(binding.target, binding.id)
-    }
-
-    /**
-     * Match an inbound event against a device profile. Returns one of the
-     * [ResolvedInput] variants or null if the event doesn't correspond to any declared
-     * control on the device.
-     */
-    private fun matchEvent(
-        profile: ControlSurfaceRegistry.DeviceTypeInfo,
-        event: MidiInputEvent,
-    ): ResolvedInput? {
-        when (event) {
-            is MidiInputEvent.ControlChange -> {
-                for (control in profile.controls) {
-                    when (control) {
-                        is FaderDescriptor -> {
-                            if (control.cc == event.cc && control.channel == event.channel) {
-                                return ResolvedInput.Continuous(control.controlId, event.value)
-                            }
-                            if (control.touchCc != null && control.touchCc == event.cc && control.channel == event.channel) {
-                                return ResolvedInput.Touch(control.controlId, down = event.value.toInt() > 0)
-                            }
-                        }
-                        is EncoderDescriptor -> {
-                            if (control.cc == event.cc && control.channel == event.channel) {
-                                return ResolvedInput.Continuous(control.controlId, event.value)
-                            }
-                        }
-                        else -> Unit
-                    }
-                }
-            }
-            // NoteOn(velocity=0) is the running-status-friendly form of NoteOff per MIDI spec.
-            is MidiInputEvent.NoteOn -> return matchNoteEvent(profile, event.channel, event.note, pressed = event.velocity.toInt() > 0)
-            is MidiInputEvent.NoteOff -> return matchNoteEvent(profile, event.channel, event.note, pressed = false)
-            is MidiInputEvent.ProgramChange -> {
-                for (control in profile.controls) {
-                    if (control is BankButtonDescriptor &&
-                        control.programChange != null &&
-                        control.programChange == event.program &&
-                        control.channel == event.channel
-                    ) {
-                        return ResolvedInput.BankButton(control.bankId, pressed = true)
-                    }
-                }
-            }
-            is MidiInputEvent.PitchBend -> Unit  // No descriptor maps PitchBend in v1.
-            is MidiInputEvent.SysEx -> Unit
-        }
-        return null
-    }
-
-    private fun matchNoteEvent(
-        profile: ControlSurfaceRegistry.DeviceTypeInfo,
-        channel: Int,
-        note: Int,
-        pressed: Boolean,
-    ): ResolvedInput? {
-        for (control in profile.controls) {
-            when (control) {
-                is ButtonDescriptor ->
-                    if (control.note == note && control.channel == channel)
-                        return if (pressed) ResolvedInput.ButtonPress(control.controlId)
-                        else ResolvedInput.ButtonRelease(control.controlId)
-                is EncoderDescriptor ->
-                    if (control.pushNote != null && control.pushNote == note && control.channel == channel)
-                        return if (pressed) ResolvedInput.ButtonPress(control.controlId)
-                        else ResolvedInput.ButtonRelease(control.controlId)
-                is FaderDescriptor ->
-                    if (control.touchNote != null && control.touchNote == note && control.channel == channel)
-                        return ResolvedInput.Touch(control.controlId, down = pressed)
-                is BankButtonDescriptor ->
-                    // Bank buttons switch on press only; the release event is swallowed.
-                    if (control.note != null && control.note == note && control.channel == channel)
-                        return if (pressed) ResolvedInput.BankButton(control.bankId, pressed = true) else null
-            }
-        }
-        return null
-    }
-
-    private sealed class ResolvedInput {
-        data class Continuous(val controlId: String, val value7Bit: UByte) : ResolvedInput()
-        data class ButtonPress(val controlId: String) : ResolvedInput()
-        data class ButtonRelease(val controlId: String) : ResolvedInput()
-        data class Touch(val controlId: String, val down: Boolean) : ResolvedInput()
-        data class BankButton(val bankId: String, val pressed: Boolean) : ResolvedInput()
     }
 }

@@ -14,25 +14,25 @@ Every address starts `/lighting7/` and acts on the **current project** (D7). The
 `osc/OscAddresses.kt`'s `entries`, the one copy the resolver, the tests and the address listing read
 (P2):
 
-| Address | Args | Does | Target |
+| Address | Args | Does | Binding |
 |---|---|---|---|
-| `/stack/{stack}/cue/{n}/go` | – | GO TO cue *n*, starting the stack if stopped; nothing if *n* is already live | `CueStackGoTo` |
-| `/stack/{stack}/cue/{n}/standby` | – | Put cue *n* on standby | `CueStackStandby` |
-| `/stack/{stack}/go` | – | GO | `CueStackGo` |
-| `/stack/{stack}/back` | – | GO BACK | `CueStackBack` |
-| `/stack/{stack}/pause` | – | Cancel the live entry's follow timer | `CueStackPause` |
-| `/stack/{stack}/stop` | – | Stop the stack over its release time, which drops the arm as any stop does | `CueStackStop` |
-| `/stack/{stack}/fx-amount` | number 0–1 | The stack's FX amount, taken whole | `StackFxAmount` |
-| `/cue/{cue}/on`, `/off` | – | Take or let go of a loose hold; nothing if already so | `LooseCueSet` |
-| `/cue/{cue}/press` | – | Toggle the loose hold | `FireCue` |
-| `/look/{look}/on`, `/off` | – | The Look on whole, or every layer of it off; nothing if already so | `LookSet` |
-| `/look/{look}/press` | – | Toggle the Look | `ApplyLook` |
-| `/busk/{page}/{bank}/{pad}/press` | – | Press a pad, on the desk selection | `PressPad` |
-| `/busk/{page}/show` | – | Show that busk page | `BuskPageSet` |
-| `/blackout` | number, optional | Set blackout, non-zero on; toggle with no argument | `BlackoutSet` · `Blackout` |
-| `/grandmaster` | number 0–1 | The grand master's level, taken whole and clamped | `GrandMasterLevel` |
-| `/tempo/{master}` | number, BPM | Set a speed master's tempo, 20–300 | `SpeedMasterSetBpm` |
-| `/tempo/{master}/tap` | – | One tap | `SpeedMasterTap` |
+| `/stack/{stack}/cue/{n}/go` | – | GO TO cue *n*, starting the stack if stopped; nothing if *n* is already live | `goTo` on the entry |
+| `/stack/{stack}/cue/{n}/standby` | – | Put cue *n* on standby | `standby` on the entry |
+| `/stack/{stack}/go` | – | GO | `go` on the stack |
+| `/stack/{stack}/back` | – | GO BACK | `back` on the stack |
+| `/stack/{stack}/pause` | – | Cancel the live entry's follow timer | `pause` on the stack |
+| `/stack/{stack}/stop` | – | Stop the stack over its release time, which drops the arm as any stop does | `stop` on the stack |
+| `/stack/{stack}/fx-amount` | number 0–1 | The stack's FX amount, taken whole | `fxAmount` on the stack, the value as `Op.Set` |
+| `/cue/{cue}/on`, `/off` | – | Take or let go of a loose hold; nothing if already so | `cue`, How On / Off |
+| `/cue/{cue}/press` | – | Toggle the loose hold | `cue`, How Toggle |
+| `/look/{look}/on`, `/off` | – | The Look on whole, or every layer of it off; nothing if already so | `look`, How On / Off |
+| `/look/{look}/press` | – | Toggle the Look | `look`, How Toggle |
+| `/busk/{page}/{bank}/{pad}/press` | – | Press a pad, on the desk selection | `pad` on the pad |
+| `/busk/{page}/show` | – | Show that busk page | `buskPage` on the page |
+| `/blackout` | number, optional | Set blackout, non-zero on; toggle with no argument | `blackout`, How On / Off / Toggle |
+| `/grandmaster` | number 0–1 | The grand master's level, taken whole and clamped | `grandMaster`, the percentage as `Op.Set` |
+| `/tempo/{master}` | number, BPM | Set a speed master's tempo, 20–300 | `tempo` on the master, the BPM as `Op.Set` |
+| `/tempo/{master}/tap` | – | One tap | `tap` on the master |
 
 **Names are slugs** (D3): `slugOf` in `models/slug.kt`, shared with the MCP setup tools — lower
 case, every run of anything but ASCII letters and digits one `-`, trimmed, at most 100 characters.
@@ -73,12 +73,14 @@ loose cues, with Looks where the operator may take them over.
 
 ## Dispatch
 
-Every address resolves to a `BindingTarget` and runs through `midi/SurfaceDispatch.kt`, the dispatch
-a MIDI surface's router uses (D2): `press` for a button target, `level` for a value taken whole. So a
-new action is added as a target, and a MIDI surface gains it too — the five targets above that are
-new are in the binding picker, and so are session 2's three: *Blackout — on / off*, *Grand Master —
-set level* and *Speed master — Set tempo*, each a button that lands one state. The actions answer an
-`ActionOutcome` (`Done(detail)`,
+Every address resolves to a `Binding` (`docs/midi-control-surface-engineering.md` §"Binding model")
+built in memory — none is stored — and runs through `midi/SurfaceDispatch.kt`, the dispatch a MIDI
+surface's router uses (D2): `Input.Press` for an action, `Input.Set` for a value taken whole, which the
+function reads in its own unit (a percentage, an amount, a tempo). The explicit forms are a How of On
+or Off on the function's toggle (D4), so a MIDI surface binds exactly what OSC sends, and a new action
+is added as a function both reach. The addresses and their arguments are what they were before the
+surface binding grammar (surface-setup plan D19); `OscAddressesTest` holds every address to the call
+it makes. The actions answer an `ActionOutcome` (`Done(detail)`,
 `Refused(code, message)`, `NotFound(message)`, `Failed(message)`), which becomes the log row.
 
 ## The receive path

@@ -6,8 +6,14 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.routes.fxInOrder
-import uk.me.cormack.lighting7.midi.BindingTarget
-import uk.me.cormack.lighting7.midi.BindingTargetJson
+import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.RecordKind
+import uk.me.cormack.lighting7.midi.Subject
+import uk.me.cormack.lighting7.models.DaoBuskPad
+import uk.me.cormack.lighting7.models.DaoBuskPage
+import uk.me.cormack.lighting7.models.DaoCueStack
+import uk.me.cormack.lighting7.models.DaoLook
+import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.models.AssignmentHealth
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
@@ -438,25 +444,51 @@ class ProjectCloneTest {
         val sourceId = seedRichProject(state)
         val result = ProjectCloner(state).clone(sourceId, "cloned-binding", description = null)
 
-        val (sourceCueUuid, cloneCueUuid, clonePayload) = transaction(state.database) {
+        val (sourceCueUuid, cloneCueUuid) = transaction(state.database) {
             val sourceCue = DaoCue.find { DaoCues.project eq sourceId }.single { it.name == "open" }
             val cloneCue = DaoCue.find { DaoCues.project eq result.projectId }.single { it.name == "open" }
-            val binding = DaoControlSurfaceBinding
-                .find { DaoControlSurfaceBindings.project eq result.projectId }
-                .single { it.targetType == "fireCue" }
-            Triple(sourceCue.uuid.toString(), cloneCue.uuid.toString(), binding.targetPayload)
+            sourceCue.uuid to cloneCue.uuid
         }
         assertNotEquals(sourceCueUuid, cloneCueUuid)
-        val target = BindingTargetJson.decodeFromString<BindingTarget>(clonePayload)
-        val fireCue = assertIs<BindingTarget.FireCue>(target)
-        assertEquals(cloneCueUuid, fireCue.cueUuid, "the payload's uuid must be the clone's cue, not the source's")
-        // The int is the source project's row and nothing can translate it — which is why the
-        // runtime resolves by uuid first (`FU-SYNC-BINDING-PAYLOAD-UUIDS`).
+        val cloned = state.controlSurfaceBindingService.list(result.projectId).single { it.binding.does == Does.Cue }
         assertEquals(
-            AssignmentHealth.Ok,
-            state.controlSurfaceBindingService.list(result.projectId).single { it.target is BindingTarget.FireCue }.health,
-            "a cloned cue binding resolves healthy through its uuid",
+            Subject.Record(RecordKind.CUE, cloneCueUuid),
+            cloned.binding.on,
+            "the subject's uuid must be the clone's cue, not the source's",
         )
+        assertEquals(AssignmentHealth.Ok, cloned.health, "a cloned cue binding resolves healthy through its uuid")
+    }
+
+    @Test
+    fun `clone points every record subject at the clone's own records`() {
+        val sourceId = seedRichProject(state)
+        val result = ProjectCloner(state).clone(sourceId, "cloned-subjects", description = null)
+
+        fun recordsOf(projectId: Int): Map<RecordKind, Set<java.util.UUID>> = transaction(state.database) {
+            mapOf(
+                RecordKind.CUE to DaoCue.all().filter { it.project.id.value == projectId }.map { it.uuid }.toSet(),
+                RecordKind.STACK to DaoCueStack.all().filter { it.project.id.value == projectId }.map { it.uuid }.toSet(),
+                RecordKind.LOOK to DaoLook.all().filter { it.project.id.value == projectId }.map { it.uuid }.toSet(),
+                RecordKind.PALETTE to DaoPalette.all().filter { it.project.id.value == projectId }.map { it.uuid }.toSet(),
+                RecordKind.PAGE to DaoBuskPage.all().filter { it.project.id.value == projectId }.map { it.uuid }.toSet(),
+                RecordKind.PAD to DaoBuskPad.all()
+                    .filter { it.bank.column.page.project.id.value == projectId }.map { it.uuid }.toSet(),
+            )
+        }
+        val source = recordsOf(sourceId)
+        val clone = recordsOf(result.projectId)
+
+        var named = 0
+        for (binding in state.controlSurfaceBindingService.list(result.projectId).map { it.binding }) {
+            val (kind, uuid) = when (val does = binding.does) {
+                is Does.Palette -> RecordKind.PALETTE to does.palette
+                else -> (binding.on as? Subject.Record)?.let { it.kind to it.uuid } ?: continue
+            }
+            assertTrue(uuid in clone.getValue(kind), "$binding names the clone's $kind")
+            assertTrue(uuid !in source.getValue(kind), "$binding does not name the source's $kind")
+            named++
+        }
+        assertEquals(6, named, "a cue, stack, Look, palette, pad and page")
     }
 
     /**

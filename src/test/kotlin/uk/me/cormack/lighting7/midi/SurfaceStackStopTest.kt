@@ -16,12 +16,13 @@ import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import java.time.Duration
+import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * A `CueStackStop` button, through the dispatch the router and OSC share, is an operator's stop
+ * A stop button, through the dispatch the router and OSC share, is an operator's stop
  * (busk-stack plan D6, D12): the stack reads stopped at once and its cue fades over its release time.
  */
 class SurfaceStackStopTest : RouteIntegrationTest() {
@@ -29,12 +30,13 @@ class SurfaceStackStopTest : RouteIntegrationTest() {
     private val manager get() = state.show.cueStackManager
     private val cueLayer get() = state.show.fxEngine.cueLayer
 
-    private val origin = SurfaceDispatch.Origin("x-touch-compact", 1, HistorySource.surface("x-touch-compact"))
+    private val origin = SurfaceDispatch.Origin("x-touch-compact", HistorySource.surface("x-touch-compact"))
 
-    private fun dispatch() =
-        SurfaceDispatch(DefaultSurfaceActions(state), state.activeBankState, state.encoderBankState, state.flashStateTracker)
+    private fun stop(stack: UUID): ActionOutcome =
+        SurfaceDispatch(DefaultSurfaceActions(state), state.activeBankState, state.encoderBankState, state.surfaceHolds)
+            .dispatch(Binding(Does.Stop, Subject.Record(RecordKind.STACK, stack)), SurfaceDispatch.Input.Press, origin)
 
-    private data class Seeded(val stackId: Int, val stackUuid: String, val cueId: Int, val entryId: Int)
+    private data class Seeded(val stackId: Int, val stackUuid: UUID, val cueId: Int, val entryId: Int)
 
     private fun seed(releaseMs: Long): Seeded {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
@@ -53,7 +55,7 @@ class SurfaceStackStopTest : RouteIntegrationTest() {
                 attribute = "dimmer"; value = "200"; sortOrder = 0
             }
             val entry = DaoCueStackEntry.new { this.stack = stack; this.cue = cue; ordinal = 1.0; cueNumber = "1" }
-            Seeded(stack.id.value, stack.uuid.toString(), cue.id.value, entry.id.value)
+            Seeded(stack.id.value, stack.uuid, cue.id.value, entry.id.value)
         }
     }
 
@@ -63,7 +65,7 @@ class SurfaceStackStopTest : RouteIntegrationTest() {
         val song = seed(releaseMs = 600)
         manager.activateEntry(state, song.stackId, song.entryId)
 
-        val outcome = dispatch().press(BindingTarget.CueStackStop(song.stackUuid), origin)
+        val outcome = stop(song.stackUuid)
 
         assertEquals(ActionOutcome.DONE, outcome)
         assertFalse(manager.isStackActive(song.stackId), "stopped at once")
@@ -73,10 +75,7 @@ class SurfaceStackStopTest : RouteIntegrationTest() {
         val mid = cueLayer.fadeWeightOf(song.cueId)
         assertTrue(mid in 0.15..0.85, "half way through, at $mid")
 
-        assertEquals(
-            ActionOutcome.Done("was not running"),
-            dispatch().press(BindingTarget.CueStackStop(song.stackUuid), origin),
-        )
+        assertEquals(ActionOutcome.Done("was not running"), stop(song.stackUuid))
         assertTrue(cueLayer.hasAssignments(song.cueId), "a second press leaves the release running")
 
         runBlocking { delay(600) }
@@ -89,7 +88,7 @@ class SurfaceStackStopTest : RouteIntegrationTest() {
         val song = seed(releaseMs = 0)
         manager.activateEntry(state, song.stackId, song.entryId)
 
-        dispatch().press(BindingTarget.CueStackStop(song.stackUuid), origin)
+        stop(song.stackUuid)
 
         assertFalse(manager.isStackActive(song.stackId))
         assertFalse(cueLayer.hasAssignments(song.cueId), "off at once")

@@ -10,7 +10,14 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.midi.BindingRefused
-import uk.me.cormack.lighting7.midi.BindingTarget
+import uk.me.cormack.lighting7.midi.Binding
+import uk.me.cormack.lighting7.midi.ControlPart
+import uk.me.cormack.lighting7.midi.LegacyRefs
+import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
+import uk.me.cormack.lighting7.midi.learntPart
+import uk.me.cormack.lighting7.routes.BindingRead
+import uk.me.cormack.lighting7.routes.readBinding
+import kotlinx.serialization.json.JsonObject
 import uk.me.cormack.lighting7.midi.ColourAxis
 import uk.me.cormack.lighting7.midi.ControlState
 import uk.me.cormack.lighting7.midi.EncoderBankSelection
@@ -38,12 +45,14 @@ data class SurfaceLearnBeginInMessage(
 @SerialName("surfaceLearn.cancel")
 data class SurfaceLearnCancelInMessage(val sessionId: String) : SurfaceInMessage()
 
+/** Bind the captured control part: [binding], or [target] in the old union's words (the bridge `routes/projectSurfaceBindings.kt` describes). */
 @Serializable
 @SerialName("surfaceLearn.commit")
 data class SurfaceLearnCommitInMessage(
     val sessionId: String,
     val bank: String? = null,
-    val target: BindingTarget,
+    val binding: Binding? = null,
+    val target: JsonObject? = null,
     val takeoverPolicy: String? = null,
 ) : SurfaceInMessage()
 
@@ -108,6 +117,7 @@ data class SurfaceLearnCapturedOutMessage(
     val projectId: Int,
     val deviceTypeKey: String,
     val controlId: String,
+    val part: ControlPart = ControlPart.MAIN,
 ) : SurfaceOutMessage()
 
 @Serializable
@@ -335,6 +345,7 @@ fun setupSurfaceSubscriptions(scope: SocketScope) {
                     projectId = event.session.projectId,
                     deviceTypeKey = captured.deviceTypeKey,
                     controlId = captured.controlId,
+                    part = captured.part,
                 ))
             }
             is MidiLearnSessionManager.SessionEvent.TimedOut -> {
@@ -468,14 +479,26 @@ private fun handleSurfaceLearnCommit(state: State, message: SurfaceLearnCommitIn
         )
     }
 
+    val refs = LegacyRefs.of(state.database, session.projectId)
+    val written = when (val read = readBinding(message.binding, message.target, captured.deviceTypeKey, captured.controlId, refs)) {
+        is BindingRead.Read -> read.binding
+        is BindingRead.Bad -> return SurfaceLearnErrorOutMessage(message.sessionId, read.message)
+        BindingRead.Absent -> return SurfaceLearnErrorOutMessage(message.sessionId, "A binding is required")
+    }
+
     return try {
         val binding = state.controlSurfaceBindingService.create(
             projectId = session.projectId,
             deviceTypeKey = captured.deviceTypeKey,
             controlId = captured.controlId,
             bank = message.bank,
-            target = message.target,
+            binding = written,
             takeoverPolicy = takeover,
+            part = learntPart(
+                ControlSurfaceRegistry.typeFor(captured.deviceTypeKey)?.control(captured.controlId),
+                captured.part,
+                written.does,
+            ),
         )
         state.midiLearnSessionManager.commit(message.sessionId)
         SurfaceLearnCommittedOutMessage(
@@ -488,7 +511,7 @@ private fun handleSurfaceLearnCommit(state: State, message: SurfaceLearnCommitIn
     } catch (e: IllegalArgumentException) {
         SurfaceLearnErrorOutMessage(
             message.sessionId,
-            e.message ?: "Invalid binding target",
+            e.message ?: "Invalid binding",
             code = (e as? BindingRefused)?.code,
         )
     }

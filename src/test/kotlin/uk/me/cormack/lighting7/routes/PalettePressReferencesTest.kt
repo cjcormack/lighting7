@@ -208,7 +208,7 @@ class PalettePressReferencesTest : RouteIntegrationTest() {
 
         // A surface's PressPalette, on the desk selection.
         state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")))
-        DefaultSurfaceActions(state).pressPalette(half.uuid)
+        DefaultSurfaceActions(state).pressPalette(UUID.fromString(half.uuid))
         assertEquals(listOf("hex-1.dimmer=Half"), refs())
         state.show.fxEngine.programmer.clearAll()
 

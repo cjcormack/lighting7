@@ -2,8 +2,8 @@ package uk.me.cormack.lighting7.midi
 
 import org.junit.Test
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
-import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
+import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
@@ -18,16 +18,16 @@ import kotlin.test.assertNull
 class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
 
     private val deviceTypeKey = "x-touch-compact-standard"
-    private val wash = CueTargetDto("group", "front-wash")
+    private val wash = Subject.Group("front-wash")
 
     private fun service() = state.controlSurfaceBindingService
 
-    private fun newBinding(controlId: String, target: BindingTarget) =
+    private fun newBinding(controlId: String, binding: Binding) =
         ControlSurfaceBindingService.NewBinding(
             deviceTypeKey = deviceTypeKey,
             controlId = controlId,
             bank = null,
-            target = target,
+            binding = binding,
         )
 
     @Test
@@ -38,19 +38,19 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
             deviceTypeKey = deviceTypeKey,
             controlId = "strip-1",
             bank = null,
-            target = BindingTarget.Strip(wash),
+            binding = Binding(Does.Strip, wash),
             takeoverPolicy = BindingTakeoverPolicy.PICKUP,
         )
 
         val created = service.replace(
             projectId = projectId,
             deleteIds = listOf(strip.id),
-            creates = deriveStripTargets(
+            creates = deriveStripBindings(
                 strip = StripDescriptor("strip-1", "fader-1", "btn-25", "enc-1", "btn-1"),
-                target = wash,
+                on = wash,
                 encoderBank = EncoderBankSelection("colour"),
-            ).map { (controlId, target) ->
-                newBinding(controlId, target).copy(takeoverPolicy = strip.takeoverPolicy)
+            ).map { (controlId, binding) ->
+                newBinding(controlId, binding).copy(takeoverPolicy = strip.takeoverPolicy)
             },
         )
 
@@ -62,8 +62,8 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         )
         // The four rows resolve to exactly what the strip was deriving, and keep its policy.
         assertEquals(
-            BindingTarget.GroupAttribute("front-wash", "colour"),
-            service.resolve(projectId, deviceTypeKey, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("colour"))?.target,
+            Binding(Does.Level("colour"), wash),
+            service.resolve(projectId, deviceTypeKey, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("colour"))?.binding,
         )
         assertEquals(BindingTakeoverPolicy.PICKUP, created.single { it.controlId == "fader-1" }.takeoverPolicy)
 
@@ -77,11 +77,11 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         val service = service()
         val strip = service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "strip-1",
-            bank = null, target = BindingTarget.Strip(wash),
+            bank = null, binding = Binding(Does.Strip, wash),
         )
         val occupier = service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "btn-25",
-            bank = null, target = BindingTarget.Blackout,
+            bank = null, binding = Binding(Does.Blackout),
         )
 
         assertFailsWith<IllegalStateException> {
@@ -89,8 +89,8 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
                 projectId = projectId,
                 deleteIds = listOf(strip.id),
                 creates = listOf(
-                    newBinding("fader-1", BindingTarget.GroupAttribute("front-wash", "dimmer")),
-                    newBinding("btn-25", BindingTarget.SelectTarget(wash)),
+                    newBinding("fader-1", Binding(Does.Level("dimmer"), wash)),
+                    newBinding("btn-25", Binding(Does.Select, wash)),
                 ),
             )
         }
@@ -109,17 +109,17 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         val service = service()
         val existing = service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "fader-1",
-            bank = null, target = BindingTarget.FixtureAttribute("hex-1", "dimmer"),
+            bank = null, binding = Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")),
         )
 
         val created = service.replace(
             projectId = projectId,
             deleteIds = listOf(existing.id),
-            creates = listOf(newBinding("fader-1", BindingTarget.GroupAttribute("front-wash", "dimmer"))),
+            creates = listOf(newBinding("fader-1", Binding(Does.Level("dimmer"), wash))),
         )
 
         assertEquals(1, created.size)
-        assertIs<BindingTarget.GroupAttribute>(service.list(projectId).single().target)
+        assertIs<Subject.Group>(service.list(projectId).single().binding.on)
     }
 
     @Test
@@ -130,10 +130,10 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
                 projectId = projectId,
                 deleteIds = emptyList(),
                 creates = listOf(
-                    // Continuous targets: a fader takes no button target since `refuseWrongKind`,
-                    // and this test is about the slot clash rather than the kind.
-                    newBinding("fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer")),
-                    newBinding("fader-1", BindingTarget.GroupAttribute("front-wash", "dimmer")),
+                    // Continuous functions: a fader takes no button function, and this test is
+                    // about the slot clash rather than the kind.
+                    newBinding("fader-1", Binding(Does.Level("dimmer"), Subject.Fixture("hex-1"))),
+                    newBinding("fader-1", Binding(Does.Level("dimmer"), wash)),
                 ),
             )
         }
@@ -144,24 +144,24 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
     // commit writes through `create` with no route validation of its own.
 
     @Test
-    fun `create refuses a strip target on an ordinary control`() {
+    fun `create refuses a strip binding on an ordinary control`() {
         val service = service()
         assertFailsWith<IllegalArgumentException> {
             service.create(
                 projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "fader-1",
-                bank = null, target = BindingTarget.Strip(wash),
+                bank = null, binding = Binding(Does.Strip, wash),
             )
         }
         assertEquals(emptyList(), service.list(projectId))
     }
 
     @Test
-    fun `create refuses a non-strip target on a strip slot`() {
+    fun `create refuses a non-strip binding on a strip slot`() {
         val service = service()
         assertFailsWith<IllegalArgumentException> {
             service.create(
                 projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "strip-1",
-                bank = null, target = BindingTarget.Blackout,
+                bank = null, binding = Binding(Does.Blackout),
             )
         }
         assertEquals(emptyList(), service.list(projectId))
@@ -172,7 +172,7 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         val service = service()
         val strip = service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "strip-1",
-            bank = null, target = BindingTarget.Strip(wash),
+            bank = null, binding = Binding(Does.Strip, wash),
         )
         assertFailsWith<IllegalArgumentException> {
             service.update(projectId = projectId, bindingId = strip.id, controlId = "fader-1")
@@ -188,12 +188,12 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
     // writes through `create` with no route validation of its own.
 
     @Test
-    fun `a button target on a fader is refused`() {
+    fun `a button function on a fader is refused`() {
         val service = service()
         val e = assertFailsWith<BindingRefused> {
             service.create(
                 projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "fader-1",
-                bank = null, target = BindingTarget.FireCue(1),
+                bank = null, binding = Binding(Does.Cue, Subject.Record(RecordKind.CUE, UUID.randomUUID())),
             )
         }
         assertEquals(CODE_BINDING_WRONG_CONTROL_KIND, e.code)
@@ -201,30 +201,33 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a continuous target on a plain button is refused`() {
+    fun `a continuous function on a plain button is refused`() {
         val service = service()
-        assertFailsWith<BindingRefused> {
+        val e = assertFailsWith<BindingRefused> {
             service.create(
                 projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "btn-1",
-                bank = null, target = BindingTarget.GroupAttribute("front-wash", "dimmer"),
+                bank = null, binding = Binding(Does.Level("dimmer"), wash),
             )
         }
+        assertEquals(CODE_BINDING_WRONG_CONTROL_KIND, e.code)
         assertEquals(emptyList(), service.list(projectId))
     }
 
     @Test
-    fun `an encoder with a push note takes both halves of the dispatch`() {
-        // The surprise the client's `controlKinds` mirrors: an encoder's CC is a `Continuous` and
-        // its note a `ButtonPress`, on one control id — so a cue target on one is legitimate.
+    fun `an encoder with a push note takes a turn function and a push function`() {
+        // An encoder's CC is its turn and its note its push, two parts of one control id (D4): a
+        // level lands on the turn and a button function on the push.
         val service = service()
-        service.create(
+        val turn = service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "enc-1",
-            bank = null, target = BindingTarget.SelectionAttribute("dimmer"),
+            bank = null, binding = Binding(Does.Level("dimmer"), Subject.Selection),
         )
-        service.create(
+        val push = service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "enc-2",
-            bank = null, target = BindingTarget.Blackout,
+            bank = null, binding = Binding(Does.Blackout),
         )
+        assertEquals(ControlPart.MAIN, turn.part)
+        assertEquals(ControlPart.PUSH, push.part)
         assertEquals(2, service.list(projectId).size)
     }
 
@@ -235,18 +238,18 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
      * commit, a hand-rolled REST call and a script all reach this service without passing it.
      */
     @Test
-    fun `the hand's three targets are refused on a fader`() {
+    fun `the hand's three functions are refused on a fader`() {
         val service = service()
-        val targets = listOf(
-            BindingTarget.PickUpPad("44444444-4444-4444-8444-444444444444"),
-            BindingTarget.HandPlaceInBank("55555555-5555-4555-8555-555555555555"),
-            BindingTarget.HandDrop,
+        val bindings = listOf(
+            Binding(Does.PickUp, Subject.Record(RecordKind.PAD, UUID.fromString("44444444-4444-4444-8444-444444444444"))),
+            Binding(Does.Place, Subject.Record(RecordKind.BANK, UUID.fromString("55555555-5555-4555-8555-555555555555"))),
+            Binding(Does.Drop),
         )
-        for (target in targets) {
-            val e = assertFailsWith<BindingRefused>("$target should be refused on a fader") {
+        for (binding in bindings) {
+            val e = assertFailsWith<BindingRefused>("$binding should be refused on a fader") {
                 service.create(
                     projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "fader-1",
-                    bank = null, target = target,
+                    bank = null, binding = binding,
                 )
             }
             assertEquals(CODE_BINDING_WRONG_CONTROL_KIND, e.code)
@@ -255,19 +258,21 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `the hand's three targets are accepted on a button`() {
+    fun `the hand's three functions are accepted on a button`() {
         val service = service()
         service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "btn-1",
-            bank = null, target = BindingTarget.PickUpPad("44444444-4444-4444-8444-444444444444"),
+            bank = null,
+            binding = Binding(Does.PickUp, Subject.Record(RecordKind.PAD, UUID.fromString("44444444-4444-4444-8444-444444444444"))),
         )
         service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "btn-2",
-            bank = null, target = BindingTarget.HandPlaceInBank("55555555-5555-4555-8555-555555555555"),
+            bank = null,
+            binding = Binding(Does.Place, Subject.Record(RecordKind.BANK, UUID.fromString("55555555-5555-4555-8555-555555555555"))),
         )
         service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "btn-3",
-            bank = null, target = BindingTarget.HandDrop,
+            bank = null, binding = Binding(Does.Drop),
         )
         assertEquals(3, service.list(projectId).size)
     }
@@ -282,7 +287,7 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         val e = assertFailsWith<BindingRefused> {
             service.create(
                 projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = bankButton.controlId,
-                bank = null, target = BindingTarget.Blackout,
+                bank = null, binding = Binding(Does.Blackout),
             )
         }
         assertEquals(CODE_BINDING_WRONG_CONTROL_KIND, e.code)
@@ -290,12 +295,12 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
 
     @Test
     fun `a strip slot is exempt from the kind rule`() {
-        // A strip id names no descriptor, and its target reaches a control by derivation rather
+        // A strip id names no descriptor, and its binding reaches a control by derivation rather
         // than dispatch — so the kind rule must skip it and leave `refuseWrongSlot` to judge it.
         val service = service()
         val strip = service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "strip-1",
-            bank = null, target = BindingTarget.Strip(wash),
+            bank = null, binding = Binding(Does.Strip, wash),
         )
         assertNotNull(service.get(projectId, strip.id))
     }
@@ -305,12 +310,12 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         val service = service()
         val fader = service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "fader-1",
-            bank = null, target = BindingTarget.FixtureAttribute("hex-1", "dimmer"),
+            bank = null, binding = Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")),
         )
         assertFailsWith<BindingRefused> {
-            service.update(projectId = projectId, bindingId = fader.id, target = BindingTarget.Blackout)
+            service.update(projectId = projectId, bindingId = fader.id, binding = Binding(Does.Blackout))
         }
-        assertIs<BindingTarget.FixtureAttribute>(service.get(projectId, fader.id)?.target)
+        assertIs<Does.Level>(service.get(projectId, fader.id)?.binding?.does)
     }
 
     @Test
@@ -320,7 +325,7 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
             service.replace(
                 projectId = projectId,
                 deleteIds = emptyList(),
-                creates = listOf(newBinding("btn-2", BindingTarget.Strip(wash))),
+                creates = listOf(newBinding("btn-2", Binding(Does.Strip, wash))),
             )
         }
         assertEquals(emptyList(), service.list(projectId))

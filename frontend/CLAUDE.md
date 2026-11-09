@@ -2985,7 +2985,8 @@ strip's row or a global one and move a binding the operator was not pointing at.
 eligibility dim mirrors a backend rule rather than standing alone**: since session 4,
 `ControlSurfaceBindingService.refuseWrongKind` refuses a `fireCue` on a fader at the write boundary
 whichever door it comes through, and `controlKinds` / `targetControlKind` in `lib/surfaceDrop.ts`
-are the client copy of `midi/BindingControlKind.kt`.
+are the client copy of the server's `Spec.inputs` against `inputFor(part)`, an encoder's button
+function placed on its push.
 
 **A label under a control carries its target's colour** as a 3px band (§Fixture colours):
 `components/surfaces/targetColour.ts` names the fixture or group a binding drives — an attribute, a
@@ -7848,7 +7849,7 @@ path may quietly change where it lands.
     on the page with nothing held down. `useLongPress` cancels on it too, or the armed hold fires on
     a finger that is already scrolling something else.
   - **The travel is `SLIDE_MIN_BPM`..`SLIDE_MAX_BPM` (60..180) in `lib/speedMasterModel.ts`**, not
-    the clock's 20..300. Deliberately the same window as lighting7's `BindingTarget.SpeedMasterBpm`
+    the clock's 20..300. Deliberately the same window as lighting7's `Does.Tempo` default
     and for its stated reason: a drag across the whole range spends most of its travel in tempos
     nobody plays at. It is a **control** range, not a limit — typing and TAP still reach the clock's
     ends. Don't "fix" it by widening it to the clock's range.

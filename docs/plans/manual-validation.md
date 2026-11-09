@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-SURFACE-SETUP-S1`](#fu-manual-surface-setup-s1) | an upgraded show's bindings all still work; a pan encoder beats a running Circle; a strip encoder's push does nothing; a flash on a capped head lands at its percentage; the blinder takes a colour move; QLab's OSC cues unchanged; a layer B binding fires | Surface setup session 1, 2026-11-09 |
 | [`FU-MANUAL-RESTORE-S3`](#fu-manual-restore-s3) | a cue deleted last week comes back from the History panel with its place in its stack and the Look it layered, nothing else moves, and ⌘Z takes it back | Snapshot restore S3, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S4`](#fu-manual-busk-stack-s4) | a bound `PressPad` on a stack pad lights while its stack runs and goes dark when it stops; `CueStackStop` and OSC's `/stop` fade over the release time | Busk stack session 4, 2026-11-08 |
 | [`FU-MANUAL-BUSK-STACK-S3`](#fu-manual-busk-stack-s3) | a stack pad steps a song by taps, a solo bank's song pad releases a sibling song, and moving the stack back into the running order asks first | Busk stack session 3, 2026-11-08 |
@@ -210,6 +211,39 @@ restore waiting for the next sync.
 4. **Offline.** Take A off the network and restore an older row: the review and the restore work, the
    toast's notes say the repository couldn't be reached, and with the network back *Sync now* pushes it;
    B takes it on its next sync.
+
+---
+
+## `FU-MANUAL-SURFACE-SETUP-S1`
+
+**What it proves**: *The binding and its migration* (surface-setup plan session 1) — every binding on
+the desk is in the new grammar (Does · On · How, at a control part), and what an operator notices of it
+is only what the plan decided: a pan or tilt move writes the head's position, an encoder's push is a
+binding of its own, and a flash is a percentage of each head's range.
+
+**Why it is here**: the migration test runs over a frozen database and the OSC table test over the
+dispatch; only the rig shows that an existing show's X-Touch still does what it did, that a Circle
+really stops under a nudge, and that the device sends Layer B's MIDI the profile expects.
+
+**Test**, on the dev desk upgraded from `main` with a show whose X-Touch is bound (strips, a GO on an
+encoder push, a flash, a tempo encoder), the China 2-cell blinder and a mover patched, and QLab on the
+allowlist:
+
+1. **The upgrade.** Start the desk on the upgraded database: the log says how many bindings step 15
+   translated and kept, and a `pre-surface-grammar` backup sits beside the database. Every bound fader,
+   encoder and button does what it did before; the Surfaces view draws them as before.
+2. **Pan beats a Circle.** Run a Circle on the mover, then turn an encoder bound to its pan: the mover
+   stops circling and follows the encoder, its tilt where it was. Clear the programmer: the Circle comes
+   back in phase.
+3. **The push.** On a strip, press its encoder: nothing happens (it used to send the strip's attribute
+   full). An encoder push bound to GO before the upgrade still GOs.
+4. **Flash.** Cap a dimmer's range below full (a fixture whose dimmer slider ends below 255) and hold its
+   flash: it sits at the cap, not past it.
+5. **The blinder.** Bind an encoder to the blinder's colour on brightness and turn it: both cells move.
+6. **QLab.** Fire the show's QLab Network cues — a GO, a Look on and off, `/grandmaster`, `/tempo/2`:
+   each does what it did.
+7. **Layer B.** Switch the device to Layer B with its own button and press a button bound on layer B
+   only: it fires. The profile maps Layer A's MIDI only, so if it does not, note what the device sends.
 
 ---
 

@@ -1,13 +1,27 @@
 package uk.me.cormack.lighting7.midi
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.history.HistorySource
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * One resolved [BindingTarget] into [SurfaceActions]: the dispatch a MIDI surface's router and the
- * OSC collector share (OSC plan D2), so a button and an OSC message that name one target cannot do
- * different things. Every call answers an [ActionOutcome].
+ * One [Binding] into its function: the dispatch a MIDI surface's router and the OSC collector share
+ * (OSC plan D2), so a button and an OSC message that name one binding cannot do different things.
+ * Every input answers an [ActionOutcome].
+ *
+ * This is the one place a [How] becomes an [Op]: Toggle, On and Off press as themselves; While held
+ * presses on and, on release, undoes exactly what the press wrote ([Acted.release]), else sends off;
+ * Toggle-hold-replaces toggles and, still held after [selectHoldMs], replaces. Holds are keyed by the
+ * control part ([HoldKey]), so two devices of one type each hold their own.
  *
  * Callers run each input inside [guarded]: the actions read `state.show`, which throws while a
  * project switch is in flight, and a throw out of an input collector would end the collector.
@@ -16,155 +30,116 @@ class SurfaceDispatch(
     private val actions: SurfaceActions,
     private val bankState: ActiveBankState,
     private val encoderBankState: EncoderBankState,
-    private val flashTracker: FlashStateTracker,
+    val holds: SurfaceHolds = SurfaceHolds(),
+    /** Where a Toggle-hold-replaces press waits out its hold; null arms no hold. */
+    private val scope: () -> CoroutineScope? = { null },
+    private val selectHoldMs: Long = SELECT_HOLD_MS,
 ) {
-    /**
-     * Where a press came from: the device profile ([deviceTypeKey]) an encoder bank applies to, the
-     * binding row a flash is tracked by, and the history source an undo key acts as.
-     */
-    data class Origin(val deviceTypeKey: String, val bindingId: Int, val source: HistorySource)
-
-    /** A fader or encoder move, 0..127. [isEncoder] is asked only by an *FX speed* target. */
-    fun continuous(target: BindingTarget, value7Bit: UByte, isEncoder: () -> Boolean = { false }): ActionOutcome =
-        when (target) {
-            is BindingTarget.FixtureAttribute ->
-                done { actions.writeFixtureAttribute(target.fixtureKey, target.attribute, value7Bit, target.colourAxis) }
-            is BindingTarget.GroupAttribute ->
-                done { actions.writeGroupAttribute(target.groupName, target.attribute, value7Bit, target.colourAxis) }
-            is BindingTarget.SpeedMasterBpm ->
-                done { actions.writeSpeedMasterBpm(target.masterUuid, target.minBpm, target.maxBpm, value7Bit) }
-            BindingTarget.GrandMasterFader -> done { actions.writeGrandMaster(value7Bit) }
-            is BindingTarget.StackFxAmount -> done { actions.writeStackFxAmount(target.stackId, target.stackUuid, value7Bit) }
-            is BindingTarget.SelectionAttribute ->
-                done { actions.writeSelectionAttribute(target.attribute, value7Bit, target.colourAxis) }
-            is BindingTarget.SelectionFan -> done { actions.writeSelectionFan(target.axis, value7Bit) }
-            BindingTarget.FxSpeed -> done { actions.writeFxSpeed(value7Bit, isEncoder()) }
-            is BindingTarget.Strip -> {
-                logger.warn("Strip target reached continuous dispatch — resolve should have derived it")
-                wrongKind(target)
-            }
-            else -> wrongKind(target)
-        }
+    /** One control part on one attached device. */
+    data class HoldKey(val displayKey: String, val controlId: String, val part: ControlPart)
 
     /**
-     * A continuous target's value taken whole (OSC plan D10), rather than through the 7-bit arm a
-     * MIDI fader goes through: a stack's FX amount, 0–1.
+     * Where an input came from: the device profile a layer or encoder page applies to, the history
+     * source an undo key acts as, the control part a hold is kept on (none for OSC), and the binding
+     * row a held flash lights its LED by.
      */
-    fun level(target: BindingTarget, value: Double): ActionOutcome = when (target) {
-        is BindingTarget.StackFxAmount -> actions.setStackFxAmount(target.stackId, target.stackUuid, value)
-        else -> wrongKind(target)
+    data class Origin(
+        val deviceTypeKey: String,
+        val source: HistorySource,
+        val hold: HoldKey? = null,
+        val bindingId: Int? = null,
+    )
+
+    /** One input from a control part, or a value an OSC message carries. */
+    sealed interface Input {
+        data class Move(val value7Bit: UByte, val encoder: Boolean = false) : Input
+        data class Set(val value: Double) : Input
+        data object Press : Input
+        data object Release : Input
     }
 
-    /** A button press. */
-    fun press(target: BindingTarget, origin: Origin): ActionOutcome = when (target) {
-        is BindingTarget.CueStackGo -> actions.cueStackGo(target.stackId, target.stackUuid)
-        is BindingTarget.CueStackBack -> actions.cueStackBack(target.stackId, target.stackUuid)
-        is BindingTarget.CueStackPause -> actions.cueStackPause(target.stackId, target.stackUuid)
-        is BindingTarget.CueStackGoTo -> actions.cueStackGoTo(target.stackUuid, target.entryUuid)
-        is BindingTarget.CueStackStandby -> actions.cueStackStandby(target.stackUuid, target.entryUuid)
-        is BindingTarget.CueStackStop -> actions.cueStackStop(target.stackUuid)
-        is BindingTarget.FireCue -> actions.fireCue(target.cueId, target.cueUuid)
-        is BindingTarget.LooseCueSet -> actions.looseCueSet(target.cueUuid, target.on)
-        // Needs the arm, like every fire; an unarmed press is refused and announced there.
-        is BindingTarget.FireTrigger -> done { actions.fireTrigger(target.fixtureKey, target.trigger) }
-        is BindingTarget.SelectTarget -> done { actions.selectTarget(target.target, target.mode) }
-        is BindingTarget.ClearSelection -> done { actions.clearSelection() }
-        is BindingTarget.LocateSelection -> done { actions.locateSelection() }
-        // Health already marks it dead, so the router drops it before it gets here.
-        is BindingTarget.Unknown -> wrongKind(target)
-        is BindingTarget.Blackout -> ActionOutcome.Done(if (actions.toggleBlackout()) "on" else "off")
-        is BindingTarget.BlackoutSet -> actions.setBlackout(target.on)
-        is BindingTarget.GrandMasterToggle -> done { actions.toggleGrandMaster() }
-        is BindingTarget.GrandMasterLevel -> actions.setGrandMasterLevel(target.level)
-        is BindingTarget.SetBank -> done { bankState.setBank(target.deviceTypeKey, target.bank) }
-        // Applies to the device the button is on, so the payload names no device and a
-        // button can never be stranded pointing at a surface that isn't attached.
-        is BindingTarget.EncoderBankSet ->
-            done { encoderBankState.set(origin.deviceTypeKey, EncoderBankSelection(target.attribute, target.colourAxis)) }
-        // Never dispatched: resolve() derives a strip to the target of the control the event
-        // arrived on. Reaching here means the strip arm failed to fire.
-        is BindingTarget.Strip -> {
-            logger.warn("Strip binding {} reached button dispatch — resolve should have derived it", origin.bindingId)
-            wrongKind(target)
+    private val selectHolds = ConcurrentHashMap<HoldKey, Job>()
+
+    fun dispatch(binding: Binding, input: Input, origin: Origin): ActionOutcome {
+        val ctx = SurfaceContext(actions, bankState, encoderBankState, origin)
+        return when (input) {
+            is Input.Move -> binding.does.act(binding.on, Op.Move(input.value7Bit, input.encoder), ctx).outcome
+            is Input.Set -> binding.does.act(binding.on, Op.Set(input.value), ctx).outcome
+            Input.Press -> press(binding, ctx)
+            Input.Release -> {
+                origin.hold?.let(::releasePart)
+                ActionOutcome.DONE
+            }
         }
-        is BindingTarget.SpeedMasterTap -> actions.tapSpeedMaster(target.masterUuid)
-        is BindingTarget.SpeedMasterSetBpm -> actions.setSpeedMasterBpm(target.masterUuid, target.bpm)
-        is BindingTarget.SpeedMasterScale -> done { actions.scaleSpeedMaster(target.masterUuid, target.factor) }
-        // Records: one behaviour each (D6). The Look whole, the palette onto the selection, the pad
-        // through its own bank's plan — never any of the three onto what the other two would choose.
-        is BindingTarget.ApplyLook -> actions.applyLook(target.lookUuid)
-        is BindingTarget.LookSet -> actions.lookSet(target.lookUuid, target.on)
-        is BindingTarget.PressPalette -> done { actions.pressPalette(target.paletteUuid) }
-        is BindingTarget.PressPad -> actions.pressPad(target.padUuid)
-        // The hand (multi-screen plan §3.5): what a pick-up reads and what a place appends live in
-        // `HandService`, which the window's own doors share.
-        is BindingTarget.PickUpPad -> done { actions.pickUpPad(target.padUuid) }
-        is BindingTarget.HandPlaceInBank -> done { actions.handPlaceInBank(target.bankUuid) }
-        BindingTarget.HandDrop -> done { actions.handDrop() }
-        // The surface is a source of its own (undo plan D1): its key takes its own entries.
-        BindingTarget.Undo -> done { actions.historyMove(origin.source, undo = true) }
-        BindingTarget.Redo -> done { actions.historyMove(origin.source, undo = false) }
-        BindingTarget.ProgrammerUndo -> done { actions.historyMove(origin.source, undo = true, programmerOnly = true) }
-        BindingTarget.BuskPageNext -> done { actions.buskPageStep(1) }
-        BindingTarget.BuskPagePrev -> done { actions.buskPageStep(-1) }
-        is BindingTarget.BuskPageSet -> actions.buskPageSet(target.pageUuid)
-        // A window by name and the sub-selection (busk-further plan D12, D14).
-        is BindingTarget.BuskFocusSet -> done { actions.buskFocusSet(target.windowName, target.focus) }
-        is BindingTarget.BuskSheetToggle -> done { actions.buskSheetToggle(target.windowName) }
-        BindingTarget.SelectionNext -> done { actions.selectionStep(1) }
-        BindingTarget.SelectionPrev -> done { actions.selectionStep(-1) }
-        is BindingTarget.SelectionCells -> done { actions.selectionCells(target.mode) }
-        is BindingTarget.SpeedMasterBpm,
-        BindingTarget.GrandMasterFader,
-        is BindingTarget.StackFxAmount,
-        is BindingTarget.SelectionFan,
-        BindingTarget.FxSpeed,
-            -> wrongKind(target)
-        is BindingTarget.Flash -> {
-            if (!flashTracker.pressed(origin.bindingId)) {
-                ActionOutcome.Done("held") // a retrigger while held
-            } else {
-                val max = target.max.toUByte()
-                when (val inner = target.target) {
-                    is BindingTarget.FixtureAttribute ->
-                        done { actions.flashFixtureAttributePress(inner.fixtureKey, inner.attribute, max) }
-                    is BindingTarget.GroupAttribute ->
-                        done { actions.flashGroupAttributePress(inner.groupName, inner.attribute, max) }
-                    // Forbidden by Flash's init block.
-                    else -> wrongKind(inner)
+    }
+
+    private fun press(binding: Binding, ctx: SurfaceContext): ActionOutcome {
+        val key = ctx.origin.hold
+        return when (binding.effectiveHow) {
+            How.TOGGLE -> act(binding, Op.Toggle, ctx)
+            How.ON, null -> act(binding, Op.On, ctx)
+            How.OFF -> act(binding, Op.Off, ctx)
+            How.REPLACE -> act(binding, Op.Replace, ctx)
+            How.WHILE_HELD -> {
+                if (key != null && holds.isHeld(key)) return ActionOutcome.Done("held")
+                val acted = binding.does.act(binding.on, Op.On, ctx)
+                if (key != null) {
+                    val release: () -> Unit = acted.release ?: { binding.does.act(binding.on, Op.Off, ctx) }
+                    holds.hold(key, ctx.origin.bindingId, release)
                 }
+                acted.outcome
+            }
+            How.TOGGLE_HOLD_REPLACES -> {
+                val outcome = act(binding, Op.Toggle, ctx)
+                if (key != null) armReplace(key, binding, ctx)
+                outcome
             }
         }
-        // A button press on a continuous attribute writes it full, with no release step: Flash is
-        // the binding for momentary.
-        is BindingTarget.FixtureAttribute ->
-            done { actions.writeFixtureAttribute(target.fixtureKey, target.attribute, 127u, target.colourAxis) }
-        is BindingTarget.GroupAttribute ->
-            done { actions.writeGroupAttribute(target.groupName, target.attribute, 127u, target.colourAxis) }
-        is BindingTarget.SelectionAttribute ->
-            done { actions.writeSelectionAttribute(target.attribute, 127u, target.colourAxis) }
     }
 
-    /** A button release: only a [BindingTarget.Flash] does anything with one. */
-    fun release(target: BindingTarget, bindingId: Int): ActionOutcome {
-        if (target !is BindingTarget.Flash || !flashTracker.clearPress(bindingId)) return ActionOutcome.DONE
-        return when (val inner = target.target) {
-            is BindingTarget.FixtureAttribute -> done { actions.flashFixtureAttributeRelease(inner.fixtureKey, inner.attribute) }
-            is BindingTarget.GroupAttribute -> done { actions.flashGroupAttributeRelease(inner.groupName, inner.attribute) }
-            else -> ActionOutcome.DONE
+    /**
+     * A control part let go: cancel its pending replace and undo its hold. Needs no binding — a
+     * release always finds its own, even if the binding changed or went dead while it was down.
+     */
+    fun releasePart(key: HoldKey) {
+        selectHolds.remove(key)?.cancel()
+        holds.release(key)
+    }
+
+    private fun act(binding: Binding, op: Op, ctx: SurfaceContext): ActionOutcome = binding.does.act(binding.on, op, ctx).outcome
+
+    private fun armReplace(key: HoldKey, binding: Binding, ctx: SurfaceContext) {
+        val scope = scope() ?: return
+        val job = scope.launch {
+            delay(selectHoldMs)
+            selectHolds.remove(key)
+            guarded("Surface hold on ${key.displayKey}/${key.controlId}") { act(binding, Op.Replace, ctx) }
         }
+        selectHolds.put(key, job)?.cancel()
+    }
+
+    /** Drop every pending replace and let go of every hold on [displayKey]: the device went away. */
+    fun releaseDevice(displayKey: String) {
+        selectHolds.keys.filter { it.displayKey == displayKey }.forEach { selectHolds.remove(it)?.cancel() }
+        holds.releaseDevice(displayKey)
+    }
+
+    /** Drop every pending replace. */
+    fun cancelPending() {
+        selectHolds.values.forEach { it.cancel() }
+        selectHolds.clear()
     }
 
     companion object {
         private val logger = LoggerFactory.getLogger(SurfaceDispatch::class.java)
 
-        private inline fun done(block: () -> Unit): ActionOutcome {
-            block()
-            return ActionOutcome.DONE
-        }
-
-        private fun wrongKind(target: BindingTarget): ActionOutcome =
-            ActionOutcome.Refused(ActionOutcome.WRONG_KIND, "${target::class.simpleName} does not take this kind of input")
+        /**
+         * How long a Toggle-hold-replaces button must be held before it *also* replaces the
+         * selection. The toggle still happens on press, so the LED is immediate; keeping the button
+         * down then narrows the selection to that one target, which is how every fader wing surveyed
+         * in `docs/plans/completed/midi-surface-plan.md` §1 behaves.
+         */
+        const val SELECT_HOLD_MS = 500L
 
         /**
          * Run one input, turning any throw but a cancellation into [ActionOutcome.Failed] so the
@@ -183,5 +158,56 @@ class SurfaceDispatch(
             logger.warn("{} failed: {}", what, e.toString())
             return ActionOutcome.Failed(e.message ?: e::class.simpleName ?: "error")
         }
+    }
+}
+
+/**
+ * What every While held press holds now, keyed by control part, with the release that undoes it.
+ * The feedback publisher lights a held flash's LED from [isHeldBinding] and [changes].
+ */
+class SurfaceHolds {
+    private class Held(val bindingId: Int?, val release: () -> Unit)
+
+    private val held = ConcurrentHashMap<SurfaceDispatch.HoldKey, Held>()
+
+    /** A binding's hold starting or ending. */
+    data class HoldChange(val bindingId: Int, val held: Boolean)
+
+    private val _changes = MutableSharedFlow<HoldChange>(
+        replay = 0,
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val changes: SharedFlow<HoldChange> = _changes.asSharedFlow()
+
+    fun isHeld(key: SurfaceDispatch.HoldKey): Boolean = held.containsKey(key)
+
+    /** Whether any control part holds binding [bindingId]. */
+    fun isHeldBinding(bindingId: Int): Boolean = held.values.any { it.bindingId == bindingId }
+
+    internal fun hold(key: SurfaceDispatch.HoldKey, bindingId: Int?, release: () -> Unit) {
+        held[key] = Held(bindingId, release)
+        bindingId?.let { _changes.tryEmit(HoldChange(it, true)) }
+    }
+
+    /** Let go of [key]'s hold, undoing what its press wrote. */
+    fun release(key: SurfaceDispatch.HoldKey) {
+        val gone = held.remove(key) ?: return
+        try {
+            gone.release()
+        } finally {
+            gone.bindingId?.let { id -> if (!isHeldBinding(id)) _changes.tryEmit(HoldChange(id, false)) }
+        }
+    }
+
+    fun releaseDevice(displayKey: String) {
+        held.keys.filter { it.displayKey == displayKey }.forEach { key -> runCatching { release(key) } }
+    }
+
+    /** Forget every hold without undoing it: the project the presses wrote into has gone. */
+    fun clearAll() {
+        val ids = held.values.mapNotNull { it.bindingId }.toSet()
+        held.clear()
+        ids.forEach { _changes.tryEmit(HoldChange(it, false)) }
     }
 }

@@ -15,8 +15,8 @@ import kotlinx.coroutines.flow.update
  * default (null, meaning "resolve to bank-agnostic bindings only").
  *
  * Two ways to flip a bank:
- *   1. Device-side bank button → [SurfaceInputRouter] synthesises a [BindingTarget.SetBank]
- *      and calls [setBank] here.
+ *   1. A device-side bank button, or a button bound to [Does.Layer] → [SurfaceInputRouter]
+ *      calls [setBank] here for the device it is on.
  *   2. Frontend `surfaceBank.set` WebSocket message → handler calls [setBank] directly.
  *
  * Changes go out on [changes] so socket clients can mirror the active bank in their UI,

@@ -1,10 +1,13 @@
 package uk.me.cormack.lighting7.midi
 
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.dmx.China2CellLedBlinderFixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.models.AssignmentHealth
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.state.SubselectMode
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -21,6 +24,8 @@ class ControlSurfaceBindingHealthTest {
 
     private val projectId = 1
     private val universe = Universe(0, 0)
+    private val stack = UUID.fromString("11111111-1111-4111-8111-111111111111")
+    private val cue = UUID.fromString("22222222-2222-4222-8222-222222222222")
 
     private fun fixturesWithHex(keys: List<String>): Fixtures {
         val fixtures = Fixtures()
@@ -34,13 +39,13 @@ class ControlSurfaceBindingHealthTest {
 
     private fun context(
         fixtures: Fixtures = fixturesWithHex(listOf("hex-1", "hex-2")),
-        validStackIds: Set<Int> = emptySet(),
-        validCueIds: Set<Int> = emptySet(),
+        validStackUuids: Set<UUID> = emptySet(),
+        validCueUuids: Set<UUID> = emptySet(),
         connectedWindowNames: Set<String> = emptySet(),
     ): BindingHealthEvaluator.Context = BindingHealthEvaluator.Context(
         fixtures = fixtures,
-        validStackIds = validStackIds,
-        validCueIds = validCueIds,
+        validStackUuids = validStackUuids,
+        validCueUuids = validCueUuids,
         deviceTypes = ControlSurfaceRegistry.allTypes,
         connectedWindowNames = connectedWindowNames,
     )
@@ -60,10 +65,10 @@ class ControlSurfaceBindingHealthTest {
         service.seedCacheForTest(
             projectId,
             listOf(
-                binding(1, BindingTarget.BuskFocusSet("Screen 2", "rig")),
-                binding(2, BindingTarget.BuskSheetToggle("Screen 2")),
-                binding(3, BindingTarget.SelectionNext),
-                binding(4, BindingTarget.SelectionCells(uk.me.cormack.lighting7.state.SubselectMode.EVEN)),
+                binding(1, Binding(Does.WindowFocus("Screen 2", "rig"))),
+                binding(2, Binding(Does.WindowSheet("Screen 2"))),
+                binding(3, Binding(Does.SelectionStep(SelectionMove.NEXT))),
+                binding(4, Binding(Does.SelectionStep(SelectionMove.of(SubselectMode.EVEN)))),
             ),
         )
         // The seed installs rows as given; the first evaluation is the one a load or a registry
@@ -86,9 +91,19 @@ class ControlSurfaceBindingHealthTest {
         assertEquals(AssignmentHealth.MissingWindow("Screen 2"), service.get(projectId, 1)?.health)
     }
 
+    @Test
+    fun `a binding on the blinder's colour is healthy, so the router dispatches it`() {
+        val fixtures = Fixtures()
+        fixtures.register { addFixture(China2CellLedBlinderFixture(universe, "blinder", "Blinder", firstChannel = 201)) }
+        val service = ControlSurfaceBindingService(database = FakeDatabase.instance, healthContextProvider = { context(fixtures) })
+        service.seedCacheForTest(projectId, listOf(binding(1, Binding(Does.Level("rgbColour", ColourAxis.BRIGHTNESS), Subject.Fixture("blinder")))))
+        service.invalidateHealth(projectId)
+        assertEquals(AssignmentHealth.Ok, service.get(projectId, 1)?.health)
+    }
+
     private fun binding(
         id: Int,
-        target: BindingTarget,
+        binding: Binding,
         health: AssignmentHealth = AssignmentHealth.Ok,
     ): ControlSurfaceBindingService.ResolvedBinding = ControlSurfaceBindingService.ResolvedBinding(
         id = id,
@@ -96,7 +111,7 @@ class ControlSurfaceBindingHealthTest {
         deviceTypeKey = "x-touch-compact-standard",
         controlId = "fader-$id",
         bank = null,
-        target = target,
+        binding = binding,
         takeoverPolicy = BindingTakeoverPolicy.IMMEDIATE,
         sortOrder = 0,
         health = health,
@@ -111,7 +126,7 @@ class ControlSurfaceBindingHealthTest {
         )
         service.seedCacheForTest(
             projectId,
-            listOf(binding(1, BindingTarget.FixtureAttribute("hex-1", "dimmer"))),
+            listOf(binding(1, Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")))),
         )
         assertEquals(AssignmentHealth.Ok, service.get(projectId, 1)?.health)
 
@@ -136,7 +151,7 @@ class ControlSurfaceBindingHealthTest {
         )
         service.seedCacheForTest(
             projectId,
-            listOf(binding(1, BindingTarget.FixtureAttribute("hex-1", "dimmer"))),
+            listOf(binding(1, Binding(Does.Level("dimmer"), Subject.Fixture("hex-1")))),
         )
         // Force the initial health evaluation (seed bypasses it).
         service.invalidateHealth(projectId)
@@ -150,41 +165,41 @@ class ControlSurfaceBindingHealthTest {
 
     @Test
     fun `invalidateHealth flags MissingStack when the referenced stack is deleted`() {
-        var current: BindingHealthEvaluator.Context = context(validStackIds = setOf(7))
+        var current: BindingHealthEvaluator.Context = context(validStackUuids = setOf(stack))
         val service = ControlSurfaceBindingService(
             database = FakeDatabase.instance,
             healthContextProvider = { current },
         )
         service.seedCacheForTest(
             projectId,
-            listOf(binding(1, BindingTarget.CueStackGo(7))),
+            listOf(binding(1, Binding(Does.Go, Subject.Record(RecordKind.STACK, stack)))),
         )
         service.invalidateHealth(projectId)
         assertEquals(AssignmentHealth.Ok, service.get(projectId, 1)?.health)
 
-        current = context(validStackIds = emptySet())
+        current = context(validStackUuids = emptySet())
         service.invalidateHealth(projectId)
         val dead = service.get(projectId, 1)?.health
-        assertEquals(AssignmentHealth.MissingStack(7), dead)
+        assertEquals(AssignmentHealth.MissingStack(stackUuid = stack.toString()), dead)
     }
 
     @Test
     fun `invalidateHealth emits a Reloaded event only when health actually changed`() {
-        var current: BindingHealthEvaluator.Context = context(validCueIds = setOf(10))
+        var current: BindingHealthEvaluator.Context = context(validCueUuids = setOf(cue))
         val service = ControlSurfaceBindingService(
             database = FakeDatabase.instance,
             healthContextProvider = { current },
         )
         service.seedCacheForTest(
             projectId,
-            listOf(binding(1, BindingTarget.FireCue(10))),
+            listOf(binding(1, Binding(Does.Cue, Subject.Record(RecordKind.CUE, cue)))),
         )
         // Seed starts at Ok (default); first invalidate with same context → no event.
         service.invalidateHealth(projectId)
         // Now remove the cue — health flips dead → event.
-        current = context(validCueIds = emptySet())
+        current = context(validCueUuids = emptySet())
         service.invalidateHealth(projectId)
-        assertEquals(AssignmentHealth.MissingCue(10), service.get(projectId, 1)?.health)
+        assertEquals(AssignmentHealth.MissingCue(cueUuid = cue.toString()), service.get(projectId, 1)?.health)
     }
 
     @Test
@@ -202,7 +217,7 @@ class ControlSurfaceBindingHealthTest {
         val service = ControlSurfaceBindingService(FakeDatabase.instance)
         service.seedCacheForTest(
             projectId,
-            listOf(binding(1, BindingTarget.FixtureAttribute("hex-missing", "dimmer"))),
+            listOf(binding(1, Binding(Does.Level("dimmer"), Subject.Fixture("hex-missing")))),
         )
         // No provider → health stays at the default Ok.
         service.invalidateHealth(projectId)
@@ -218,7 +233,7 @@ class ControlSurfaceBindingHealthTest {
         )
         service.seedCacheForTest(
             projectId,
-            listOf(binding(1, BindingTarget.FixtureAttribute("hex-gone", "dimmer"))),
+            listOf(binding(1, Binding(Does.Level("dimmer"), Subject.Fixture("hex-gone")))),
         )
         service.invalidateHealth(projectId)
 

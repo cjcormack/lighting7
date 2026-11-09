@@ -2,8 +2,12 @@ package uk.me.cormack.lighting7.osc
 
 import io.ktor.server.testing.testApplication
 import org.junit.Test
-import uk.me.cormack.lighting7.midi.BindingTarget
+import uk.me.cormack.lighting7.midi.Binding
 import uk.me.cormack.lighting7.midi.DefaultSurfaceActions
+import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.How
+import uk.me.cormack.lighting7.midi.RecordKind
+import uk.me.cormack.lighting7.midi.Subject
 import uk.me.cormack.lighting7.midi.SurfaceDispatch
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.mountTestApp
@@ -11,6 +15,7 @@ import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -24,7 +29,7 @@ class OscMastersTest : RouteIntegrationTest() {
     private fun handler() = OscHandler(
         database = state.database,
         currentProjectId = { projectId },
-        dispatch = SurfaceDispatch(DefaultSurfaceActions(state), state.activeBankState, state.encoderBankState, state.flashStateTracker),
+        dispatch = SurfaceDispatch(DefaultSurfaceActions(state), state.activeBankState, state.encoderBankState),
     )
 
     private fun OscHandler.send(address: String, vararg args: OscArg): OscHandled =
@@ -94,21 +99,24 @@ class OscMastersTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `every session-2 row resolves to its target`() = testApplication {
+    fun `every session-2 row resolves to its binding`() = testApplication {
         mountTestApp(state)
         val lookup = DbOscLookup(projectId)
         fun resolve(address: String, vararg args: OscArg) =
             org.jetbrains.exposed.v1.jdbc.transactions.transaction(state.database) { OscAddresses.resolve(address, args.toList(), lookup) }
-        val m3 = master(3).uuid.toString()
+        val m3 = Subject.Record(RecordKind.MASTER, assertNotNull(master(3).uuid))
 
-        assertEquals(BindingTarget.Blackout, assertIs<OscResolution.Press>(resolve("/lighting7/blackout")).target)
-        assertEquals(BindingTarget.BlackoutSet(true), assertIs<OscResolution.Press>(resolve("/lighting7/blackout", OscArg.Int32(5))).target)
-        assertEquals(BindingTarget.BlackoutSet(false), assertIs<OscResolution.Press>(resolve("/lighting7/blackout", OscArg.Int32(0))).target)
-        assertEquals(BindingTarget.GrandMasterLevel(25.0), assertIs<OscResolution.Press>(resolve("/lighting7/grandmaster", OscArg.Float32(0.25f))).target)
-        val tempo = assertIs<OscResolution.Press>(resolve("/lighting7/tempo/3", OscArg.Float32(140f)))
-        assertEquals(BindingTarget.SpeedMasterSetBpm(m3, 140.0), tempo.target)
+        assertEquals(Binding(Does.Blackout, how = How.TOGGLE), assertIs<OscResolution.Press>(resolve("/lighting7/blackout")).binding)
+        assertEquals(Binding(Does.Blackout, how = How.ON), assertIs<OscResolution.Press>(resolve("/lighting7/blackout", OscArg.Int32(5))).binding)
+        assertEquals(Binding(Does.Blackout, how = How.OFF), assertIs<OscResolution.Press>(resolve("/lighting7/blackout", OscArg.Int32(0))).binding)
+        val grandMaster = assertIs<OscResolution.Level>(resolve("/lighting7/grandmaster", OscArg.Float32(0.25f)))
+        assertEquals(Binding(Does.GrandMaster()), grandMaster.binding)
+        assertEquals(25.0, grandMaster.value)
+        val tempo = assertIs<OscResolution.Level>(resolve("/lighting7/tempo/3", OscArg.Float32(140f)))
+        assertEquals(Binding(Does.Tempo(), m3), tempo.binding)
+        assertEquals(140.0, tempo.value)
         assertEquals(OscRecordKind.MASTER, tempo.record?.kind)
-        assertEquals(BindingTarget.SpeedMasterTap(m3), assertIs<OscResolution.Press>(resolve("/lighting7/tempo/3/tap")).target)
+        assertEquals(Binding(Does.Tap, m3), assertIs<OscResolution.Press>(resolve("/lighting7/tempo/3/tap")).binding)
         assertEquals(4, OscAddresses.entries.count { it.session == 2 })
     }
 }

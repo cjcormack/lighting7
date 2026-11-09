@@ -1,0 +1,58 @@
+{
+  "events": [
+    {
+      "offsetMs": 600,
+      "patchUuid": "0a90b4bd-29e9-4d3a-bac2-ec3c49881547",
+      "trigger": "output1",
+      "uuid": "9a5303cf-993d-4f41-b455-4eda801b9675"
+    },
+    {
+      "offsetMs": 750,
+      "patchUuid": "0a90b4bd-29e9-4d3a-bac2-ec3c49881547",
+      "sortOrder": 1,
+      "trigger": "output2",
+      "uuid": "c7d92ad2-c750-4a78-990f-aa3651db90c0"
+    }
+  ],
+  "fadeCurve": "SINE_IN_OUT",
+  "fadeDurationMs": 1000,
+  "moveInDarkDelayMs": 1500,
+  "moveInDarkLive": [
+    "hex-2"
+  ],
+  "moveInDarkMode": "LATE",
+  "moveInDarkTimeMs": 800,
+  "name": "open",
+  "notes": "house to half, then go",
+  "scenery": [
+    {
+      "elementUuid": "1bcf06bd-0af8-4bcf-bb3a-f9b4a2232a61",
+      "state": {
+        "open": 0.0
+      },
+      "transitionMs": 4000,
+      "uuid": "d1858152-d34c-4028-99bf-755c239cb7eb"
+    },
+    {
+      "elementUuid": "a31f4b5d-f309-427f-a514-95cc43d6fc94",
+      "sortOrder": 1,
+      "state": {
+        "visible": false
+      },
+      "transitionMs": 1500,
+      "uuid": "5eb551e5-abb3-4b9a-b88a-1474e505f631"
+    }
+  ],
+  "speedMasters": [
+    {
+      "bpm": 132.0,
+      "speedMasterUuid": "718c3cad-bdec-4dee-bf01-1443dd13100b"
+    },
+    {
+      "bpm": 96.5,
+      "speedMasterUuid": "102984c9-805a-48e4-adcc-1762802bf7fe"
+    }
+  ],
+  "stomp": true,
+  "uuid": "2774f31c-e8c8-4001-a0fa-771b6d1915f4"
+}

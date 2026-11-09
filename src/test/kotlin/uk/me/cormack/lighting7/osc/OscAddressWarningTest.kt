@@ -66,7 +66,7 @@ class OscAddressWarningTest : RouteIntegrationTest() {
         val handler = OscHandler(
             database = state.database,
             currentProjectId = { projectId },
-            dispatch = SurfaceDispatch(DefaultSurfaceActions(state), state.activeBankState, state.encoderBankState, state.flashStateTracker),
+            dispatch = SurfaceDispatch(DefaultSurfaceActions(state), state.activeBankState, state.encoderBankState),
         )
         return OscService(state.database, handler, DeskMetrics()).also {
             it.start()

@@ -3,25 +3,16 @@ package uk.me.cormack.lighting7.midi
 import uk.me.cormack.lighting7.models.AssignmentHealth
 import uk.me.cormack.lighting7.fixture.FixtureTriggers
 import uk.me.cormack.lighting7.fx.PersistedFixtureReferenceValidator
-import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
-import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
 
 /**
- * Pure evaluator that maps a [BindingTarget] onto an [AssignmentHealth] given a snapshot
- * of the current project state. Stateless — callers assemble a [Context] per evaluation
- * batch and throw it away. Fixture / group reference validation delegates to
- * [PersistedFixtureReferenceValidator] so cue-authoring's rules (property
- * canonicalisation, `"position"` compound, group-member probing) stay the one source of
- * truth.
- *
- * Stack / cue / bank variants live here because they're surface-specific — cue-authoring
- * never references a cue stack or a device bank by ID.
- *
- * [BindingTarget.Flash] recurses on its inner target so a flash on a now-deleted fixture
- * surfaces the same `MissingFixture` a continuous binding would.
+ * Pure evaluator that maps a [Binding] onto an [AssignmentHealth] given a snapshot of the current
+ * project state: its subject's health, then its function's own parameters. Stateless — callers
+ * assemble a [Context] per evaluation batch and throw it away. A fixture's or group's attribute is
+ * judged per head [Heads.of] reaches, through [PersistedFixtureReferenceValidator], so cue-authoring's
+ * rules (property canonicalisation, the `"position"` compound) stay the one source of truth.
  */
 object BindingHealthEvaluator {
 
@@ -31,17 +22,14 @@ object BindingHealthEvaluator {
      * re-scan fixtures per binding.
      *
      * @param fixtures current patch; delegated to `PersistedFixtureReferenceValidator`
-     * @param validStackIds IDs of cue stacks that currently exist in the project
-     * @param validCueIds IDs of cues that currently exist in the project
-     * @param deviceTypes device profiles — used for [BindingTarget.SetBank] bank validation
-     * @param validSpeedMasterUuids uuids currently in the bank; master 1 is addressed by a
-     *   null uuid and so never needs to appear here
-     * @param validStackUuids uuids of the same stacks as [validStackIds] — a stack variant with
-     *   a uuid is judged by this set and its int is ignored
-     * @param validCueUuids likewise for cues
+     * @param deviceTypes device profiles — used for a [Does.Layer]'s layer
+     * @param validSpeedMasterUuids uuids currently in the bank; master 1 is addressed by no
+     *   subject and so never needs to appear here
+     * @param validStackUuids the project's cue stacks
+     * @param validCueUuids the project's cues
      * @param selectionAttributes every property name some patched fixture declares that a
-     *   continuous control can write (sliders and colour) — the vocabulary of
-     *   [BindingTarget.SelectionAttribute]; see [selectionAttributesOf]
+     *   continuous control can write (sliders and colour) — the vocabulary of a level on the
+     *   selection and of an encoder page; see [selectionAttributesOf]
      * @param colourAttributes the subset of [selectionAttributes] some patched fixture declares as
      *   a **colour** — what a [ColourAxis] on a selection or encoder-bank target is judged against
      *   at the write boundary (`refuseAxisOnNonColour`); see [colourAttributesOf]. Health itself
@@ -51,18 +39,16 @@ object BindingHealthEvaluator {
      * @param validPaletteUuids templates that exist in the project
      * @param validPadUuids busk pads that exist — a pad dragged off a page, or swept by its
      *   record's delete, is gone
-     * @param validBankUuids busk banks that exist — what a [BindingTarget.HandPlaceInBank] places
-     *   onto. A bank, not a pad: the place appends, so what must exist is the container
+     * @param validBankUuids busk banks that exist — what a [Does.Place] places onto. A bank, not a
+     *   pad: the place appends, so what must exist is the container
      * @param validPageUuids busk pages that exist
      * @param connectedWindowNames the registry names of every window signed in **now** — what a
-     *   [BindingTarget.BuskFocusSet] / [BindingTarget.BuskSheetToggle] is judged against. The one
+     *   [Does.WindowFocus] / [Does.WindowSheet] is judged against. The one
      *   input here that is not a database fact, which is why the publisher re-evaluates on every
      *   registry change rather than only on the fixture hooks
      */
     data class Context(
         val fixtures: Fixtures,
-        val validStackIds: Set<Int>,
-        val validCueIds: Set<Int>,
         val deviceTypes: List<ControlSurfaceRegistry.DeviceTypeInfo>,
         val validSpeedMasterUuids: Set<UUID> = emptySet(),
         val validStackUuids: Set<UUID> = emptySet(),
@@ -80,7 +66,7 @@ object BindingHealthEvaluator {
     )
 
     /**
-     * The property names a [BindingTarget.SelectionAttribute] may carry: every name that at least
+     * The property names a level on the selection may carry: every name that at least
      * one patched fixture declares and that [AttributeChannelResolver] would accept on a fader —
      * sliders and colour, never a setting. Computed once per context, not per binding.
      */
@@ -96,113 +82,119 @@ object BindingHealthEvaluator {
      */
     fun colourAttributesOf(fixtures: Fixtures): Set<String> =
         fixtures.fixtures.flatMapTo(HashSet()) { fixture ->
-            fixture.fixtureAttributes.map { it.name }.filter {
-                AttributeChannelResolver.describeAttributeRead(fixture, it) is AttributeChannelResolver.AttributeRead.Colour
-            }
+            fixture.fixtureAttributes.map { it.name }.filter { AttributeChannelResolver.isColour(fixture, it) == true }
         }
 
-    fun evaluate(target: BindingTarget, context: Context): AssignmentHealth = when (target) {
-        is BindingTarget.FixtureAttribute -> PersistedFixtureReferenceValidator.validateTargetedReference(
-            fixtures = context.fixtures,
-            target = TargetRef.Fixture(target.fixtureKey),
-            attribute = target.attribute,
-        )
-        is BindingTarget.GroupAttribute -> PersistedFixtureReferenceValidator.validateTargetedReference(
-            fixtures = context.fixtures,
-            target = TargetRef.Group(target.groupName),
-            attribute = target.attribute,
-        )
-        is BindingTarget.CueStackGo -> checkStack(target.stackId, target.stackUuid, context)
-        is BindingTarget.CueStackBack -> checkStack(target.stackId, target.stackUuid, context)
-        is BindingTarget.CueStackPause -> checkStack(target.stackId, target.stackUuid, context)
-        is BindingTarget.FireCue -> checkCue(target.cueId, target.cueUuid, context)
-        is BindingTarget.CueStackGoTo -> checkEntry(target.stackUuid, target.entryUuid, context)
-        is BindingTarget.CueStackStandby -> checkEntry(target.stackUuid, target.entryUuid, context)
-        is BindingTarget.CueStackStop -> checkStack(0, target.stackUuid, context)
-        is BindingTarget.LooseCueSet -> checkCue(0, target.cueUuid, context)
-        // The fixture and its trigger. Whether the desk is armed is a fact about this second, not
-        // about the binding — an unarmed press is announced, never a dead binding.
-        is BindingTarget.FireTrigger -> checkTrigger(target.fixtureKey, target.trigger, context)
-        is BindingTarget.SelectionAttribute ->
-            if (target.attribute in context.selectionAttributes) AssignmentHealth.Ok
-            else AssignmentHealth.UnknownAttribute(target.attribute)
-        is BindingTarget.SelectTarget -> checkTarget(target.target, context)
-        // A strip is judged by its group or fixture alone. The properties its controls derive
-        // are the encoder bank's business, and an attribute no selected head declares makes the
-        // encoder read unbound — not the strip dead.
-        is BindingTarget.Strip -> checkTarget(target.target, context)
-        is BindingTarget.EncoderBankSet ->
-            if (target.attribute in context.selectionAttributes) AssignmentHealth.Ok
-            else AssignmentHealth.UnknownAttribute(target.attribute)
-        BindingTarget.ClearSelection -> AssignmentHealth.Ok
-        BindingTarget.LocateSelection -> AssignmentHealth.Ok
-        // A Look lands whole (absolute-looks plan D1), so the one failure is a Look that is gone.
-        is BindingTarget.ApplyLook ->
-            uuidHealth(target.lookUuid, context.validLookUuids) { AssignmentHealth.MissingLook(it) }
-        is BindingTarget.LookSet ->
-            uuidHealth(target.lookUuid, context.validLookUuids) { AssignmentHealth.MissingLook(it) }
-        // A template's *emptiness* is not a health question: a generic template pressed with
-        // nothing selected is a dropped press, which is a fact about the selection at that moment
-        // and not about the binding — the same line `SelectionAttribute` draws.
-        is BindingTarget.PressPalette ->
-            uuidHealth(target.paletteUuid, context.validPaletteUuids) { AssignmentHealth.MissingPalette(it) }
-        // The pad, not its record: a pad whose record was deleted is itself swept in the same
-        // transaction, so "the pad exists" already answers "its record does".
-        is BindingTarget.PressPad ->
-            uuidHealth(target.padUuid, context.validPadUuids) { AssignmentHealth.MissingPad(it) }
-        // The hand's three (multi-screen plan §3.5). Each is judged on the *address* it carries and
-        // nothing else: a pick-up needs its pad, a place needs its bank, and a drop addresses
-        // nothing, so it can never be dead. What the hand happens to hold is never a health
-        // question — it is a fact about this second, like an empty selection under a
-        // `SelectionAttribute`.
-        is BindingTarget.PickUpPad ->
-            uuidHealth(target.padUuid, context.validPadUuids) { AssignmentHealth.MissingPad(it) }
-        is BindingTarget.HandPlaceInBank ->
-            uuidHealth(target.bankUuid, context.validBankUuids) { AssignmentHealth.MissingBank(it) }
-        BindingTarget.HandDrop -> AssignmentHealth.Ok
-        BindingTarget.Undo, BindingTarget.Redo, BindingTarget.ProgrammerUndo -> AssignmentHealth.Ok
-        is BindingTarget.BuskPageSet ->
-            uuidHealth(target.pageUuid, context.validPageUuids) { AssignmentHealth.MissingPage(it) }
-        // Page-agnostic: they move along whatever pages there are, and a project with none simply
-        // has nowhere to move to — not a dead binding.
-        BindingTarget.BuskPageNext -> AssignmentHealth.Ok
-        BindingTarget.BuskPagePrev -> AssignmentHealth.Ok
-        // Window-addressed: dead while no connected window carries the name, alive the moment one
-        // announces. Transient, unlike every other arm — see `AssignmentHealth.MissingWindow`.
-        is BindingTarget.BuskFocusSet -> windowHealth(target.windowName, context)
-        is BindingTarget.BuskSheetToggle -> windowHealth(target.windowName, context)
-        // Selection-relative and rig-agnostic: an empty selection or an empty rig is a fact about
-        // this second, not about the binding — the `SelectionAttribute` line.
-        BindingTarget.SelectionNext -> AssignmentHealth.Ok
-        BindingTarget.SelectionPrev -> AssignmentHealth.Ok
-        is BindingTarget.SelectionCells -> AssignmentHealth.Ok
-        is BindingTarget.SelectionFan -> AssignmentHealth.Ok
-        // A selection with no Local FX on it is a fact about this second too: the ring goes dark
-        // and the move is dropped, but the binding is not dead.
-        BindingTarget.FxSpeed -> AssignmentHealth.Ok
-        is BindingTarget.Unknown -> AssignmentHealth.UnknownTarget(target.targetType)
-        is BindingTarget.SetBank -> {
-            val profile = context.deviceTypes.firstOrNull { it.typeKey == target.deviceTypeKey }
-            if (profile == null || profile.banks.none { it.id == target.bank }) {
-                AssignmentHealth.UnknownBank(target.deviceTypeKey, target.bank)
-            } else {
-                AssignmentHealth.Ok
-            }
-        }
-        is BindingTarget.Flash -> evaluate(target.target, context)
-        is BindingTarget.SpeedMasterBpm -> checkSpeedMaster(target.masterUuid, context)
-        is BindingTarget.SpeedMasterTap -> checkSpeedMaster(target.masterUuid, context)
-        is BindingTarget.SpeedMasterScale -> checkSpeedMaster(target.masterUuid, context)
-        is BindingTarget.SpeedMasterSetBpm -> checkSpeedMaster(target.masterUuid, context)
-        BindingTarget.Blackout -> AssignmentHealth.Ok
-        is BindingTarget.BlackoutSet -> AssignmentHealth.Ok
-        BindingTarget.GrandMasterToggle -> AssignmentHealth.Ok
-        is BindingTarget.GrandMasterLevel -> AssignmentHealth.Ok
-        BindingTarget.GrandMasterFader -> AssignmentHealth.Ok
-        is BindingTarget.StackFxAmount -> checkStack(target.stackId, target.stackUuid, context)
+    /** [binding]'s health on the device [deviceTypeKey] it is bound on: its subject's, then its function's parameters'. */
+    fun evaluate(binding: Binding, context: Context, deviceTypeKey: String? = null): AssignmentHealth {
+        val does = binding.does
+        if (does is Does.Unknown) return AssignmentHealth.UnknownTarget(does.storedType)
+        val subject = subjectHealth(binding, context)
+        if (subject != AssignmentHealth.Ok) return subject
+        return parameterHealth(binding, context, deviceTypeKey)
     }
 
-    /** A [BindingTarget.FireTrigger]'s fixture must be patched and carry that trigger (by name or label). */
+    /**
+     * Does the subject resolve: a fixture or group (with the attribute a level or flash writes on
+     * some head it reaches), a fixture's trigger, a record by uuid. None, the selection and a slot
+     * always do — an empty selection is a fact about this second, not about the binding.
+     */
+    private fun subjectHealth(binding: Binding, context: Context): AssignmentHealth {
+        val named = binding.does.named
+        return when (val on = binding.on) {
+            Subject.None, Subject.Selection, Subject.Slot -> AssignmentHealth.Ok
+            is Subject.Fixture ->
+                if (runCatching { context.fixtures.untypedGroupableFixture(on.key) }.isFailure) AssignmentHealth.MissingFixture(on.key)
+                else when (named) {
+                    is Named.Trigger -> checkTrigger(on.key, named.trigger, context)
+                    is Named.Attribute -> headsHealth(on, on.key, named.attribute, context)
+                    null -> AssignmentHealth.Ok
+                }
+            is Subject.Group ->
+                if (runCatching { context.fixtures.untypedGroup(on.key) }.isFailure) AssignmentHealth.MissingGroup(on.key)
+                else when (named) {
+                    is Named.Attribute -> headsHealth(on, on.key, named.attribute, context)
+                    is Named.Trigger, null -> AssignmentHealth.Ok
+                }
+            is Subject.Record -> recordHealth(on, context)
+        }
+    }
+
+    /**
+     * A fixture's or group's [attribute] judged over the heads the write reaches ([Heads.of]) — an
+     * element, a group's cells, the cells a parent's attribute lives on — each as cue authoring
+     * judges a cell. Healthy when any head has it, as the write skips the heads that do not.
+     */
+    private fun headsHealth(on: Subject, key: String, attribute: String, context: Context): AssignmentHealth {
+        val heads = Heads.of(context.fixtures, on, attribute)
+        if (heads.isEmpty()) return if (on is Subject.Group) AssignmentHealth.MissingGroup(key) else AssignmentHealth.MissingFixture(key)
+        val reached = heads.any { head ->
+            PersistedFixtureReferenceValidator.validateTargetedReference(
+                context.fixtures, TargetRef.Fixture(head.fixture.targetKey), attribute, allowElements = true,
+            ) == AssignmentHealth.Ok
+        }
+        return if (reached) AssignmentHealth.Ok else AssignmentHealth.MissingAttribute(key, attribute)
+    }
+
+    private fun recordHealth(on: Subject.Record, context: Context): AssignmentHealth {
+        val uuid = on.uuid
+        val raw = uuid.toString()
+        fun check(valid: Boolean, missing: () -> AssignmentHealth) = if (valid) AssignmentHealth.Ok else missing()
+        return when (on.kind) {
+            RecordKind.STACK -> check(uuid in context.validStackUuids) { AssignmentHealth.MissingStack(stackUuid = raw) }
+            // An entry gone reads as a missing cue: the health vocabulary has no word for an entry.
+            RecordKind.ENTRY -> check(uuid in context.validEntryUuids) { AssignmentHealth.MissingCue(cueUuid = raw) }
+            RecordKind.CUE -> check(uuid in context.validCueUuids) { AssignmentHealth.MissingCue(cueUuid = raw) }
+            // A Look lands whole (absolute-looks plan D1), so the one failure is a Look that is gone.
+            RecordKind.LOOK -> check(uuid in context.validLookUuids) { AssignmentHealth.MissingLook(raw) }
+            RecordKind.PALETTE -> check(uuid in context.validPaletteUuids) { AssignmentHealth.MissingPalette(raw) }
+            // The pad, not its record: a pad whose record was deleted is itself swept in the same
+            // transaction, so "the pad exists" already answers "its record does".
+            RecordKind.PAD -> check(uuid in context.validPadUuids) { AssignmentHealth.MissingPad(raw) }
+            RecordKind.BANK -> check(uuid in context.validBankUuids) { AssignmentHealth.MissingBank(raw) }
+            RecordKind.PAGE -> check(uuid in context.validPageUuids) { AssignmentHealth.MissingPage(raw) }
+            RecordKind.MASTER -> check(uuid in context.validSpeedMasterUuids) { AssignmentHealth.MissingSpeedMaster(raw) }
+        }
+    }
+
+    /**
+     * What a function's own parameters need: a level on the selection, or an encoder page, an
+     * attribute some patched fixture declares; a palette that exists; a layer the device has; a
+     * window that is connected. A palette's *emptiness*, a hand's contents, a selection with no Local
+     * FX — each is a fact about this second, never a dead binding.
+     */
+    private fun parameterHealth(binding: Binding, context: Context, deviceTypeKey: String?): AssignmentHealth =
+        when (val does = binding.does) {
+            is Does.Level ->
+                if (binding.on != Subject.Selection || does.attribute in context.selectionAttributes) AssignmentHealth.Ok
+                else AssignmentHealth.UnknownAttribute(does.attribute)
+            is Does.EncoderPage ->
+                if (does.attribute in context.selectionAttributes) AssignmentHealth.Ok
+                else AssignmentHealth.UnknownAttribute(does.attribute)
+            is Does.Palette ->
+                if (does.palette in context.validPaletteUuids) AssignmentHealth.Ok
+                else AssignmentHealth.MissingPalette(does.palette.toString())
+            is Does.Layer -> {
+                val profile = deviceTypeKey?.let { key -> context.deviceTypes.firstOrNull { it.typeKey == key } }
+                if (profile == null || profile.banks.none { it.id == does.layer }) {
+                    AssignmentHealth.UnknownBank(deviceTypeKey ?: "", does.layer)
+                } else {
+                    AssignmentHealth.Ok
+                }
+            }
+            // Window-addressed: dead while no connected window carries the name, alive the moment one
+            // announces. Transient, unlike every other check — see `AssignmentHealth.MissingWindow`.
+            is Does.WindowFocus -> windowHealth(does.window, context)
+            is Does.WindowSheet -> windowHealth(does.window, context)
+            is Does.Flash, Does.Select, Does.Locate, is Does.Fan, Does.FxSpeed, Does.Look, Does.Cue, Does.Pad,
+            Does.PickUp, Does.Place, Does.Drop, Does.Go, Does.Back, Does.Pause, Does.Stop, Does.GoTo,
+            Does.Standby, Does.FxAmount, is Does.Fire, Does.Blackout, is Does.GrandMaster, is Does.Tempo,
+            Does.Tap, is Does.TempoScale, is Does.Undo, is Does.BuskPage, is Does.SelectionStep, Does.Strip,
+            is Does.Unknown,
+                -> AssignmentHealth.Ok
+        }
+
+    /** A fire's fixture must be patched and carry that trigger (by name or label). */
     private fun checkTrigger(fixtureKey: String, trigger: String, context: Context): AssignmentHealth {
         val fixture = runCatching { context.fixtures.untypedFixture(fixtureKey) }.getOrNull()
             ?: return AssignmentHealth.MissingFixture(fixtureKey)
@@ -210,79 +202,7 @@ object BindingHealthEvaluator {
         return if (known) AssignmentHealth.Ok else AssignmentHealth.MissingAttribute(fixtureKey, trigger)
     }
 
-    /**
-     * Uuid first: a row that carries one is judged by it alone, so a clone whose ints point at
-     * the source project's rows still reads healthy when its remapped uuid resolves — and a row
-     * whose uuid names a deleted stack is dead even if the stale int happens to collide with a
-     * live one. Only a pre-v11 row with no uuid falls back to the int.
-     */
-    private fun checkStack(stackId: Int, stackUuid: String?, context: Context): AssignmentHealth {
-        val uuid = stackUuid?.let(::uuidOrNull)
-        val ok = if (stackUuid != null) uuid != null && uuid in context.validStackUuids
-        else stackId in context.validStackIds
-        return if (ok) AssignmentHealth.Ok else AssignmentHealth.MissingStack(stackId)
-    }
-
-    /**
-     * A GO TO or standby needs its stack and an entry of it. A removed entry reads as a missing cue —
-     * the health vocabulary has no word for an entry — with no id to name, since the binding holds none.
-     */
-    private fun checkEntry(stackUuid: String, entryUuid: String, context: Context): AssignmentHealth {
-        val stack = checkStack(0, stackUuid, context)
-        if (stack != AssignmentHealth.Ok) return stack
-        val entry = uuidOrNull(entryUuid)
-        return if (entry != null && context.validEntryUuids[entry] == uuidOrNull(stackUuid)) AssignmentHealth.Ok
-        else AssignmentHealth.MissingCue(0)
-    }
-
-    private fun checkCue(cueId: Int, cueUuid: String?, context: Context): AssignmentHealth {
-        val uuid = cueUuid?.let(::uuidOrNull)
-        val ok = if (cueUuid != null) uuid != null && uuid in context.validCueUuids
-        else cueId in context.validCueIds
-        return if (ok) AssignmentHealth.Ok else AssignmentHealth.MissingCue(cueId)
-    }
-
-    /** A select button needs its group or fixture to exist; no property is involved. */
-    private fun checkTarget(target: CueTargetDto, context: Context): AssignmentHealth =
-        when (val ref = TargetRef.ofOrNull(target.type, target.key)) {
-            is TargetRef.Fixture ->
-                if (runCatching { context.fixtures.untypedFixture(ref.key) }.isSuccess) AssignmentHealth.Ok
-                else AssignmentHealth.MissingFixture(ref.key)
-            is TargetRef.Group ->
-                if (runCatching { context.fixtures.untypedGroup(ref.key) }.isSuccess) AssignmentHealth.Ok
-                else AssignmentHealth.MissingGroup(ref.key)
-            null -> AssignmentHealth.MissingFixture(target.key)
-        }
-
     private fun windowHealth(windowName: String, context: Context): AssignmentHealth =
         if (windowName in context.connectedWindowNames) AssignmentHealth.Ok
         else AssignmentHealth.MissingWindow(windowName)
-
-    private fun uuidOrNull(raw: String): UUID? = try {
-        UUID.fromString(raw)
-    } catch (_: IllegalArgumentException) {
-        null
-    }
-
-    /**
-     * Shared shape for "does this raw uuid resolve into [valid]" — [PressPalette]/[PressPad]/
-     * [BuskPageSet] all reduce to this, differing only in which set and which [AssignmentHealth]
-     * arm names the miss. One helper rather than three copies, so a future arm reusing the wrong
-     * `valid*Uuids` set at the call site is a value passed at the call, not a re-typed condition
-     * that would compile silently wrong.
-     */
-    private fun uuidHealth(raw: String, valid: Set<UUID>, missing: (String) -> AssignmentHealth): AssignmentHealth =
-        if (uuidOrNull(raw)?.let { it in valid } == true) AssignmentHealth.Ok else missing(raw)
-
-    /**
-     * Null means master 1, which always exists — so an unkeyed binding is always healthy.
-     * A malformed uuid is reported dead rather than parsed leniently: it can never resolve
-     * to anything, and saying so is more useful than a binding that quietly does nothing.
-     */
-    private fun checkSpeedMaster(masterUuid: String?, context: Context): AssignmentHealth {
-        if (masterUuid == null) return AssignmentHealth.Ok
-        val parsed = speedMasterUuidOrNull(masterUuid)
-        return if (parsed != null && parsed in context.validSpeedMasterUuids) AssignmentHealth.Ok
-        else AssignmentHealth.MissingSpeedMaster(masterUuid)
-    }
 }

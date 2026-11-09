@@ -48,7 +48,7 @@ interface FanRing {
 }
 
 /**
- * The surface's **fan** (venue-visit plan S12): an encoder bound to [BindingTarget.SelectionFan]
+ * The surface's **fan** (venue-visit plan S12): an encoder bound to [Does.Fan]
  * fans the desk selection's positions about their own, through the same desk resolve as the Spread
  * panel's Fan ([fanIntoProgrammer], owner `SURFACE`).
  *

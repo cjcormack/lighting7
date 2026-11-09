@@ -1,0 +1,13 @@
+{
+  "loop": true,
+  "moveInDark": true,
+  "moveInDarkDelayMs": 2500,
+  "moveInDarkFamilies": [
+    "POSITION"
+  ],
+  "moveInDarkTimeMs": 500,
+  "moveInDarkWhen": "LATE",
+  "name": "show-2",
+  "sortOrder": 2,
+  "uuid": "9bdafe7a-dcb5-4c4d-9b95-dba76042fcf6"
+}

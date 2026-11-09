@@ -1,0 +1,8 @@
+{
+  "controlId": "fader-3",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 30,
+  "targetPayload": "{\"type\":\"groupAttribute\",\"groupName\":\"front-wash\",\"attribute\":\"rgbColour\",\"colourAxis\":\"saturation\"}",
+  "targetType": "groupAttribute",
+  "uuid": "43b10c86-6e46-4b69-b31c-6d085d54e04c"
+}

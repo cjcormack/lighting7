@@ -1,0 +1,16 @@
+{
+  "color": "#ffb000",
+  "kind": "NOTE",
+  "region": [
+    {
+      "h": 0.03,
+      "page": 2,
+      "w": 0.4,
+      "x": 0.05,
+      "y": 0.9
+    }
+  ],
+  "text": "slow build, watch conductor",
+  "tone": "warn",
+  "uuid": "79390746-60b1-45d9-80a5-4b2ce28e244a"
+}

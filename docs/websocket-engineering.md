@@ -562,7 +562,7 @@ The live project's grand master (venue-visit plan S5), clamped into 0–100; a n
 ignored. The Grand Master overview panel's fader, sent at frame rate (floored at 50 ms by the client), so it is
 `CONTINUOUS` in `TraceSampling.WS_MESSAGES` and never traced. An operator gesture, so
 `FU-AUTH-WS-PER-MESSAGE` stays unfired. `GET/PUT /projects/{id}/grand-master` reads and sets the
-same value over REST, and a MIDI `grandMasterFader` binding moves it too.
+same value over REST, and a surface's `grandMaster` binding on a fader moves it too.
 
 ### Recent values — `RecentValuesSocket.kt`
 
@@ -698,7 +698,7 @@ broadcast because the programmer is shared desk state.
 |---|---|---|
 | `surfaceLearn.begin` | `projectId: Int`, `deviceTypeKey?` | `surfaceLearn.started` |
 | `surfaceLearn.cancel` | `sessionId: String` | `surfaceLearn.cancelled` \| `surfaceLearn.error` |
-| `surfaceLearn.commit` | `sessionId`, `bank?`, `target: BindingTarget`, `takeoverPolicy?` | `surfaceLearn.committed` \| `surfaceLearn.error` |
+| `surfaceLearn.commit` | `sessionId`, `bank?`, `binding?: Binding` or `target?` (the screens' old shape, translated), `takeoverPolicy?` | `surfaceLearn.committed` \| `surfaceLearn.error` |
 | `surfaceBank.set` | `deviceTypeKey: String`, `bank: String?` | none — `surfaceBank.changed`/`.state` broadcast |
 | `surfaceBank.state` | — | `surfaceBank.state` |
 | `surfaceScaler.state` | — | `surfaceScaler.state` |
@@ -1313,7 +1313,7 @@ refetch.
 | Message | Payload | Cast |
 |---|---|---|
 | `surfaceLearn.started` | `sessionId`, `projectId`, `deviceTypeKey?`, `deadlineMs` | Unicast reply |
-| `surfaceLearn.captured` | `sessionId`, `projectId`, `deviceTypeKey`, `controlId` | Owning connection only |
+| `surfaceLearn.captured` | `sessionId`, `projectId`, `deviceTypeKey`, `controlId`, `part` (`MAIN` \| `PUSH`) | Owning connection only |
 | `surfaceLearn.committed` | `sessionId`, `bindingId`, `projectId` | Unicast reply |
 | `surfaceLearn.cancelled` | `sessionId`, `reason` (`cancelled` \| `timeout`) | Owning connection only |
 | `surfaceLearn.error` | `sessionId?`, `message` | Unicast reply |

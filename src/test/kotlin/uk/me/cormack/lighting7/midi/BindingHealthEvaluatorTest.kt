@@ -1,9 +1,12 @@
 package uk.me.cormack.lighting7.midi
 
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fixture.dmx.China2CellLedBlinderFixture
+import uk.me.cormack.lighting7.fixture.dmx.ShehdsLed19RgbwFixture
+import uk.me.cormack.lighting7.fixture.dmx.EquinoxTwinShotMkIIFixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.models.AssignmentHealth
-import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
 import kotlin.test.Test
@@ -11,10 +14,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 /**
- * Phase 7: unit tests for [BindingHealthEvaluator]. Verifies each [BindingTarget] variant
- * maps onto the expected [AssignmentHealth], and that fixture / group checks delegate to
- * [uk.me.cormack.lighting7.fx.PersistedFixtureReferenceValidator] (covered by that
- * validator's own suite; here we just assert the integration).
+ * Phase 7: unit tests for [BindingHealthEvaluator]. A binding's health is its subject's, then its
+ * function's parameters'; each arm maps onto the expected [AssignmentHealth], and fixture / group
+ * checks delegate to [uk.me.cormack.lighting7.fx.PersistedFixtureReferenceValidator] (covered by
+ * that validator's own suite; here we just assert the integration).
  */
 class BindingHealthEvaluatorTest {
 
@@ -36,6 +39,7 @@ class BindingHealthEvaluatorTest {
 
     private val liveCue: UUID = UUID.fromString("11111111-2222-3333-4444-555555555555")
     private val liveStack: UUID = UUID.fromString("66666666-7777-8888-9999-000000000000")
+    private val liveEntry: UUID = UUID.fromString("99999999-0000-4000-8000-000000000001")
 
     private val liveLook: UUID = UUID.fromString("aaaaaaaa-0000-4000-8000-000000000001")
     private val livePalette: UUID = UUID.fromString("bbbbbbbb-0000-4000-8000-000000000001")
@@ -46,13 +50,10 @@ class BindingHealthEvaluatorTest {
 
     private fun context(
         fixtures: Fixtures = fixturesWithHex(),
-        validStackIds: Set<Int> = setOf(1, 2),
-        validCueIds: Set<Int> = setOf(10, 20),
         validSpeedMasterUuids: Set<UUID> = setOf(liveMaster),
+        connectedWindowNames: Set<String> = emptySet(),
     ): BindingHealthEvaluator.Context = BindingHealthEvaluator.Context(
         fixtures = fixtures,
-        validStackIds = validStackIds,
-        validCueIds = validCueIds,
         deviceTypes = ControlSurfaceRegistry.allTypes,
         validSpeedMasterUuids = validSpeedMasterUuids,
         validStackUuids = setOf(liveStack),
@@ -64,322 +65,299 @@ class BindingHealthEvaluatorTest {
         validPadUuids = setOf(livePad),
         validBankUuids = setOf(liveBank),
         validPageUuids = setOf(livePage),
+        connectedWindowNames = connectedWindowNames,
+        validEntryUuids = mapOf(liveEntry to liveStack),
     )
+
+    private fun health(binding: Binding, ctx: BindingHealthEvaluator.Context = context()) =
+        BindingHealthEvaluator.evaluate(binding, ctx)
+
+    private fun record(kind: RecordKind, uuid: UUID) = Subject.Record(kind, uuid)
 
     // ─── Records on buttons (midi-surface plan D6) ─────────────────────
 
     @Test
     fun `a record binding is healthy when its uuid resolves and dead when it does not`() {
-        val ctx = context()
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.ApplyLook("$liveLook"), ctx))
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.PressPalette("$livePalette"), ctx))
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.PressPad("$livePad"), ctx))
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.BuskPageSet("$livePage"), ctx))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Look, record(RecordKind.LOOK, liveLook))))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Palette(livePalette), Subject.Selection)))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Pad, record(RecordKind.PAD, livePad))))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.BuskPage(), record(RecordKind.PAGE, livePage))))
 
-        assertIs<AssignmentHealth.MissingLook>(BindingHealthEvaluator.evaluate(BindingTarget.ApplyLook("$gone"), ctx))
-        assertIs<AssignmentHealth.MissingPalette>(BindingHealthEvaluator.evaluate(BindingTarget.PressPalette("$gone"), ctx))
-        assertIs<AssignmentHealth.MissingPad>(BindingHealthEvaluator.evaluate(BindingTarget.PressPad("$gone"), ctx))
-        assertIs<AssignmentHealth.MissingPage>(BindingHealthEvaluator.evaluate(BindingTarget.BuskPageSet("$gone"), ctx))
+        assertIs<AssignmentHealth.MissingLook>(health(Binding(Does.Look, record(RecordKind.LOOK, gone))))
+        assertIs<AssignmentHealth.MissingPalette>(health(Binding(Does.Palette(gone), Subject.Selection)))
+        assertIs<AssignmentHealth.MissingPad>(health(Binding(Does.Pad, record(RecordKind.PAD, gone))))
+        assertIs<AssignmentHealth.MissingPage>(health(Binding(Does.BuskPage(), record(RecordKind.PAGE, gone))))
     }
 
     @Test
-    fun `a malformed record uuid is dead rather than parsed leniently`() {
-        val ctx = context()
-        assertIs<AssignmentHealth.MissingLook>(BindingHealthEvaluator.evaluate(BindingTarget.ApplyLook("not-a-uuid"), ctx))
-        assertIs<AssignmentHealth.MissingPad>(BindingHealthEvaluator.evaluate(BindingTarget.PressPad(""), ctx))
+    fun `a malformed record uuid reads as unknown rather than parsed leniently`() {
+        val payloads = mapOf(
+            "look" to """{"does":{"type":"look"},"on":{"type":"record","kind":"LOOK","uuid":"not-a-uuid"}}""",
+            "pad" to """{"does":{"type":"pad"},"on":{"type":"record","kind":"PAD","uuid":""}}""",
+            "place" to """{"does":{"type":"place"},"on":{"type":"record","kind":"BANK","uuid":"not-a-uuid"}}""",
+            "palette" to """{"does":{"type":"palette","palette":"not-a-uuid"},"on":{"type":"selection"}}""",
+            "tap" to """{"does":{"type":"tap"},"on":{"type":"record","kind":"MASTER","uuid":"not-a-uuid"}}""",
+        )
+        for ((type, payload) in payloads) {
+            assertEquals(AssignmentHealth.UnknownTarget(type), health(decodeBinding(payload, type)), type)
+        }
     }
 
     // ─── The hand (multi-screen plan §3.5) ─────────────────────────────
 
     @Test
-    fun `the hand's two addressed targets are judged on the address they carry`() {
-        val ctx = context()
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.PickUpPad("$livePad"), ctx))
-        assertEquals(
-            AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.HandPlaceInBank("$liveBank"), ctx),
-        )
+    fun `the hand's two addressed functions are judged on the record they name`() {
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.PickUp, record(RecordKind.PAD, livePad))))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Place, record(RecordKind.BANK, liveBank))))
 
-        assertIs<AssignmentHealth.MissingPad>(BindingHealthEvaluator.evaluate(BindingTarget.PickUpPad("$gone"), ctx))
-        assertIs<AssignmentHealth.MissingBank>(
-            BindingHealthEvaluator.evaluate(BindingTarget.HandPlaceInBank("$gone"), ctx),
-        )
-        assertIs<AssignmentHealth.MissingBank>(
-            BindingHealthEvaluator.evaluate(BindingTarget.HandPlaceInBank("not-a-uuid"), ctx),
-        )
+        assertIs<AssignmentHealth.MissingPad>(health(Binding(Does.PickUp, record(RecordKind.PAD, gone))))
+        assertIs<AssignmentHealth.MissingBank>(health(Binding(Does.Place, record(RecordKind.BANK, gone))))
 
         // A pick-up's pad and a place's bank come from **different** sets: a bank uuid on a pick-up
         // is as dead as any other stranger, which is what a shared helper reading the wrong set
         // would hide.
-        assertIs<AssignmentHealth.MissingPad>(
-            BindingHealthEvaluator.evaluate(BindingTarget.PickUpPad("$liveBank"), ctx),
-        )
-        assertIs<AssignmentHealth.MissingBank>(
-            BindingHealthEvaluator.evaluate(BindingTarget.HandPlaceInBank("$livePad"), ctx),
-        )
+        assertIs<AssignmentHealth.MissingPad>(health(Binding(Does.PickUp, record(RecordKind.PAD, liveBank))))
+        assertIs<AssignmentHealth.MissingBank>(health(Binding(Does.Place, record(RecordKind.BANK, livePad))))
     }
 
     @Test
     fun `a hand drop addresses nothing and so can never be dead`() {
         // Whether the hand holds anything is a fact about this second, not about the binding — the
-        // same line `SelectionAttribute` draws with an empty selection.
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.HandDrop, context()))
+        // same line a level on the selection draws with an empty selection.
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Drop)))
     }
 
     @Test
-    fun `the history targets address nothing and are always healthy`() {
-        for (target in listOf(BindingTarget.Undo, BindingTarget.Redo, BindingTarget.ProgrammerUndo)) {
-            assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(target, context()), "$target")
+    fun `the history functions address nothing and are always healthy`() {
+        for (kind in UndoKind.entries) {
+            assertEquals(AssignmentHealth.Ok, health(Binding(Does.Undo(kind))), "$kind")
         }
     }
 
     @Test
     fun `busk page next and prev are page-agnostic and always healthy`() {
         // A project with no pages has nowhere to step, which is not a dead binding — the same line
-        // `ClearSelection` draws with an empty selection.
-        val ctx = context()
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.BuskPageNext, ctx))
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.BuskPagePrev, ctx))
+        // clearing the selection draws with an empty selection.
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.BuskPage(1))))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.BuskPage(-1))))
     }
 
     @Test
-    fun `a cue binding with a uuid is judged by the uuid alone`() {
-        val ctx = context()
-        // Live uuid, stale int: healthy — the int is what a clone leaves behind.
+    fun `a stack's FX amount and an entry are judged by their uuids`() {
+        // A stack's FX amount fader is judged by its stack, as the stack buttons are.
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.FxAmount, record(RecordKind.STACK, liveStack))))
         assertEquals(
-            AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.FireCue(cueId = 999, cueUuid = liveCue.toString()), ctx),
+            AssignmentHealth.MissingStack(stackUuid = gone.toString()),
+            health(Binding(Does.FxAmount, record(RecordKind.STACK, gone))),
         )
-        // Live int, unknown uuid: dead — the uuid names a cue that no longer exists.
-        assertIs<AssignmentHealth.MissingCue>(
-            BindingHealthEvaluator.evaluate(BindingTarget.FireCue(cueId = 10, cueUuid = UUID.randomUUID().toString()), ctx),
-        )
-        // Malformed uuid: dead rather than parsed leniently.
-        assertIs<AssignmentHealth.MissingCue>(
-            BindingHealthEvaluator.evaluate(BindingTarget.FireCue(cueId = 10, cueUuid = "not-a-uuid"), ctx),
-        )
-        // No uuid (a pre-v11 row): the int decides, as before.
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.FireCue(cueId = 10), ctx))
+        // An entry gone reads as a missing cue.
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.GoTo, record(RecordKind.ENTRY, liveEntry))))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Standby, record(RecordKind.ENTRY, liveEntry))))
         assertEquals(
-            AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.CueStackGo(stackId = 999, stackUuid = liveStack.toString()), ctx),
+            AssignmentHealth.MissingCue(cueUuid = gone.toString()),
+            health(Binding(Does.GoTo, record(RecordKind.ENTRY, gone))),
         )
-        assertIs<AssignmentHealth.MissingStack>(
-            BindingHealthEvaluator.evaluate(BindingTarget.CueStackPause(stackId = 1, stackUuid = UUID.randomUUID().toString()), ctx),
-        )
-        // A stack's effect-size fader is judged by its stack, as the stack buttons are.
-        assertEquals(
-            AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.StackFxAmount(stackId = 999, stackUuid = liveStack.toString()), ctx),
-        )
-        assertIs<AssignmentHealth.MissingStack>(
-            BindingHealthEvaluator.evaluate(BindingTarget.StackFxAmount(stackId = 1, stackUuid = UUID.randomUUID().toString()), ctx),
-        )
+        // A cue's uuid is not an entry's.
+        assertIs<AssignmentHealth.MissingCue>(health(Binding(Does.Standby, record(RecordKind.ENTRY, liveCue))))
     }
 
     @Test
-    fun `SelectionAttribute is healthy for an attribute some patched fixture can take on a fader`() {
-        val ctx = context()
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.SelectionAttribute("dimmer"), ctx))
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.SelectionAttribute("rgbColour"), ctx))
-        val dead = BindingHealthEvaluator.evaluate(BindingTarget.SelectionAttribute("tilt"), ctx)
-        assertEquals(AssignmentHealth.UnknownAttribute("tilt"), dead)
+    fun `a level on the selection is healthy for an attribute some patched fixture can take on a fader`() {
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Level("dimmer"), Subject.Selection)))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Level("rgbColour"), Subject.Selection)))
+        assertEquals(AssignmentHealth.UnknownAttribute("tilt"), health(Binding(Does.Level("tilt"), Subject.Selection)))
     }
 
     @Test
-    fun `SelectTarget needs its group or fixture to exist and nothing else`() {
-        val ctx = context()
-        assertEquals(
-            AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.SelectTarget(CueTargetDto("group", "front-wash")), ctx),
-        )
-        assertEquals(
-            AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.SelectTarget(CueTargetDto("fixture", "hex-2")), ctx),
-        )
-        assertEquals(
-            AssignmentHealth.MissingGroup("side-wash"),
-            BindingHealthEvaluator.evaluate(BindingTarget.SelectTarget(CueTargetDto("group", "side-wash")), ctx),
-        )
-        assertEquals(
-            AssignmentHealth.MissingFixture("hex-9"),
-            BindingHealthEvaluator.evaluate(BindingTarget.SelectTarget(CueTargetDto("fixture", "hex-9")), ctx),
-        )
+    fun `a select needs its group or fixture to exist and nothing else`() {
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Select, Subject.Group("front-wash"))))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Select, Subject.Fixture("hex-2"), How.REPLACE)))
+        assertEquals(AssignmentHealth.MissingGroup("side-wash"), health(Binding(Does.Select, Subject.Group("side-wash"))))
+        assertEquals(AssignmentHealth.MissingFixture("hex-9"), health(Binding(Does.Select, Subject.Fixture("hex-9"))))
     }
 
     @Test
-    fun `a strip is judged by its target alone, not by the attributes it derives`() {
-        val ctx = context()
-        assertEquals(
-            AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.Strip(CueTargetDto("group", "front-wash")), ctx),
-        )
-        assertEquals(
-            AssignmentHealth.MissingGroup("side-wash"),
-            BindingHealthEvaluator.evaluate(BindingTarget.Strip(CueTargetDto("group", "side-wash")), ctx),
-        )
-        assertEquals(
-            AssignmentHealth.MissingFixture("hex-9"),
-            BindingHealthEvaluator.evaluate(BindingTarget.Strip(CueTargetDto("fixture", "hex-9")), ctx),
-        )
+    fun `a strip is judged by its subject alone, not by the attributes it derives`() {
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Strip, Subject.Group("front-wash"))))
+        assertEquals(AssignmentHealth.MissingGroup("side-wash"), health(Binding(Does.Strip, Subject.Group("side-wash"))))
+        assertEquals(AssignmentHealth.MissingFixture("hex-9"), health(Binding(Does.Strip, Subject.Fixture("hex-9"))))
     }
 
     @Test
-    fun `EncoderBankSet needs an attribute some patched fixture can take`() {
-        val ctx = context()
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.EncoderBankSet("dimmer"), ctx))
-        assertEquals(
-            AssignmentHealth.UnknownAttribute("tilt"),
-            BindingHealthEvaluator.evaluate(BindingTarget.EncoderBankSet("tilt"), ctx),
-        )
+    fun `an encoder page needs an attribute some patched fixture can take`() {
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.EncoderPage("dimmer"))))
+        assertEquals(AssignmentHealth.UnknownAttribute("tilt"), health(Binding(Does.EncoderPage("tilt"))))
     }
 
     @Test
-    fun `ClearSelection and LocateSelection are always Ok and Unknown is always dead`() {
-        val ctx = context()
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.ClearSelection, ctx))
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.LocateSelection, ctx))
+    fun `clearing and locating the selection are always Ok and Unknown is always dead`() {
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.SelectionStep(SelectionMove.CLEAR))))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Locate, Subject.Selection)))
+        // A slot names nothing that can go missing: its job's item fills it.
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Select, Subject.Slot)))
         assertEquals(
             AssignmentHealth.UnknownTarget("fromTheFuture"),
-            BindingHealthEvaluator.evaluate(BindingTarget.Unknown("fromTheFuture", "{}"), ctx),
+            health(Binding(Does.Unknown("fromTheFuture", "{}"))),
         )
     }
 
     @Test
-    fun `Blackout and GrandMasterToggle always resolve to Ok`() {
-        val ctx = context()
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.Blackout, ctx))
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.GrandMasterToggle, ctx))
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.GrandMasterFader, ctx))
+    fun `blackout and the grand master always resolve to Ok`() {
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Blackout)))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Blackout, how = How.ON)))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.GrandMaster())))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.GrandMaster(level = 50.0))))
     }
 
     @Test
-    fun `FixtureAttribute with live fixture + valid attribute is Ok`() {
-        val health = BindingHealthEvaluator.evaluate(
-            BindingTarget.FixtureAttribute("hex-1", "dimmer"),
-            context(),
-        )
-        assertEquals(AssignmentHealth.Ok, health)
+    fun `a fixture level with live fixture + valid attribute is Ok`() {
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Level("dimmer"), Subject.Fixture("hex-1"))))
     }
 
     @Test
-    fun `FixtureAttribute with renamed fixture returns MissingFixture`() {
-        val health = BindingHealthEvaluator.evaluate(
-            BindingTarget.FixtureAttribute("hex-renamed", "dimmer"),
-            context(),
+    fun `a fixture level on a renamed fixture returns MissingFixture`() {
+        val missing = assertIs<AssignmentHealth.MissingFixture>(
+            health(Binding(Does.Level("dimmer"), Subject.Fixture("hex-renamed"))),
         )
-        val missing = assertIs<AssignmentHealth.MissingFixture>(health)
         assertEquals("hex-renamed", missing.fixtureKey)
     }
 
     @Test
-    fun `GroupAttribute with unknown group returns MissingGroup`() {
-        val health = BindingHealthEvaluator.evaluate(
-            BindingTarget.GroupAttribute("vanished", "dimmer"),
-            context(),
+    fun `a group level on an unknown group returns MissingGroup`() {
+        val missing = assertIs<AssignmentHealth.MissingGroup>(
+            health(Binding(Does.Level("dimmer"), Subject.Group("vanished"))),
         )
-        val missing = assertIs<AssignmentHealth.MissingGroup>(health)
         assertEquals("vanished", missing.groupName)
     }
 
     @Test
-    fun `GroupAttribute with removed attribute returns MissingAttribute`() {
-        val health = BindingHealthEvaluator.evaluate(
-            BindingTarget.GroupAttribute("front-wash", "doesNotExist"),
-            context(),
+    fun `a group level on a removed attribute returns MissingAttribute`() {
+        val missing = assertIs<AssignmentHealth.MissingAttribute>(
+            health(Binding(Does.Level("doesNotExist"), Subject.Group("front-wash"))),
         )
-        val missing = assertIs<AssignmentHealth.MissingAttribute>(health)
         assertEquals("front-wash", missing.targetKey)
         assertEquals("doesNotExist", missing.attribute)
     }
 
     @Test
-    fun `CueStackGo Back and Pause resolve against validStackIds`() {
-        val ctx = context(validStackIds = setOf(7))
-        assertEquals(
-            AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.CueStackGo(7), ctx),
-        )
-        assertEquals(
-            AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.CueStackBack(7), ctx),
-        )
-        assertEquals(
-            AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.CueStackPause(7), ctx),
-        )
-        val dead = BindingHealthEvaluator.evaluate(BindingTarget.CueStackGo(999), ctx)
-        assertEquals(AssignmentHealth.MissingStack(999), dead)
+    fun `a level reaches elements as the write does - a cell, a group of cells, a parent whose colour is its cells'`() {
+        val fixtures = Fixtures()
+        fixtures.register {
+            // Its colour on two warm/cold cells only.
+            val blinder = addFixture(China2CellLedBlinderFixture(universe, "blinder", "Blinder", firstChannel = 201))
+            // Its colour on three RGBW zones only.
+            val wash = addFixture(ShehdsLed19RgbwFixture.Mode24Ch(universe, "wash", "Wash", firstChannel = 101))
+            createGroup<GroupableFixture>("cells") { addSpread(listOf(blinder.elements[0], wash.elements[1])) }
+        }
+        val ctx = context(fixtures)
+        val colour = Does.Level("rgbColour", ColourAxis.BRIGHTNESS)
+        assertEquals(AssignmentHealth.Ok, health(Binding(colour, Subject.Fixture("blinder")), ctx))
+        assertEquals(AssignmentHealth.Ok, health(Binding(colour, Subject.Fixture("wash")), ctx))
+        assertEquals(AssignmentHealth.Ok, health(Binding(colour, Subject.Fixture("blinder.cell-2")), ctx))
+        assertEquals(AssignmentHealth.Ok, health(Binding(colour, Subject.Group("cells")), ctx))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Flash("rgbColour", 50), Subject.Fixture("wash.zone-1")), ctx))
+
+        assertEquals(AssignmentHealth.MissingFixture("blinder.cell-9"), health(Binding(colour, Subject.Fixture("blinder.cell-9")), ctx))
+        assertEquals(AssignmentHealth.MissingAttribute("blinder", "zoom"), health(Binding(Does.Level("zoom"), Subject.Fixture("blinder")), ctx))
     }
 
     @Test
-    fun `FireCue resolves against validCueIds`() {
-        val ctx = context(validCueIds = setOf(42))
+    fun `go, back, pause and stop resolve against the project's stacks`() {
+        for (does in listOf(Does.Go, Does.Back, Does.Pause, Does.Stop)) {
+            assertEquals(AssignmentHealth.Ok, health(Binding(does, record(RecordKind.STACK, liveStack))), does.functionId)
+        }
         assertEquals(
-            AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.FireCue(42), ctx),
+            AssignmentHealth.MissingStack(stackUuid = gone.toString()),
+            health(Binding(Does.Go, record(RecordKind.STACK, gone))),
         )
-        val dead = BindingHealthEvaluator.evaluate(BindingTarget.FireCue(99), ctx)
-        assertEquals(AssignmentHealth.MissingCue(99), dead)
+        // A cue's uuid is not a stack's.
+        assertIs<AssignmentHealth.MissingStack>(health(Binding(Does.Pause, record(RecordKind.STACK, liveCue))))
     }
 
     @Test
-    fun `SetBank validates against registered device profiles`() {
+    fun `a cue binding resolves against the project's cues, however it is pressed`() {
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Cue, record(RecordKind.CUE, liveCue))))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Cue, record(RecordKind.CUE, liveCue), How.ON)))
+        assertEquals(
+            AssignmentHealth.MissingCue(cueUuid = gone.toString()),
+            health(Binding(Does.Cue, record(RecordKind.CUE, gone), How.OFF)),
+        )
+    }
+
+    @Test
+    fun `a layer validates against the profile of the device it is bound on`() {
         // The X-Touch Compact Standard profile declares layer-a and layer-b banks.
         val ctx = context()
         assertEquals(
             AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(
-                BindingTarget.SetBank("x-touch-compact-standard", "layer-a"),
-                ctx,
-            ),
-        )
-        val unknownBank = BindingHealthEvaluator.evaluate(
-            BindingTarget.SetBank("x-touch-compact-standard", "layer-z"),
-            ctx,
+            BindingHealthEvaluator.evaluate(Binding(Does.Layer("layer-a")), ctx, "x-touch-compact-standard"),
         )
         assertEquals(
             AssignmentHealth.UnknownBank("x-touch-compact-standard", "layer-z"),
-            unknownBank,
-        )
-        val unknownDevice = BindingHealthEvaluator.evaluate(
-            BindingTarget.SetBank("not-a-real-device", "layer-a"),
-            ctx,
+            BindingHealthEvaluator.evaluate(Binding(Does.Layer("layer-z")), ctx, "x-touch-compact-standard"),
         )
         assertEquals(
             AssignmentHealth.UnknownBank("not-a-real-device", "layer-a"),
-            unknownDevice,
+            BindingHealthEvaluator.evaluate(Binding(Does.Layer("layer-a")), ctx, "not-a-real-device"),
         )
     }
 
     @Test
-    fun `Flash recurses on the inner target — dead inner propagates`() {
-        val flashOk = BindingTarget.Flash(BindingTarget.FixtureAttribute("hex-1", "dimmer"))
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(flashOk, context()))
+    fun `a flash is judged by its fixture and attribute`() {
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Flash("dimmer"), Subject.Fixture("hex-1"))))
+        assertIs<AssignmentHealth.MissingFixture>(health(Binding(Does.Flash("dimmer"), Subject.Fixture("hex-gone"))))
+        assertIs<AssignmentHealth.MissingAttribute>(health(Binding(Does.Flash("doesNotExist", 50), Subject.Group("front-wash"))))
+    }
 
-        val flashDead = BindingTarget.Flash(BindingTarget.FixtureAttribute("hex-gone", "dimmer"))
-        val health = BindingHealthEvaluator.evaluate(flashDead, context())
-        assertIs<AssignmentHealth.MissingFixture>(health)
+    @Test
+    fun `a fire needs its fixture patched and carrying the trigger`() {
+        val fixtures = Fixtures()
+        fixtures.register {
+            addFixture(HexFixture(universe, "hex-1", "Hex 1", firstChannel = 1))
+            addFixture(EquinoxTwinShotMkIIFixture(universe, "cannon", "Cannon", firstChannel = 100))
+        }
+        val ctx = context(fixtures = fixtures)
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Fire("output1"), Subject.Fixture("cannon")), ctx))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Fire("B"), Subject.Fixture("cannon")), ctx), "by label")
+        assertEquals(
+            AssignmentHealth.MissingAttribute("cannon", "output9"),
+            health(Binding(Does.Fire("output9"), Subject.Fixture("cannon")), ctx),
+        )
+        assertEquals(
+            AssignmentHealth.MissingAttribute("hex-1", "output1"),
+            health(Binding(Does.Fire("output1"), Subject.Fixture("hex-1")), ctx),
+        )
+        assertEquals(
+            AssignmentHealth.MissingFixture("cannon-2"),
+            health(Binding(Does.Fire("output1"), Subject.Fixture("cannon-2")), ctx),
+        )
+    }
+
+    @Test
+    fun `a window-addressed binding is dead until a window of that name connects`() {
+        val focus = Binding(Does.WindowFocus("Screen 2", "rig"))
+        val sheet = Binding(Does.WindowSheet("Screen 2"))
+        assertEquals(AssignmentHealth.MissingWindow("Screen 2"), health(focus))
+        assertEquals(AssignmentHealth.MissingWindow("Screen 2"), health(sheet))
+
+        val connected = context(connectedWindowNames = setOf("Screen 1", "Screen 2"))
+        assertEquals(AssignmentHealth.Ok, health(focus, connected))
+        assertEquals(AssignmentHealth.Ok, health(sheet, connected))
     }
 
     @Test
     fun `an unkeyed speed-master binding means master 1 and is always Ok`() {
         val ctx = context(validSpeedMasterUuids = emptySet())
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterBpm(), ctx))
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterTap(), ctx))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Tempo()), ctx))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Tap), ctx))
     }
 
     @Test
     fun `a speed-master binding naming a live master is Ok`() {
-        val ctx = context()
-        assertEquals(
-            AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterBpm(liveMaster.toString()), ctx),
-        )
-        assertEquals(
-            AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterTap(liveMaster.toString()), ctx),
-        )
+        val master = record(RecordKind.MASTER, liveMaster)
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Tempo(), master)))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Tempo(bpm = 120.0), master)))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.Tap, master)))
     }
 
     /**
@@ -389,33 +367,20 @@ class BindingHealthEvaluatorTest {
      */
     @Test
     fun `a speed-master binding naming a deleted master is MissingSpeedMaster`() {
-        val gone = UUID.randomUUID().toString()
-        val health = BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterBpm(gone), context())
-        assertEquals(AssignmentHealth.MissingSpeedMaster(gone), health)
-
-        val tapHealth = BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterTap(gone), context())
-        assertEquals(AssignmentHealth.MissingSpeedMaster(gone), tapHealth)
+        val master = record(RecordKind.MASTER, gone)
+        assertEquals(AssignmentHealth.MissingSpeedMaster(gone.toString()), health(Binding(Does.Tempo(), master)))
+        assertEquals(AssignmentHealth.MissingSpeedMaster(gone.toString()), health(Binding(Does.Tap, master)))
     }
 
     @Test
     fun `a tempo scale is judged by its master, and the selection's FX speed is always Ok`() {
-        val gone = UUID.randomUUID().toString()
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterScale(null, 2.0), context()))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.TempoScale(2.0))))
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.TempoScale(0.5), record(RecordKind.MASTER, liveMaster))))
         assertEquals(
-            AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterScale(liveMaster.toString(), 0.5), context()),
-        )
-        assertEquals(
-            AssignmentHealth.MissingSpeedMaster(gone),
-            BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterScale(gone, 2.0), context()),
+            AssignmentHealth.MissingSpeedMaster(gone.toString()),
+            health(Binding(Does.TempoScale(2.0), record(RecordKind.MASTER, gone))),
         )
         // Selection-relative: no Local FX on the selection is this second's fact, not the binding's.
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.FxSpeed, context()))
-    }
-
-    @Test
-    fun `a malformed speed-master uuid is reported dead rather than parsed leniently`() {
-        val health = BindingHealthEvaluator.evaluate(BindingTarget.SpeedMasterTap("not-a-uuid"), context())
-        assertEquals(AssignmentHealth.MissingSpeedMaster("not-a-uuid"), health)
+        assertEquals(AssignmentHealth.Ok, health(Binding(Does.FxSpeed, Subject.Selection)))
     }
 }

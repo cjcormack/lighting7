@@ -48,17 +48,21 @@ sealed class AssignmentHealth {
     data class MissingAttribute(val targetKey: String, val attribute: String) : AssignmentHealth()
 
     /**
-     * A cue stack referenced by a `cueStackGo` / `cueStackBack` / `cueStackPause` / `stackFxAmount` binding
-     * no longer exists in the project. Control-surface-only.
+     * A cue stack a binding names by [stackUuid] no longer exists in the project. [stackId] is 0: a
+     * binding names a stack by uuid only, and the field stays for the screens session 3 replaces.
+     * Control-surface-only.
      */
     @Serializable
     @SerialName("missingStack")
-    data class MissingStack(val stackId: Int) : AssignmentHealth()
+    data class MissingStack(val stackId: Int = 0, val stackUuid: String? = null) : AssignmentHealth()
 
-    /** A cue referenced by a `fireCue` binding no longer exists. Control-surface-only. */
+    /**
+     * A cue or a cue entry a binding names by [cueUuid] no longer exists. [cueId] is 0, as
+     * [MissingStack]'s `stackId` is. Control-surface-only.
+     */
     @Serializable
     @SerialName("missingCue")
-    data class MissingCue(val cueId: Int) : AssignmentHealth()
+    data class MissingCue(val cueId: Int = 0, val cueUuid: String? = null) : AssignmentHealth()
 
     /**
      * A `setBank` binding references an unknown device type key or an unknown bank id
@@ -160,8 +164,8 @@ fun describeAssignmentHealth(health: AssignmentHealth): String = when (health) {
     is AssignmentHealth.MissingGroup -> "missing group '${health.groupName}'"
     is AssignmentHealth.MissingAttribute ->
         "missing attribute '${health.attribute}' on '${health.targetKey}'"
-    is AssignmentHealth.MissingStack -> "missing cue stack id=${health.stackId}"
-    is AssignmentHealth.MissingCue -> "missing cue id=${health.cueId}"
+    is AssignmentHealth.MissingStack -> "missing cue stack ${health.stackUuid ?: "id=${health.stackId}"}"
+    is AssignmentHealth.MissingCue -> "missing cue ${health.cueUuid ?: "id=${health.cueId}"}"
     is AssignmentHealth.UnknownBank ->
         "unknown bank '${health.bankId}' for device '${health.deviceTypeKey}'"
     is AssignmentHealth.MissingSpeedMaster -> "missing speed master ${health.masterUuid}"

@@ -15,8 +15,11 @@ import org.junit.Test
 import uk.me.cormack.lighting7.ai.AiTools
 import uk.me.cormack.lighting7.ai.SetupTools
 import uk.me.cormack.lighting7.ai.ToolExecutionResult
-import uk.me.cormack.lighting7.midi.BindingTarget
-import uk.me.cormack.lighting7.midi.BindingTargetJson
+import uk.me.cormack.lighting7.midi.Binding
+import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.Subject
+import uk.me.cormack.lighting7.midi.decodeBinding
+import uk.me.cormack.lighting7.midi.encodePayload
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import kotlin.test.assertEquals
@@ -88,8 +91,8 @@ class McpPatchEditToolsTest : RouteIntegrationTest() {
         val binding = DaoControlSurfaceBinding.new {
             this.project = project
             deviceTypeKey = "xtouch-mini"; controlId = "fader-1"
-            targetType = "fixtureAttribute"
-            targetPayload = BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.FixtureAttribute("foh-1", "dimmer"))
+            targetType = "level"
+            targetPayload = Binding(Does.Level("dimmer"), Subject.Fixture("foh-1")).encodePayload()
         }
         DaoScript.new { this.project = project; name = "Chase"; script = """fixture<Fixture>("foh-1")""" }
         Seeded(look.id.value, cue.id.value, binding.id.value)
@@ -193,8 +196,8 @@ class McpPatchEditToolsTest : RouteIntegrationTest() {
                 listOf(CueTargetDto("fixture", "wash-1"), CueTargetDto("group", "FOH")),
                 DaoCueLayer.find { DaoCueLayers.cue eq seeded.cueId }.single().targets,
             )
-            val binding = BindingTargetJson.decodeFromString<BindingTarget>(DaoControlSurfaceBinding[seeded.bindingId].targetPayload)
-            assertEquals(BindingTarget.FixtureAttribute("wash-1", "dimmer"), binding)
+            val binding = DaoControlSurfaceBinding[seeded.bindingId].let { decodeBinding(it.targetPayload, it.targetType) }
+            assertEquals(Binding(Does.Level("dimmer"), Subject.Fixture("wash-1")), binding)
         }
         val rewritten = done.json()["rewritten"]!!.jsonObject
         assertEquals(1, rewritten["looks"]!!.jsonPrimitive.int)

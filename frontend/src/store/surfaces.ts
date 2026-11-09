@@ -1,6 +1,7 @@
 import { restApi } from "./restApi"
 import { lightingApi } from "../api/lightingApi"
 import { store } from "./index"
+import { bindingsForScreens } from "../api/surfacesApi"
 import type {
   ControlSurfaceBinding,
   ControlSurfaceType,
@@ -71,6 +72,12 @@ export type {
   TakeoverPolicy,
   LearnEvent,
   BindingHealth,
+  ControlPart,
+  How,
+  RecordKind,
+  SurfaceSubject,
+  SurfaceDoes,
+  SurfaceBinding,
 } from "../api/surfacesApi"
 
 // The cue list counts each cue's `FireCue` bindings (`usedBy`), so a binding change refreshes it too.
@@ -131,6 +138,7 @@ export const surfacesApi = restApi.injectEndpoints({
     // All bindings for a project.
     surfaceBindings: build.query<ControlSurfaceBinding[], number>({
       query: (projectId) => `projects/${projectId}/surface-bindings`,
+      transformResponse: (bindings: ControlSurfaceBinding[]) => bindingsForScreens(bindings),
       providesTags: (_result, _error, projectId) => [
         { type: 'SurfaceBinding', id: projectId },
       ],

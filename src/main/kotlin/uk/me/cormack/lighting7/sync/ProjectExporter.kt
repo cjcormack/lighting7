@@ -980,6 +980,7 @@ class ProjectExporter(private val state: State) {
                     uuid = b.uuid.toString(),
                     deviceTypeKey = b.deviceTypeKey,
                     controlId = b.controlId,
+                    part = b.part,
                     bank = b.bank,
                     targetType = b.targetType,
                     targetPayload = b.targetPayload,

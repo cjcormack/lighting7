@@ -31,6 +31,7 @@ import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import java.util.UUID
 
 /**
  * Stack pads (busk-stack plan session 3, D9–D11): a pad naming a busk stack, its press — the stack's
@@ -264,7 +265,7 @@ class StackPadRoutesTest : RouteIntegrationTest() {
         val chorus = client.createCue("Chorus", song)
         val pad = client.bank(solo = false, stackPad(song)).single()
 
-        DefaultSurfaceActions(state).pressPad(pad.uuid)
+        DefaultSurfaceActions(state).pressPad(UUID.fromString(pad.uuid))
         assertEquals(chorus, manager.getActiveCueId(song))
     }
 
@@ -275,7 +276,7 @@ class StackPadRoutesTest : RouteIntegrationTest() {
         val song = client.createStack("Song 3")
         val pad = client.bank(solo = false, stackPad(song)).single()
 
-        val outcome = DefaultSurfaceActions(state).pressPad(pad.uuid)
+        val outcome = DefaultSurfaceActions(state).pressPad(UUID.fromString(pad.uuid))
         assertTrue(outcome is uk.me.cormack.lighting7.midi.ActionOutcome.Refused, "$outcome")
         assertEquals(uk.me.cormack.lighting7.midi.ActionOutcome.STACK_EMPTY, outcome.code)
     }

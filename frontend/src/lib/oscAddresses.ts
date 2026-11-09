@@ -1,4 +1,4 @@
-import type { BindingTarget } from '@/api/surfacesApi'
+import type { SurfaceBinding } from '@/api/surfacesApi'
 import type { OscAddressChange, OscAddressWarning } from '@/api/oscWsApi'
 
 /** The kinds of record an OSC address can name, mirroring `OscRecordKind` in lighting7's `osc/OscAddresses.kt`. */
@@ -10,14 +10,14 @@ export interface OscRef {
   uuid: string
 }
 
-/** One address the project answers to: what it does, the record it reaches and the target it dispatches. */
+/** One address the project answers to: what it does, the record it reaches and the binding it dispatches. */
 export interface OscAddress {
   address: string
   pattern: string
   args: string
   does: string
   reaches: string
-  target: BindingTarget
+  binding: SurfaceBinding
   /** Absent for an address that names no record (`/blackout`, `/grandmaster`). */
   record?: OscRef | null
 }

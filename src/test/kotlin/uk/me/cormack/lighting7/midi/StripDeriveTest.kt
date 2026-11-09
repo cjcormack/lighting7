@@ -1,6 +1,5 @@
 package uk.me.cormack.lighting7.midi
 
-import uk.me.cormack.lighting7.models.CueTargetDto
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -11,54 +10,53 @@ import kotlin.test.assertNull
  */
 class StripDeriveTest {
 
-    private val group = CueTargetDto("group", "front-wash")
-    private val fixture = CueTargetDto("fixture", "hex-1")
+    private val group = Subject.Group("front-wash")
+    private val fixture = Subject.Fixture("hex-1")
 
     @Test
     fun `fader and flash always drive dimmer, whatever the encoder bank`() {
         assertEquals(
-            BindingTarget.GroupAttribute("front-wash", "dimmer"),
-            deriveStripTarget(StripRole.FADER, group, encoderBank = EncoderBankSelection("pan")),
+            Binding(Does.Level("dimmer"), group),
+            deriveStripBinding(StripRole.FADER, group, encoderBank = EncoderBankSelection("pan")),
         )
         assertEquals(
-            BindingTarget.Flash(BindingTarget.GroupAttribute("front-wash", "dimmer")),
-            deriveStripTarget(StripRole.FLASH, group, encoderBank = EncoderBankSelection("pan")),
+            Binding(Does.Flash("dimmer"), group),
+            deriveStripBinding(StripRole.FLASH, group, encoderBank = EncoderBankSelection("pan")),
         )
     }
 
     @Test
-    fun `select toggles rather than replaces`() {
-        assertEquals(
-            BindingTarget.SelectTarget(group, BindingTarget.SelectMode.TOGGLE),
-            deriveStripTarget(StripRole.SELECT, group, encoderBank = EncoderBankSelection("dimmer")),
-        )
+    fun `select toggles rather than replaces, and a hold replaces`() {
+        val select = deriveStripBinding(StripRole.SELECT, group, encoderBank = EncoderBankSelection("dimmer"))
+        assertEquals(Binding(Does.Select, group), select)
+        assertEquals(How.TOGGLE_HOLD_REPLACES, select.effectiveHow)
     }
 
     @Test
     fun `the encoder follows the encoder bank`() {
         assertEquals(
-            BindingTarget.GroupAttribute("front-wash", "dimmer"),
-            deriveStripTarget(StripRole.ENCODER, group, encoderBank = EncoderBankSelection("dimmer")),
+            Binding(Does.Level("dimmer"), group),
+            deriveStripBinding(StripRole.ENCODER, group, encoderBank = EncoderBankSelection("dimmer")),
         )
         assertEquals(
-            BindingTarget.GroupAttribute("front-wash", "colour"),
-            deriveStripTarget(StripRole.ENCODER, group, encoderBank = EncoderBankSelection("colour")),
+            Binding(Does.Level("colour"), group),
+            deriveStripBinding(StripRole.ENCODER, group, encoderBank = EncoderBankSelection("colour")),
         )
     }
 
     @Test
-    fun `a fixture target derives fixture targets`() {
+    fun `a fixture subject derives fixture bindings`() {
         assertEquals(
-            BindingTarget.FixtureAttribute("hex-1", "dimmer"),
-            deriveStripTarget(StripRole.FADER, fixture, encoderBank = EncoderBankSelection("tilt")),
+            Binding(Does.Level("dimmer"), fixture),
+            deriveStripBinding(StripRole.FADER, fixture, encoderBank = EncoderBankSelection("tilt")),
         )
         assertEquals(
-            BindingTarget.FixtureAttribute("hex-1", "tilt"),
-            deriveStripTarget(StripRole.ENCODER, fixture, encoderBank = EncoderBankSelection("tilt")),
+            Binding(Does.Level("tilt"), fixture),
+            deriveStripBinding(StripRole.ENCODER, fixture, encoderBank = EncoderBankSelection("tilt")),
         )
         assertEquals(
-            BindingTarget.SelectTarget(fixture, BindingTarget.SelectMode.TOGGLE),
-            deriveStripTarget(StripRole.SELECT, fixture, encoderBank = EncoderBankSelection("tilt")),
+            Binding(Does.Select, fixture),
+            deriveStripBinding(StripRole.SELECT, fixture, encoderBank = EncoderBankSelection("tilt")),
         )
     }
 
@@ -69,13 +67,13 @@ class StripDeriveTest {
         assertNull(master.controlFor(StripRole.FLASH))
         assertEquals(listOf("fader-9", "btn-33"), master.controlIds)
 
-        val derived = deriveStripTargets(master, group, encoderBank = EncoderBankSelection("colour"))
+        val derived = deriveStripBindings(master, group, encoderBank = EncoderBankSelection("colour"))
         assertEquals(setOf("fader-9", "btn-33"), derived.keys)
-        assertEquals(BindingTarget.GroupAttribute("front-wash", "dimmer"), derived["fader-9"])
+        assertEquals(Binding(Does.Level("dimmer"), group), derived["fader-9"])
     }
 
     @Test
-    fun `a full strip derives one target per control`() {
+    fun `a full strip derives one binding per control`() {
         val strip = StripDescriptor("strip-1", "fader-1", "btn-25", "enc-1", "btn-1")
         assertEquals(StripRole.FADER, strip.roleOf("fader-1"))
         assertEquals(StripRole.SELECT, strip.roleOf("btn-25"))
@@ -83,13 +81,13 @@ class StripDeriveTest {
         assertEquals(StripRole.FLASH, strip.roleOf("btn-1"))
         assertNull(strip.roleOf("fader-2"))
 
-        val derived = deriveStripTargets(strip, group, encoderBank = EncoderBankSelection("colour"))
+        val derived = deriveStripBindings(strip, group, encoderBank = EncoderBankSelection("colour"))
         assertEquals(
             mapOf(
-                "fader-1" to BindingTarget.GroupAttribute("front-wash", "dimmer"),
-                "btn-25" to BindingTarget.SelectTarget(group, BindingTarget.SelectMode.TOGGLE),
-                "enc-1" to BindingTarget.GroupAttribute("front-wash", "colour"),
-                "btn-1" to BindingTarget.Flash(BindingTarget.GroupAttribute("front-wash", "dimmer")),
+                "fader-1" to Binding(Does.Level("dimmer"), group),
+                "btn-25" to Binding(Does.Select, group),
+                "enc-1" to Binding(Does.Level("colour"), group),
+                "btn-1" to Binding(Does.Flash("dimmer"), group),
             ),
             derived,
         )
@@ -99,25 +97,22 @@ class StripDeriveTest {
     fun `the encoder carries the bank's colour axis, and the fader and flash never do`() {
         val sat = EncoderBankSelection("rgbColour", ColourAxis.SATURATION)
         assertEquals(
-            BindingTarget.GroupAttribute("front-wash", "rgbColour", ColourAxis.SATURATION),
-            deriveStripTarget(StripRole.ENCODER, group, sat),
+            Binding(Does.Level("rgbColour", ColourAxis.SATURATION), group),
+            deriveStripBinding(StripRole.ENCODER, group, sat),
         )
         assertEquals(
-            BindingTarget.FixtureAttribute("hex-1", "rgbColour", ColourAxis.SATURATION),
-            deriveStripTarget(StripRole.ENCODER, fixture, sat),
+            Binding(Does.Level("rgbColour", ColourAxis.SATURATION), fixture),
+            deriveStripBinding(StripRole.ENCODER, fixture, sat),
         )
-        assertEquals(BindingTarget.GroupAttribute("front-wash", "dimmer"), deriveStripTarget(StripRole.FADER, group, sat))
-        assertEquals(
-            BindingTarget.Flash(BindingTarget.GroupAttribute("front-wash", "dimmer")),
-            deriveStripTarget(StripRole.FLASH, group, sat),
-        )
-        val derived = deriveStripTargets(StripDescriptor("strip-1", "fader-1", "btn-25", "enc-1", "btn-1"), group, sat)
-        assertEquals(BindingTarget.GroupAttribute("front-wash", "rgbColour", ColourAxis.SATURATION), derived["enc-1"])
-        assertEquals(BindingTarget.GroupAttribute("front-wash", "dimmer"), derived["fader-1"])
+        assertEquals(Binding(Does.Level("dimmer"), group), deriveStripBinding(StripRole.FADER, group, sat))
+        assertEquals(Binding(Does.Flash("dimmer"), group), deriveStripBinding(StripRole.FLASH, group, sat))
+        val derived = deriveStripBindings(StripDescriptor("strip-1", "fader-1", "btn-25", "enc-1", "btn-1"), group, sat)
+        assertEquals(Binding(Does.Level("rgbColour", ColourAxis.SATURATION), group), derived["enc-1"])
+        assertEquals(Binding(Does.Level("dimmer"), group), derived["fader-1"])
         // A bank on hue derives an encoder with no axis at all — the form every pre-axis row has.
         assertEquals(
-            BindingTarget.GroupAttribute("front-wash", "rgbColour"),
-            deriveStripTarget(StripRole.ENCODER, group, EncoderBankSelection("rgbColour")),
+            Binding(Does.Level("rgbColour"), group),
+            deriveStripBinding(StripRole.ENCODER, group, EncoderBankSelection("rgbColour")),
         )
     }
 }

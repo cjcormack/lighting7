@@ -26,6 +26,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import java.util.UUID
 
 /**
  * `PalettePressLog` — the one place a template press is recorded, through all four of its doors.
@@ -212,19 +213,19 @@ class PalettePressLogTest : RouteIntegrationTest() {
         val announced = recordPresses()
 
         // Refusal one: a generic template with nothing selected never reaches the stack.
-        actions.pressPalette(uuid)
+        actions.pressPalette(UUID.fromString(uuid))
         assertNull(client.stamp(amber))
         // Refusal two: no such template.
-        actions.pressPalette("00000000-0000-0000-0000-000000000000")
+        actions.pressPalette(UUID(0, 0))
         assertTrue(announced.isEmpty())
 
         state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")))
-        actions.pressPalette(uuid)
+        actions.pressPalette(UUID.fromString(uuid))
         val onStamp = assertNotNull(client.stamp(amber), "pressing from the desk's own hardware counts")
         assertEquals(listOf(amber to onStamp), announced)
 
         // And the hardware's own second press is a release.
-        actions.pressPalette(uuid)
+        actions.pressPalette(UUID.fromString(uuid))
         assertEquals(onStamp, client.stamp(amber))
         assertEquals(1, announced.size)
     }

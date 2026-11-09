@@ -8,9 +8,10 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.stackEntryPositions
 import uk.me.cormack.lighting7.fx.StackEntryPositions
-import uk.me.cormack.lighting7.midi.BindingTarget
-import uk.me.cormack.lighting7.midi.BindingTargetJson
-import uk.me.cormack.lighting7.midi.discriminator
+import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.RecordKind
+import uk.me.cormack.lighting7.midi.decodeBinding
+import uk.me.cormack.lighting7.midi.recordUuid
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 
@@ -98,7 +99,7 @@ internal fun cueInUseMessage(uses: List<CueUsesDto>): String =
 
 /**
  * What names each of [cues] of [project]: its entries (in show order), busk pads, cue slots, the
- * prompt-book anchors on its entries and the `FireCue` and `LooseCueSet` bindings to it. Must run inside a transaction.
+ * prompt-book anchors on its entries and the cue bindings to it. Must run inside a transaction.
  */
 internal fun cueUsesOf(
     project: DaoProject,
@@ -114,19 +115,13 @@ internal fun cueUsesOf(
     val cueOfEntry = slots.values.flatten().associate { it.entry.id.value to it.entry.cueId!! }
     val pads = DaoBuskPad.find { DaoBuskPads.cue inList ids }.toList()
     val cueSlots = DaoCueSlot.find { DaoCueSlots.cue inList ids }.toList()
-    val cueTargets = listOf(BindingTarget.FireCue(0).discriminator(), BindingTarget.LooseCueSet("", true).discriminator())
-    val byUuid = cues.associateBy { it.uuid.toString() }
+    val byUuid = cues.associateBy { it.uuid }
     val bindings = DaoControlSurfaceBinding.find {
-        (DaoControlSurfaceBindings.project eq project.id) and (DaoControlSurfaceBindings.targetType inList cueTargets)
+        (DaoControlSurfaceBindings.project eq project.id) and (DaoControlSurfaceBindings.targetType eq Does.Cue.functionId)
     }.mapNotNull { binding ->
-        val cueId = when (val target = runCatching { BindingTargetJson.decodeFromString<BindingTarget>(binding.targetPayload) }.getOrNull()) {
-            // Uuid first, as the binding's own health check reads it; the int only for a row with none.
-            is BindingTarget.FireCue ->
-                target.cueUuid?.let { byUuid[it]?.id?.value } ?: target.cueId.takeIf { target.cueUuid == null && it in ids }
-            is BindingTarget.LooseCueSet -> byUuid[target.cueUuid]?.id?.value
-            else -> null
-        }
-        cueId?.let { it to binding }
+        decodeBinding(binding.targetPayload, binding.targetType).on.recordUuid(RecordKind.CUE)
+            ?.let { byUuid[it]?.id?.value }
+            ?.let { it to binding }
     }
     return cues.associate { cue ->
         val id = cue.id.value

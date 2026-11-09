@@ -1,0 +1,18 @@
+{
+  "fx": {
+    "attribute": "rgbColour",
+    "blendMode": "OVERRIDE",
+    "cycle": 4.0,
+    "family": "colour",
+    "fxType": "ColourCycle",
+    "order": "NORMAL",
+    "parameters": {
+      "colours": "#ff0000,#00ff00,#0000ff"
+    },
+    "spread": 1.5,
+    "spreadUnit": "STEP",
+    "uuid": "eac8d6f0-6103-43df-8a57-429ad6c07f5f"
+  },
+  "name": "steps-chase",
+  "uuid": "9681e4f6-1c07-4db3-8430-9fff34228c36"
+}

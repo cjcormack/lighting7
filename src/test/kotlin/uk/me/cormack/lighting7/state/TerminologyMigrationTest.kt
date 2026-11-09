@@ -1,5 +1,11 @@
 package uk.me.cormack.lighting7.state
 
+import uk.me.cormack.lighting7.midi.Binding
+import uk.me.cormack.lighting7.midi.Does
+import uk.me.cormack.lighting7.midi.RecordKind
+import uk.me.cormack.lighting7.midi.Subject
+import uk.me.cormack.lighting7.midi.encodePayload
+
 import org.jetbrains.exposed.v1.core.eq
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -141,7 +147,7 @@ class TerminologyMigrationTest {
 
         assertEquals(1, backups().size, "the database is backed up before anything moves")
         assertTrue(logs.any { "templates → palettes" in it && "look_effects → look_fx" in it }, "$logs")
-        assertEquals(BUSK_PAD_STACK_USER_VERSION, userVersion())
+        assertEquals(SURFACE_GRAMMAR_USER_VERSION, userVersion())
 
         val tables = strings("SELECT name FROM sqlite_master WHERE type = 'table'").toSet()
         for (old in listOf("templates", "template_rows", "template_effects", "look_effects", "cue_ad_hoc_effects", "cue_property_assignments")) {
@@ -167,10 +173,11 @@ class TerminologyMigrationTest {
         assertTrue(parameters.none { "tmpl:" in it!! } && parameters.count { "pal:" in it!! } == 2, "$parameters")
         assertEquals(listOf("HEAD"), strings("SELECT timing FROM look_fx WHERE fx_type = 'PaletteSteps'"), "step timing on is Per head")
         assertEquals(
+            // Renamed here, and put in the grammar by step 15.
             listOf(
-                "pressPalette" to """{"type":"pressPalette","paletteUuid":"7dbf1758-a269-4d26-9ce0-ff0871394569"}""",
-                "stackFxAmount" to """{"type":"stackFxAmount","stackId":1,"stackUuid":"59b883f6-892b-4741-898b-64e82b8bcf88"}""",
-            ),
+                Binding(Does.Palette(UUID.fromString("7dbf1758-a269-4d26-9ce0-ff0871394569")), Subject.Selection),
+                Binding(Does.FxAmount, Subject.Record(RecordKind.STACK, UUID.fromString("59b883f6-892b-4741-898b-64e82b8bcf88"))),
+            ).map { it.functionId to it.encodePayload() },
             query("SELECT target_type, target_payload FROM control_surface_bindings ORDER BY id") { it.getString(1) to it.getString(2) },
         )
         assertEquals(4, strings("SELECT id FROM palettes").size, "every row is copied")
@@ -193,7 +200,7 @@ class TerminologyMigrationTest {
 
         assertNotNull(
             transaction(desk.database) { DaoPalette.find { uk.me.cormack.lighting7.models.DaoPalettes.uuid eq red }.single().lastPressedAt },
-            "the pressPalette binding pressed Red on (the stamp is the on arm only)",
+            "the palette binding pressed Red on (the stamp is the on arm only)",
         )
     }
 
@@ -215,14 +222,14 @@ class TerminologyMigrationTest {
             listOf(listOf("Wave", "intensity", "CENTRE_IN")),
             query("SELECT fx_type, family, spread_order FROM look_fx WHERE sort_order = 9") { listOf(it.getString(1), it.getString(2), it.getString(3)) },
         )
-        assertEquals(BUSK_PAD_STACK_USER_VERSION, userVersion())
+        assertEquals(SURFACE_GRAMMAR_USER_VERSION, userVersion())
     }
 
     @Test
     fun `a fresh database is born in the glossary's words, with no backup`() {
         startDesk()
         stopDesk()
-        assertEquals(BUSK_PAD_STACK_USER_VERSION, userVersion())
+        assertEquals(SURFACE_GRAMMAR_USER_VERSION, userVersion())
         assertEquals(emptyList(), backups())
         assertTrue("palettes" in strings("SELECT name FROM sqlite_master WHERE type = 'table'"))
     }
@@ -277,7 +284,7 @@ class TerminologyMigrationTest {
         assertEquals(listOf("old colours"), strings("SELECT name FROM palettes_retired"))
         assertEquals(names, strings("SELECT name FROM palettes ORDER BY id"))
         assertTrue(logs.any { "palettes_retired" in it }, "$logs")
-        assertEquals(BUSK_PAD_STACK_USER_VERSION, userVersion())
+        assertEquals(SURFACE_GRAMMAR_USER_VERSION, userVersion())
     }
 
     @Test

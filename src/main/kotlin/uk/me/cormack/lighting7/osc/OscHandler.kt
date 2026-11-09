@@ -117,9 +117,10 @@ class OscHandler(
             runCatching { ensureHistory(projectId) }
             val (reached, done) = Tracing.span("osc.dispatch") { WriteOrigin.with(origin) {
                 when (resolution) {
-                    is OscResolution.Press ->
-                        resolution.reached to dispatch.press(resolution.target, SurfaceDispatch.Origin(DEVICE_TYPE, -1, origin.source))
-                    is OscResolution.Level -> resolution.reached to dispatch.level(resolution.target, resolution.value)
+                    is OscResolution.Press -> resolution.reached to
+                        dispatch.dispatch(resolution.binding, SurfaceDispatch.Input.Press, SurfaceDispatch.Origin(DEVICE_TYPE, origin.source))
+                    is OscResolution.Level -> resolution.reached to
+                        dispatch.dispatch(resolution.binding, SurfaceDispatch.Input.Set(resolution.value), SurfaceDispatch.Origin(DEVICE_TYPE, origin.source))
                     else -> error("resolved above")
                 }
             } }

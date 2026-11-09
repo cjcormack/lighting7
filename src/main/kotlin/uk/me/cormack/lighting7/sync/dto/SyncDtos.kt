@@ -34,6 +34,12 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v53: the surface binding grammar (surface-setup plan session 1, D18). A binding's
+    // `targetPayload` is a `Binding` — `{does, on, how}` — rather than a `BindingTarget`, and
+    // `ControlSurfaceBindingJson` gains `part`, an encoder's push its own binding. The importer reads
+    // an older archive's payloads through `SurfaceGrammar` (`LegacyNames.record`). The writer and
+    // `minReader` move to **53**: a v52 reader would decode every binding as unknown and push it back
+    // so. See `docs/sync-engineering.md` §"Version 53 — The surface binding grammar".
     // v52: stack pads (busk-stack plan D9). `BuskPadJson` gains `cueStackUuid`. The writer and
     // `minReader` move to **52**: a v51 reader would drop a stack pad as naming nothing and push the
     // drop. See `docs/sync-engineering.md` §"Version 52 — Stack pads".
@@ -388,9 +394,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 52,
+    val formatVersion: Int = 53,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 52,
+    val minReader: Int = 53,
 )
 
 /**
@@ -1413,11 +1419,16 @@ data class ParkedChannelJson(
     val value: Int,
 )
 
+/**
+ * One surface binding. [targetPayload] is a `Binding` as `BindingJson` writes it (from v53), and
+ * [targetType] its function id; [part] the control's part, `MAIN` or an encoder's `PUSH` (v53).
+ */
 @Serializable
 data class ControlSurfaceBindingJson(
     val uuid: String,
     val deviceTypeKey: String,
     val controlId: String,
+    val part: String = "MAIN",
     val bank: String? = null,
     val targetType: String,
     val targetPayload: String,

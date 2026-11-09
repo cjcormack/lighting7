@@ -31,7 +31,7 @@ interface FxSpeedRing {
 }
 
 /**
- * The surface's **FX speed** (fx-speed plan D13): a control bound to [BindingTarget.FxSpeed] moves the
+ * The surface's **FX speed** (fx-speed plan D13): a control bound to [Does.FxSpeed] moves the
  * Speed of every Local FX ([FxInstance.isLocalFx]) that paints a head of the desk selection, each
  * whole — [applyFxUpdate] with no targets, so nothing splits and an FX partly inside the selection
  * changes on every head it paints. A programmer layer's, a cue's and a Look's FX are not Local and are
