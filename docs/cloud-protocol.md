@@ -6,7 +6,7 @@ the desk access tokens, and the contracts a remote session's browser speaks to t
 the desk's SPA. It is MIT like the rest of the desk, and it is the desk's: a protocol change is a desk
 PR first (cloud design record R3). The cloud builds it from a pinned desk commit (R4). P0 is the
 cloud-p0 plan (`docs/plans/completed/cloud-p0-plan.md`), decisions D3 to D10; P1's additions are the
-cloud-p1 plan's (`docs/plans/cloud-p1-plan.md`), D2 to D8.
+cloud-p1 plan's (`docs/plans/completed/cloud-p1-plan.md`), D2 to D8.
 
 Package `uk.me.cormack.lighting7.cloud.protocol`, JVM only, `kotlinx.serialization` and no Ktor: each
 side brings its own HTTP client, server and WebSocket.

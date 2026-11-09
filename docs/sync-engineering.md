@@ -2016,7 +2016,7 @@ own log/status calls.
 
 ### Restoring a snapshot
 
-`sync/SnapshotRestore.kt` (sync-restore plan, `docs/plans/sync-restore-plan.md`) puts a show back to
+`sync/SnapshotRestore.kt` (sync-restore plan, `docs/plans/completed/sync-restore-plan.md`) puts a show back to
 one of its snapshots — HEAD or an ancestor of it — as a **new commit on top**, never a reset or a
 force-push, so a peer reaches it by fast-forward or merge like any other commit. It goes **through the
 database**: the target's tree is extracted to a scratch directory (`JGitClient.extractTree`, binaries

@@ -89,7 +89,7 @@ A session's PR is titled *Flaky tests: session N — title*.
 | 3 | The sheet's commit floor | merged | `claude/flaky-tests-s3` | [#301](https://github.com/cjcormack/lighting7/pull/301) | 5194d0d |
 | 4 | Timeouts under load | merged | `claude/flaky-tests-s4` | [#303](https://github.com/cjcormack/lighting7/pull/303) | f932c5d |
 | 5 | The ledger after the clock moves | merged | `claude/flaky-tests-s5` | [#308](https://github.com/cjcormack/lighting7/pull/308) | 5ff756b |
-| 6 | A socket's own broadcast | in review | `claude/elegant-bell-n17686` | | |
+| 6 | A socket's own broadcast | merged | `claude/elegant-bell-n17686` | [#378](https://github.com/cjcormack/lighting7/pull/378) | 17255d0 |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts

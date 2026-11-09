@@ -1913,7 +1913,7 @@ The venue and the set, as named elements the Stage view draws (stage-view plan s
 room, the proscenium, masking, platforms, seating, furniture. Nothing composes them and nothing
 here reaches DMX — they are what the light lands on. Regions stay separate (D5): a region is the
 playing surface, an aim target and a beam receiver, and a platform may **link** to one rather than
-duplicate it. The design record is `docs/plans/stage-view-design/INDEX.md` §"2. A scene document".
+duplicate it. The design record is `docs/plans/completed/stage-view-design/INDEX.md` §"2. A scene document".
 
 | Column | Meaning |
 |---|---|

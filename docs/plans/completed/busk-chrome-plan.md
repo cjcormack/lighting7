@@ -7,7 +7,7 @@
 desk checks the preview pane could not reach are
 [`FU-MANUAL-BUSK-CHROME`](../manual-validation.md#fu-manual-busk-chrome).** The
 > visual design is settled and
-> checked in beside this plan at [`busk-chrome-design/`](../busk-chrome-design/INDEX.md) — five static
+> checked in beside this plan at [`busk-chrome-design/`](busk-chrome-design/INDEX.md) — five static
 > artboards: the busk window with the ShowBar gone and the Show tab open, the same window immersive
 > with the vertical budget, the Show tab at full size, the rig band's one row in its three shapes
 > with the fold ladder, and the model with every suggestion's verdict. The live copy at

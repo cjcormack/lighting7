@@ -1,7 +1,7 @@
 # Library sheets — Scripts, FX Library, Looks, Templates and Speed Masters on the sheet kit
 
 > **Document status: DONE — all five sessions shipped 2026-09-23/24 (lighting7 `1f16441`; lighting-react `042919f8`, `dca9a1f9`, `83243b2e`, `a3699076`).** The design is checked in beside this
-> plan at [`library-sheets-design/`](../library-sheets-design/INDEX.md): eight static artboards
+> plan at [`library-sheets-design/`](library-sheets-design/INDEX.md): eight static artboards
 > covering the five views today, the rules, the kit's additions, every sheet's columns, and one
 > mock-up per view. The live copy at <https://claude.ai/artifact/RFXrmBb8LGYJhsuYTgPh2F> is a
 > convenience, private to Chris; the checked-in files are the authority. This document is the

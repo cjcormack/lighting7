@@ -2,7 +2,7 @@
 
 > **Document status: DONE — sessions 0–9 shipped 2026-09-29 to 2026-10-01, the last as `37a2b6d`
 > ([PR #37](https://github.com/cjcormack/lighting7/pull/37)).** Approved 2026-09-29. The design is checked in at
-> [`stage-view-design/`](../stage-view-design/INDEX.md). It contains:
+> [`stage-view-design/`](stage-view-design/INDEX.md). It contains:
 > - the design record;
 > - a working three.js prototype of project 15;
 > - an art book of 30 plates;

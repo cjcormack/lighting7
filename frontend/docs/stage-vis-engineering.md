@@ -624,7 +624,7 @@ today"); what follows is what the code does now and why, since each piece is eas
 The scene is drawn straight to the canvas by `StageRender` (priority `STAGE_RENDER_PRIORITY`, after
 the bodies' and emitters' flushes — R3F stops drawing on its own once any frame subscriber has a
 positive priority). There is no composer and no bloom, as in the prototype
-(`../docs/plans/stage-view-design/prototype.html`): every fragment encodes itself for the canvas
+(`../docs/plans/completed/stage-view-design/prototype.html`): every fragment encodes itself for the canvas
 (`linearToOutputTexel`), so the additive beams and the overlapping pools blend in display space and
 two beams crossing visibly sum. The canvas clears **opaque** to `STAGE_BACKGROUND`: a beam adds at
 full alpha, and over a transparent clear its faint edge would darken the CSS background behind it.

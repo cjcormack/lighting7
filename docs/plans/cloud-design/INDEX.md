@@ -18,7 +18,7 @@ repos. So **each phase is two plans**, one per repo, written together:
 | Phase | Desk plan (this repo, public) | Cloud plan (`lighting7-cloud`, private) |
 |---|---|---|
 | P0 | `docs/plans/completed/cloud-p0-plan.md` (done) | `docs/plans/completed/p0-plan.md` (done) |
-| P1 | `docs/plans/cloud-p1-plan.md` (active) | `docs/plans/p1-plan.md` (active) |
+| P1 | `docs/plans/completed/cloud-p1-plan.md` (done) | `docs/plans/p1-plan.md` (active) |
 | … | `cloud-pN-plan.md` | `pN-plan.md` |
 
 Each plan is run by `/next-session` in its own repo, which keeps its own copy of the skill. A session
