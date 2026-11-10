@@ -243,7 +243,7 @@ class VenueUpdate(private val state: State) {
             recordIn(pin.toSnapshot, HideKind.PATCH, c.recordUuid) == null && recordIn(pin.toSnapshot, HideKind.GROUP, c.recordUuid) == null
         }
         for (c in droppedColours) {
-            val name = recordIn(pin.fromSnapshot, HideKind.PATCH, c.recordUuid)
+            val name = recordIn(pin.fromSnapshot, HideKind.PATCH, c.recordUuid, before)
                 ?: recordIn(pin.fromSnapshot, HideKind.GROUP, c.recordUuid)
                 ?: c.recordUuid.toString()
             dropped += UpdateItemDto("COLOUR", name, "Your colour ${c.colour} for $name: v${pin.to} has no such fixture or group", c.recordUuid.toString())
@@ -262,7 +262,7 @@ class VenueUpdate(private val state: State) {
         val fromPatches = DaoFixturePatch.find { DaoFixturePatches.project eq pin.fromSnapshot }.associateBy { it.uuid }
         val missing = drifts.filter { it.missing }
         for (d in missing) {
-            val name = fromPatches[d.recordUuid]?.let { "${it.displayName} (${it.key})" } ?: d.recordUuid.toString()
+            val name = fromPatches[d.recordUuid]?.let { "${before.nameOf(it)} (${it.key})" } ?: d.recordUuid.toString()
             dropped += UpdateItemDto(
                 "OVERRIDE", name,
                 "Your ${d.facet.name.lowercase()} override on $name: it is gone in v${pin.to}, so the override has nothing to apply to",
@@ -276,7 +276,7 @@ class VenueUpdate(private val state: State) {
                 id = id,
                 recordUuid = d.recordUuid.toString(),
                 patchKey = d.patchKey,
-                patchName = fromPatches[d.recordUuid]?.displayName,
+                patchName = fromPatches[d.recordUuid]?.let(before::nameOf),
                 facet = d.facet,
                 value = d.value?.let(::facetElement),
                 venue = d.current?.let(::facetElement),
@@ -507,8 +507,8 @@ class VenueUpdate(private val state: State) {
                 DeadReferenceDto(
                     kind = "OVERRIDE",
                     key = patch.key,
-                    name = patch.displayName,
-                    detail = "Your ${facet.name.lowercase()} override on ${patch.displayName} names $names v${pin.to} doesn't have: " +
+                    name = rig.nameOf(patch),
+                    detail = "Your ${facet.name.lowercase()} override on ${rig.nameOf(patch)} names $names v${pin.to} doesn't have: " +
                         "it stays, dormant, and the venue's ${facet.name.lowercase()} applies until you change it",
                 )
             }
@@ -526,18 +526,19 @@ class VenueUpdate(private val state: State) {
         pin: Pin,
     ): List<UpdateItemDto> {
         val out = mutableListOf<UpdateItemDto>()
+        val rig = RigScope.of(project)
         val toPatches = DaoFixturePatch.find { DaoFixturePatches.project eq pin.toSnapshot }.associateBy { it.uuid }
         for (d in drifts) {
             if (d.missing || d.drifted || driftId(d.recordUuid, d.facet) in takeVenue) continue
-            val p = toPatches[d.recordUuid]
-            out += UpdateItemDto("OVERRIDE", p?.displayName ?: d.recordUuid.toString(), "Your ${d.facet.name.lowercase()} override on ${p?.displayName ?: "a venue fixture"}", d.recordUuid.toString())
+            val name = toPatches[d.recordUuid]?.let(rig::nameOf)
+            out += UpdateItemDto("OVERRIDE", name ?: d.recordUuid.toString(), "Your ${d.facet.name.lowercase()} override on ${name ?: "a venue fixture"}", d.recordUuid.toString())
         }
         for (h in hides) {
             val name = recordIn(pin.toSnapshot, h.recordKind, h.recordUuid) ?: continue
             out += UpdateItemDto("HIDE", name, "Your hide of ${h.recordKind.label()} $name", h.recordUuid.toString())
         }
         val decidedMine = decisions.map { it.mine.uuid }.toSet()
-        for (p in RigScope.of(project).own.patches()) {
+        for (p in rig.own.patches()) {
             if (p.uuid.toString() in decidedMine) continue
             out += UpdateItemDto("ADDITION", "${p.displayName} (${p.key})", "Your ${p.displayName}", p.uuid.toString())
         }
@@ -583,9 +584,13 @@ class VenueUpdate(private val state: State) {
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
-    /** The name of the record of [kind] with [uuid] in [snapshot], or null when it has none. */
-    private fun recordIn(snapshot: EntityID<Int>, kind: HideKind, uuid: UUID): String? = when (kind) {
-        HideKind.PATCH -> DaoFixturePatch.find { (DaoFixturePatches.project eq snapshot) and (DaoFixturePatches.uuid eq uuid) }.firstOrNull()?.let { "${it.displayName} (${it.key})" }
+    /**
+     * The name of the record of [kind] with [uuid] in [snapshot], or null when it has none; a patch's as
+     * [rig] names it when given (a hidden one's overrides are dormant, so its hide names the row's).
+     */
+    private fun recordIn(snapshot: EntityID<Int>, kind: HideKind, uuid: UUID, rig: RigScope? = null): String? = when (kind) {
+        HideKind.PATCH -> DaoFixturePatch.find { (DaoFixturePatches.project eq snapshot) and (DaoFixturePatches.uuid eq uuid) }.firstOrNull()
+            ?.let { "${rig?.nameOf(it) ?: it.displayName} (${it.key})" }
         HideKind.RIGGING -> DaoRigging.find { (DaoRiggings.project eq snapshot) and (DaoRiggings.uuid eq uuid) }.firstOrNull()?.name
         HideKind.ELEMENT -> DaoStageElement.find { (DaoStageElements.project eq snapshot) and (DaoStageElements.uuid eq uuid) }.firstOrNull()?.name
         HideKind.REGION -> DaoStageRegion.find { (DaoStageRegions.project eq snapshot) and (DaoStageRegions.uuid eq uuid) }.firstOrNull()?.name

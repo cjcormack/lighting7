@@ -24,6 +24,7 @@ import uk.me.cormack.lighting7.models.HideKind
 import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.AddressFacet
 import uk.me.cormack.lighting7.models.MediaFacet
+import uk.me.cormack.lighting7.models.NameFacet
 import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.PositionFacet
 import uk.me.cormack.lighting7.venue.ShowHides
@@ -78,10 +79,10 @@ fun seedVenueReadyShow(state: State): Int {
  * record, an **addition** on a venue universe (non-default gel and position, so canonical JSON carries
  * them), and a show group holding a venue patch beside the addition (D12). The show still holds the
  * fixture's cues, cue events, scenery and busk rig, now linking into the venue. And (session 5) the show
- * **overrides** three facets of one venue patch, every value non-default so canonical JSON carries it:
+ * **overrides** four facets of one venue patch, every value non-default so canonical JSON carries it:
  * its Address (start channel 470 on the venue's universe 0), its Position (hung on the show's own
  * "Panto boom SR" — a show-owned rigging, so a clone must remap the value's rigging uuid) and its Media
- * (gel L202). It recolours a venue patch and group, and (group-order plan session 1) chases the venue's
+ * (gel L202), and (venue-rig-fixes plan D24) renames it "Panto SR special". It recolours a venue patch and group, and (group-order plan session 1) chases the venue's
  * front-wash in the reverse of the venue's order.
  */
 data class VenueShowFixture(
@@ -190,6 +191,7 @@ fun seedShowOnVenue(state: State): VenueShowFixture {
             PositionFacet(riggingUuid = boom.uuid.toString(), stageZ = 2.25, baseYawDeg = 15.0, basePitchDeg = 180.0),
         )
         ShowOverrides.put(show, target, PatchFacet.MEDIA, MediaFacet(gelCode = "L202"))
+        ShowOverrides.put(show, target, PatchFacet.NAME, NameFacet("Panto SR special"))
         // Fixture colours (formatVersion 36): the show recolours the overridden venue patch and the
         // venue's first group, both to colours the venue does not use.
         ShowColours.put(show.id, target.patch.uuid, "pink")

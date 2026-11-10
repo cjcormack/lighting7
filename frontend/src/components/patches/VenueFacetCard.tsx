@@ -13,6 +13,7 @@ import type {
   FixturePatch,
   FocusFacetValue,
   MediaFacetValue,
+  NameFacetValue,
   PatchFacet,
   PatchPlacementInput,
   PositionFacetValue,
@@ -44,7 +45,7 @@ export interface FacetCardContext {
 }
 
 /**
- * One facet of a venue patch in a show — Address, Position, Focus or Media — with its **Venue | This
+ * One facet of a venue patch in a show — Address, Position, Focus, Media or Name — with its **Venue | This
  * show** switch (venue plan session 5, `Show.dc.html`'s Edit Fixture sheet). *Venue* reads the
  * venue's value; *This show* opens the facet's fields, editable, and saves the facet whole
  * (`PUT …/facets/{facet}`); *Revert to venue* takes the venue's back. A drifted facet draws the drift
@@ -77,7 +78,8 @@ export function VenueFacetCard({ facet, patch, ctx }: { facet: PatchFacet; patch
   const valid = facetValid(facet, draft, ctx.fixtureType)
 
   const save = () => {
-    setFacet({ projectId: ctx.projectId, patchId: patch.id, facet, value: draft })
+    const value = facet === 'NAME' ? { displayName: (draft as NameFacetValue).displayName.trim() } : draft
+    setFacet({ projectId: ctx.projectId, patchId: patch.id, facet, value })
       .unwrap()
       .then((answer) => {
         setOpened(false)
@@ -197,6 +199,7 @@ export function facetEditable(facet: PatchFacet, type: FixtureTypeInfo | undefin
 }
 
 function facetValid(facet: PatchFacet, draft: FacetValue, type: FixtureTypeInfo | undefined): boolean {
+  if (facet === 'NAME') return (draft as NameFacetValue).displayName.trim() !== ''
   if (facet === 'ADDRESS') {
     const v = draft as AddressFacetValue
     return Number.isInteger(v.startChannel) && v.startChannel >= 1
@@ -352,6 +355,21 @@ function FacetFields({
               }
             />
           )}
+        </div>
+      )
+    }
+    case 'NAME': {
+      const v = draft as NameFacetValue
+      return (
+        <div className="space-y-1">
+          <Label htmlFor={`${id}-name`} className="text-xs">Name in this show</Label>
+          <Input
+            id={`${id}-name`}
+            className="h-8"
+            value={v.displayName}
+            maxLength={255}
+            onChange={(e) => onChange({ displayName: e.target.value })}
+          />
         </div>
       )
     }

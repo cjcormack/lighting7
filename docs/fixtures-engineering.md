@@ -2602,10 +2602,10 @@ none, fall back to a patch's key and fixture type and an element's name.
 
 ### Facet overrides
 
-A show can make four parts of a venue patch its own (venue plan session 5, D4, D5): its **facets**.
-Each is **whole** — every field it covers, the patch's and each extra placement's — because shutters
-without the position they were cut against mean nothing; a patch's **identity** (name, key, type,
-head number) and its placements' count, order and labels stay the venue's.
+A show can make five parts of a venue patch its own (venue plan session 5, D4, D5; Name, venue-rig-fixes
+plan D24): its **facets**. Each is **whole** — every field it covers, the patch's and each extra
+placement's — because shutters without the position they were cut against mean nothing; a patch's
+**identity** (key, type, head number) and its placements' count, order and labels stay the venue's.
 
 | Facet | Fields |
 |---|---|
@@ -2613,6 +2613,7 @@ head number) and its placements' count, order and labels stay the venue's.
 | `POSITION` | `riggingUuid`, `stageX/Y/Z`, `baseYaw/Pitch/RollDeg`, `lengthM`, and each placement's |
 | `FOCUS` | `lanternType`, `beamAngleDeg`, `lampWatts`, `lampKelvin`, `zoomDeg`, `lampRotationDeg`, `shutters`, `gateRotationDeg`, `iris`, `focusSoftness`, `locate` (the patch's alone), and each placement's lantern fields |
 | `MEDIA` | `gelCode`, `media`, and each placement's |
+| `NAME` | `displayName`, the show's name for the unit |
 
 **Stored** as `show_overrides` (`models/showOverrides.kt`): `project_id`, `record_uuid` (the venue
 patch — a uuid is its identity across versions, as a hide's is), `facet`, `value` and `base`, both
@@ -2662,8 +2663,23 @@ clash cannot arise, since a facet never touches a key. Refused: a show's own pat
 show's and a venue's own — 409 `NOT_A_VENUE_RECORD` (edit the patch); a version —
 `VENUE_VERSION_READ_ONLY` from the write guard; an unknown facet — 400 `FACET_UNKNOWN`. It is a stored
 show write like a patch edit, so **an operator may make one** (the write guard still refuses an
-operator's write to a venue). An Address or Media write to the live show reloads the rig. Answers
+operator's write to a venue). An Address, Media or Name write to the live show reloads the rig, since
+the loader builds a fixture at its address, names it and carries its media. Answers
 `{patch, changed, warnings}`.
+
+**The Name facet** (venue-rig-fixes plan D24–D27) is the show's name for a venue fixture; its key, type
+and head stay the venue's, so every key a cue, Look, binding or script names still resolves. A blank
+name is `FACET_INVALID`; there is no uniqueness check, as for a show's own patch (only `(project, key)`
+is unique). **Every reader of a patch's name in a show reads the show's**: `EffectivePatch.displayName`,
+and `RigScope.nameOf(patch)` where a reader holds the row — the patch DTO, the loader, the busk rig's
+tiles, a group's members, a cue event's fixture, the trigger and command guards' refusals, the surface
+labels, the dead-reference names, `get_patch`'s hidden fixtures and the Update review's names. The
+patch PUT still refuses a venue row's name (`VENUE_OWNED`); the Patch sheet's name cell on a venue row
+and the fixture sheet's Name card write the facet instead, and so does `override_venue_fixtures`' `name`.
+`VenueDiff` files a venue's rename under `VenueFacet.NAME`, not Identity: under a show's Name override
+it is drift, else it reaches the show as before. Detach writes the effective name into the copy, and
+Attach pairs a show patch that differs from a venue patch only by name as that patch with a Name
+override (`venueFacetOf` reads the name as a facet, so the pairing's facet loop takes it).
 
 **Drift** is the pinned version's current value of a facet differing from the override's `base`: the
 venue changed something the show had overridden. An Update moves the pin and leaves the base, so the
@@ -2682,8 +2698,8 @@ version's snapshot (`missing` is an override whose patch that version lacks; §"
 route): a Position override is a decision taken whole, in the fixture sheet's *This show*, with a base
 recorded — not the side effect of a drag. The fixture sheet (`VenuePatchPanel`, the Patch list's and
 the Stage editor's) draws a *Venue | This show* switch per facet, the drift note with *Keep mine* and
-*Take venue's*, and the Patch list's *This show* column four chips, lit where overridden and amber
-where drifted. A venue rigging, element, region, group or viewpoint is still only hidden
+*Take venue's*, and the Patch list's *This show* column five chips, lit where overridden and amber
+where drifted. The Name card sits in the sheet's Identity block. A venue rigging, element, region, group or viewpoint is still only hidden
 (`FU-VENUE-ELEMENT-OVERRIDES`) — but for a group's colour, which a show recolours (§"Fixture
 colours").
 
@@ -2693,7 +2709,7 @@ The show history (`docs/undo-engineering.md` §"Restore") puts the rig back like
 patch with its placements, a group with its members, a universe, a hide, a facet override, a recolour,
 a group order, a park and a park release, each with its row id. On the live project each reaches the
 fixtures as its own route's write does: what rebuilds them (a patch's address, type or key, a group's
-members, a universe, an Address or Media override, a patch or group hide) reloads them, a drawn field or
+members, a universe, an Address, Media or Name override, a patch or group hide) reloads them, a drawn field or
 a Focus override refreshes the patch metadata, a recolour announces the fixture list, and a Position
 override or a hide of a rigging, element, region or viewpoint is drawn only; the parks reload. While a
 cue is held an undo that rebuilds or moves a park asks first (409 `HISTORY_CONFIRM`, *The fixtures

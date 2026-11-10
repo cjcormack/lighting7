@@ -46,6 +46,18 @@ describe('facetValueOf', () => {
   })
 })
 
+describe('the Name facet', () => {
+  it('starts from the name the rig shows and reads as the name', () => {
+    const value = facetValueOf(patch(), 'NAME')
+    expect(value).toEqual({ displayName: patch().displayName })
+    expect(describeFacet('NAME', { displayName: 'Stage left wash' })).toBe('Stage left wash')
+    const state: PatchFacetState = {
+      facet: 'NAME', value: { displayName: 'Stage left wash' }, venue: { displayName: 'House wash' }, drifted: true, base: { displayName: 'Wash' },
+    }
+    expect(driftLine(state)).toBe('Wash → House wash')
+  })
+})
+
 describe('facet chips', () => {
   it('reads each facet as the venue’s, the show’s or drifted', () => {
     const p = patch({
@@ -59,6 +71,7 @@ describe('facet chips', () => {
       { facet: 'POSITION', state: 'show' },
       { facet: 'FOCUS', state: 'venue' },
       { facet: 'MEDIA', state: 'drifted' },
+      { facet: 'NAME', state: 'venue' },
     ])
     expect(anyDrifted(p)).toBe(true)
     expect(facetState(p, 'ADDRESS')).toBeNull()

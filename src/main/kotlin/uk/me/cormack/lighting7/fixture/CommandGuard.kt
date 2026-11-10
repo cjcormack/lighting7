@@ -152,11 +152,11 @@ class CommandIndex private constructor(
             val rig = RigScope.of(project)
             val patches = rig.patches().toList()
             val reservedById = patches.mapNotNull { p ->
-                FixtureCommands.reservedNamesForTypeKey(p.fixtureTypeKey).takeIf { it.isNotEmpty() }?.let { p.id.value to (p.key to (p.displayName to it)) }
+                FixtureCommands.reservedNamesForTypeKey(p.fixtureTypeKey).takeIf { it.isNotEmpty() }?.let { p.id.value to (p.key to (rig.nameOf(p) to it)) }
             }.toMap()
             if (reservedById.isEmpty()) return EMPTY
             val bandsById = patches.mapNotNull { p ->
-                FixtureCommands.sharedBandsForTypeKey(p.fixtureTypeKey).takeIf { it.isNotEmpty() }?.let { p.id.value to (p.key to (p.displayName to it)) }
+                FixtureCommands.sharedBandsForTypeKey(p.fixtureTypeKey).takeIf { it.isNotEmpty() }?.let { p.id.value to (p.key to (rig.nameOf(p) to it)) }
             }.toMap()
             val groups = mutableMapOf<String, Set<String>>()
             val groupBands = mutableMapOf<String, Map<String, List<FixtureCommands.SharedBand>>>()

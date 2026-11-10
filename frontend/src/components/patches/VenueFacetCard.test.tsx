@@ -87,6 +87,30 @@ describe('VenueFacetCard', () => {
     expect(setFacet).toHaveBeenCalledWith({ projectId: 5, patchId: 12, facet: 'MEDIA', value: null })
   })
 
+  it('renames the fixture for this show through the Name facet, trimmed, and refuses a blank name', async () => {
+    render(<VenueFacetCard facet="NAME" patch={patch()} ctx={ctx} />)
+    expect(screen.getByText('Hex 1')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('radio', { name: 'This show' }))
+    const field = screen.getByLabelText('Name in this show')
+    const save = screen.getByRole('button', { name: "Make name this show's" })
+    fireEvent.change(field, { target: { value: '   ' } })
+    expect(save).toBeDisabled()
+    fireEvent.change(field, { target: { value: ' Stage left wash ' } })
+    fireEvent.click(save)
+    await waitFor(() => expect(setFacet).toHaveBeenCalled())
+    expect(setFacet).toHaveBeenCalledWith({ projectId: 5, patchId: 12, facet: 'NAME', value: { displayName: 'Stage left wash' } })
+  })
+
+  it('draws a venue rename under the show’s name as drift', () => {
+    const renamed = patch({
+      displayName: 'Stage left wash',
+      facets: [{ facet: 'NAME', value: { displayName: 'Stage left wash' }, venue: { displayName: 'House wash' }, drifted: true, base: { displayName: 'Hex 1' } }],
+    })
+    render(<VenueFacetCard facet="NAME" patch={renamed} ctx={ctx} />)
+    expect(screen.getByText(/Hex 1 → House wash/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Name in this show')).toHaveValue('Stage left wash')
+  })
+
   it('offers no This show for a facet the type has nothing in, and says why', () => {
     const noOptics = { ...ctx, fixtureType: { typeKey: 'hex', acceptsGel: false, acceptsBeamAngle: false, attributes: [] } as unknown as FacetCardContext['fixtureType'] }
     render(<VenueFacetCard facet="FOCUS" patch={patch()} ctx={noOptics} />)
@@ -106,5 +130,6 @@ describe('FacetChips', () => {
     expect(chip('ADDRESS')).toHaveAttribute('data-state', 'venue')
     expect(chip('POSITION')).toHaveAttribute('data-state', 'show')
     expect(chip('MEDIA')).toHaveAttribute('data-state', 'drifted')
+    expect(chip('NAME')).toHaveAttribute('data-state', 'venue')
   })
 })

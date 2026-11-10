@@ -15,6 +15,7 @@ export const FACET_LABELS: Record<VenueFacet, string> = {
   POSITION: 'Position',
   FOCUS: 'Focus',
   MEDIA: 'Media',
+  NAME: 'Name',
   OTHER: 'Other',
 }
 

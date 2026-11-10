@@ -472,8 +472,8 @@ class SetupTools(
                         put(
                             "note",
                             "Records with owner=venue are the venue's: the setup tools refuse a write to one (VENUE_OWNED). A show " +
-                                "can make a venue fixture's address, position, focus or media its own, or hide it, with " +
-                                "override_venue_fixtures; place_fixtures then edits the position, focus and media this show owns. " +
+                                "can make a venue fixture's name (override_venue_fixtures' `name`), address, position, focus or media its " +
+                                "own, or hide it, with override_venue_fixtures; place_fixtures then edits the position, focus and media this show owns. " +
                                 "A fixture's `overrides` lists those facets; its fields are already the overridden ones (but for a " +
                                 "`dormant` one, which names a universe or rigging the rig lacks, so the venue's stands), and `drifted` " +
                                 "marks a facet the venue has changed since (answer it with KEEP_MINE or VENUE). `hiddenFixtures` are " +

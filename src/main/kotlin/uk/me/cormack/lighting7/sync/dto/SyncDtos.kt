@@ -34,6 +34,10 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v56: a show's name for a venue fixture (venue-rig-fixes plan D24–D27). `ShowOverrideJson.facet`
+    // may be `NAME`, its value `{displayName}`. No field is new. The writer and `minReader` move to
+    // **56**: a v55 reader would fail on the enum value in `showOverrides/`. See
+    // `docs/sync-engineering.md` §"Version 56 — A show's name for a venue fixture".
     // v55: surface jobs (surface-setup plan session 5, D11). A new folder, `surfaceJobs/`, one record
     // per region's job (`SurfaceJobJson`), which holds the channel strips; the importer translates an
     // older archive's strip rows into jobs (`SurfaceStripJobs`, the translate database step 17 shares). The writer and `minReader` move to **55** (D18): a v54 reader would drop every job and
@@ -402,9 +406,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 55,
+    val formatVersion: Int = 56,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 55,
+    val minReader: Int = 56,
 )
 
 /**

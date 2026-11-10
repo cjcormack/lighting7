@@ -421,6 +421,10 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // no binding row of its own. SUPPORTED moved because a v54 reader would drop every job; MIN stays at
 // 5, since an older archive's strip rows are turned into jobs on read (`SurfaceStripJobs`).
 //
+// v56 lets a show's facet override be `NAME`, its name for a venue fixture (venue-rig-fixes plan D24).
+// SUPPORTED moved because a v55 reader would fail on the enum value; MIN stays at 5, since an older
+// archive holds no Name override.
+//
 // **These two constants are the real gate.** `FormatVersionJson.minReader` is *written* but never
 // read by the importer — `loadAndValidateArchive` compares against these — so bumping the DTO
 // alone leaves the gate wide open.
@@ -428,7 +432,7 @@ import uk.me.cormack.lighting7.fx.PaletteReferenceInvalidException
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 55
+internal const val SUPPORTED_FORMAT_VERSION = 56
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**

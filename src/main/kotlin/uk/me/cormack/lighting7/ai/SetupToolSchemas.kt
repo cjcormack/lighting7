@@ -677,7 +677,7 @@ private val venueFixtureOverrideSchema = objectSchema(required = listOf("key")) 
         put("type", "object")
         put(
             "description",
-            "Facet → SHOW | VENUE | KEEP_MINE, for any of ADDRESS, POSITION, FOCUS, MEDIA — the fixture sheet's Venue | This show switch. " +
+            "Facet → SHOW | VENUE | KEEP_MINE, for any of ADDRESS, POSITION, FOCUS, MEDIA, NAME — the fixture sheet's Venue | This show switch. " +
                 "SHOW makes the facet this show's own, starting from the venue's value (nothing drawn or sent changes until you edit it; one already this show's keeps its value). " +
                 "VENUE drops this show's value and takes the venue's again — also the answer to a drifted facet you do not want to keep. " +
                 "KEEP_MINE answers a drifted facet (the venue changed it since this show took it) by keeping this show's value.",
@@ -703,6 +703,11 @@ private val venueFixtureOverrideSchema = objectSchema(required = listOf("key")) 
         })
         put("required", buildJsonArray { add("universe"); add("startChannel") })
     })
+    prop(
+        "name", "string",
+        "The fixture's name in this show only — a Name override (implies facets.NAME = SHOW); not blank. Its key stays the venue's. " +
+            "facets.NAME = VENUE takes the venue's name back.",
+    )
     prop("colour", "string", COLOUR_DESCRIPTION + " This show's recolour of the venue fixture; null takes the venue's colour back.")
     prop(
         "hidden", "boolean",
@@ -714,8 +719,8 @@ private val venueFixtureOverrideSchema = objectSchema(required = listOf("key")) 
 internal val overrideVenueFixturesTool = ToolDef(
     name = "override_venue_fixtures",
     description = "On a show on a venue, change how this show takes the venue's fixtures — the fixture sheet's Venue | This show switches, Keep mine and Hide in this show. " +
-        "A venue fixture has four facets — Address, Position, Focus, Media — each the venue's until the show makes it its own; its name, key, type, head and kind stay the venue's. " +
-        "Make a facet this show's here, then edit Position, Focus and Media with place_fixtures (an Address is set here, with `address`). " +
+        "A venue fixture has five facets — Address, Position, Focus, Media, Name — each the venue's until the show makes it its own; its key, type, head and kind stay the venue's. " +
+        "Make a facet this show's here, then edit Position, Focus and Media with place_fixtures (an Address is set here, with `address`, and a Name with `name`). " +
         "get_patch lists each venue fixture's `overrides` (a `drifted` one the venue has changed since) and the hidden ones. " +
         "Every row is checked first and nothing is written if any fails; dryRun answers what would change. To change a fixture for every show, edit the venue itself and publish_venue.",
     inputSchema = objectSchema(required = listOf("fixtures")) {

@@ -30,7 +30,7 @@ import java.util.UUID
 /**
  * A show's **facet overrides** of its venue's patches (venue plan §3.2, §3.5, D4, D5; session 5): the
  * second change a show makes to a venue row, beside hiding it. One `show_overrides` row per facet a
- * show makes its own — Address, Position, Focus or Media, each **whole** — naming the patch by uuid.
+ * show makes its own — Address, Position, Focus, Media or Name, each **whole** — naming the patch by uuid.
  * [RigScope.effective] lays them over the pinned snapshot's row; this object writes them.
  *
  * - **Only a venue patch takes one** — 409 [VenueRigGuard.CODE_NOT_A_VENUE_RECORD] for a show's own

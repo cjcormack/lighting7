@@ -38,6 +38,7 @@ import uk.me.cormack.lighting7.models.kindUnderLantern
 import uk.me.cormack.lighting7.models.venueFacetOf
 import uk.me.cormack.lighting7.routes.addressOverlaps
 import uk.me.cormack.lighting7.routes.parseFacet
+import uk.me.cormack.lighting7.routes.reloadsRig
 import uk.me.cormack.lighting7.routes.syncStoredLocates
 import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.state.State
@@ -49,8 +50,8 @@ import uk.me.cormack.lighting7.venue.VenueRigGuard
 
 /**
  * What a show changes about its venue's fixtures, over MCP (venue plan sessions 3 and 5) — the fixture
- * sheet's *Venue | This show* switch per facet, *Keep mine*, *Hide in this show* and an Address override
- * (`override_venue_fixtures`), and `place_fixtures`' edit of a venue fixture's overridden facets
+ * sheet's *Venue | This show* switch per facet, *Keep mine*, *Hide in this show*, an Address override
+ * and the show's name for a fixture (`override_venue_fixtures`), and `place_fixtures`' edit of a venue fixture's overridden facets
  * ([resolvePlacement]). The rules are `venue/ShowOverrides.kt`'s and `venue/ShowHides.kt`'s, and every
  * facet value is checked by the facet route's own parser, so a tool write and the sheet's agree.
  */
@@ -66,6 +67,8 @@ internal class VenueFixtureTools(private val state: State) {
         val facets: Map<PatchFacet, Use>,
         val hidden: Boolean?,
         val address: JsonObject?,
+        /** The show's name for the fixture, when the row sends one. */
+        val name: String? = null,
         /** The colour the row sends, when it sends one (a null value takes the venue's back). */
         val colour: SentColour? = null,
     ) {
@@ -177,7 +180,7 @@ internal class VenueFixtureTools(private val state: State) {
         val where = "fixtures[$index] ('$key')"
         val before = problems.size
         if (key.isEmpty()) problems += "fixtures[$index]: key is required"
-        problems += unknownFields(row, listOf("key", "facets", "hidden", "address", "colour"), where)
+        problems += unknownFields(row, listOf("key", "facets", "hidden", "address", "name", "colour"), where)
 
         val facets = linkedMapOf<PatchFacet, Use>()
         when (val e = row["facets"]) {
@@ -210,14 +213,25 @@ internal class VenueFixtureTools(private val state: State) {
                 else -> problems += "$where: an address makes the Address this show's, so facets.ADDRESS cannot be ${facets[PatchFacet.ADDRESS]}"
             }
         }
+        val name = when (val e = row["name"]) {
+            null, is JsonNull -> null
+            else -> (e as? JsonPrimitive)?.takeIf { it.isString }?.content
+                ?: run { problems += "$where: name must be a string"; null }
+        }
+        if (name != null) {
+            when (facets[PatchFacet.NAME]) {
+                null, Use.SHOW -> facets[PatchFacet.NAME] = Use.SHOW
+                else -> problems += "$where: a name makes the Name this show's, so facets.NAME cannot be ${facets[PatchFacet.NAME]}"
+            }
+        }
         if (hidden == true && facets.values.any { it != Use.VENUE }) {
             problems += "$where: a hidden fixture takes no override — only facets set to VENUE may go with hidden: true"
         }
         val colourSent = FixtureColours.FIELD in row
         val colour = if (colourSent) FixtureColours.parseSent(row[FixtureColours.FIELD], where, problems) else null
         if (hidden == true && colourSent) problems += "$where: a hidden fixture takes no colour — leave colour out"
-        if (facets.isEmpty() && hidden == null && !colourSent) problems += "$where: nothing to change — send facets, address, colour or hidden"
-        return if (problems.size == before) Row(index, key, facets, hidden, address, colour) else null
+        if (facets.isEmpty() && hidden == null && !colourSent) problems += "$where: nothing to change — send facets, address, name, colour or hidden"
+        return if (problems.size == before) Row(index, key, facets, hidden, address, name, colour) else null
     }
 
     /**
@@ -241,6 +255,8 @@ internal class VenueFixtureTools(private val state: State) {
                     val stored = target.rig.overrides[patch.uuid]?.get(facet)
                     val value = when {
                         facet == PatchFacet.ADDRESS && row.address != null -> parseFacet(facet, row.address, target)
+                        facet == PatchFacet.NAME && row.name != null ->
+                            parseFacet(facet, buildJsonObject { put("displayName", row.name) }, target)
                         // Already this show's: the switch is on, and its value stays as it is.
                         stored != null -> null
                         // The switch's first value is the venue's, so turning it on changes nothing drawn or sent.
@@ -255,7 +271,7 @@ internal class VenueFixtureTools(private val state: State) {
                     Use.KEEP_MINE -> "$label: kept mine"
                     Use.SHOW -> "$label: this show's"
                 }
-                if (use != Use.KEEP_MINE && (facet == PatchFacet.ADDRESS || facet == PatchFacet.MEDIA)) done.reloads = true
+                if (use != Use.KEEP_MINE && facet.reloadsRig) done.reloads = true
             }
             if (facet == PatchFacet.ADDRESS && row.address != null) {
                 done.warnings += addressOverlaps(ShowOverrides.target(project, patch.id.value))
@@ -322,7 +338,7 @@ internal class VenueFixtureTools(private val state: State) {
 
         listOf("kind", "stageHidden").filter { it in row }.forEach {
             problems += "${VenueRigGuard.CODE_VENUE_OWNED}: $where: $it is the venue's on a venue fixture — a show can make only " +
-                "its address, position, focus and media its own (override_venue_fixtures); to change it for every show, edit the " +
+                "its address, position, focus, media and name its own (override_venue_fixtures); to change it for every show, edit the " +
                 "venue (projectId = the venue's id) and publish_venue"
         }
 

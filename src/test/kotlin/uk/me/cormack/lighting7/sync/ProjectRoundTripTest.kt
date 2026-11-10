@@ -13,6 +13,7 @@ import uk.me.cormack.lighting7.models.DaoShowOverride
 import uk.me.cormack.lighting7.models.DaoShowOverrides
 import uk.me.cormack.lighting7.models.FocusFacet
 import uk.me.cormack.lighting7.models.MediaFacet
+import uk.me.cormack.lighting7.models.NameFacet
 import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.PositionFacet
 import uk.me.cormack.lighting7.models.decodeFacet
@@ -166,7 +167,7 @@ class ProjectRoundTripTest {
             if (!path.endsWith(".json")) continue
             for (name in old) assertTrue(name !in text, "$path says $name")
         }
-        assertEquals(FormatVersionJson(formatVersion = 55, minReader = 55), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+        assertEquals(FormatVersionJson(formatVersion = 56, minReader = 56), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
     }
 
     /**
@@ -1804,6 +1805,35 @@ class ProjectRoundTripTest {
         }
     }
 
+    /**
+     * v56 (venue-rig-fixes plan D27): a v55 archive holds no Name override, so it reads as before —
+     * its overrides land and the venue fixture keeps the venue's name.
+     */
+    @Test
+    fun `a v55 archive of a show on a venue still imports`() {
+        val f = seedShowOnVenue(state)
+        ProjectExporter(state).export(f.showId, exportDirA)
+        val name = Files.list(exportDirA.resolve("showOverrides")).use { it.toList() }
+            .single { canonicalDecode(ShowOverrideJson.serializer(), Files.readString(it)).facet == PatchFacet.NAME }
+        Files.delete(name)
+        Files.writeString(
+            exportDirA.resolve("formatVersion.json"),
+            Files.readString(exportDirA.resolve("formatVersion.json"))
+                .replace("\"formatVersion\": $SUPPORTED_FORMAT_VERSION", "\"formatVersion\": 55")
+                .replace("\"minReader\": $SUPPORTED_FORMAT_VERSION", "\"minReader\": 55"),
+        )
+        val venueName = transaction(state.database) { RigScope.of(f.showId).patches().single { it.uuid == f.overriddenUuid }.displayName }
+
+        transaction(state.database) { deleteProjectRows(state, DaoProject[f.showId]) }
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) {
+            val rig = RigScope.of(imported.projectId)
+            val unit = rig.effective(rig.patches().single { it.uuid == f.overriddenUuid })
+            assertEquals(setOf(PatchFacet.ADDRESS, PatchFacet.POSITION, PatchFacet.MEDIA), unit.overridden)
+            assertEquals(venueName, unit.displayName)
+        }
+    }
+
     // ── v24: venues sync (venue plan session 4) ──────────────────────────────────
 
     /**
@@ -1849,11 +1879,13 @@ class ProjectRoundTripTest {
         val overrides = Files.list(exportDirA.resolve("showOverrides")).use { it.toList() }
             .map { canonicalDecode(ShowOverrideJson.serializer(), Files.readString(it)) }
             .associateBy { it.facet }
-        assertEquals(setOf(PatchFacet.ADDRESS, PatchFacet.POSITION, PatchFacet.MEDIA), overrides.keys)
+        assertEquals(setOf(PatchFacet.ADDRESS, PatchFacet.POSITION, PatchFacet.MEDIA, PatchFacet.NAME), overrides.keys)
         assertTrue(overrides.values.all { it.recordUuid == f.overriddenUuid.toString() })
         assertEquals(470, (decodeFacet(PatchFacet.ADDRESS, overrides.getValue(PatchFacet.ADDRESS).value) as AddressFacet).startChannel)
         assertEquals(f.boomUuid.toString(), (decodeFacet(PatchFacet.POSITION, overrides.getValue(PatchFacet.POSITION).value) as PositionFacet).riggingUuid)
         assertEquals("L202", (decodeFacet(PatchFacet.MEDIA, overrides.getValue(PatchFacet.MEDIA).value) as MediaFacet).gelCode)
+        // v56: a show's name for a venue fixture travels as a NAME override.
+        assertEquals("Panto SR special", (decodeFacet(PatchFacet.NAME, overrides.getValue(PatchFacet.NAME).value) as NameFacet).displayName)
 
         // v27: the show's own re-park of a venue park travels as a park, and its release of another
         // as `showParkReleases/{uuid}.json`, by channel; the venue's parks are the version's, not here.
@@ -1882,7 +1914,8 @@ class ProjectRoundTripTest {
             assertEquals(470, overridden.startChannel)
             assertEquals("L202", overridden.gelCode)
             assertEquals(f.boomUuid, overridden.rigging?.uuid)
-            assertEquals(setOf(PatchFacet.ADDRESS, PatchFacet.POSITION, PatchFacet.MEDIA), overridden.overridden)
+            assertEquals("Panto SR special", overridden.displayName, "the show's name for it")
+            assertEquals(setOf(PatchFacet.ADDRESS, PatchFacet.POSITION, PatchFacet.MEDIA, PatchFacet.NAME), overridden.overridden)
         }
     }
 
@@ -2082,8 +2115,8 @@ class ProjectRoundTripTest {
         val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
         transaction(state.database) {
             val rows = DaoShowOverride.find { DaoShowOverrides.project eq imported.projectId }.toList()
-            assertEquals(4, rows.size)
-            assertEquals(3, rows.count { it.recordUuid == f.overriddenUuid })
+            assertEquals(5, rows.size)
+            assertEquals(4, rows.count { it.recordUuid == f.overriddenUuid })
         }
         assertTrue(RESERVED_FOLDERS.isEmpty(), "nothing is reserved any more")
     }

@@ -120,7 +120,7 @@ class VenueUpdateTest : RouteIntegrationTest() {
         // Hides and overrides follow by uuid.
         transaction(state.database) {
             assertEquals(1, DaoShowHide.find { DaoShowHides.project eq f.showId }.count())
-            assertEquals(3, DaoShowOverride.find { DaoShowOverrides.project eq f.showId }.count())
+            assertEquals(4, DaoShowOverride.find { DaoShowOverrides.project eq f.showId }.count())
         }
         assertEquals(VenueBehind.NONE, ShowBehind.judge(state, f.showId).behind)
     }
@@ -149,7 +149,7 @@ class VenueUpdateTest : RouteIntegrationTest() {
 
         val review = client.get("/api/rest/projects/${f.showId}/venue/update").obj()
         val dropped = review.list("dropped")
-        assertEquals(3, dropped.count { it.str("kind") == "OVERRIDE" }, "its three overrides have nothing to apply to: $dropped")
+        assertEquals(4, dropped.count { it.str("kind") == "OVERRIDE" }, "its four overrides have nothing to apply to: $dropped")
         assertTrue(dropped.any { it.str("kind") == "LINK" && it.str("detail").contains("Panto specials") }, "the group member goes: $dropped")
         assertTrue(dropped.any { it.str("kind") == "LINK" && it.str("detail").contains("Panto follow") }, "the addition comes off the boom: $dropped")
         assertTrue(dropped.any { it.str("kind") == "LINK" && it.str("detail").contains("busk rig") }, "hex-3's busk tile goes: $dropped")
@@ -206,6 +206,21 @@ class VenueUpdateTest : RouteIntegrationTest() {
         val media = patch.list("facets").single { it.str("facet") == "MEDIA" }
         assertTrue(media.bool("drifted"), "$media")
         assertEquals("L299", media["venue"]!!.jsonObject.str("gelCode"))
+    }
+
+    @Test
+    fun `a venue rename under the show's name is listed with the facet drift`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val f = seedShowOnVenue(state)
+        val key = keyOf(f, f.overriddenUuid)
+        publish(f, "Rename $key") { draftPatch(f, key).displayName = "House special" }
+
+        val drift = client.get("/api/rest/projects/${f.showId}/venue/update").obj().list("drift").single()
+        assertEquals("NAME", drift.str("facet"))
+        assertEquals("House special", drift["venue"]!!.jsonObject.str("displayName"))
+        assertEquals("Panto SR special", drift["value"]!!.jsonObject.str("displayName"))
+        assertEquals("Panto SR special", drift.str("patchName"), "named as the show names it")
     }
 
     @Test

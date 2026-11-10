@@ -259,7 +259,7 @@ private fun DaoFixtureGroup.toDetailDto(rig: RigScope) = PatchGroupDetailDto(
         PatchGroupMemberDto(
             patchId = it.fixturePatch.id.value,
             fixtureKey = it.fixturePatch.key,
-            fixtureName = it.fixturePatch.displayName,
+            fixtureName = rig.nameOf(it.fixturePatch),
             fixtureTypeKey = it.fixturePatch.fixtureTypeKey,
             sortOrder = i,
         )

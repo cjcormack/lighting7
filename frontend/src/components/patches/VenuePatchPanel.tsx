@@ -17,10 +17,10 @@ import { LocateBox } from './LocateBox'
 
 /**
  * A **venue's** fixture opened from a show (venue plan sessions 3 and 5, `Show.dc.html`'s Edit
- * Fixture sheet): its identity — name, key, type, head — read-only, because it is the venue's, with a
- * way into the venue to change it for every show; its four **facets** — Address · Position · Focus ·
- * Media — each with a *Venue | This show* switch (`VenueFacetCard`), which makes that facet this
- * show's own; and *Hide in this show*.
+ * Fixture sheet): its identity — key, type, head — read-only, because it is the venue's, with a way
+ * into the venue to change it for every show; its **facets** — a Name card in the Identity block, then
+ * Address · Position · Focus · Media — each with a *Venue | This show* switch (`VenueFacetCard`), which
+ * makes that facet this show's own; and *Hide in this show*.
  *
  * Mounted in place of `EditPatchForm` wherever a patch opens — the Patch list's sheet and the Stage
  * view's editor panel — so neither host offers a form for a row it cannot write. The Stage view's drag
@@ -89,8 +89,6 @@ export function VenuePatchPanel({
             )}
           </div>
           <dl className="grid grid-cols-[88px_1fr] gap-x-3 gap-y-1.5 text-sm">
-            <dt className="text-muted-foreground">Name</dt>
-            <dd className="font-medium">{patch.displayName}</dd>
             <dt className="text-muted-foreground">Key</dt>
             <dd className="font-mono text-xs leading-5">{patch.key}</dd>
             <dt className="text-muted-foreground">Type</dt>
@@ -100,12 +98,13 @@ export function VenuePatchPanel({
             </dd>
           </dl>
           <p className="text-xs text-muted-foreground">
-            The venue&rsquo;s. A show can hide this fixture, not rename or retype it. Its address, position,
-            focus and media can each be this show&rsquo;s own below; to change it for every show, edit the
-            venue and publish.
+            The venue&rsquo;s. A show can hide this fixture and rename it for this show, not rekey or retype
+            it. Its address, position, focus and media can each be this show&rsquo;s own below; to change it
+            for every show, edit the venue and publish.
           </p>
+          <VenueFacetCard facet="NAME" patch={patch} ctx={ctx} />
         </section>
-        {PATCH_FACETS.map((facet) => (
+        {PATCH_FACETS.filter((facet) => facet !== 'NAME').map((facet) => (
           <VenueFacetCard key={facet} facet={facet} patch={patch} ctx={ctx} />
         ))}
         <LocateBox patch={patch} projectId={projectId} />

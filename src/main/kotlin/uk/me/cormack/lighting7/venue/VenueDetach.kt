@@ -214,6 +214,7 @@ class VenueDetach(private val state: State) {
             val e = effective.getValue(patch)
             val copy = DaoFixturePatch[copyRow(DaoFixturePatches, patch.id, DaoFixturePatches.project, show.id)]
             // The overridden facets' fields, as the rig sees them, over the snapshot row's.
+            copy.displayName = e.displayName
             copy.universeConfig = e.universeConfig
             copy.startChannel = e.startChannel
             copy.rigging = e.rigging

@@ -26,6 +26,7 @@ import {
   useDeletePatchMutation,
   useSetHeadNumbersMutation,
   useSetPatchColoursMutation,
+  useSetPatchFacetMutation,
   useSetPatchHiddenMutation,
   useUpdatePatchMutation,
 } from '@/store/patches'
@@ -285,6 +286,7 @@ export function PatchSheet({
   readOnly?: boolean
 }) {
   const [updatePatch] = useUpdatePatchMutation()
+  const [setPatchFacet] = useSetPatchFacetMutation()
   const [setHeadNumbers] = useSetHeadNumbersMutation()
   const [setPatchColours] = useSetPatchColoursMutation()
   const [deletePatch] = useDeletePatchMutation()
@@ -406,6 +408,21 @@ export function PatchSheet({
     (patchId: number, body: Record<string, unknown>) =>
       updatePatch({ projectId, patchId, ...body }).unwrap().catch(ignoreReportedError),
     [projectId, updatePatch],
+  )
+
+  /**
+   * A rename. A venue head's name is the show's Name override (`PUT …/facets/NAME`), never the patch
+   * PUT, which refuses a venue row; its key stays the venue's. A blank name takes the venue's back.
+   */
+  const rename = useCallback(
+    (patch: FixturePatch, displayName: string) => {
+      if (!isVenueOwned(patch)) return put(patch.id, { displayName })
+      const name = displayName.trim()
+      return setPatchFacet({ projectId, patchId: patch.id, facet: 'NAME', value: name === '' ? null : { displayName: name } })
+        .unwrap()
+        .catch(ignoreReportedError)
+    },
+    [projectId, put, setPatchFacet],
   )
 
   /**
@@ -939,7 +956,7 @@ export function PatchSheet({
         display: (row) => <SourceMark venue={isVenueOwned(row.patch)} />,
       },
       {
-        // A read-out: which of a venue head's four facets this show makes its own (venue plan
+        // A read-out: which of a venue head's five facets this show makes its own (venue plan
         // session 5, `Show.dc.html`'s *This show* column) — lit when overridden, amber when the
         // venue has changed one under the override. Set from the fixture sheet.
         key: 'facets',
@@ -1182,7 +1199,7 @@ export function PatchSheet({
         firstColumn={{
           label: 'Fixture',
           width: '220px',
-          render: (row, selected) => readOnly || isVenueOwned(row.patch) ? (
+          render: (row, selected) => readOnly ? (
             <>
               <PatchTagMark patch={row.patch} />
               <span className={cn('mx-1 min-w-0 flex-1 truncate text-sm', selected ? 'font-semibold' : 'font-medium')}>
@@ -1207,13 +1224,15 @@ export function PatchSheet({
                     value: row.patch.displayName,
                     label: 'Fixture name',
                     onCommit: (next) => {
-                      if (next !== row.patch.displayName) void put(row.patch.id, { displayName: next })
+                      if (next !== row.patch.displayName) void rename(row.patch, next)
                     },
                   })}
+                  allowEmpty={isVenueOwned(row.patch)}
+                  placeholder={isVenueOwned(row.patch) ? "Blank takes the venue's name" : undefined}
                   face={
                     <span
                       className={cn('mx-1 truncate text-sm', selected ? 'font-semibold' : 'font-medium')}
-                      title="Double-click to rename"
+                      title={isVenueOwned(row.patch) ? "Double-click to rename for this show" : 'Double-click to rename'}
                     >
                       {row.patch.displayName}
                     </span>
@@ -1317,7 +1336,7 @@ export function DraftMarker({ change, className }: { change: VenueChange; classN
 // ─── A show on a venue (venue plan session 3) ─────────────────────────
 
 /**
- * A venue head's four facet chips — Address · Position · Focus · Media — lit where this show
+ * A venue head's facet chips — Address · Position · Focus · Media · Name — lit where this show
  * overrides the facet and amber where the venue changed it under the override (drift).
  */
 export function FacetChips({ patch }: { patch: FixturePatch }) {

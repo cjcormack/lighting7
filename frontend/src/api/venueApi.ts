@@ -38,8 +38,8 @@ export interface VenueShow {
 /** `PARK` is a parked channel (output, by channel); `OTHER` is any table outside the rig a venue holds (a Look, a script), named by `table`. */
 export type VenueChangeKind = 'UNIVERSE' | 'PATCH' | 'PARK' | 'GROUP' | 'RIGGING' | 'REGION' | 'ELEMENT' | 'VIEWPOINT' | 'STAGE' | 'OTHER'
 export type VenueChangeType = 'ADDED' | 'REMOVED' | 'CHANGED'
-/** The plan's four facets (Address, Position, Focus, Media), plus Type, Identity and Other. */
-export type VenueFacet = 'ADDRESS' | 'TYPE' | 'IDENTITY' | 'POSITION' | 'FOCUS' | 'MEDIA' | 'OTHER'
+/** The plan's five facets (Name, Address, Position, Focus, Media), plus Type, Identity and Other. */
+export type VenueFacet = 'ADDRESS' | 'TYPE' | 'IDENTITY' | 'POSITION' | 'FOCUS' | 'MEDIA' | 'NAME' | 'OTHER'
 
 export interface VenueFieldChange {
   field: string

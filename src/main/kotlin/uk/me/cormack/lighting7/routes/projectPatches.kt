@@ -214,7 +214,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 request.headNumber?.let { n ->
                     headNumberHolder(project, n, exceptPatchId = null)?.let {
                         VenueRigGuard.refuseIfVenue(rig, it.project.id, "Head number $n")
-                        return@transaction Pair<FixturePatchDto?, String?>(null, headNumberTaken(n, it))
+                        return@transaction Pair<FixturePatchDto?, String?>(null, headNumberTaken(n, it, rig))
                     }
                 }
 
@@ -410,7 +410,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 if (headNumber != null) {
                     headNumberHolder(project, headNumber, exceptPatchId = patch.id.value)?.let {
                         VenueRigGuard.refuseIfVenue(rig, it.project.id, "Head number $headNumber")
-                        return@transaction Pair<FixturePatchDto?, String?>(null, headNumberTaken(headNumber, it))
+                        return@transaction Pair<FixturePatchDto?, String?>(null, headNumberTaken(headNumber, it, rig))
                     }
                 }
 
@@ -1128,9 +1128,9 @@ data class FixturePatchDto(
     val extraPlacements: List<PatchPlacementDto> = emptyList(),
     /**
      * Whose the patch is in the rig it was read in (venue plan session 3): `SHOW` for the project's
-     * own, `VENUE` for its venue's at the pinned version. A venue row's identity — name, key, type,
-     * head — is the venue's, and every write to it through a show is refused with `VENUE_OWNED`; it
-     * can only be hidden (`PUT …/hidden`).
+     * own, `VENUE` for its venue's at the pinned version. A venue row's identity — key, type, head —
+     * is the venue's, and every write to it through a show's patch PUT is refused with `VENUE_OWNED`;
+     * a show hides it (`PUT …/hidden`) or overrides a facet, its name among them (`PUT …/facets/{facet}`).
      */
     val owner: RigOwner = RigOwner.SHOW,
     /** The universe the patch sits on (as the rig sees it), by uuid — what an Address facet names. */
@@ -1284,7 +1284,7 @@ internal fun DaoFixturePatch.toDto(
         id = id.value,
         uuid = uuid.toString(),
         key = key,
-        displayName = displayName,
+        displayName = e.displayName,
         headNumber = headNumber,
         fixtureTypeKey = fixtureTypeKey,
         startChannel = e.startChannel,
@@ -1422,8 +1422,8 @@ internal fun parseHeadNumber(element: JsonElement?): Result<Int?> {
 internal fun headNumberHolder(project: DaoProject, number: Int, exceptPatchId: Int?): DaoFixturePatch? =
     RigScope.of(project).patches(DaoFixturePatches.headNumber eq number).firstOrNull { it.id.value != exceptPatchId }
 
-internal fun headNumberTaken(number: Int, holder: DaoFixturePatch): String =
-    "Head number $number is already '${holder.displayName}' (${holder.key})"
+internal fun headNumberTaken(number: Int, holder: DaoFixturePatch, rig: RigScope): String =
+    "Head number $number is already '${rig.nameOf(holder)}' (${holder.key})"
 
 /**
  * The patch PUT keys that change a show group's membership, not the patch (venue plan D12): with a
@@ -1467,7 +1467,7 @@ internal fun headNumberClashes(
                 if (id !in assigned || id in refused) continue
                 val other = byId.getValue(ids.first { it != id })
                 failed[id] = VenueRigGuard.takenByVenue(rig, other.project.id, "Head number $number")?.message
-                    ?: headNumberTaken(number, other)
+                    ?: headNumberTaken(number, other, rig)
                 changed = true
             }
         }

@@ -123,7 +123,7 @@ class TriggerIndex private constructor(
             val rig = RigScope.of(project)
             val patches = rig.patches().toList()
             val reservedById = patches.mapNotNull { p ->
-                FixtureTriggers.reservedNamesForTypeKey(p.fixtureTypeKey).takeIf { it.isNotEmpty() }?.let { p.id.value to (p.key to (p.displayName to it)) }
+                FixtureTriggers.reservedNamesForTypeKey(p.fixtureTypeKey).takeIf { it.isNotEmpty() }?.let { p.id.value to (p.key to (rig.nameOf(p) to it)) }
             }.toMap()
             if (reservedById.isEmpty()) return EMPTY
             val groups = rig.groups().mapNotNull { g ->

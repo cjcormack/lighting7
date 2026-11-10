@@ -7,6 +7,7 @@ import uk.me.cormack.lighting7.models.FacetValue
 import uk.me.cormack.lighting7.models.FocusFacet
 import uk.me.cormack.lighting7.models.HideKind
 import uk.me.cormack.lighting7.models.MediaFacet
+import uk.me.cormack.lighting7.models.NameFacet
 import uk.me.cormack.lighting7.models.ParkAddress
 import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.PositionFacet
@@ -68,9 +69,10 @@ object VenueAttachPairing {
     data class PlacementRow(val id: Int, val uuid: UUID, val label: String?)
 
     /**
-     * One patch: its identity, its four facets as `venueFacetOf` reads the row (references by uuid), and
-     * the rest of what a venue patch holds that is not a facet ([attributes]: name, stage-hidden,
-     * infrastructure, a hand-set kind, placement labels), which a pair takes from the venue.
+     * One patch: its identity, its facets as `venueFacetOf` reads the row (references by uuid; its name
+     * is the Name facet, so a pair differing only by name keeps the show's as an override), and the rest
+     * of what a venue patch holds that is not a facet ([attributes]: stage-hidden, infrastructure, a
+     * hand-set kind, placement labels), which a pair takes from the venue.
      */
     data class PatchRow(
         val id: Int,
@@ -546,6 +548,7 @@ object VenueAttachPairing {
                 )
                 is FocusFacet -> value.copy(placements = value.placements.mapNotNull { p -> placement(p.placementUuid)?.let { p.copy(placementUuid = it) } })
                 is MediaFacet -> value.copy(placements = value.placements.mapNotNull { p -> placement(p.placementUuid)?.let { p.copy(placementUuid = it) } })
+                is NameFacet -> value
             }
         }
 

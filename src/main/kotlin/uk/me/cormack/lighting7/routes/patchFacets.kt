@@ -14,6 +14,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
+import org.jetbrains.exposed.v1.core.VarCharColumnType
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -27,6 +28,7 @@ import uk.me.cormack.lighting7.fixture.lantern.lampWattsError
 import uk.me.cormack.lighting7.fixture.locate.StoredLocate
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.models.AddressFacet
+import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
 import uk.me.cormack.lighting7.models.EffectivePatch
@@ -35,6 +37,7 @@ import uk.me.cormack.lighting7.models.FocusFacet
 import uk.me.cormack.lighting7.models.MAX_FIXTURE_LENGTH_M
 import uk.me.cormack.lighting7.models.MIN_FIXTURE_LENGTH_M
 import uk.me.cormack.lighting7.models.MediaFacet
+import uk.me.cormack.lighting7.models.NameFacet
 import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.PlacementFocus
 import uk.me.cormack.lighting7.models.PlacementMedia
@@ -61,7 +64,8 @@ import java.util.UUID
  *   the Patch list rings one); Position the stage ranges, a rigging of this rig, a length only on a type
  *   that takes one; Focus the lantern library and the type's focus rules, and a stored locate only on
  *   units of the type that pan and tilt (`StoredLocate.parse`); Media the type's loadable
- *   settings. A placement is named by its venue uuid and must be one of the patch's.
+ *   settings; Name a `displayName` that is not blank (no uniqueness check, as for a show's own patch). A
+ *   placement is named by its venue uuid and must be one of the patch's.
  * - `POST …/facets/{facet}/keep-mine` — *Keep mine*: the override stays and its base becomes the
  *   venue's current value, so the drift clears.
  *
@@ -70,7 +74,7 @@ import java.util.UUID
  * and a version (`VENUE_VERSION_READ_ONLY`) are refused before this runs (`projectWriteGuard.kt`), and
  * anything that is not a show on a venue, or a show's own patch, is 409 `NOT_A_VENUE_RECORD`. Stored
  * data, ungated by the current project, as every patch route is; an Address or Media write to the live
- * show reloads it.
+ * show reloads it, as a Name write does (the loader names each fixture from the effective patch).
  */
 internal fun Route.routeApiRestPatchFacets(state: State) {
     put<ProjectPatchFacetResource> { resource ->
@@ -109,6 +113,10 @@ internal fun Route.routeApiRestPatchFacets(state: State) {
     }
 }
 
+/** A change to this facet rebuilds the live rig: the loader builds from the address, the name and the media. */
+internal val PatchFacet.reloadsRig: Boolean
+    get() = this == PatchFacet.ADDRESS || this == PatchFacet.MEDIA || this == PatchFacet.NAME
+
 /** What a facet write answers: the patch as the rig now sees it, and any overlap an Address landed on. */
 @Serializable
 data class FacetWriteResponse(
@@ -127,10 +135,10 @@ private fun facetResponse(target: ShowOverrides.Target, changed: Boolean, warnin
 private fun announceFacetChange(state: State, projectId: Int, facet: PatchFacet, changed: Boolean, patch: FixturePatchDto) {
     if (!changed) return
     val current = state.projectManager.currentProject.id.value == projectId
-    // The loader builds a fixture at its address and carries its fitted media in the patch metadata;
-    // position and focus are drawn, never built from — but for Focus's stored locate, which the patch
-    // metadata carries for Locate and is refreshed in place.
-    if ((facet == PatchFacet.ADDRESS || facet == PatchFacet.MEDIA) && current) {
+    // The loader builds a fixture at its address, names it, and carries its fitted media in the patch
+    // metadata; position and focus are drawn, never built from — but for Focus's stored locate, which
+    // the patch metadata carries for Locate and is refreshed in place.
+    if (facet.reloadsRig && current) {
         DbFixtureLoader.loadFixtures(projectId, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
     } else if (facet == PatchFacet.FOCUS && current) {
         refreshStoredLocate(state, patch.key, patch.locate)
@@ -177,6 +185,7 @@ internal fun parseFacet(facet: PatchFacet, raw: JsonElement, target: ShowOverrid
         PatchFacet.POSITION -> parsePosition(reader, target, typeKey)
         PatchFacet.FOCUS -> parseFocus(reader, obj, target, typeKey)
         PatchFacet.MEDIA -> parseMedia(reader, obj, target, typeKey)
+        PatchFacet.NAME -> parseName(reader)
     }
     if (reader.problems.isNotEmpty()) throw invalid(reader.problems)
     return value
@@ -390,6 +399,20 @@ private fun parseMedia(reader: FieldReader, obj: JsonObject, target: ShowOverrid
         uuid?.let { PlacementMedia(it, m) }
     }
     return MediaFacet(gel, media, placements)
+}
+
+private val MAX_DISPLAY_NAME = (DaoFixturePatches.displayName.columnType as VarCharColumnType).colLength
+
+/** A Name: not blank, and as long as a patch's own name may be. No uniqueness check, as for a show's own patch. */
+private fun parseName(reader: FieldReader): NameFacet {
+    reader.allow(setOf("displayName"))
+    val before = reader.problems.size
+    val name = reader.string("displayName")
+    when {
+        name == null -> if (reader.problems.size == before) reader.problems += "displayName is required and may not be blank"
+        name.length > MAX_DISPLAY_NAME -> reader.problems += "displayName is ${name.length} characters (max $MAX_DISPLAY_NAME)"
+    }
+    return NameFacet(name.orEmpty())
 }
 
 private fun parseMediaField(reader: FieldReader, element: JsonElement?, where: String, typeKey: String): FittedMedia? {

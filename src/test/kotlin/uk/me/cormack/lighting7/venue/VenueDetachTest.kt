@@ -118,6 +118,7 @@ class VenueDetachTest : RouteIntegrationTest() {
             val patch = DaoFixturePatch.find { (DaoFixturePatches.project eq f.showId) and (DaoFixturePatches.uuid eq f.overriddenUuid) }.single()
             assertEquals(470, patch.startChannel)
             assertEquals("L202", patch.gelCode)
+            assertEquals("Panto SR special", patch.displayName, "the show's name for it")
             assertEquals(f.boomUuid, patch.rigging?.uuid)
             assertEquals(f.showId, patch.rigging!!.project.id.value)
             assertEquals(15.0, patch.baseYawDeg)
@@ -180,7 +181,7 @@ class VenueDetachTest : RouteIntegrationTest() {
             assertEquals(1, DaoProject[f.showId].venueVersion, "the pin stays")
             assertNull(DaoProject[f.showId].detachedFromVenueUuid, "no origin is written by a dry run")
             assertEquals(1, DaoShowHide.find { DaoShowHides.project eq f.showId }.count())
-            assertEquals(3, DaoShowOverride.find { DaoShowOverrides.project eq f.showId }.count())
+            assertEquals(4, DaoShowOverride.find { DaoShowOverrides.project eq f.showId }.count())
         }
         assertEquals(ownBefore, ownCounts(f.showId), "no row was written")
         assertEquals(scopeBefore, scopeUuids(f.showId))

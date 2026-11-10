@@ -4,6 +4,7 @@ package uk.me.cormack.lighting7.routes
 import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fixture.CommandIndex
 
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.CueTargetDto
 
 import kotlinx.serialization.Serializable
@@ -414,7 +415,9 @@ internal fun DaoCue.toCueDetails(
         canDelete = isCurrentProject,
         scenery = cueSceneryOf(this.id).map { it.toDto() },
         trackedScenery = entry?.let(::trackedSceneryAt).orEmpty(),
-        events = cueEventsOf(this.id).map { it.toDto() },
+        events = cueEventsOf(this.id).let { events ->
+            if (events.isEmpty()) emptyList() else RigScope.of(this.project).let { rig -> events.map { it.toDto(rig) } }
+        },
         speedMasters = this.speedMasters,
         moveInDark = moveInDarkSettings.let { setting -> setting.toDto(unknownLive = setting.live.filterNot { fixtures.hasHead(it) }) },
         entries = slots.map { it.toPlaceDto() },
