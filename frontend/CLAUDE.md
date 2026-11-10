@@ -7448,6 +7448,24 @@ Scenery-programmer plan session 5 (D13, D14); the mechanism is `docs/show-mode-e
   while the book is mounted — the Stage view's Next GO source alone does not (stage-vis doc).
   `FU-SCENERY-FLY-DEPT` is a fly department of its own (FQ markers, its own lane), not built.
 
+#### The Prompt Book's follow scroll
+
+The book scrolls to the live cue's anchor on every new live **sequence** — a follower firing has no
+line, so it moves nothing — and once when its sheets are laid out, to the live cue (or a `?cue=`
+link, which the follow then leaves alone). `scrollToEntry` keeps one identity for the session, so a
+book refetch never re-runs it. **It waits while the operator works in the script** (venue-rig-fixes
+plan D29): `ScriptViewer` reports `onHoldChange(true)` while a pointer is down in it, a text
+selection is live in it or the selection's toolbar is open, unlocked, and `useHeldFollow`
+(`lib/promptBook/`) holds the scroll until the hold ends, then scrolls once to wherever the show then
+is; a hold with no GO behind it scrolls nothing, and nor does one the viewer drops by unmounting
+(`onHoldChange(false, true)`). A scroll under a selection carried it out of view, past the render
+window (where its page unmounted and the DOM selection went with it), or under a drag, running the
+selection on to whatever came under the pointer. The first and last pages of a selection also stay
+mounted whatever the render window says — the pages between it may unmount, since only a boundary's
+text layer holds the selection. Locked, nothing holds, and the book follows as before. The rail's
+clicks, a desync warning's, *Jump to live* and a `?cue=` link are the operator's own: they never wait,
+and each cancels a follow still waiting, so the book stays where the operator took it.
+
 **Timed FX**: Layers and ad-hoc FX can have optional timing (delayMs, intervalMs, randomWindowMs) to fire after a delay or on a recurring interval. Immediate (no timing) is the default. A timed layer re-cooks the whole cue when it fires rather than appending its rows, so an in-flight crossfade weight survives.
 
 **Script hooks** (triggers) automate FX_APPLICATION script execution on cue lifecycle events:

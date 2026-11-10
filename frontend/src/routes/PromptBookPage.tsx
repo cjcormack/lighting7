@@ -47,6 +47,7 @@ import { useCardViewMode } from '../lib/promptBook/useCardViewMode'
 import { useBookAnchors } from '../lib/promptBook/useBookAnchors'
 import { useAnnotationEditor } from '../lib/promptBook/useAnnotationEditor'
 import { useScriptDocument } from '../lib/promptBook/useScriptDocument'
+import { useHeldFollow } from '../lib/promptBook/useHeldFollow'
 import { ScriptViewer, type ScriptViewerHandle } from '../components/promptbook/ScriptViewer'
 import { CueAnchorPickerSheet } from '../components/promptbook/CueAnchorPickerSheet'
 import { ShowHeader } from '../components/ShowHeader'
@@ -270,10 +271,6 @@ export function PromptBookViewerPage() {
   }, [warnings])
   const warningEntryIds = useMemo(() => new Set(warnings.map((w) => w.entryId)), [warnings])
 
-  const jumpToLive = useCallback(() => {
-    if (activeEntryId != null) scrollToEntry(activeEntryId)
-  }, [activeEntryId, scrollToEntry])
-
   /**
    * **`?cue=` is the arrival contract, the mirror of the one this page mints for Show.** The cue
    * sheet's Book column asks "where is this cue in the book?", so it lands here at that cue's
@@ -295,6 +292,37 @@ export function PromptBookViewerPage() {
   const linkedCueId = cueParam ? Number(cueParam) : null
   // A cue in several places lands on its first.
   const linkedEntryId = linkedCueId != null ? (firstEntryByCue.get(linkedCueId) ?? null) : null
+
+  // ── Runtime emphasis: scroll the live cue into view on advance. ──
+  // The same operation the toolbar's "jump to live" performs, so the two cannot drift. Keyed on the
+  // sequence, not the cue: a follower firing has no line to go to, and must not pull a reader back
+  // to its head.
+  // `scrollToCue` holds one identity for the session, so an unrelated book refetch (edit, WS echo)
+  // can't re-run this and yank the viewport while the operator reads ahead.
+  // Not while a `?cue=` link is being honoured — the two would fight over the viewport, and the
+  // one the operator asked for is the link. Held while the operator selects in the script.
+  const liveSequenceEntryId =
+    activeEntryId != null ? (followByEntry.get(activeEntryId)?.headEntryId ?? activeEntryId) : null
+  const jumpToLiveUnlessLinked = useCallback(() => {
+    if (linkedCueId != null || liveSequenceEntryId == null) return
+    scrollToEntry(liveSequenceEntryId)
+  }, [liveSequenceEntryId, linkedCueId, scrollToEntry])
+  const { onHoldChange: handleScriptHold, cancel: cancelFollow } = useHeldFollow(jumpToLiveUnlessLinked)
+
+  // Every scroll the operator asks for drops a follow still waiting on a hold, so the book stays
+  // where they took it.
+  const scrollForOperator = useCallback(
+    (entryId: number) => {
+      cancelFollow()
+      scrollToEntry(entryId)
+    },
+    [cancelFollow, scrollToEntry],
+  )
+  const jumpToLive = useCallback(() => {
+    if (activeEntryId != null) scrollForOperator(activeEntryId)
+  }, [activeEntryId, scrollForOperator])
+
+  // The `?cue=` link's own scroll, consumed once per id as above.
   const consumedLinkRef = useRef<number | null>(null)
   useEffect(() => {
     if (linkedCueId == null) {
@@ -304,29 +332,13 @@ export function PromptBookViewerPage() {
     if (consumedLinkRef.current === linkedCueId) return
     if (linkedEntryId == null) return
     consumedLinkRef.current = linkedCueId
-    scrollToEntry(linkedEntryId)
-  }, [linkedEntryId, linkedCueId, scrollToEntry])
-
-  // ── Runtime emphasis: scroll the live cue into view on advance. ──
-  // The same operation the toolbar's "jump to live" performs, so the two cannot drift. Keyed on the
-  // sequence, not the cue: a follower firing has no line to go to, and must not pull a reader back
-  // to its head.
-  // `scrollToCue` holds one identity for the session, so an unrelated book refetch (edit, WS echo)
-  // can't re-run this and yank the viewport while the operator reads ahead.
-  // Not while a `?cue=` link is being honoured — the two would fight over the viewport, and the
-  // one the operator asked for is the link.
-  const liveSequenceEntryId =
-    activeEntryId != null ? (followByEntry.get(activeEntryId)?.headEntryId ?? activeEntryId) : null
-  const jumpToLiveUnlessLinked = useCallback(() => {
-    if (linkedCueId != null || liveSequenceEntryId == null) return
-    scrollToEntry(liveSequenceEntryId)
-  }, [liveSequenceEntryId, linkedCueId, scrollToEntry])
-  useEffect(jumpToLiveUnlessLinked, [jumpToLiveUnlessLinked])
+    scrollForOperator(linkedEntryId)
+  }, [linkedEntryId, linkedCueId, scrollForOperator])
 
   /**
    * …and the one case that stability makes unreachable: **opening the book while the show runs**.
    * The playhead lands first — the program state is a far smaller query than the book — so the
-   * effect above fires while `viewerRef` is still null (the guards below are still rendering a
+   * follow above fires while `viewerRef` is still null (the guards below are still rendering a
    * spinner), and then never again, because neither `activeCueId` nor `scrollToCue` moves when the
    * book finally arrives. The book sat at page one until the next GO.
    *
@@ -337,7 +349,7 @@ export function PromptBookViewerPage() {
   const handlePagesReady = useStableCallback(() => {
     if (linkedCueId != null && linkedEntryId != null) {
       consumedLinkRef.current = linkedCueId
-      scrollToEntry(linkedEntryId)
+      scrollForOperator(linkedEntryId)
       return
     }
     jumpToLive()
@@ -416,15 +428,15 @@ export function PromptBookViewerPage() {
   // select the line.
   const handleCueClick = useCallback(
     (cue: FlatCue) => {
-      scrollToEntry(cue.entryId)
+      scrollForOperator(cue.entryId)
       if (!anchorByEntry.has(cue.entryId) && !followByEntry.has(cue.entryId) && !locked) togglePlacing(cue.entryId)
     },
-    [scrollToEntry, anchorByEntry, followByEntry, locked, togglePlacing],
+    [scrollForOperator, anchorByEntry, followByEntry, locked, togglePlacing],
   )
 
   const handleWarningClick = useCallback(
-    (warning: DesyncWarning) => scrollToEntry(warning.entryId),
-    [scrollToEntry],
+    (warning: DesyncWarning) => scrollForOperator(warning.entryId),
+    [scrollForOperator],
   )
 
   // Start/Stop the show in place from the header (parity with Program/Run). State is
@@ -705,6 +717,7 @@ export function PromptBookViewerPage() {
               onAnnotationClick={ann.open}
               onDocumentError={doc.onDocumentError}
               onPagesReady={handlePagesReady}
+              onHoldChange={handleScriptHold}
               sceneryByEntry={sceneryByEntry}
               onOpenCueCard={openCueCard}
             />

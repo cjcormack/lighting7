@@ -14,6 +14,7 @@ import 'react-pdf/dist/Page/TextLayer.css'
 import { Loader2 } from 'lucide-react'
 import { clamp, cn } from '@/lib/utils'
 import { useMountedRef } from '@/hooks/useMountedRef'
+import { useStableCallback } from '@/hooks/useStableCallback'
 import type { AnnotationDto, AnnotationKind, CueAnchorDto, Rect, Region } from '../../api/promptBooksApi'
 import type { FollowTail } from '../../lib/promptBook/followers'
 import {
@@ -207,6 +208,13 @@ interface ScriptViewerProps {
   sceneryByEntry?: Map<number, string>
   /** Open an entry's card in the rail — the glyph's tap. Must be stable: this component is memoized. */
   onOpenCueCard?: (entryId: number) => void
+  /**
+   * True while the operator is working in the script, unlocked — a pointer down in it, a text
+   * selection in it, or the selection's toolbar open — and false again when that ends. The page
+   * holds its follow scroll meanwhile. A hold the viewer drops by unmounting is reported as
+   * `(false, true)`.
+   */
+  onHoldChange?: (held: boolean, unmounted?: boolean) => void
 }
 
 /**
@@ -246,6 +254,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     onPagesReady,
     sceneryByEntry,
     onOpenCueCard,
+    onHoldChange,
   },
   ref,
 ) {
@@ -480,9 +489,14 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
   // a book refetch (WS echo) can remount pages and drop the live DOM selection.
   const [selection, setSelection] = useState<{ region: Region; anchor: { x: number; y: number } } | null>(null)
 
+  // The first and last pages of a text selection in the script, kept mounted outside the render
+  // window: an unmounted text layer holding a boundary takes the DOM selection with it.
+  const [selectionEnds, setSelectionEnds] = useState<SelectionEnds | null>(null)
+
   const clearSelection = useCallback(() => {
     window.getSelection()?.removeAllRanges()
     setSelection(null)
+    setSelectionEnds(null)
   }, [])
 
   const captureSelection = useCallback(() => {
@@ -513,10 +527,43 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     const onSel = () => {
       const s = window.getSelection()
       if (!s || s.isCollapsed) setSelection(null)
+      const ends = selectionEndsOf(s, containerRef.current, pageElsRef.current)
+      setSelectionEnds((prev) => (prev?.[0] === ends?.[0] && prev?.[1] === ends?.[1] ? prev : ends))
     }
     document.addEventListener('selectionchange', onSel)
     return () => document.removeEventListener('selectionchange', onSel)
   }, [])
+
+  // A pointer down anywhere in the script, overlays included, until it comes up — wherever it
+  // comes up, since a drag can leave the pane.
+  const [pointerHeld, setPointerHeld] = useState(false)
+  useEffect(() => {
+    if (!pointerHeld) return
+    const release = () => setPointerHeld(false)
+    window.addEventListener('pointerup', release)
+    window.addEventListener('pointercancel', release)
+    window.addEventListener('blur', release)
+    return () => {
+      window.removeEventListener('pointerup', release)
+      window.removeEventListener('pointercancel', release)
+      window.removeEventListener('blur', release)
+    }
+  }, [pointerHeld])
+
+  const held = !locked && (pointerHeld || selection != null || selectionEnds != null)
+  const reportHold = useStableCallback(onHoldChange)
+  const reportedHeldRef = useRef(false)
+  useEffect(() => {
+    if (reportedHeldRef.current === held) return
+    reportedHeldRef.current = held
+    reportHold(held)
+  }, [held, reportHold])
+  useEffect(
+    () => () => {
+      if (reportedHeldRef.current) reportHold(false, true)
+    },
+    [reportHold],
+  )
 
   // Locking drops any pending selection toolbar and clears the DOM selection so no
   // stray blue highlight lingers after an (auto-)relock.
@@ -524,6 +571,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     if (locked) {
       window.getSelection()?.removeAllRanges()
       setSelection(null)
+      setSelectionEnds(null)
     }
   }, [locked])
 
@@ -646,6 +694,8 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
   }, [scheduleOverlayFrame])
 
   const onPointerUp = useCallback(() => {
+    // Here, beside the selection's capture, so the hold never lapses between the two.
+    setPointerHeld(false)
     const drag = dragRef.current
     if (drag) {
       dragRef.current = null
@@ -678,6 +728,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
   // A cancelled pointer (touch interruption, OS gesture, lost capture) aborts the
   // in-flight gesture — it must NOT commit a nudge or annotation like pointer-up.
   const onPointerCancel = useCallback(() => {
+    setPointerHeld(false)
     dragRef.current = null
     drawRef.current = null
     setDragOverride(null)
@@ -711,6 +762,9 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
   return (
     <div
       ref={containerRef}
+      onPointerDownCapture={(e) => {
+        if (containerRef.current?.contains(e.target as Node)) setPointerHeld(true)
+      }}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
@@ -837,7 +891,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
                     // sits flush in it.
                     style={{ width: pageWidth, height: Math.floor(pageWidth * ratio) }}
                   >
-                    {rendered.has(i) && (
+                    {(rendered.has(i) || selectionEnds?.includes(i)) && (
                       <PdfPage
                         index={i}
                         width={pageWidth}
@@ -999,6 +1053,28 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     </div>
   )
 }))
+
+/** The indices of the first and last pages a selection reaches. */
+type SelectionEnds = readonly [number, number]
+
+/** The pages a non-collapsed selection inside the script starts and ends on, or null for none. */
+function selectionEndsOf(
+  selection: Selection | null,
+  container: HTMLElement | null,
+  pageEls: Map<number, HTMLDivElement>,
+): SelectionEnds | null {
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0 || !container) return null
+  const range = selection.getRangeAt(0)
+  if (!container.contains(range.commonAncestorContainer)) return null
+  let first = Infinity
+  let last = -Infinity
+  for (const [index, el] of pageEls) {
+    if (!range.intersectsNode(el)) continue
+    first = Math.min(first, index)
+    last = Math.max(last, index)
+  }
+  return first === Infinity ? null : [first, last]
+}
 
 /** Compute the default band rect for a click-placed anchor (scanned fallback). */
 function placedAnchorRect(page: number, y: number): Rect {

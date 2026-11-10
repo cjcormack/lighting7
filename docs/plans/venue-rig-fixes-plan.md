@@ -1,6 +1,6 @@
 # After the rig session
 
-> **Document status: ACTIVE — agreed 2026-11-09, session 1 in progress.** Calls decided 2026-11-09
+> **Document status: DONE — sessions 1–9 shipped 2026-11-09 to 2026-11-10.** Calls decided 2026-11-09
 > (§3).
 
 The design record is [`venue-rig-fixes-design/INDEX.md`](venue-rig-fixes-design/INDEX.md), and its
@@ -410,8 +410,8 @@ run `./gradlew compileTestKotlin` and the touched packages' tests where they tou
 | 5 | One colour editor for FX | merged | `claude/venue-rig-fixes-1fe92b` | [#417](https://github.com/cjcormack/lighting7/pull/417) | `35394c6` |
 | 6 | Path's Size | merged | `claude/lucid-keller-q7h8l3` | [#418](https://github.com/cjcormack/lighting7/pull/418) | `9f0b797` |
 | 7 | Move in dark's instant rows | merged | `claude/brave-darwin-jeducv` | [#420](https://github.com/cjcormack/lighting7/pull/420) | `4b5ccf3` |
-| 8 | A show's name for a venue fixture | in review | `claude/eloquent-planck-9djcze` | | |
-| 9 | Selecting in the Prompt Book while the show plays | planned | | | |
+| 8 | A show's name for a venue fixture | merged | `claude/eloquent-planck-9djcze` | [#421](https://github.com/cjcormack/lighting7/pull/421) | `afb9b04` |
+| 9 | Selecting in the Prompt Book while the show plays | in review | `claude/focused-gates-d819o7` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -745,6 +745,21 @@ D28, D29.
 - Then `docs/plans/manual-validation.md` gains `FU-MANUAL-RIG-SESSION-FIXES` (§6), and this plan's
   status line says DONE.
 - Local: `check:quick`.
+- *As built:* the reproduction ran in Chromium (Playwright) against a cloud-session desk, an 8-page
+  PDF with cues anchored on pages 1, 2, 4, 6 and 8 and a follow out of the third. A selection
+  **survived** a GO and a follow whose scroll stayed within a viewport of it, though the scroll carried
+  it out of sight and left the toolbar floating where the selection had been; a GO TO onto a cue five
+  pages on scrolled its page out of the render window, the page unmounted, and the selection and its
+  toolbar went (§1.13's second suspect, set off by the first); and a GO landing mid-drag scrolled the
+  book under the pointer, so the selection ran on from 221 characters to 1 958. So D29's fix as
+  written: `ScriptViewer` reports `onHoldChange` — a pointer down in the script (overlays included,
+  released wherever it comes up), a live selection in it or its toolbar open, unlocked only, and
+  `(false, true)` on unmount — and `lib/promptBook/useHeldFollow.ts` holds the page's follow scroll
+  meanwhile, running it once when the hold ends and not at all when no GO came, the viewer unmounted
+  or the operator moved the book themselves (a rail or warning click, *Jump to live*, a `?cue=` link
+  cancel it); the first and last pages of a selection stay mounted, not every page between. The same run after the fix: nothing moved under a held selection or drag, a click
+  that dropped it or a *Mark cut* that used it then scrolled to the live cue, a hold with no GO
+  scrolled nothing, and a selection on page 1 survived a hand scroll to page 7 with page 1 kept mounted.
 
 ## 6. Operator checks
 
