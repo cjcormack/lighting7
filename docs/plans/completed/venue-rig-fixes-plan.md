@@ -1,6 +1,6 @@
 # After the rig session
 
-> **Document status: DONE — sessions 1–9 shipped 2026-11-09 to 2026-11-10.** Calls decided 2026-11-09
+> **Document status: DONE — sessions 1–9 merged 2026-11-09 to 2026-11-10.** Calls decided 2026-11-09
 > (§3).
 
 The design record is [`venue-rig-fixes-design/INDEX.md`](venue-rig-fixes-design/INDEX.md), and its
@@ -411,7 +411,7 @@ run `./gradlew compileTestKotlin` and the touched packages' tests where they tou
 | 6 | Path's Size | merged | `claude/lucid-keller-q7h8l3` | [#418](https://github.com/cjcormack/lighting7/pull/418) | `9f0b797` |
 | 7 | Move in dark's instant rows | merged | `claude/brave-darwin-jeducv` | [#420](https://github.com/cjcormack/lighting7/pull/420) | `4b5ccf3` |
 | 8 | A show's name for a venue fixture | merged | `claude/eloquent-planck-9djcze` | [#421](https://github.com/cjcormack/lighting7/pull/421) | `afb9b04` |
-| 9 | Selecting in the Prompt Book while the show plays | in review | `claude/focused-gates-d819o7` | | |
+| 9 | Selecting in the Prompt Book while the show plays | merged | `claude/focused-gates-d819o7` | [#422](https://github.com/cjcormack/lighting7/pull/422) | `30f55d6` |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -764,7 +764,7 @@ D28, D29.
 ## 6. Operator checks
 
 Recorded by session 9 as `FU-MANUAL-RIG-SESSION-FIXES` in
-[`manual-validation.md`](manual-validation.md), at the desk: QLab sending from an address inside a
+[`manual-validation.md`](../manual-validation.md), at the desk: QLab sending from an address inside a
 range; the OSC tab's address list beside QLab; Safari on the Show view, wheel over the header and
 past the end of a long list; a blinder stack with follows reading no *too quick*; a Shehds' FX
 colour offering W; a venue fixture renamed in the show; text anchored in the Prompt Book mid-show.

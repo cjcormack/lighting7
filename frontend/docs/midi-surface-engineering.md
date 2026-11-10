@@ -4,8 +4,8 @@
 an inspector for whichever control you click or touch on the desk (**editor A**), or the same bindings
 as a table (**editor C**), the only view below tablet width.
 
-The plan is `docs/plans/surface-setup-plan.md` (sessions 1–3 here; jobs, new functions and *Assign to
-surface…* come later) and its record `docs/plans/surface-setup-design/`; the earlier picture's layout
+The plan is `docs/plans/completed/surface-setup-plan.md` and its record
+`docs/plans/completed/surface-setup-design/`; the earlier picture's layout
 authority is `docs/plans/completed/midi-surface-design/`. The backend contract is
 `docs/midi-control-surface-engineering.md`. This file is the client half: the things that will bite.
 
