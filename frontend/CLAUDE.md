@@ -2982,7 +2982,7 @@ snapshot, for `dragOverlayRegistry`'s stated reason.
 (`ControlSurfaceType.layout`) with an inspector per control (editor A), a region's job (editor B,
 `SurfaceJobsPanel`), or the same bindings as a mapping sheet (editor C), the only view below tablet width (surface-setup plan session 3). Read
 [`docs/midi-surface-engineering.md`](docs/midi-surface-engineering.md) before touching it; the plan is
-`../docs/plans/surface-setup-plan.md`.
+`../docs/plans/completed/surface-setup-plan.md`.
 
 The things that bite, in one line each. **The desk is the only resolver** (P5): what every control
 part does — its label with records by name, its colour, where it writes, what it shows, its health —

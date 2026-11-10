@@ -177,7 +177,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 ## `FU-MANUAL-RIG-SESSION-FIXES`
 
 **What it proves**: the fifteen notes from the rig session of 2026-11-09 are fixed at the desk
-([`venue-rig-fixes-plan.md`](venue-rig-fixes-plan.md) §6).
+([`venue-rig-fixes-plan.md`](completed/venue-rig-fixes-plan.md) §6).
 
 **Why it is here**: QLab, Safari, a real blinder and a real Shehds are not in the tests; the Prompt
 Book check was reproduced in Chromium on a cloud desk and fixed there, but not on the desk's own

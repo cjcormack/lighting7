@@ -6,7 +6,7 @@ address and optional arguments, and the desk does what the address names. The pl
 Session 1 is the listener, stacks, Looks, loose cues and busk pads; session 2 masters and tempo, and
 finding addresses: the listing, *Copy OSC address*, the address list and the moved-address warning;
 session 3 TCP and replies. Sender ranges and the on-screen address list are the venue-rig-fixes plan's
-session 1 ([`plans/venue-rig-fixes-plan.md`](plans/venue-rig-fixes-plan.md), D1–D5). Learnable addresses, and the fader and LED feedback a learned sender
+session 1 ([`plans/completed/venue-rig-fixes-plan.md`](plans/completed/venue-rig-fixes-plan.md), D1–D5). Learnable addresses, and the fader and LED feedback a learned sender
 would want, wait for one to be in use (`FU-OSC-LEARN` in `plans/followups.md`).
 
 ## The address set

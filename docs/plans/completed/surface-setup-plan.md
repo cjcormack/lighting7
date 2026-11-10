@@ -1,6 +1,7 @@
 # Surface setup: one binding grammar, one layer rule, four editors
 
-> **Document status: READY — written 2026-11-08 from the pages Chris and Claude agreed that day.**
+> **Document status: DONE — sessions 1–6 merged (2026-11-09 to 2026-11-10).** Written 2026-11-08
+> from the pages Chris and Claude agreed that day.
 > Six sessions, each one PR, each stacked on the one before while that one is unmerged, each run by
 > `/next-session` (§5). Session 1 needs the busk-stack plan's session 4, merged as #400. The pages and
 > the record are in [`surface-setup-design/INDEX.md`](surface-setup-design/INDEX.md): the concept page
@@ -282,8 +283,8 @@ and its row marked *in review* with its branch. A session's PR is titled
 | 2 | Feedback | merged | `claude/happy-heisenberg-vh2hqw` | [#409](https://github.com/cjcormack/lighting7/pull/409) | 1c407f7 |
 | 3 | The served picture, and editors A and C | merged | `claude/beautiful-heisenberg-fvjsu7` | [#412](https://github.com/cjcormack/lighting7/pull/412) | 6f12ce6 |
 | 4 | New functions | merged | `claude/beautiful-turing-37vey4` | [#414](https://github.com/cjcormack/lighting7/pull/414) | 67f8350 |
-| 5 | Jobs | in review | `claude/zen-mendel-10xked` | [#416](https://github.com/cjcormack/lighting7/pull/416) | a05b996 |
-| 6 | Assign from the thing | in review | `claude/sweet-meitner-62h2o7` | | |
+| 5 | Jobs | merged | `claude/zen-mendel-10xked` | [#416](https://github.com/cjcormack/lighting7/pull/416) | a05b996 |
+| 6 | Assign from the thing | merged | `claude/sweet-meitner-62h2o7` | [#419](https://github.com/cjcormack/lighting7/pull/419) | 2b8c656 |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
