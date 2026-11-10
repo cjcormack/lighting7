@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-RIG-SESSION-FIXES`](#fu-manual-rig-session-fixes) | QLab from an address inside a sender range; the OSC tab's address list beside QLab; Safari's Show view not scrolling the page; a blinder stack with follows reading no *too quick*; a Shehds' FX colour offering W; a venue fixture renamed in the show; text anchored in the Prompt Book mid-show | Rig session fixes, 2026-11-10 |
 | [`FU-MANUAL-SURFACE-SETUP-S6`](#fu-manual-surface-setup-s6) | *Assign to surface…* from a stack card by touching a button, which does not fire; *Bound on* on the card; a palette pressed from an encoder's push; the picture's click in remote mode | Surface setup session 6, 2026-11-09 |
 | [`FU-MANUAL-SURFACE-SETUP-S5`](#fu-manual-surface-setup-s5) | an upgraded show's strips are a groups job; the heads job follows the selection with the faders still; the busk-page row follows a page button; a control made its own beats its job; the Jobs panel's up and down | Surface setup session 5, 2026-11-09 |
 | [`FU-MANUAL-SURFACE-SETUP-S4`](#fu-manual-surface-setup-s4) | Record from a button makes a cue at the end of its stack; Update writes back into it; Blind while held; Release on a group; Locate, a fan and FX speed bound on a group; an encoder following the encoder page | Surface setup session 4, 2026-11-09 |
@@ -170,6 +171,35 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-RIG-SESSION-FIXES`
+
+**What it proves**: the fifteen notes from the rig session of 2026-11-09 are fixed at the desk
+([`venue-rig-fixes-plan.md`](venue-rig-fixes-plan.md) §6).
+
+**Why it is here**: QLab, Safari, a real blinder and a real Shehds are not in the tests; the Prompt
+Book check was reproduced in Chromium on a cloud desk and fixed there, but not on the desk's own
+screens.
+
+**Test**, on the show from that evening, its venue's rig:
+
+1. **OSC ranges.** In Install settings → OSC, give QLab's sender a range (`192.168.1.0/24`) and send
+   a GO from QLab: the stack goes. The Received log names the sender and its own address.
+2. **The address list.** Beside QLab, the OSC tab's address list shows the stack's and a busk pad's
+   addresses; *Copy* on one pastes into a QLab network cue that works.
+3. **Safari.** On the Show view in Safari, wheel over the header and past the end of a long cue list:
+   the list scrolls, the page never does.
+4. **Blinders.** A stack of blinder cues with follows reads no *Dark too briefly before a follow*,
+   and the blinders still fade as programmed.
+5. **Shehds W.** A Colour Cycle on the Shehds offers W in its colour editor, and the white lands on
+   the bars.
+6. **Renamed fixture.** In the show, rename a venue fixture from the Patch sheet: the new name shows
+   in the programmer, the busk rig and the Stage view; the venue's own patch keeps its name.
+7. **Prompt Book mid-show.** With *In production* off and the show running through a stack with
+   follows, select a line of the script: the toolbar stays through a GO and a follow, the book does
+   not move, *Anchor cue* anchors that line, and the book then goes to the live cue.
 
 ---
 

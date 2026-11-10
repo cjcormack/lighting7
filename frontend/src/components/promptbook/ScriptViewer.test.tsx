@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { StrictMode, Suspense, type ComponentProps } from 'react'
 import { act, fireEvent, render, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CueAnchorDto } from '../../api/promptBooksApi'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { CueAnchorDto, Region } from '../../api/promptBooksApi'
 
 /**
  * The render window, which is most of what this file is about.
@@ -55,8 +55,20 @@ vi.mock('react-pdf', async () => {
     // the setting from, says `suspense={false}`.
     Page: ({ pageIndex, suspense }: { pageIndex: number; suspense?: boolean }) => {
       if ((suspense ?? documentSuspense) !== false) use(pageLoad)
-      return <div data-testid={`pdf-page-${pageIndex}`} />
+      return <div data-testid={`pdf-page-${pageIndex}`}>Text on page {pageIndex}</div>
     },
+  }
+})
+
+// jsdom lays nothing out, so a selection's region is supplied rather than measured, by the tests
+// that set one.
+const selectionRegion = vi.hoisted(() => ({ current: null as Region | null }))
+vi.mock('../../lib/promptBook/geometry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/promptBook/geometry')>()
+  return {
+    ...actual,
+    rangeToRegion: (...args: Parameters<typeof actual.rangeToRegion>) =>
+      selectionRegion.current ?? actual.rangeToRegion(...args),
   }
 })
 
@@ -430,5 +442,145 @@ describe('ScriptViewer render window', () => {
     const { view } = await renderViewer({ sceneryByEntry: new Map(), onOpenCueCard: vi.fn() })
     expect(view.container.querySelector('[data-scenery-glyph]')).toBeNull()
     expect(view.getByText('Q1')).toBeVisible()
+  })
+})
+
+describe('ScriptViewer while the operator selects', () => {
+  let rangeRect: PropertyDescriptor | undefined
+  beforeEach(() => {
+    window.getSelection()?.removeAllRanges()
+    selectionRegion.current = [{ page: 1, x: 0.1, y: 0.2, w: 0.5, h: 0.02 }]
+    rangeRect = Object.getOwnPropertyDescriptor(Range.prototype, 'getBoundingClientRect')
+    Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 100, top: 200, width: 50, height: 10, right: 150, bottom: 210, x: 100, y: 200 }),
+    })
+  })
+  afterEach(() => {
+    selectionRegion.current = null
+    window.getSelection()?.removeAllRanges()
+    if (rangeRect) Object.defineProperty(Range.prototype, 'getBoundingClientRect', rangeRect)
+    else delete (Range.prototype as { getBoundingClientRect?: unknown }).getBoundingClientRect
+  })
+
+  /**
+   * Select the text mounted pages draw, from the start of one to the end of another, as a drag
+   * across them would, and let the document say so.
+   */
+  async function selectOnPage(view: ReturnType<typeof render>, page: number, toPage = page) {
+    const range = document.createRange()
+    range.setStartBefore(view.getByTestId(`pdf-page-${page}`).firstChild!)
+    range.setEndAfter(view.getByTestId(`pdf-page-${toPage}`).lastChild!)
+    await act(async () => {
+      const selection = window.getSelection()!
+      selection.removeAllRanges()
+      selection.addRange(range)
+      document.dispatchEvent(new Event('selectionchange'))
+    })
+  }
+
+  async function dropSelection() {
+    await act(async () => {
+      window.getSelection()!.removeAllRanges()
+      document.dispatchEvent(new Event('selectionchange'))
+    })
+  }
+
+  it('keeps a page holding the selection mounted outside the render window, and lets it go once the selection is dropped', async () => {
+    const { view, observer, mounted } = await renderViewer()
+    await act(async () => observer.report([0, 1, 2]))
+    await selectOnPage(view, 1)
+
+    await act(async () => observer.report([40, 41]))
+    expect(mounted().sort((a, b) => a - b)).toEqual([1, 40, 41])
+    expect(window.getSelection()!.toString()).toBe('Text on page 1')
+
+    await dropSelection()
+    expect(mounted().sort((a, b) => a - b)).toEqual([40, 41])
+  })
+
+  it('keeps only the pages a selection starts and ends on mounted outside the render window', async () => {
+    const { view, observer, mounted } = await renderViewer()
+    const span = Array.from({ length: 40 }, (_, i) => i + 1)
+    await act(async () => observer.report(span))
+    await selectOnPage(view, 1, 40)
+
+    await act(async () => observer.report([60, 61]))
+    expect(mounted().sort((a, b) => a - b)).toEqual([1, 40, 60, 61])
+  })
+
+  it('holds a selection whose drag came up outside the pane, until it is dropped', async () => {
+    const onHoldChange = vi.fn()
+    const { view, observer, sheets } = await renderViewer({ locked: false, onHoldChange })
+    await act(async () => observer.report([0, 1, 2]))
+
+    fireEvent.pointerDown(sheets()[1])
+    await selectOnPage(view, 1)
+    fireEvent.pointerUp(window)
+    expect(onHoldChange.mock.calls).toEqual([[true]])
+
+    await dropSelection()
+    expect(onHoldChange.mock.calls).toEqual([[true], [false]])
+  })
+
+  it('holds from a pointer down until the selection it made is used', async () => {
+    const onHoldChange = vi.fn()
+    const onCreateAnnotation = vi.fn()
+    const { view, observer, sheets } = await renderViewer({ locked: false, onHoldChange, onCreateAnnotation })
+    await act(async () => observer.report([0, 1, 2]))
+    expect(onHoldChange).not.toHaveBeenCalled()
+
+    fireEvent.pointerDown(sheets()[1])
+    expect(onHoldChange.mock.calls).toEqual([[true]])
+
+    // The release opens the toolbar on the selection, and the hold passes to it without lapsing.
+    await selectOnPage(view, 1)
+    fireEvent.pointerUp(sheets()[1])
+    expect(view.getByRole('toolbar')).toBeVisible()
+    expect(onHoldChange.mock.calls).toEqual([[true]])
+
+    // The toolbar is portalled out of the script, so a press on it is no pointer in the script.
+    fireEvent.pointerDown(view.getByRole('button', { name: /Mark cut/ }))
+    fireEvent.click(view.getByRole('button', { name: /Mark cut/ }))
+    expect(onCreateAnnotation).toHaveBeenCalledWith('STRIKETHROUGH', expect.any(Array))
+    expect(onHoldChange.mock.calls).toEqual([[true], [false]])
+  })
+
+  it('ends the hold when the selection is dropped, and when a press ends outside the pane', async () => {
+    const onHoldChange = vi.fn()
+    const { view, observer, sheets } = await renderViewer({ locked: false, onHoldChange })
+    await act(async () => observer.report([0, 1, 2]))
+
+    fireEvent.pointerDown(sheets()[1])
+    await selectOnPage(view, 1)
+    fireEvent.pointerUp(sheets()[1])
+    await dropSelection()
+    expect(onHoldChange.mock.calls).toEqual([[true], [false]])
+
+    // A drag that leaves the pane comes up somewhere else.
+    fireEvent.pointerDown(sheets()[2])
+    fireEvent.pointerUp(window)
+    expect(onHoldChange.mock.calls).toEqual([[true], [false], [true], [false]])
+  })
+
+  it('drops a hold when it unmounts mid-gesture', async () => {
+    const onHoldChange = vi.fn()
+    const { view, sheets } = await renderViewer({ locked: false, onHoldChange })
+    fireEvent.pointerDown(sheets()[0])
+    view.unmount()
+    expect(onHoldChange.mock.calls).toEqual([[true], [false, true]])
+  })
+
+  it('locked, holds nothing and opens no toolbar', async () => {
+    const onHoldChange = vi.fn()
+    const { view, observer, sheets } = await renderViewer({ locked: true, onHoldChange })
+    await act(async () => observer.report([0, 1, 2]))
+
+    fireEvent.pointerDown(sheets()[1])
+    await selectOnPage(view, 1)
+    fireEvent.pointerUp(sheets()[1])
+
+    expect(onHoldChange).not.toHaveBeenCalled()
+    expect(view.queryByRole('toolbar')).toBeNull()
   })
 })
