@@ -9,9 +9,14 @@ import { resetDeskFollowStores } from '@/lib/deskFollow'
  * when Record is pressed, and a cue picker for Merge / Replace / Remove — what the Record menu's
  * "An existing cue…" opens — that lists every cue by name and records into the one picked.
  */
+type StackRow = { entryId: number; id: number; name: string; cueNumber: string | null; cueType: string }
+type Place = { stackId: number; sortOrder: number; stackName: string; cueNumber: string | null }
 const store = {
-  stacks: [] as { id: number; name: string; type: string }[] | undefined,
-  cues: [] as { id: number; name: string; entries: { stackName: string; cueNumber: string | null }[]; cueType: string }[],
+  stacks: [] as { id: number; name: string; type: string; activeCueId?: number | null; cues?: StackRow[] }[] | undefined,
+  cues: [] as { id: number; name: string; entries: Place[]; cueType: string }[],
+  /** The show's playhead and what Include last loaded (D16). */
+  activeStackId: null as number | null,
+  lastIncluded: null as unknown,
 }
 const record = vi.fn((_: unknown) => Promise.resolve({ data: undefined }))
 const createStack = vi.fn((body: { name: string }) => Promise.resolve({ data: { id: 77, name: body.name } }))
@@ -23,6 +28,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: v
 vi.mock('react-redux', () => ({ useSelector: () => [] }))
 vi.mock('@/store/selectionSlice', () => ({ selectTargetKeys: () => [] }))
 vi.mock('@/store/programmer', () => ({
+  useProgrammerSummaryQuery: () => ({ data: { lastIncluded: store.lastIncluded } }),
   useProgrammerRevision: () => 0,
   useProgrammerScenery: () => ({ projectId: 6, elements: [] }),
   useProgrammerTempo: () => ({ projectId: 6, masters: [] }),
@@ -32,6 +38,7 @@ vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }), 
 vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/cueStacks', () => ({
   useProjectCueStackListQuery: () => ({ data: store.stacks }),
+  useProjectProgramStateQuery: () => ({ data: { activeStackId: store.activeStackId } }),
   useCreateProjectCueStackMutation: () => [createStack, { isLoading: false, error: createState.error, reset: () => {} }],
 }))
 vi.mock('@/store/cues', () => ({ useProjectCueListQuery: () => ({ data: store.cues, isLoading: false }) }))
@@ -56,13 +63,27 @@ beforeEach(() => {
   createState.error = undefined
   record.mockClear()
   createStack.mockClear()
+  store.activeStackId = null
+  store.lastIncluded = null
   store.stacks = [
-    { id: 4, name: 'Act 1', type: 'STANDARD' },
-    { id: 5, name: 'Act 2', type: 'STANDARD' },
+    {
+      id: 4,
+      name: 'Act 1',
+      type: 'STACK',
+      activeCueId: 11,
+      cues: [{ entryId: 41, id: 11, name: 'Storm', cueNumber: '7', cueType: 'STANDARD' }],
+    },
+    {
+      id: 5,
+      name: 'Act 2',
+      type: 'STACK',
+      activeCueId: null,
+      cues: [{ entryId: 51, id: 12, name: 'Bows', cueNumber: '30', cueType: 'STANDARD' }],
+    },
   ]
   store.cues = [
-    { id: 11, name: 'Storm', entries: [{ stackName: 'Act 1', cueNumber: '7' }], cueType: 'STANDARD' },
-    { id: 12, name: 'Bows', entries: [{ stackName: 'Act 2', cueNumber: '30' }], cueType: 'STANDARD' },
+    { id: 11, name: 'Storm', entries: [{ stackId: 4, sortOrder: 0, stackName: 'Act 1', cueNumber: '7' }], cueType: 'STANDARD' },
+    { id: 12, name: 'Bows', entries: [{ stackId: 5, sortOrder: 0, stackName: 'Act 2', cueNumber: '30' }], cueType: 'STANDARD' },
     { id: 13, name: 'Wash', entries: [], cueType: 'STANDARD' },
   ]
 })
@@ -136,7 +157,7 @@ describe('New stack…', () => {
     const { rerender } = render(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
     expect(screen.queryByLabelText('New stack name')).toBeNull()
     expect(recordButton()).toBeDisabled()
-    store.stacks = [{ id: 4, name: 'Act 1', type: 'STANDARD' }]
+    store.stacks = [{ id: 4, name: 'Act 1', type: 'STACK', cues: [] }]
     rerender(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
     expect(screen.queryByLabelText('New stack name')).toBeNull()
     fireEvent.click(recordButton())
@@ -150,7 +171,7 @@ describe('New stack…', () => {
     store.stacks = []
     const { rerender } = render(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
     expect(screen.getByText(/A stack called Act 1 exists/)).toBeTruthy()
-    store.stacks = [{ id: 4, name: 'Act 1', type: 'STANDARD' }]
+    store.stacks = [{ id: 4, name: 'Act 1', type: 'STACK', cues: [] }]
     rerender(<RecordSheet open onOpenChange={() => {}} projectId={6} defaultCueStackId={4} />)
     openStackSelect()
     fireEvent.click(screen.getByRole('option', { name: 'Act 1' }))
@@ -177,16 +198,73 @@ describe('New stack…', () => {
 })
 
 describe('An existing cue…', () => {
-  it('opens on Merge with the picker and nothing picked', () => {
+  it('opens on Merge with the picker in show order, and nothing picked with nothing included or playing', () => {
     render(<RecordSheet open onOpenChange={() => {}} projectId={6} existingCue />)
     expect(screen.getByRole('radio', { name: 'Merge' })).toHaveAttribute('aria-checked', 'true')
     const picker = screen.getByRole('radiogroup', { name: 'Cue' })
     expect(within(picker).getAllByRole('radio').map((r) => r.closest('label')!.textContent)).toEqual([
-      'BowsQ30 · Act 2',
       'StormQ7 · Act 1',
+      'BowsQ30 · Act 2',
       'WashLoose',
     ])
+    expect([...picker.querySelectorAll('[data-picker-divider]')].map((d) => d.textContent)).toEqual(['Act 1', 'Act 2', 'Loose'])
     expect(recordButton()).toBeDisabled()
+  })
+
+  it('preselects the included cue (D16)', async () => {
+    store.lastIncluded = { kind: 'CUE', cueId: 12, cueName: 'Bows' }
+    store.activeStackId = 4
+    render(<RecordSheet open onOpenChange={() => {}} projectId={6} existingCue />)
+    expect(screen.getByRole('radio', { name: /Bows/ })).toBeChecked()
+    fireEvent.click(recordButton())
+    await waitFor(() => expect(record).toHaveBeenCalled())
+    expect(record.mock.calls[0][0]).toMatchObject({ mode: 'MERGE', cueId: 12 })
+  })
+
+  it('preselects the playhead stack’s live cue when no cue is included', () => {
+    store.lastIncluded = { kind: 'LOOK', lookId: 3 }
+    store.activeStackId = 4
+    render(<RecordSheet open onOpenChange={() => {}} projectId={6} existingCue />)
+    expect(screen.getByRole('radio', { name: /Storm/ })).toBeChecked()
+  })
+
+  it.each(['Replace', 'Remove'])('carries no preselection into %s', (mode) => {
+    store.activeStackId = 4
+    render(<RecordSheet open onOpenChange={() => {}} projectId={6} existingCue />)
+    expect(screen.getByRole('radio', { name: /Storm/ })).toBeChecked()
+    fireEvent.click(screen.getByRole('radio', { name: mode }))
+    const picker = screen.getByRole('radiogroup', { name: 'Cue' })
+    expect(within(picker).getAllByRole('radio').filter((r) => (r as HTMLInputElement).checked)).toEqual([])
+    expect(recordButton()).toBeDisabled()
+    fireEvent.click(screen.getByRole('radio', { name: 'Merge' }))
+    expect(screen.getByRole('radio', { name: /Storm/ })).toBeChecked()
+  })
+
+  it('preselects nothing for a plain Record switched to Replace', () => {
+    store.activeStackId = 4
+    render(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
+    fireEvent.click(screen.getByRole('radio', { name: 'Replace' }))
+    expect(screen.getByRole('radio', { name: /Storm/ })).not.toBeChecked()
+    expect(recordButton()).toBeDisabled()
+  })
+
+  it('carries a cue picked by hand across the modes', async () => {
+    store.activeStackId = 4
+    render(<RecordSheet open onOpenChange={() => {}} projectId={6} existingCue />)
+    fireEvent.click(screen.getByRole('radio', { name: /Bows/ }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Remove' }))
+    expect(screen.getByRole('radio', { name: /Bows/ })).toBeChecked()
+    fireEvent.click(recordButton())
+    await waitFor(() => expect(record).toHaveBeenCalled())
+    expect(record.mock.calls[0][0]).toMatchObject({ mode: 'REMOVE', cueId: 12 })
+  })
+
+  it('takes the preselected row pressed as a pick', () => {
+    store.activeStackId = 4
+    render(<RecordSheet open onOpenChange={() => {}} projectId={6} existingCue />)
+    fireEvent.click(screen.getByRole('radio', { name: /Storm/ }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Replace' }))
+    expect(screen.getByRole('radio', { name: /Storm/ })).toBeChecked()
   })
 
   it('records into the cue picked, whatever its stack', async () => {
@@ -220,6 +298,36 @@ describe('An existing cue…', () => {
     const picker = screen.getByRole('radiogroup', { name: 'Cue' })
     expect(within(picker).getAllByRole('radio')).toHaveLength(1)
     expect(within(picker).getByRole('radio', { name: /Bows/ })).toBeTruthy()
+  })
+})
+
+describe('A new cue after Q7 (D17)', () => {
+  const sheet = () => <RecordSheet open onOpenChange={() => {}} projectId={6} defaultCueStackId={4} afterEntryId={41} />
+
+  it('says where the cue goes, and records it directly after that entry', async () => {
+    render(sheet())
+    expect(screen.getByText('After Q7 in Act 1')).toBeTruthy()
+    fireEvent.click(recordButton())
+    await waitFor(() => expect(record).toHaveBeenCalled())
+    expect(record.mock.calls[0][0]).toMatchObject({ mode: 'CREATE', cueStackId: 4, afterEntryId: 41 })
+  })
+
+  it('appends with Put it at the end', async () => {
+    render(sheet())
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Put it at the end' }))
+    fireEvent.click(recordButton())
+    await waitFor(() => expect(record).toHaveBeenCalled())
+    expect(record.mock.calls[0][0]).toMatchObject({ cueStackId: 4, afterEntryId: undefined })
+  })
+
+  it('drops the place when another stack is picked', async () => {
+    render(sheet())
+    openStackSelect()
+    fireEvent.click(screen.getByRole('option', { name: 'Act 2' }))
+    expect(screen.queryByText('After Q7 in Act 1')).toBeNull()
+    fireEvent.click(recordButton())
+    await waitFor(() => expect(record).toHaveBeenCalled())
+    expect(record.mock.calls[0][0]).toMatchObject({ cueStackId: 5, afterEntryId: undefined })
   })
 })
 

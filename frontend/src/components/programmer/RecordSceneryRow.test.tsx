@@ -38,6 +38,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: v
 vi.mock('react-redux', () => ({ useSelector: () => [] }))
 vi.mock('@/store/selectionSlice', () => ({ selectTargetKeys: () => [] }))
 vi.mock('@/store/programmer', () => ({
+  useProgrammerSummaryQuery: () => ({ data: { lastIncluded: null } }),
   useProgrammerRevision: () => 0,
   useProgrammerScenery: () => store.programmer,
   useProgrammerTempo: () => ({ projectId: 6, masters: [] }),
@@ -47,6 +48,7 @@ vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }), 
 vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: store.elements }) }))
 vi.mock('@/store/cueStacks', () => ({
   useProjectCueStackListQuery: () => ({ data: [{ id: 4, name: 'Main', type: 'STANDARD' }] }),
+  useProjectProgramStateQuery: () => ({ data: { activeStackId: null } }),
   useCreateProjectCueStackMutation: () => [vi.fn(), { isLoading: false, error: undefined, reset: () => {} }],
 }))
 vi.mock('@/store/cues', () => ({ useProjectCueListQuery: () => ({ data: [] }) }))

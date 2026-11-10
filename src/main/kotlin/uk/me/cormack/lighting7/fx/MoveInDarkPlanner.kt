@@ -29,6 +29,10 @@ import java.time.Duration
  * Nothing that lights a head moves: DIMMER, STROBE, UV, an LED ring or macro, a colour carrying UV, and
  * Colour on a head whose colour is its intensity ([HeadIntensity.colourIsIntensity]). A head whose target sets nothing that
  * may move is not in the plan.
+ *
+ * A head whose moving rows are all [isInstant] — nothing in it travels to make them, a blinder's warmth
+ * and program — is set the moment it goes dark, with no delay and no move time, so it is never
+ * [LiveReason.TOO_QUICK] (venue-rig-fixes plan D23). One with any travelling row moves them all as one.
  */
 object MoveInDarkPlanner {
 
@@ -64,7 +68,28 @@ object MoveInDarkPlanner {
         val time: Duration,
         /** How a person names the target: `Q12`, or the cue's name where its entry has no number. */
         val label: String = "",
+        /** Every row is instant on the head: it is set the moment it goes dark. */
+        val instant: Boolean = false,
     )
+
+    /** A head's move for [rows], with no delay and no move time when they are all instant on [head] (D23). */
+    fun headMove(
+        head: String,
+        headIntensity: HeadIntensity,
+        targetEntryId: Int,
+        targetCueId: Int,
+        rows: List<CueAssignmentResolver.Assignment>,
+        timing: MoveInDarkSettings,
+        label: String = "",
+    ): HeadMove {
+        val instant = allInstant(rows, headIntensity)
+        return HeadMove(
+            head, targetEntryId, targetCueId, rows,
+            if (instant) Duration.ZERO else timing.delay,
+            if (instant) Duration.ZERO else timing.time,
+            label, instant,
+        )
+    }
 
     /**
      * A stack's plan: its [moves], and the heads its live cue lights ([litByLive]), which a GO back
@@ -105,7 +130,7 @@ object MoveInDarkPlanner {
                 if (effective.whenMode == MoveInDarkWhen.LATE && index > 0) continue
                 val rows = byHead[key].orEmpty().filter { moves(it, head, effective) }
                 if (rows.isEmpty()) continue
-                plan[key] = HeadMove(key, entry.entryId, entry.cueId, rows, effective.delay, effective.time)
+                plan[key] = headMove(key, head, entry.entryId, entry.cueId, rows, effective)
             }
         }
         return plan
@@ -230,7 +255,7 @@ object MoveInDarkPlanner {
                         }
                         val from = if (effective.whenMode == MoveInDarkWhen.LATE) previous else first
                         val dark = darkMs(input, ordered, from, t, takenOut && from == first)
-                        if (dark != null && dark < (effective.delay + effective.time).toMillis()) {
+                        if (dark != null && !allInstant(rows, head) && dark < (effective.delay + effective.time).toMillis()) {
                             live += StaticLive(key, LiveReason.TOO_QUICK, moving)
                         } else {
                             moves += StaticMove(key, ordered[from].entryId, rows.mapTo(LinkedHashSet()) { familyOf(it) })
@@ -309,6 +334,23 @@ object MoveInDarkPlanner {
         if (colour != null && colour.value.uv.toInt() > 0) return false
         return family in families
     }
+
+    /**
+     * Whether nothing in [head] travels to make [row] (venue-rig-fixes plan D22): a mixed colour, a
+     * WHITE or AMBER level, a SETTING or OTHER that is not a wheel or media slot, and a SPEED on a head
+     * with nothing that travels. A colour wheel's row is a slot level, never a mixed colour.
+     */
+    fun isInstant(row: CueAssignmentResolver.Assignment, head: HeadIntensity): Boolean = when (row.category) {
+        AttributeCategory.COLOUR -> row.value is CueAssignmentResolver.AttributeValue.Colour
+        AttributeCategory.WHITE, AttributeCategory.AMBER -> true
+        AttributeCategory.SETTING, AttributeCategory.OTHER -> row.attribute !in head.wheels
+        AttributeCategory.SPEED -> !head.travels
+        else -> false
+    }
+
+    /** Whether [rows] — a head's move — are all instant on [head], so it is set at the dark. */
+    fun allInstant(rows: List<CueAssignmentResolver.Assignment>, head: HeadIntensity): Boolean =
+        rows.isNotEmpty() && rows.all { isInstant(it, head) }
 
     /** What lights a head, and so never moves: its dimmer, strobe, UV, an LED ring or macro. */
     private val NEVER_MOVES = setOf(

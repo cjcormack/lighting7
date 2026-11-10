@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.fx
 
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -23,6 +25,7 @@ import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import java.time.Duration
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -517,8 +520,8 @@ class MoveInDarkServiceTest : RouteIntegrationTest() {
     fun `the frame reports each head's state as it changes`() = testApplication {
         mountTestApp(state)
         val rig = seed(on = true)
-        val seen = java.util.concurrent.CopyOnWriteArrayList<MoveInDarkService.HeadState>()
-        val collector = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+        val seen = CopyOnWriteArrayList<MoveInDarkService.HeadState>()
+        val collector = CoroutineScope(Dispatchers.Default).launch {
             state.show.moveInDark.state.collect { snapshot ->
                 snapshot.stacks[rig.stackId]?.firstOrNull { it.head == "spot" }?.let { if (seen.lastOrNull() != it.state) seen += it.state }
             }
@@ -657,6 +660,57 @@ class MoveInDarkServiceTest : RouteIntegrationTest() {
         manager.activateEntry(state, rig.stackId, rig.q10)
         awaitUntil("Q10's place again") { value(pan) == 10 && !contributorPublished(rig.stackId) }
         assertTrue(changesTo(pan, from).none { it.fadeMs > 0 }, "let go at once, not ramped lit: ${changesTo(pan, from)}")
+    }
+
+    @Test
+    fun `a head whose rows are all instant is set the moment it goes dark`() = testApplication {
+        mountTestApp(state)
+        // A 2-cell blinder at 1: dimmer 1, program 3, program speed 4. The stack waits 5 s and moves over 5 s.
+        LocateTestSupport.seedFixture(state, projectId, "china-2-cell-led-blinder-8ch", "blinder", 1)
+        val (stackId, entries) = transaction(state.database) {
+            val project = DaoProject.findById(projectId)!!
+            val stack = DaoCueStack.new {
+                this.project = project
+                name = "Blinders"; loop = false; type = CueStackType.STACK.name; sortOrder = 0
+                moveInDarkSettings = MoveInDarkSettings.NEW_STACK.copy(
+                    on = true, delay = Duration.ofSeconds(5), time = Duration.ofSeconds(5),
+                )
+            }
+            fun entry(name: String, ordinal: Double, vararg rows: Pair<String, String>): Int {
+                val cue = DaoCue.new { this.project = project; this.name = name }
+                rows.forEachIndexed { index, (attribute, value) ->
+                    DaoCueAttributeAssignment.new {
+                        this.cue = cue; targetType = "fixture"; targetKey = "blinder"
+                        this.attribute = attribute; this.value = value; sortOrder = index
+                    }
+                }
+                return DaoCueStackEntry.new { this.stack = stack; this.cue = cue; this.ordinal = ordinal; cueNumber = name }.id.value
+            }
+            stack.id.value to listOf(
+                entry("1", 1.0, "dimmer" to "255", "program" to "0"),
+                entry("2", 2.0, "dimmer" to "0"),
+                entry("3", 3.0, "dimmer" to "255", "program" to "80", "progSpeed" to "120"),
+            )
+        }
+        val seen = CopyOnWriteArrayList<MoveInDarkService.HeadState>()
+        val collector = CoroutineScope(Dispatchers.Default).launch {
+            state.show.moveInDark.state.collect { snapshot ->
+                snapshot.stacks[stackId]?.firstOrNull { it.head == "blinder" }?.let { if (seen.lastOrNull() != it.state) seen += it.state }
+            }
+        }
+        try {
+            manager.activateEntry(state, stackId, entries[0])
+            awaitUntil("Q1 lit") { value(1) == 255 }
+            manager.activateEntry(state, stackId, entries[1])
+            awaitUntil("Q2 took it out") { value(1) == 0 }
+            awaitUntil("the program set for Q3 well inside the 5 s delay", timeoutMs = 2_000) { value(3) == 80 && value(4) == 120 }
+            assertEquals(0, value(1), "it moved in the dark")
+            awaitUntil("the frame says set") { seen.lastOrNull() == MoveInDarkService.HeadState.SET }
+            assertEquals(listOf(MoveInDarkService.HeadState.SET), seen.toList(), "never waiting or moving")
+            assertEquals(MoveInDarkService.HeadState.SET, manager.moveInDark!!.statusOf(stackId).getValue("blinder").state)
+        } finally {
+            collector.cancel()
+        }
     }
 }
 

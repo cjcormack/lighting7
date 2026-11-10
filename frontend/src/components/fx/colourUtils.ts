@@ -19,18 +19,6 @@ export const NAMED_COLOURS: Record<string, string> = {
   black: '#000000',
 }
 
-/** Quick-select presets for the colour picker UI */
-export const COLOUR_PRESETS = [
-  { name: 'Red', hex: '#ff0000' },
-  { name: 'Green', hex: '#00ff00' },
-  { name: 'Blue', hex: '#0000ff' },
-  { name: 'Yellow', hex: '#ffff00' },
-  { name: 'Cyan', hex: '#00ffff' },
-  { name: 'Magenta', hex: '#ff00ff' },
-  { name: 'Orange', hex: '#ffc800' },
-  { name: 'White', hex: '#ffffff' },
-]
-
 export interface ExtendedColour {
   hex: string
   white: number
@@ -109,11 +97,6 @@ export function serializeExtendedColour(colour: ExtendedColour): string {
   return parts.join(';')
 }
 
-/** Check if a string is a valid hex colour (#rrggbb or #rgb) */
-export function isValidHexColour(hex: string): boolean {
-  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(hex)
-}
-
 /** Clamp-and-format an R/G/B triple as `#RRGGBB` (uppercase). */
 export function rgbToHex(r: number, g: number, b: number): string {
   const byte = (n: number) =>
@@ -140,39 +123,6 @@ export type ExtendedChannelFlags = {
   white: boolean
   amber: boolean
   uv: boolean
-}
-
-/**
- * Detect which extended colour channels (W/A/UV) are available from an array
- * of property descriptor arrays (one per fixture or fixture type).
- *
- * Works with both Fixture.attributes and FixtureTypeInfo.attributes since both
- * use the same AttributeDescriptor union.
- *
- * Returns undefined if no extended channels are available.
- */
-export function detectExtendedChannels(
-  attributeSets: ReadonlyArray<ReadonlyArray<{ type: string; category?: string; whiteChannel?: unknown; amberChannel?: unknown; uvChannel?: unknown }>>,
-): ExtendedChannelFlags | undefined {
-  const hasChannel = (channelKey: 'whiteChannel' | 'amberChannel' | 'uvChannel', category: string) => {
-    return attributeSets.some((props) =>
-      props.some(
-        (p) =>
-          (p.type === 'colour' && p[channelKey]) ||
-          (p.type === 'slider' && p.category === category),
-      ),
-    )
-  }
-
-  if (attributeSets.length === 0) return undefined
-
-  const white = hasChannel('whiteChannel', 'white')
-  const amber = hasChannel('amberChannel', 'amber')
-  const uv = hasChannel('uvChannel', 'uv')
-
-  if (!white && !amber && !uv) return undefined
-
-  return { white, amber, uv }
 }
 
 // --- Palette reference support ---

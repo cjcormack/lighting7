@@ -233,4 +233,45 @@ class FxFileLoaderTest {
             assertTrue(problem in error.message.orEmpty(), "expected '$problem' in '${error.message}'")
         }
     }
+
+    @Test
+    fun `controls are parsed beside the parameters and never land in them (venue-rig-fixes plan D20)`() {
+        val parsed = metadata(
+            """
+              - name: high
+                type: ubyte
+                default: "255"
+                shownWhen: shape = [SINE]
+              - name: width
+                type: ubyte
+                default: "64"
+                shownWhen: shape = [SINE]
+            controls:
+              - name: both
+                label: Both
+                scales: [high, width]
+                shownWhen: shape = [SINE]
+            presets:
+              - name: Plain
+                attribute: dimmer
+            """,
+        )
+        assertEquals(listOf("shape", "low", "high", "width"), parsed.parameters.map { it.name })
+        assertEquals(listOf(FxControl("both", "Both", listOf("high", "width"), ParameterCondition("shape", listOf("SINE")))), parsed.controls)
+        assertEquals(listOf("Plain"), parsed.presets.map { it.name }, "the controls list ends where presets begins")
+    }
+
+    @Test
+    fun `a control that breaks a rule fails to load`() {
+        val broken = listOf(
+            "controls:\n  - name: both\n    label: Both\n    scales: [low]" to "scales two parameters or more",
+            "controls:\n  - name: both\n    label: Both\n    scales: [low, shape]" to "scales numbers of one type",
+            "controls:\n  - name: both\n    label: Both\n    scales: [low, wide]" to "scales no parameter 'wide'",
+            "controls:\n  - name: both\n    label: Both\n    scales: [low, shape]\n    type: ubyte" to "'type' is no key of a controls item",
+        )
+        for ((tail, problem) in broken) {
+            val error = assertFailsWith<IllegalArgumentException>(tail) { metadata(tail) }
+            assertTrue(problem in error.message.orEmpty(), "expected '$problem' in '${error.message}'")
+        }
+    }
 }

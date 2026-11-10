@@ -56,7 +56,7 @@ import { FX_SHAPES, matchesShape, shapeOf, spreadFieldsOf, type FxShape } from '
 import { useFingerSized } from '../fixtureSheet/sheetContext'
 import { useFxGraphLink, type GraphMark, type MatchSource } from './fxGraphLink'
 import type { AttributeFamily } from '@/lib/attributeFamily'
-import type { detectExtendedChannels } from './colourUtils'
+import type { ExtendedChannelFlags } from './colourUtils'
 import {
   ORDER_OPTIONS,
   isMirroredOrder,
@@ -79,7 +79,8 @@ import {
   blendForLevelMode,
   centreFlip,
   centreModeOf,
-  clampByte,
+  controlValue,
+  controlViews,
   defaultParameters,
   draftOf,
   hasCentre,
@@ -90,9 +91,12 @@ import {
   orderPatch,
   paramView,
   runsWord,
+  scaleControl,
+  storedNumber,
   timingChoicePatch,
   withCentreMode,
   type CentreMode,
+  type ControlView,
   type FxDraft,
   type FxScope,
   type LevelMode,
@@ -116,18 +120,20 @@ const CURVES = [
 ] as const
 
 /**
- * A parameter as drawn: alone, a low drawn with its high as one range (its `pair`), or a number
- * drawn as a segment of its common values ending in a typed cell ([ParamPresets]).
+ * A parameter as drawn: alone, a low drawn with its high as one range (its `pair`), a number
+ * drawn as a segment of its common values ending in a typed cell ([ParamPresets]), or a control
+ * over several ([ControlView]).
  */
 type ParamItem =
   | { kind: 'one'; param: FxParameterDef; view: ParamView }
+  | { kind: 'control'; control: ControlView }
   | { kind: 'pair'; low: FxParameterDef; high: FxParameterDef; lowView: ParamView; highView: ParamView }
   | { kind: 'presets'; param: FxParameterDef; view: ParamView; presets: ParamPresets; alongside?: FxParameterDef }
 
 /**
  * The parameters to draw, in order: each shown one ([isParamShown]) once, a pair at whichever of
  * its two comes first, a preset segment's choice ([ParamPresets.alongside]) inside the segment while
- * both are shown, [hidden] left out.
+ * both are shown, a control before its first member, which folds under *More*, [hidden] left out.
  */
 function paramItems(
   entry: FxLibraryEntry,
@@ -136,16 +142,28 @@ function paramItems(
 ): ParamItem[] {
   const shown = entry.parameters.filter((p) => !hidden(p) && isParamShown(entry, p, parameters))
   const byName = new Map(shown.map((p) => [p.name, p]))
+  const controls = controlViews(entry, parameters, hidden)
+  const folded = new Set(controls.flatMap((c) => c.members.map((m) => m.param.name)))
+  const viewOf = (param: FxParameterDef): ParamView => {
+    const view = paramView(entry, param)
+    return folded.has(param.name) ? { ...view, fold: 'detail' } : view
+  }
+  const firstMember = new Map(
+    controls.map((c) => [c, shown.find((p) => c.members.some((m) => m.param.name === p.name))?.name]),
+  )
   const placed = new Set<string>()
   const items: ParamItem[] = []
   for (const param of shown) {
+    for (const control of controls) {
+      if (firstMember.get(control) === param.name) items.push({ kind: 'control', control })
+    }
     if (placed.has(param.name)) continue
     const presets = isNumeric(param) ? paramPresetsOf(entry, param.name) : null
     if (presets != null) {
       const alongside = presets.alongside != null ? byName.get(presets.alongside.param) : undefined
       placed.add(param.name)
       if (alongside != null) placed.add(alongside.name)
-      items.push({ kind: 'presets', param, view: paramView(entry, param), presets, alongside })
+      items.push({ kind: 'presets', param, view: viewOf(param), presets, alongside })
       continue
     }
     if (shown.some((p) => p !== param && paramPresetsOf(entry, p.name)?.alongside?.param === param.name && isNumeric(p))) {
@@ -156,10 +174,10 @@ function paramItems(
     const high = low === param ? byName.get(param.pair ?? '') : low != null ? param : undefined
     if (low != null && high != null && !placed.has(low.name) && !placed.has(high.name)) {
       placed.add(low.name).add(high.name)
-      items.push({ kind: 'pair', low, high, lowView: paramView(entry, low), highView: paramView(entry, high) })
+      items.push({ kind: 'pair', low, high, lowView: viewOf(low), highView: viewOf(high) })
     } else {
       placed.add(param.name)
-      items.push({ kind: 'one', param, view: paramView(entry, param) })
+      items.push({ kind: 'one', param, view: viewOf(param) })
     }
   }
   return items
@@ -169,8 +187,9 @@ function isNumeric(param: FxParameterDef): boolean {
   return ['ubyte', 'double', 'float', 'int'].includes(param.type.toLowerCase())
 }
 
-const itemFold = (item: ParamItem) => (item.kind === 'pair' ? item.lowView.fold : item.view.fold)
-const itemKey = (item: ParamItem) => (item.kind === 'pair' ? item.low.name : item.param.name)
+const itemFold = (item: ParamItem) => (item.kind === 'pair' ? item.lowView.fold : item.kind === 'control' ? 'main' : item.view.fold)
+const itemKey = (item: ParamItem) =>
+  item.kind === 'pair' ? item.low.name : item.kind === 'control' ? `control:${item.control.name}` : item.param.name
 
 /** The FX a header can swap this one for, and the swap (fx-settings plan D9). */
 export interface FxTypeSwap {
@@ -212,7 +231,7 @@ export function FxFields({
   timingSource: string | null | undefined
   draft: FxDraft
   scope: FxScope
-  extendedChannels: ReturnType<typeof detectExtendedChannels>
+  extendedChannels: ExtendedChannelFlags | undefined
   /** The setting the effect drives, where it drives one — a setting effect's `level`, Slot Steps' slots. */
   settingAttribute: SettingAttributeDescriptor | undefined
   /** The property the effect drives, where it has one — Palette Steps offers palettes naming it. */
@@ -256,13 +275,24 @@ export function FxFields({
     (param) => centreMode === 'around' && (CENTRE_PARAMS as readonly string[]).includes(param.name),
   )
   const main = items.filter((item) => itemFold(item) === 'main')
-  const more = items.filter((item) => itemFold(item) === 'detail')
+  const more = items.filter((item): item is Exclude<ParamItem, { kind: 'control' }> => item.kind !== 'control' && itemFold(item) === 'detail')
 
   // Blank is the default, as the desk reads it (`TypedParams.raw`).
   const valueOf = (param: FxParameterDef) => draft.parameters[param.name] || param.defaultValue
   const setParams = (changes: Record<string, string>, release: boolean) =>
     set({ parameters: { ...draft.parameters, ...changes } }, release)
   const paramControl = (item: ParamItem) => {
+    if (item.kind === 'control') {
+      return (
+        <ControlRow
+          key={itemKey(item)}
+          control={item.control}
+          values={item.control.members.map((m) => Number(valueOf(m.param)) || 0)}
+          readOnly={readOnly}
+          onChange={setParams}
+        />
+      )
+    }
     if (item.kind === 'pair') {
       return (
         <RangeRow
@@ -1722,12 +1752,6 @@ function foldSummary(param: FxParameterDef, view: ParamView, value: string): str
   return `${label} ${value}`
 }
 
-/** A number as [param]'s type stores it: a byte clamped, an int whole, a double as it is. */
-function writeNumber(param: FxParameterDef, v: number): string {
-  const type = param.type.toLowerCase()
-  return type === 'ubyte' ? String(clampByte(v)) : type === 'int' ? String(Math.round(v)) : String(v)
-}
-
 /** How a stored value reads in its unit (`FxParamUnit`), and the suffix its field carries. */
 function unitDisplay(unit: FxParamUnit | null): {
   display: (value: number) => number
@@ -1815,6 +1839,49 @@ function SliderRow({
   )
 }
 
+/**
+ * A control over several parameters (venue-rig-fixes plan D21): it reads the largest, and a gesture
+ * — a drag, a key, a typed value — scales every member from their values at its start, so a drag
+ * through 0 and back keeps their ratio.
+ */
+function ControlRow({
+  control,
+  values,
+  readOnly,
+  onChange,
+}: {
+  control: ControlView
+  values: number[]
+  readOnly: boolean
+  onChange: (changes: Record<string, string>, release: boolean) => void
+}) {
+  const base = useRef<number[] | null>(null)
+  const { display, fromDisplay, suffix } = unitDisplay(control.unit)
+  const startGesture = () => {
+    base.current = null
+  }
+  return (
+    <div onPointerDownCapture={startGesture} onKeyDownCapture={startGesture}>
+      <SliderRow
+        label={control.label}
+        unit={suffix}
+        value={controlValue(values)}
+        min={control.min}
+        max={control.max}
+        step={control.step}
+        display={display}
+        fromDisplay={fromDisplay}
+        readOnly={readOnly}
+        onChange={(v, release) => {
+          const from = base.current ?? values
+          base.current = release ? null : from
+          onChange(scaleControl(control.members, from, v), release)
+        }}
+      />
+    </div>
+  )
+}
+
 function unitWord(unit: string): string {
   if (unit === '%') return 'percent'
   if (unit === '°') return 'degrees'
@@ -1876,7 +1943,7 @@ function ParamControl({
   param: FxParameterDef
   view: ParamView
   value: string
-  extendedChannels: ReturnType<typeof detectExtendedChannels>
+  extendedChannels: ExtendedChannelFlags | undefined
   settingAttribute: SettingAttributeDescriptor | undefined
   /** The setting a slot list names options of, where the effect drives one. */
   slotSetting?: SettingAttributeDescriptor
@@ -1904,7 +1971,7 @@ function ParamControl({
 
   if (isNumeric(param)) {
     const { display, fromDisplay, suffix } = unitDisplay(view.unit)
-    const write = (v: number) => writeNumber(param, v)
+    const write = (v: number) => storedNumber(param, v)
     return (
       <SliderRow
         label={label}
@@ -2125,7 +2192,7 @@ function PresetRow({
   const matched = onChoice ? undefined : presets.values.find((v) => Math.abs(v - num) < 1e-6)
   const pressed = onChoice ? 'choice' : matched != null ? String(matched) : ''
   const off = choice != null ? { [choice.param]: choice.off } : {}
-  const write = (v: number) => ({ [param.name]: writeNumber(param, Math.max(view.min, Math.min(view.max, v))), ...off })
+  const write = (v: number) => ({ [param.name]: storedNumber(param, Math.max(view.min, Math.min(view.max, v))), ...off })
   const word = (v: number) => `${Math.round(display(v) * 100) / 100}${suffix != null ? ` ${suffix}` : ''}`
   return (
     <div className="flex flex-col gap-1">
@@ -2204,7 +2271,7 @@ function RangeRow({
   const lo = clamp(Number(lowValue) || 0)
   const hi = clamp(Number(highValue) || 0)
   const inverted = lo > hi
-  const write = (v: number) => writeNumber(low, v)
+  const write = (v: number) => storedNumber(low, v)
   const move = ([a, b]: number[], release: boolean) => {
     if (a === undefined || b === undefined) return
     const [nextLow, nextHigh] = inverted ? [Math.max(a, b), Math.min(a, b)] : [Math.min(a, b), Math.max(a, b)]

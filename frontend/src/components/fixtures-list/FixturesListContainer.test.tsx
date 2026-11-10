@@ -25,34 +25,47 @@ import type { CellCommit } from './rowModel'
 const rowSelection = vi.hoisted(() => {
   const state = {
     ids: new Set<RowId>(),
+    /** The rows the last render showed, which the slice's row door keeps the selection to. */
+    visibleOrder: [] as readonly RowId[],
     select: vi.fn(),
     clear: vi.fn(),
-    // The row door, faked the way the slice behaves: it replaces the selection, so a later render
-    // reads back what was set. The scope-switch test below is the one that needs that.
+    // The row door, faked the way the slice behaves: it replaces the selection with the ids that are
+    // shown, so a later render reads back what was set. The scope-switch test below needs that.
     setSelection: vi.fn((ids: readonly RowId[]) => {
-      state.ids = new Set(ids)
+      state.ids = new Set(ids.filter((id) => state.visibleOrder.includes(id)))
     }),
   }
   return state
 })
 vi.mock('./useListSelection', async () => {
   const actual = await vi.importActual<typeof import('./useListSelection')>('./useListSelection')
+  const { useEffect } = await import('react')
   return {
     listSelectionIntentFor: actual.listSelectionIntentFor,
     usePublishSelectionTargets: () => {},
     usePublishRowTargets: () => {},
-    useListSelection: () => ({
-      selectedIds: rowSelection.ids,
-      orderedSelected: [...rowSelection.ids],
-      // The last id set, as the slice's range pivot is — what the tree keys open and close.
-      anchor: [...rowSelection.ids].at(-1) ?? null,
-      count: rowSelection.ids.size,
-      isSelected: (id: RowId) => rowSelection.ids.has(id),
-      select: rowSelection.select,
-      selectAll: vi.fn(),
-      clear: rowSelection.clear,
-      setSelection: rowSelection.setSelection,
-    }),
+    useListSelection: (visibleOrder: readonly RowId[]) => {
+      rowSelection.visibleOrder = visibleOrder
+      // The hook drops its scope when the list goes away.
+      useEffect(
+        () => () => {
+          rowSelection.ids = new Set()
+        },
+        [],
+      )
+      return {
+        selectedIds: rowSelection.ids,
+        orderedSelected: [...rowSelection.ids],
+        // The last id set, as the slice's range pivot is — what the tree keys open and close.
+        anchor: [...rowSelection.ids].at(-1) ?? null,
+        count: rowSelection.ids.size,
+        isSelected: (id: RowId) => rowSelection.ids.has(id),
+        select: rowSelection.select,
+        selectAll: vi.fn(),
+        clear: rowSelection.clear,
+        setSelection: rowSelection.setSelection,
+      }
+    },
   }
 })
 
@@ -334,6 +347,7 @@ beforeEach(() => {
   router.searchParamReads = 0
   releaseFrames.calls = []
   rowSelection.ids = new Set()
+  rowSelection.visibleOrder = []
   rowSelection.select.mockClear()
   rowSelection.clear.mockClear()
   rowSelection.setSelection.mockClear()
@@ -391,10 +405,10 @@ describe('Include’s request (programmer-fixes plan D10)', () => {
   /** Let the deferred spend run. */
   const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
 
-  it('is applied again after StrictMode’s simulated remount, whose unmount clears the selection', () => {
+  it('is applied after StrictMode’s simulated remount, whose unmount clears the selection', () => {
     publishIncludeSelection(['a'])
     render(<StrictMode>{grid()}</StrictMode>)
-    expect(landings()).toBe(2)
+    expect([...rowSelection.ids]).toEqual(['fixture:a'])
   })
 
   it('lands once: a grid mounting later neither re-selects nor turns Lit off', async () => {
@@ -428,6 +442,61 @@ describe('Include’s request (programmer-fixes plan D10)', () => {
     vi.setSystemTime(19_001)
     render(grid())
     expect(landings()).toBe(1)
+  })
+
+  describe('lands on the fixture (venue-rig-fixes plan D14)', () => {
+    const stored = () => window.sessionStorage.getItem('fixturesList.expansion.1.programmer')
+    const elementRows = () => table.rows.filter((row) => row.kind === 'element').map((row) => row.id)
+    // What the row door kept: only rows that are shown, as the slice keeps them.
+    const selected = () => [...rowSelection.ids]
+
+    it('selects a multi-head fixture all of whose heads came in, collapsed, writing no expansion', () => {
+      publishIncludeSelection(['c.pixel-0', 'c.pixel-1'])
+      render(grid())
+      expect(selected()).toEqual(['fixture:c'])
+      expect(elementRows()).toHaveLength(0)
+      expect(stored()).toBeNull()
+    })
+
+    it('opens a fixture only some of whose heads came in for this landing alone', async () => {
+      publishIncludeSelection(['c.pixel-1'])
+      const { unmount } = render(grid())
+      expect(selected()).toEqual(['element:fixture:c:c.pixel-1'])
+      expect(elementRows()).toHaveLength(2)
+      expect(stored()).toBeNull()
+      await settle()
+      unmount()
+      render(grid())
+      expect(elementRows()).toHaveLength(0)
+    })
+
+    it('opens the group a fixture is listed under in the grouped view without storing it', () => {
+      groupList.value = [{ name: 'Front', memberCount: 1, memberKeys: ['d'] }]
+      publishIncludeSelection(['d'])
+      render(
+        <FixturesListContainer projectId={1} grouped selectionScope="programmer" respondToIncludeSelection enableDeepLinkSelect={false} />,
+      )
+      expect(selected()).toEqual(['member:Front:d'])
+      const front = table.rows.find((row) => row.kind === 'group' && row.name === 'Front') as Extract<Row, { kind: 'group' }>
+      expect(front.isExpanded).toBe(true)
+      expect(stored()).toBeNull()
+    })
+
+    it('stores a fixture the landing opened once Expand all covers it', async () => {
+      groupList.value = [{ name: 'Front', memberCount: 1, memberKeys: ['d'] }]
+      publishIncludeSelection(['c.pixel-1'])
+      const sheet = () => (
+        <FixturesListContainer projectId={1} grouped selectionScope="programmer" respondToIncludeSelection enableDeepLinkSelect={false} />
+      )
+      const { unmount } = render(sheet())
+      expect(stored()).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Expand all' }))
+      expect(JSON.parse(stored()!)).toEqual({ groups: ['Front'], fixtures: ['c'] })
+      await settle()
+      unmount()
+      render(sheet())
+      expect(elementRows()).toHaveLength(2)
+    })
   })
 
   it('never lands on another project’s grid', async () => {
@@ -999,6 +1068,8 @@ describe('Release over a row selection on the programmer (fixture-fx-sheets plan
     expect(release).toBeDisabled()
     expect(release.getAttribute('title')).toMatch(/Release clears Local/)
     unmount()
+    // The unmount dropped the list's selection.
+    rowSelection.ids = new Set(['fixture:a'])
     programmerScope.value = { kind: 'output' } as ProgrammerScope
     render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership renderToolbar={programmerToolbar} />)
     expect(screen.getByRole('button', { name: 'Release the 1 head' })).toBeEnabled()

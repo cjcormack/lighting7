@@ -6,7 +6,10 @@ import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
+import uk.me.cormack.lighting7.fixture.MediaSlot
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureColourSettingValue
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureGoboSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
@@ -53,6 +56,13 @@ data class HeadIntensity(
      * them, and [levels] are theirs. Empty for every other head.
      */
     val elementKeys: List<String> = emptyList(),
+    /**
+     * The head's settings something travels to make: a wheel or a media slot, whatever its category
+     * — one whose options declare a colour preview or a gobo, or that is loadable (`media`).
+     */
+    val wheels: Set<String> = emptySet(),
+    /** Whether the head has anything that travels: a wheel, or a position, beam or movement attribute. */
+    val travels: Boolean = false,
 ) {
     val universe: Int get() = dmxUniverse.universe
 
@@ -86,7 +96,7 @@ data class HeadIntensity(
                 if (fixture !is DmxFixture) continue
                 val universe = fixture.universe
                 val own = fixture.fixtureAttributes.map { attribute ->
-                    Read(attribute.name, attribute.category, runCatching { attribute.classProperty.call(fixture) }.getOrNull())
+                    Read(attribute.name, attribute.category, attribute.media, runCatching { attribute.classProperty.call(fixture) }.getOrNull())
                 }
                 val fixtureDimmed = own.any { it.category == AttributeCategory.DIMMER }
                 val parent = head(fixture.key, null, universe, own, dimmerless = !fixtureDimmed, parentDimmers = emptyList(), parentAttributes = emptySet())
@@ -116,13 +126,13 @@ data class HeadIntensity(
             return heads
         }
 
-        private class Read(val name: String, val category: AttributeCategory, val value: Any?)
+        private class Read(val name: String, val category: AttributeCategory, val media: MediaSlot?, val value: Any?)
 
         private fun elementAttributes(element: FixtureElement<*>): List<Read> =
             FixtureAttributeCatalogue.of(element::class).all.map { attribute ->
                 @Suppress("UNCHECKED_CAST")
                 val read = attribute.classProperty as kotlin.reflect.KProperty1<Any, *>
-                Read(attribute.name, attribute.category, runCatching { read.call(element) }.getOrNull())
+                Read(attribute.name, attribute.category, attribute.media, runCatching { read.call(element) }.getOrNull())
             }
 
         private fun head(
@@ -153,6 +163,8 @@ data class HeadIntensity(
                 }
             }
             val own = levels.toList()
+            val wheels = attributes.filter { isWheel(it) }.mapTo(LinkedHashSet()) { it.name }
+            val travels = wheels.isNotEmpty() || attributes.any { it.value != null && it.category in TRAVELLING_CATEGORIES }
             // An LED ring's effect channel lights the ring, 0 being off: lit, though never scaled.
             val rings = attributes.filter { it.category == AttributeCategory.RING }.flatMap { channelsOf(it.value) }
             return HeadIntensity(
@@ -165,8 +177,25 @@ data class HeadIntensity(
                 colourIsIntensity = dimmerless,
                 intensityAttributes = intensity,
                 parentIntensityAttributes = parentAttributes,
+                wheels = wheels,
+                travels = travels,
             )
         }
+
+        private fun isWheel(attribute: Read): Boolean {
+            val setting = attribute.value as? DmxFixtureSetting<*> ?: return false
+            return attribute.media != null ||
+                setting.sortedValues.any { it is DmxFixtureColourSettingValue || it is DmxFixtureGoboSettingValue }
+        }
+
+        /** What travels in a head to make its value, whatever the value (venue-rig-fixes plan D22). */
+        private val TRAVELLING_CATEGORIES = setOf(
+            AttributeCategory.PAN, AttributeCategory.TILT, AttributeCategory.PAN_FINE, AttributeCategory.TILT_FINE,
+            AttributeCategory.GOBO, AttributeCategory.GOBO_ROTATION, AttributeCategory.GOBO_ROTATION_MODE,
+            AttributeCategory.PRISM, AttributeCategory.PRISM_ROTATION,
+            AttributeCategory.FOCUS, AttributeCategory.ZOOM, AttributeCategory.IRIS, AttributeCategory.FROST,
+            AttributeCategory.SHUTTER, AttributeCategory.SHUTTER_ROTATION, AttributeCategory.MOVEMENT_MACRO,
+        )
 
         private fun channelsOf(value: Any?): List<Int> = when (value) {
             is DmxSlider -> listOf(value.channelNo)

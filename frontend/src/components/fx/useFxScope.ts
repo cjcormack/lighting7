@@ -4,7 +4,8 @@ import { selectionFixtures, selectionItems, selectionUnits, spreadsOverMembers, 
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import type { FxLibraryEntry } from '@/store/fixtureFx'
 import type { Fixture, SettingAttributeDescriptor } from '@/store/fixtures'
-import { detectExtendedChannels } from './colourUtils'
+import { emitterFlagsOf } from '@/lib/emitterHeads'
+import type { ExtendedChannelFlags } from './colourUtils'
 import { carriesFxAttribute, selectionHeadCount, spreadHeadCount, type FxScope } from './fxEditorModel'
 
 /**
@@ -30,7 +31,7 @@ export function useFxScope({
 }): {
   scope: FxScope
   targetFixtures: Fixture[]
-  extendedChannels: ReturnType<typeof detectExtendedChannels>
+  extendedChannels: ExtendedChannelFlags | undefined
   settingAttribute: SettingAttributeDescriptor | undefined
 } {
   const { fixtures, fixtureByKey } = useFixtureLookup()
@@ -61,8 +62,9 @@ export function useFxScope({
     return { heads, elementMode: heads && onElements, elementFilter: heads }
   }, [overMembers, targetFixtures, attribute, items])
 
+  // From the heads, a fixture's elements included: a Shehds keeps its white on its zones (D19).
   const extendedChannels = useMemo(
-    () => (entry?.family === 'colour' ? detectExtendedChannels(targetFixtures.map((f) => f.attributes ?? [])) : undefined),
+    () => (entry?.family === 'colour' ? emitterFlagsOf(targetFixtures) : undefined),
     [entry, targetFixtures],
   )
   const settingAttribute = useMemo(() => {

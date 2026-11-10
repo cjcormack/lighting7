@@ -404,11 +404,11 @@ run `./gradlew compileTestKotlin` and the touched packages' tests where they tou
 |---|---|---|---|---|---|
 | 1 | OSC sender ranges and the address list | merged | `claude/magical-ritchie-84882h` | [#410](https://github.com/cjcormack/lighting7/pull/410) | `7296801` |
 | 2 | Auto numbers from position | merged | `claude/gallant-meitner-7xk6a8` | [#411](https://github.com/cjcormack/lighting7/pull/411) | `210c26d` |
-| 3 | The Show view follows the show | in review | `claude/zen-dirac-kc1wi2` | | |
-| 4 | Include, and Record's cue list and placement | planned | | | |
-| 5 | One colour editor for FX | planned | | | |
-| 6 | Path's Size | planned | | | |
-| 7 | Move in dark's instant rows | planned | | | |
+| 3 | The Show view follows the show | merged | `claude/zen-dirac-kc1wi2` | [#413](https://github.com/cjcormack/lighting7/pull/413) | `5a7f5cc` |
+| 4 | Include, and Record's cue list and placement | merged | `claude/sharp-lamport-6erbz0` | [#415](https://github.com/cjcormack/lighting7/pull/415) | `0015e0e` |
+| 5 | One colour editor for FX | merged | `claude/venue-rig-fixes-1fe92b` | [#417](https://github.com/cjcormack/lighting7/pull/417) | `35394c6` |
+| 6 | Path's Size | in review | `claude/lucid-keller-q7h8l3` | [#418](https://github.com/cjcormack/lighting7/pull/418) | `9f0b797` |
+| 7 | Move in dark's instant rows | in review | `claude/brave-darwin-jeducv` | | |
 | 8 | A show's name for a venue fixture | planned | | | |
 | 9 | Selecting in the Prompt Book while the show plays | planned | | | |
 
@@ -578,6 +578,31 @@ D14–D17.
 - Docs: frontend `CLAUDE.md`'s Record paragraph (*A row names every place…*) and the Include
   landing; `docs/cues-engineering.md` if it lists Record's fields.
 - Local: `compileTestKotlin`, `--tests 'uk.me.cormack.lighting7.routes.*'`, `check:quick`.
+- *As built*: `landing.ts` holds `useLandingOpenings` beside `foldLandingKeys`: the landing's openings
+  laid over the stored set while the list stays mounted, each landing replacing the last's; the
+  container's chevrons, Expand all and Collapse all go through its setters, so a row they close is
+  closed whichever opened it, a row they open is stored, and a landing's row they leave open stays the
+  landing's — unless the gesture means to open it (Expand all, a ⌥-click level expand, a deep link's
+  group), which stores it. `foldLandingKeys` also answers each key's fixture (`fixtureOf`), which both
+  landings read. `landTargets` is the heads chip's landing (*Odd*, *Select by colour*), so it folds too.
+  The Include landing now selects on the commit after its openings, as `landTargets` does: the row door
+  keeps only rows that are shown, so an Include of some heads opened the fixture and selected nothing
+  (and a member row in a closed group likewise), which predates this session. The
+  picker's rows became `cuePickerSections` (one per divider) with `filterCuePickerSections`, and a
+  row's places are sorted into the same order (`showOrderStacks`, which `cuesInShowOrder` shares);
+  `preselectedRecordCue` is D16's rule, held apart from the cue picked so it is offered on Merge alone
+  and never carried into Replace or Remove, filled in when the summary, the playhead or the stack list
+  arrives after the open, and the picker brings a picked row into view once. *Put it at the end* is a
+  checkbox, the sheet's idiom (the kit has no switch), and *After Q13 in Act 1* is drawn while the
+  entry's stack is the choice rather than dropped for good. The menu keeps the bare number the source
+  strip shows (*A new cue after 13*, *Act 1 · directly after 13*), and passes the include's entry only
+  when the stack list holds it, saying *· appended* otherwise (never a row guessed by cue); the sheet's
+  line takes the picker's `Q`. `afterEntryId` is resolved in `routes/programmerSurface.kt`
+  (`performProgrammerRecord`'s transaction), not `programmerRecord.kt`; `recordShapeProblem`, which the
+  AI surface shares (its `record_cue` sends neither), refuses it beside `sortOrder` and outside CREATE;
+  a bad entry is 400 where the core's other in-transaction failures stay 404. `cuePickerRows.test.ts`'s
+  by-name cases and `RecordSheet.test.tsx`'s picker order now pin show order; `RecordSceneryRow.test.tsx`
+  and `RecordTempoRow.test.tsx` mock the two hooks the sheet now reads.
 
 ### Session 5 — One colour editor for FX
 
@@ -594,6 +619,32 @@ D18, D19.
 - Docs: frontend `CLAUDE.md`'s FX colour paragraphs (§Looks, palettes and layers' `pal:` section,
   `FxColourPalettes.tsx`).
 - Local: `check:quick`.
+- *As built*: the FX pickers mount `editor/ColourEditorCore.tsx` through one adapter,
+  `fx/FxColourEditor.tsx`, the editor's body moved out of
+  `ColourEditor.tsx`, which is now the core plus its two press bands: `PaletteBand` and `FxBand` reach
+  `ApplyPicker` and through it `FxEditor`, where the FX colour parameters are drawn, so mounting
+  `ColourEditor` there was an import cycle. Its programmer hosts and tests are unchanged. The core
+  gained `onRelease` beside `references`: the FX editor's live push and the
+  cue FX tab's saves read a release, and the programmer's hosts write every move, so each edit is a
+  frame and `onRelease` the gesture's end — the picker let go a frame after its last move, a picker
+  key's key-up, a field left, a slider's commit, a recent tapped, the editor closed. A typed channel
+  therefore lands when its field is left, where the old hex field released each valid hex. The old
+  body's hex field and colour presets went with it, since the programmer's editor has neither (the
+  read-out shows the hex); `COLOUR_PRESETS` and `isValidHexColour`, used only there, were deleted.
+  The references band is `FxColourPaletteRow` with a frame of its own, and the read-out names the
+  palette a value references. `detectExtendedChannels` was deleted for `emitterFlagsOf`, beside
+  `emitterHeadCounts` and over its walk in `lib/emitterHeads.ts` (re-exported by both editor modules),
+  which `useFxScope` and the palette editor (over the visible fixtures) read. An emitter the targets
+  lack is never written, so a stored one is kept. The programmer's picker turns pure white into the
+  white LED alone (`#000000;w255`); an FX colour reaches every head and an RGB-only one would go
+  black, so the core's `pickerWhiteLed` is off in the FX hosts, white stays `#ffffff` and the
+  white-LED hints are not drawn. The
+  programmer's colour cell reads W on a collapsed Shehds row from the zones' colour descriptors, as
+  its test pins, but the desk built an element's colour descriptor without its bundled emitters, so
+  no zone carried `whiteChannel` and neither the cell nor an FX on a Shehds offered W:
+  `DmxFixture.extractElementAttributes` now bundles them as the fixture's descriptor does
+  (`ShehdsLed19RgbwFixtureTest`). Both
+  popovers are the cell's 352px, since the editor's picker is fluid.
 
 ### Session 6 — Path's Size
 
@@ -602,8 +653,8 @@ D20, D21.
 - `fx/FxFileLoader.kt`: the `controls:` key parsed; `fx/ParameterMetadata.kt`: its checks;
   `fx/FxRegistry.kt`: a `controls` list on `FxRegistration` and on `FxTypeInfo` (declared at `:97`, built at
   `:259` by `getLibrary`, `:255`), which `routes/lightFx.kt:117` serves as the FX library; `Path.fx.kts`
-  declares `size`. (`routes/fxDefinitions.kt` is the CRUD of user FX definitions, which take
-  `controls` only if their source's frontmatter declares one.)
+  declares `size`. (`routes/fxDefinitions.kt` is the CRUD of user FX definitions. Their source
+  is a script body with no frontmatter, so they carry no `controls`; corrected in session 6.)
 - `fxEditorModel.ts` `paramView` and `FxFields.tsx`: the Size slider, scaled from the gesture's
   start, its members under More.
 - Tests: `ParameterMetadataTest` (new: a valid control; refused: one member, mixed types, a member
@@ -633,6 +684,13 @@ D22, D23.
 - Docs: `docs/cue-stacks-engineering.md` §"Move in dark" (the instant table, D22).
 - Local: `compileTestKotlin`, `--tests 'uk.me.cormack.lighting7.fx.*'` and the move-in-dark route
   tests.
+- *As built:* `HeadIntensity` carries what `isInstant` reads: `wheels` (a setting whose options
+  declare a colour preview or a gobo, or that declares `media`) and `travels` (the head declares a
+  wheel or a travelling category). "A head that has travelling rows" for a SPEED is read from the
+  head's declared attributes, not the cue's rows, so a mover's vector speed travels even in a cue that
+  sets nothing else. The service's catch-up at a GO gives an instant head the same zero timing, and a
+  head lit early that goes dark again is set at once too. The route test is in
+  `CueMoveInDarkRoutesTest`, beside the other static-plan tests.
 
 ### Session 8 — A show's name for a venue fixture
 

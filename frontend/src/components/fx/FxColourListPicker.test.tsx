@@ -14,11 +14,7 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
  * react-colorful and Radix's slider read the pointer against a box jsdom lays out at zero, so each is
  * a stand-in with its callbacks: the picker's `change` is a move, the slider's `pointerUp` its commit.
  */
-vi.mock('react-colorful', () => ({
-  HexColorPicker: ({ color, onChange }: { color: string; onChange: (hex: string) => void }) => (
-    <input aria-label="Colour picker" value={color} onChange={(e) => onChange(e.target.value)} />
-  ),
-}))
+vi.mock('react-colorful', async () => (await import('@/test/colourPickerMock')).colourPickerMock())
 /** dnd-kit's sensors measure the swatches, so a test drives the context's own callbacks instead. */
 const dnd = vi.hoisted(() => ({
   props: null as null | {
@@ -344,7 +340,7 @@ describe('FxColourListPicker releases (programmer-fixes plan D23)', () => {
     expect(onEmit).toHaveBeenCalledTimes(sent)
   })
 
-  it('releases an emitter slider’s drag once, on its commit', () => {
+  it('releases an emitter slider’s drag once, on its commit', async () => {
     const onEmit = vi.fn()
     const { container } = render(
       withStore(<ControlledPicker initial="#ff0000" onEmit={onEmit} extendedChannels={{ white: true }} />),
@@ -354,11 +350,13 @@ describe('FxColourListPicker releases (programmer-fixes plan D23)', () => {
     fireEvent.change(white, { target: { value: '40' } })
     fireEvent.change(white, { target: { value: '80' } })
     fireEvent.pointerUp(white)
+    // A slider's commit is read a microtask on, after Radix has reported a key's step.
+    await act(async () => {})
     expect(onEmit.mock.calls.map(([, release]) => release)).toEqual([false, false, true])
-    expect(releases(onEmit)).toHaveLength(1)
+    expect(releases(onEmit)).toEqual([['#ff0000;w80', true]])
   })
 
-  it('releases a typed hex, an add and a removal each', () => {
+  it('sends a typed channel as it is typed and releases it once its field is left; an add and a removal release each', () => {
     const onEmit = vi.fn()
     const { container } = render(withStore(<ControlledPicker initial="#ff0000,#00ff00" onEmit={onEmit} />))
     addColour()
@@ -368,19 +366,27 @@ describe('FxColourListPicker releases (programmer-fixes plan D23)', () => {
     expect(onEmit).toHaveBeenLastCalledWith('#ff0000,#00ff00', true)
 
     openFirstSwatch(container)
-    fireEvent.change(screen.getByRole('dialog').querySelector('input[type="text"]')!, { target: { value: '#123456' } })
-    expect(onEmit).toHaveBeenLastCalledWith('#123456,#00ff00', true)
-    expect(onEmit.mock.calls.every(([, release]) => release)).toBe(true)
+    const red = within(screen.getByRole('dialog')).getByRole('spinbutton', { name: 'R' })
+    fireEvent.change(red, { target: { value: '1' } })
+    fireEvent.change(red, { target: { value: '18' } })
+    expect(onEmit).toHaveBeenLastCalledWith('#120000,#00ff00', false)
+    fireEvent.blur(red)
+    expect(onEmit).toHaveBeenLastCalledWith('#120000,#00ff00', true)
+    expect(releases(onEmit)).toHaveLength(3)
   })
 
-  it('releases a preset', () => {
+  it('edits a swatch in the programmer’s editor: R, G and B fields, a typed one keeping the rest and an emitter the targets lack', () => {
     const onEmit = vi.fn()
-    const { container } = render(withStore(<ControlledPicker initial="#ff0000" onEmit={onEmit} />))
+    const { container } = render(withStore(<ControlledPicker initial="#102030;a40" onEmit={onEmit} />))
     openFirstSwatch(container)
-    const presets = screen.getByRole('dialog').querySelectorAll('button[title]')
-    fireEvent.click(presets[1])
-    expect(onEmit).toHaveBeenCalledTimes(1)
-    expect(onEmit.mock.calls[0][1]).toBe(true)
+    const dialog = within(screen.getByRole('dialog'))
+    expect(dialog.getByRole('spinbutton', { name: 'R' })).toHaveValue(16)
+    expect(dialog.getByRole('spinbutton', { name: 'G' })).toHaveValue(32)
+    expect(dialog.getByRole('spinbutton', { name: 'B' })).toHaveValue(48)
+    // No emitter row for amber the targets have none of, but the stored amber stays in the value.
+    expect(dialog.queryByRole('spinbutton', { name: 'A value' })).toBeNull()
+    fireEvent.change(dialog.getByRole('spinbutton', { name: 'G' }), { target: { value: '200' } })
+    expect(onEmit).toHaveBeenLastCalledWith('#10c830;a40', false)
   })
 })
 
@@ -434,7 +440,8 @@ describe('FxColourListPicker recent values (programmer-fixes plan D20, D23)', ()
 
   const openFirstSwatch = (container: HTMLElement) =>
     fireEvent.click(container.querySelector('button[style*="background-color"]')!)
-  const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 30)))
+  /** The recorder holds a picker's release past its last report (`RECENT_RELEASE_SETTLE_MS`). */
+  const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 130)))
 
   it('records a swatch’s drag once, on its release, with the emitters the targets have', async () => {
     const { container } = render(withStore(<ControlledPicker initial="#ff0000,#00ff00" extendedChannels={{ white: true }} />))
@@ -449,15 +456,21 @@ describe('FxColourListPicker recent values (programmer-fixes plan D20, D23)', ()
     expect(record).toHaveBeenCalledExactlyOnceWith('colour', '#dd0000;w0')
   })
 
-  it('records a picker’s key steps once, on the key-up, however many the key repeated', () => {
-    const { container } = render(withStore(<ControlledPicker initial="#ff0000" />))
+  it('records a picker’s key steps once, on the key-up, however many the key repeated, and releases them there', async () => {
+    const onEmit = vi.fn()
+    const { container } = render(withStore(<ControlledPicker initial="#ff0000" onEmit={onEmit} />))
     openFirstSwatch(container)
     const picker = screen.getByLabelText('Colour picker')
-    // A move with no press held is a key's step.
+    // react-colorful reads the numeric code; a move with no press held is a key's step.
+    fireEvent.keyDown(picker, { key: 'ArrowLeft', keyCode: 37 })
     fireEvent.change(picker, { target: { value: '#ee0000' } })
+    fireEvent.keyDown(picker, { key: 'ArrowLeft', keyCode: 37 })
     fireEvent.change(picker, { target: { value: '#dd0000' } })
     expect(record).not.toHaveBeenCalled()
-    fireEvent.keyUp(picker, { key: 'ArrowLeft' })
+    expect(onEmit.mock.calls.map(([, release]) => release)).toEqual([false, false])
+    fireEvent.keyUp(picker, { key: 'ArrowLeft', keyCode: 37 })
+    expect(onEmit).toHaveBeenLastCalledWith('#dd0000', true)
+    await settle()
     expect(record).toHaveBeenCalledExactlyOnceWith('colour', '#dd0000')
   })
 
@@ -476,15 +489,15 @@ describe('FxColourListPicker recent values (programmer-fixes plan D20, D23)', ()
     expect(record).toHaveBeenCalledTimes(1)
   })
 
-  it('records a typed hex when its field is left, not on the way to it', () => {
+  it('records a typed channel when its field is left, not on the way to it', () => {
     const { container } = render(withStore(<ControlledPicker initial="#ff0000" />))
     openFirstSwatch(container)
-    const hex = screen.getByRole('dialog').querySelector('input[type="text"]')!
-    fireEvent.change(hex, { target: { value: '#ff0' } })
-    fireEvent.change(hex, { target: { value: '#ff0000' } })
+    const red = within(screen.getByRole('dialog')).getByRole('spinbutton', { name: 'R' })
+    fireEvent.change(red, { target: { value: '1' } })
+    fireEvent.change(red, { target: { value: '18' } })
     expect(record).not.toHaveBeenCalled()
-    fireEvent.blur(hex)
-    expect(record).toHaveBeenCalledExactlyOnceWith('colour', '#ff0000')
+    fireEvent.blur(red)
+    expect(record).toHaveBeenCalledExactlyOnceWith('colour', '#120000')
   })
 
   it('a tap sets the swatch’s colour as a release, and moves the recent to the front', () => {
@@ -494,7 +507,8 @@ describe('FxColourListPicker recent values (programmer-fixes plan D20, D23)', ()
     openFirstSwatch(container)
     const band = screen.getByRole('dialog').querySelector('[data-recent-values="colour"]') as HTMLElement
     fireEvent.click(within(band).getByRole('button', { name: 'Recent #102030 · W 50' }))
-    expect(onEmit).toHaveBeenCalledExactlyOnceWith('#102030;w50,#00ff00', true)
+    expect(onEmit).toHaveBeenLastCalledWith('#102030;w50,#00ff00', true)
+    expect(onEmit.mock.calls.every(([value]) => value === '#102030;w50,#00ff00')).toBe(true)
     expect(record).toHaveBeenCalledExactlyOnceWith('colour', '#102030;w50')
   })
 })

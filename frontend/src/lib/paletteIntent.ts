@@ -281,8 +281,7 @@ export const EMITTER_ATTRIBUTES: readonly string[] = ['white', 'amber', 'uv']
 /**
  * The tint each emitter is drawn in — a swatch dot, a slider track, a pad face.
  *
- * Lives here rather than in a component so the five surfaces that draw an emitter agree. The values
- * are `ColourEditorBody`'s, which had them first.
+ * Lives here rather than in a component so the surfaces that draw an emitter agree.
  */
 export const EMITTER_TINTS: Record<string, string> = {
   white: '#fffbe6',

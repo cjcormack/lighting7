@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { chan, colourProp, settingProp } from '@/test/fixtureFactories'
+import { chan, colourProp, settingProp, sliderProp } from '@/test/fixtureFactories'
 import type { CellResolution } from '../columns'
-import type { CellBatch } from '../rowModel'
+import { batchForTargets, resolveTargetCells, type CellBatch, type WriteTarget } from '../rowModel'
 import { resetEditorSurfaceMedia } from '../../editor/EditorSurface'
 
 /**
@@ -192,6 +192,20 @@ describe('ColourCell', () => {
       attributeMask: 'COLOUR',
       families: ['COLOUR'],
     })
+  })
+
+  // The colour of a Shehds 24-channel is on its zones, so a collapsed row's cell reads the zones'
+  // descriptors, whose white is bundled with the colour (venue-rig-fixes plan D19).
+  it('offers W on a collapsed Shehds 24-channel row, its white on the zones', () => {
+    const shehds: WriteTarget = {
+      key: 'shehds-1',
+      attributes: [sliderProp('dimmer', 'dimmer', chan(7))],
+      elements: [1, 2, 3].map((n) => ({ index: n - 1, key: `shehds-1.zone-${n}`, displayName: `Zone ${n}`, attributes: [rgbw] })),
+    }
+    const row = resolveTargetCells(shehds, 'colour').map((cell) => cell.resolution)
+    draw({ resolutions: row, batch: batchForTargets([shehds], 'colour') })
+    expect(screen.getByRole('spinbutton', { name: 'W value' })).toBeInTheDocument()
+    expect(document.querySelector('[data-colour-emitters]')).toHaveTextContent('Emitters on 3 of 3 heads')
   })
 
   it('Save as palette… opens the sheet with Colour answered over the marquee’s heads — a cell by its own key', () => {

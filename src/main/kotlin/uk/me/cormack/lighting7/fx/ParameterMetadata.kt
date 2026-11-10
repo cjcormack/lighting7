@@ -62,17 +62,7 @@ fun parameterMetadataProblems(parameters: List<ParameterInfo>): List<String> {
         }
         options?.groupBy { it.value.uppercase() }?.filter { it.value.size > 1 }?.keys?.forEach { problems += "$at: option '$it' twice" }
         options?.filter { it.value.isBlank() || it.label.isBlank() }?.forEach { _ -> problems += "$at: an option needs a value and a label" }
-        p.shownWhen?.let { condition ->
-            val other = byName[condition.param]
-            when {
-                other == null || other === p -> problems += "$at: shownWhen names no other parameter '${condition.param}'"
-                condition.values.isEmpty() -> problems += "$at: shownWhen names no values"
-                else -> other.options?.let { declared ->
-                    val known = declared.map { it.value }.toSet()
-                    condition.values.filter { it !in known }.forEach { problems += "$at: shownWhen value '$it' is not an option of '${other.name}'" }
-                }
-            }
-        }
+        p.shownWhen?.let { problems += conditionProblems(at, it, byName, self = p.name) }
         p.pair?.let { high ->
             val other = byName[high]
             when {
@@ -84,6 +74,63 @@ fun parameterMetadataProblems(parameters: List<ParameterInfo>): List<String> {
     }
     return problems
 }
+
+private fun conditionProblems(
+    at: String,
+    condition: ParameterCondition,
+    byName: Map<String, ParameterInfo>,
+    self: String?,
+): List<String> {
+    val other = byName[condition.param]
+    return when {
+        other == null || other.name == self -> listOf("$at: shownWhen names no other parameter '${condition.param}'")
+        condition.values.isEmpty() -> listOf("$at: shownWhen names no values")
+        else -> other.options?.let { declared ->
+            val known = declared.map { it.value }.toSet()
+            condition.values.filter { it !in known }.map { "$at: shownWhen value '$it' is not an option of '${other.name}'" }
+        }.orEmpty()
+    }
+}
+
+/**
+ * Every problem with [controls] over [parameters] (venue-rig-fixes plan D20), each naming its control;
+ * empty when there is none. A control scales two or more known parameters of one numeric type, none
+ * in a `pair` or in another control, each shown exactly when the control is (the same `shownWhen`, or
+ * none on both), and its `shownWhen` is checked as a parameter's and names none of its members.
+ */
+fun fxControlProblems(parameters: List<ParameterInfo>, controls: List<FxControl>): List<String> {
+    val byName = parameters.associateBy { it.name }
+    val problems = mutableListOf<String>()
+    controls.groupBy { it.name }.filter { it.value.size > 1 }.keys.forEach { problems += "control '$it' twice" }
+    val paired = parameters.flatMap { p -> listOfNotNull(p.pair?.let { p.name }, p.pair) }.toSet()
+    val claimed = mutableSetOf<String>()
+    for (c in controls) {
+        val at = "control '${c.name}'"
+        if (c.name.isBlank()) problems += "a control needs a name"
+        if (c.name in byName) problems += "$at: is also a parameter's name"
+        if (c.label.isBlank()) problems += "$at: needs a label"
+        if (c.scales.size < 2) problems += "$at: scales two parameters or more, not ${c.scales.size}"
+        val members = c.scales.mapNotNull { name ->
+            byName[name] ?: null.also { problems += "$at: scales no parameter '$name'" }
+        }
+        if (members.any { it.type !in NUMERIC_TYPES } || members.map { it.type }.distinct().size > 1) {
+            problems += "$at: scales numbers of one type, not ${members.joinToString { "${it.name} (${it.type})" }}"
+        }
+        for (name in c.scales) {
+            if (name in paired) problems += "$at: '$name' is in a pair"
+            if (!claimed.add(name)) problems += "$at: '$name' is scaled twice"
+        }
+        c.shownWhen?.let { problems += conditionProblems(at, it, byName, self = null) }
+        c.shownWhen?.takeIf { it.param in c.scales }?.let { problems += "$at: shownWhen names its own member '${it.param}'" }
+        for (m in members) {
+            if (!sameCondition(m.shownWhen, c.shownWhen)) problems += "$at: '${m.name}' is shown when the control is not"
+        }
+    }
+    return problems
+}
+
+private fun sameCondition(a: ParameterCondition?, b: ParameterCondition?): Boolean =
+    a?.param == b?.param && a?.values?.toSet() == b?.values?.toSet()
 
 /**
  * [value] as one of [param]'s options — matched ignoring case, answered in the option's own spelling

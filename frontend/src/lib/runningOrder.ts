@@ -88,3 +88,59 @@ export function reorderWithinGroup<T extends StackKind & { id: number }>(
   next.splice(to, 0, moved)
   return next
 }
+
+/** The stacks in show order (D15): the running order's, then the busk stacks, each in the order given. */
+export function showOrderStacks<T extends StackKind>(stacks: readonly T[] | undefined): T[] {
+  return [...runningOrder(stacks), ...(stacks ?? []).filter(isBuskStack)]
+}
+
+/** What [cuesInShowOrder] reads of a cue: its places, each a stack and a position in it. */
+export interface ShowOrderCue {
+  id: number
+  name: string
+  entries?: readonly { stackId: number; sortOrder: number }[]
+}
+
+/** One stack's cues in show order, or the loose cues (`stack` null). */
+export interface ShowOrderSection<C, S> {
+  stack: S | null
+  cues: C[]
+}
+
+/**
+ * Cues in show order (lighting7 venue-rig-fixes plan D15): the running order's stacks, then the busk
+ * stacks, each in the order given, each cue once, under the stack of its first place in that order
+ * and at its position there; then the loose cues by name. A cue placed only in stacks [stacks] does
+ * not hold counts as loose. A stack no cue lands in has no section.
+ */
+export function cuesInShowOrder<C extends ShowOrderCue, S extends StackKind & { id: number }>(
+  cues: readonly C[],
+  stacks: readonly S[] | undefined,
+): ShowOrderSection<C, S>[] {
+  const ordered = showOrderStacks(stacks)
+  const rank = new Map(ordered.map((stack, i) => [stack.id, i]))
+  const placed = ordered.map(() => [] as { cue: C; at: number }[])
+  const loose: C[] = []
+  for (const cue of cues) {
+    let first: { stack: number; at: number } | null = null
+    for (const entry of cue.entries ?? []) {
+      const stack = rank.get(entry.stackId)
+      if (stack == null) continue
+      if (first == null || stack < first.stack || (stack === first.stack && entry.sortOrder < first.at)) {
+        first = { stack, at: entry.sortOrder }
+      }
+    }
+    if (first == null) loose.push(cue)
+    else placed[first.stack].push({ cue, at: first.at })
+  }
+  const sections: ShowOrderSection<C, S>[] = []
+  ordered.forEach((stack, i) => {
+    if (placed[i].length === 0) return
+    sections.push({ stack, cues: placed[i].sort((a, b) => a.at - b.at || a.cue.id - b.cue.id).map((p) => p.cue) })
+  })
+  if (loose.length > 0) {
+    loose.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) || a.id - b.id)
+    sections.push({ stack: null, cues: loose })
+  }
+  return sections
+}

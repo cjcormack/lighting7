@@ -752,6 +752,23 @@ is only what the target sets on the head, in the stack's families. Nothing that 
 DIMMER, STROBE, UV, an LED ring or macro, a colour carrying UV, Colour on a head whose colour is its
 intensity.
 
+**Instant rows** (venue-rig-fixes plan D22–D23). A row is instant when nothing in the head travels to
+make it, judged by its value and attribute (`MoveInDarkPlanner.isInstant`, over what
+`HeadIntensity.classify` reads of the head: `wheels` and `travels`):
+
+| Instant | Travels |
+|---|---|
+| A mixed colour (`AttributeValue.Colour`), WHITE, AMBER | A colour wheel or scroller declared as a COLOUR setting: its row is a slot level |
+| A SETTING or OTHER that is not a wheel or media slot (no option declares a colour preview or a gobo, and no `media`) — a blinder's program | A SETTING or OTHER that is one, whatever its category |
+| A SPEED on a head with nothing that travels — a blinder's program speed | A SPEED on a head that has — a mover's vector speed, a timing channel |
+| | GOBO, GOBO_ROTATION, GOBO_ROTATION_MODE, PRISM, PRISM_ROTATION, FOCUS, ZOOM, IRIS, FROST, SHUTTER, SHUTTER_ROTATION, MOVEMENT_MACRO, and the position categories |
+
+A head whose moving rows are **all** instant is set the moment it goes dark: its move has no delay and
+no move time, so the static plan never reads it `TOO_QUICK`, and the service takes it straight to
+`SET`. Lit straight through it is still `LIT_BEFORE`, and on a *Late* cue it is set at the dark too. A
+head with any travelling row moves all its rows, instant ones included, with the stack's delay and
+time, as one move.
+
 **The service** (`fx/MoveInDarkService.kt`) is one per `Show`, started in `start` and stopped in
 `close`. A 50 ms tick re-plans each stack marked since the last tick and watches each planned head:
 dark since *t* it is `WAITING`; at *t* + delay `MOVING`, its rows joining the stack's contributor and

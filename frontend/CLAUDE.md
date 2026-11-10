@@ -848,7 +848,10 @@ Release folds to its glyph and the scope line drops the fade.
   as one two-thumb range with a field at each end, one whose `shownWhen` is false not at all, and `detail`
   ones folded under **More**, its summary line saying what is in it; `paramRole` and the board's label table guess these
   only for a parameter that declares none (a script FX's), whose curves, switches and ratios beside levels fold under
-  *More* too. The parameters are **the FX's own section**, named for what it holds (`fxSectionName`: *Levels* for a Wave
+  *More* too. A **control** the desk declares over several parameters (venue-rig-fixes plan D20–D21,
+  `controlViews` / `scaleControl`) is one slider before its first member — Path's *Size* over its two
+  sizes on a Circle, Figure 8 or Random — reading the largest and scaling every member from their values
+  at the gesture's start, the members folded under *More*. The parameters are **the FX's own section**, named for what it holds (`fxSectionName`: *Levels* for a Wave
   or a level FX, *Colours*, *Path*, *Steps*, *Flicker* for the Flicker family, *Parameters* for a script FX), its header's
   FX name the **type switcher** (`FxTypeSwap`): the FX this attribute takes, a pick swapping it as the picker does
   (`swappedDraft` — the new type's starting parameters and blend, a blend changed from the old type's start kept, the
@@ -1318,8 +1321,11 @@ colour picker's swatches and a 3D material list are unrelated.
 
 `FxColourPalettes.tsx` owns both halves of the UI: `useColourPalettes()` (the offerable list plus
 the three lookups a picker needs to draw a reference) and `FxColourPaletteRow` (the chips, plus
-**Save `<hex>` as palette…**, which fills the library the way Record ▾'s *A new palette* does). Both pickers read `projectId` from the **route**, not a prop — the
-FX library page has no project, and there the row simply offers nothing and still edits literals.
+**Save `<hex>` as palette…**, which fills the library the way Record ▾'s *A new palette* does);
+`FxColourPicker` hands the row to the colour editor (`ColourEditorCore`) as its `references` band
+(venue-rig-fixes plan D18), and Colour Cycle's list draws none. Both pickers read `projectId` from the **route**, not a
+prop — the FX library page has no project, and there the row simply offers nothing and still edits
+literals.
 
 **The programmer is a layer stack too**, and `LookStack` (`components/looks/LookStack.tsx`) is
 the one component that draws both — that sharing is the point rather than a saving, because a
@@ -1471,13 +1477,24 @@ when Record is pressed, so a cancelled sheet leaves nothing behind; once made it
 a failed Record is retried into it. A show with no stack opens on it. Its last item is ***No stack***,
 which sends no `cueStackId`: the new cue is loose, and the sheet says it is found in the Cues table
 (§"The Cues table"). Merge, Replace and Remove are offered from every Record, not only from a cue row,
-and each draws `RecordCuePicker`: one filterable radio list of **every cue, flat and by name**
-(`cuePickerRows` — markers left out). The programmer Record menu's *An existing cue…* opens on Merge
-with it (`RecordPreset.existingCue`); until S10 it opened the sheet with only *New cue* to offer.
-**A row names every place its cue sits**, from the list's `entries` — `Q7 · Act 1, Q14 · Act 2`, or
-*Loose* — the list the Cues table reads, so a loose cue is still a cue, labelled by its name, and a
-shared cue is one row because it is one cue. The filter matches the name or any place's number or
-stack.
+and each draws `RecordCuePicker`: one filterable radio list of every cue **in show order** under a
+divider per stack (venue-rig-fixes plan D15; `cuePickerSections` over `lib/runningOrder.ts`'s
+`cuesInShowOrder`, markers left out): the running order's stacks, then the busk stacks (*· busk*), each
+cue once at its first place in that order, then the loose cues by name. The programmer Record menu's
+*An existing cue…* opens on Merge with it (`RecordPreset.existingCue`); until S10 it opened the sheet
+with only *New cue* to offer. **A row names every place its cue sits**, in the same order, from the
+list's `entries` — `Q7 · Act 1, Q14 · Act 2`, or *Loose* — the list the Cues table reads, so a loose
+cue is still a cue, labelled by its name, and a shared cue is one row because it is one cue. The
+filter matches the name or any place's number or stack, and keeps a divider only over a match. On
+Merge with no cue named, the sheet **preselects** the included cue when Include last loaded one, else
+the live cue of the stack the show's playhead is on (D16, `preselectedRecordCue`), filling it in when
+either arrives after the open; the preselection is held apart from the cue picked, so a cue nobody
+picked is never what a Replace or a Remove writes into, and the picker brings a picked row into view
+once. Record ▾'s ***A new cue after Q13*** (D17) opens on New cue with `RecordPreset.afterEntryId`, the
+entry the include named, its subtitle *Act 1 · directly after 13* (*· appended* when the include named
+none or the stack list does not hold it — never a row guessed by cue); the sheet
+says *After Q13 in Act 1* under the stack select while that stack is the choice, with a *Put it at the
+end* checkbox, and sends `afterEntryId`, which the desk resolves when it records.
 
 **Provenance names the winning layer.** `ProvenanceEntry` gained `layerId` and `layerSource` —
 the resolved referent, `kind` + `id` + `name` — which `useRowOwnership` aggregates into
@@ -4338,15 +4355,30 @@ each was:
   declared temperatures and a level, committing the colour that mix makes (`lib/whiteMix.ts`;
   `docs/fixtures-engineering.md` §"DmxWhiteMixColour"), with Save and Fan in its footer — and
   `ColourCell` dispatches between the two. Its controls are `editor/WarmthEditor`, which the fixture
-  sheet's `white-mix` row draws too. Five hosts: the programmer's colour
+  sheet's `white-mix` row draws too. Its hosts: the programmer's colour
   cell through a thinned `ColourPickerPopover` (the popover at 352 — `contentClassName`, measured
   in the app on 2026-09-22 with the picker at 234×200 — and **528 compact**, the side sheet's
   compact width, because the compact body sits its 208px emitter column beside a 256px picker row
   and at 352 it wrapped under, costing the height compact exists to save; and both sheets, `wide`
   on the side sheet),
   the busk tab docked, the Fan tab's colour endpoint (`footer` and `counts` off — a colour intent
-  has no emitter component) and the fixture sheet's colour rows (docked in the row, `footer` and
-  `counts` off, the typed channels on). The picker-only form in a 224px popover was the property
+  has no emitter component), the fixture sheet's colour rows (docked in the row, `footer` and
+  `counts` off, the typed channels on) and the FX colour parameters (venue-rig-fixes plan D18):
+  `FxColourPicker` and each swatch of `FxColourListPicker` in a 352px popover, through one
+  adapter, `fx/FxColourEditor`, over **`ColourEditorCore`** — `ColourEditor` is the core plus its two press bands, which reach
+  `ApplyPicker` and through it `FxEditor`, where these pickers are drawn, so mounting `ColourEditor`
+  there would be an import cycle — `footer` off, the
+  typed channels on, the band as **`references`** — `FxColourPaletteRow`'s chips picking a
+  `pal:{uuid}` and its *Save `<hex>` as palette…*, the read-out naming the palette a value
+  references — and **`onRelease`**, the gesture's end (the picker let go a frame after its last
+  move, a picker key's key-up, a field left, a slider's commit a microtask on, a recent tapped, the
+  editor closed), each edit before it a frame, which is how the FX editor's live push and the cue
+  FX tab's saves keep their floors. Pure white stays `#ffffff` there (`pickerWhiteLed` off, its
+  hints not drawn): one FX colour reaches every head, and the white LED alone would black an RGB
+  one. Their emitter rows are the targets' heads' through `emitterFlagsOf`, the walk
+  `emitterHeadCounts` runs (`lib/emitterHeads.ts`), a Shehds' zones included (D19); a palette's
+  FX offers what any patched head takes; an emitter the targets lack is never written, so the
+  value keeps a stored one. The picker-only form in a 224px popover was the property
   visualisers', which fixture-fx-sheets session 4 deleted. **Pick reads the heads the editor is
   editing** through one hidden `FixtureAppearanceSource` leaf per parent fixture, mounted by the
   editor itself in a store-bound child (`AppearanceLeaves`) so a cell mounted with no project pays
@@ -4407,9 +4439,8 @@ each was:
     (`warmth`). The two cells draw their editor body as an inner component (`SliderEditorBody`,
     `PositionEditorBody`) so the recorder mounts and unmounts with the open editor: a hook at the
     cell's level would outlive the popover and never send what a closed editor staged.
-  - `ColourEditorBody`, under both FX colour pickers (each colour of a list too): a typed hex is
-    staged until its field is left, a drag sends on the body's `onRelease`, a slider's commit and a
-    preset at once; the project is the route's, as the pickers' palettes are.
+  - the FX colour pickers (each colour of a list too) through `ColourEditorCore`, which records as in
+    every host; the project is the route's, as the pickers' palettes are.
   - the palette editor's `FamilyControls`, given the palette's `projectId` by `PaletteEditor` and
     the palette sheet's Value cell: `PercentControl` records `palette-level:<attribute>`,
     `PositionControl` the pair, and `ColourControl` its hex alone (D20a) on the window's release
@@ -5155,7 +5186,16 @@ step by the kit's `arrowStepTarget`, which every sheet on the kit steps by too (
 `lib/listExpansion.ts`): one `sessionStorage` entry per project and selection scope, group names and
 fixture keys, so a row opened on the programmer is open on the way back to it, a show's same-named
 group never opens another show's, and a name the loaded rig lacks is dropped on the next write.
-Include, the heads chip's landings and a deep link add to it. **Expand all · Collapse all**
+A deep link adds to it. **A landing does not** (venue-rig-fixes plan D14, `fixtures-list/landing.ts`):
+Include's and the heads chip's (`landTargets`) fold the keys first — a multi-head fixture all of whose
+heads came in is selected as its own row, collapsed (`foldLandingKeys`) — and what a landing opens,
+a fixture only some of whose heads came in and in the grouped view a fixture's group, is held by
+`useLandingOpenings` over the stored set while the list stays mounted, each landing replacing the
+last's. The chevrons, Expand all and Collapse all are the operator's: a row they close is closed
+whichever opened it, a row they open is stored, and a landing's row they leave open stays the
+landing's — but Expand all, a ⌥-click level expand and a deep link's group store what they mean to
+open, a landing's rows among them. The Include landing selects on the commit after its openings, as
+`landTargets` does, because the row door keeps only rows that are shown. **Expand all · Collapse all**
 (`ExpandAllButton`, the toolbar's `expand` part) opens every group and multi-head fixture the filter
 shows — a closed group's members included — and reads *Collapse all* once none is closed; a collapse
 leaves open a fixture whose element rows hold a selected row or cell, and a group whose member rows

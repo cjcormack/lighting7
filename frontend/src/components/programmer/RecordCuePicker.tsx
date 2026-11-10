@@ -1,10 +1,11 @@
-import { useId, useMemo, useState } from 'react'
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import { useProjectCueListQuery } from '@/store/cues'
-import { cuePickerRows, filterCuePickerRows } from './cuePickerRows'
+import { useProjectCueStackListQuery } from '@/store/cueStacks'
+import { cuePickerSections, filterCuePickerSections } from './cuePickerRows'
 
 export interface RecordCuePickerProps {
   projectId: number
@@ -20,15 +21,31 @@ export interface RecordCuePickerProps {
  *
  * A filter over one radio list rather than a stack select then a cue select: the operator knows the
  * cue, not where it lives, and "where it lives" may be nowhere (*Loose*) or several places, each
- * of which the row names.
+ * of which the row names. The list runs in show order under a divider per stack (D15), and a cue
+ * picked before the list drew it is brought into view once.
  */
 export function RecordCuePicker({ projectId, value, onChange, disabled }: RecordCuePickerProps) {
   const { data: cues, isLoading } = useProjectCueListQuery(projectId)
+  const { data: stacks } = useProjectCueStackListQuery(projectId)
   const [filter, setFilter] = useState('')
   const name = useId()
 
-  const rows = useMemo(() => cuePickerRows(cues ?? []), [cues])
-  const shown = useMemo(() => filterCuePickerRows(rows, filter), [rows, filter])
+  const sections = useMemo(() => cuePickerSections(cues ?? [], stacks), [cues, stacks])
+  const shown = useMemo(() => filterCuePickerSections(sections, filter), [sections, filter])
+  const cueCount = sections.reduce((n, section) => n + section.rows.length, 0)
+
+  const listRef = useRef<HTMLDivElement>(null)
+  const revealedRef = useRef<number | null>(null)
+  useEffect(() => {
+    const list = listRef.current
+    if (value == null || revealedRef.current === value || list == null) return
+    const row = list.querySelector<HTMLElement>(`[data-cue-id="${value}"]`)
+    if (row == null) return
+    revealedRef.current = value
+    if (row.offsetTop < list.scrollTop || row.offsetTop + row.offsetHeight > list.scrollTop + list.clientHeight) {
+      list.scrollTop = row.offsetTop - (list.clientHeight - row.offsetHeight) / 2
+    }
+  }, [value, shown])
 
   return (
     <div className="space-y-2">
@@ -44,47 +61,62 @@ export function RecordCuePicker({ projectId, value, onChange, disabled }: Record
       <div
         role="radiogroup"
         aria-label="Cue"
-        className="max-h-56 space-y-0.5 overflow-y-auto rounded-md border p-1"
+        ref={listRef}
+        className="relative max-h-56 space-y-0.5 overflow-y-auto rounded-md border p-1"
       >
-        {shown.map((row) => (
-          <label
-            key={row.id}
-            className={cn(
-              'flex cursor-pointer items-baseline gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent',
-              row.id === value && 'bg-accent',
-            )}
-          >
-            <input
-              type="radio"
-              name={name}
-              value={row.id}
-              checked={row.id === value}
-              onChange={() => onChange(row.id)}
-              disabled={disabled}
-              className="size-3.5 shrink-0 self-center"
-            />
-            <span className="min-w-0 flex-1 truncate">{row.name}</span>
-            <span className="max-w-[60%] shrink-0 truncate text-xs text-muted-foreground" data-picker-places>
-              {row.places.length === 0
-                ? 'Loose'
-                : row.places.map((place, i) => (
-                    <span key={i}>
-                      {i > 0 && ', '}
-                      {place.number != null && (
-                        <span className={cn('tabular-nums', place.numberAuto && AUTO_CUE_NUMBER_CLASS)}>
-                          {place.number}
+        {shown.map((section) => (
+          <Fragment key={section.key}>
+            <div
+              data-picker-divider
+              className="px-2 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground first:pt-1"
+            >
+              {section.label}
+              {section.busk && <span className="font-normal normal-case tracking-normal"> · busk</span>}
+            </div>
+            {section.rows.map((row) => (
+              <label
+                key={row.id}
+                data-cue-id={row.id}
+                className={cn(
+                  'flex cursor-pointer items-baseline gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent',
+                  row.id === value && 'bg-accent',
+                )}
+              >
+                <input
+                  type="radio"
+                  name={name}
+                  value={row.id}
+                  checked={row.id === value}
+                  onChange={() => onChange(row.id)}
+                  // A checked radio fires no change, and a preselected row pressed is still a pick.
+                  onClick={() => onChange(row.id)}
+                  disabled={disabled}
+                  className="size-3.5 shrink-0 self-center"
+                />
+                <span className="min-w-0 flex-1 truncate">{row.name}</span>
+                <span className="max-w-[60%] shrink-0 truncate text-xs text-muted-foreground" data-picker-places>
+                  {row.places.length === 0
+                    ? 'Loose'
+                    : row.places.map((place, i) => (
+                        <span key={i}>
+                          {i > 0 && ', '}
+                          {place.number != null && (
+                            <span className={cn('tabular-nums', place.numberAuto && AUTO_CUE_NUMBER_CLASS)}>
+                              {place.number}
+                            </span>
+                          )}
+                          {place.number != null && ' · '}
+                          {place.stackName}
                         </span>
-                      )}
-                      {place.number != null && ' · '}
-                      {place.stackName}
-                    </span>
-                  ))}
-            </span>
-          </label>
+                      ))}
+                </span>
+              </label>
+            ))}
+          </Fragment>
         ))}
         {shown.length === 0 && (
           <p className="px-2 py-1.5 text-sm text-muted-foreground">
-            {isLoading ? 'Loading cues…' : rows.length === 0 ? 'This show has no cues yet.' : 'No cues match.'}
+            {isLoading ? 'Loading cues…' : cueCount === 0 ? 'This show has no cues yet.' : 'No cues match.'}
           </p>
         )}
       </div>
