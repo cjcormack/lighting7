@@ -98,7 +98,7 @@ export interface FixturePatch extends LanternFocus {
    * Whose the patch is in the rig it was read in (venue plan session 3): `SHOW` for the project's
    * own, `VENUE` for its venue's at the pinned version. A venue row's identity is the venue's and the
    * desk refuses a patch write to one through a show (`VENUE_OWNED`); a show can hide it, or make one
-   * of its four facets its own (`facets`, `PUT …/facets/{facet}`, session 5). Absent from a desk older
+   * of its five facets its own (`facets`, `PUT …/facets/{facet}`: Name, Address, Position, Focus, Media). Absent from a desk older
    * than venues, which reads as `SHOW`.
    */
   owner?: RigOwner;
@@ -128,10 +128,13 @@ export type ColourOwner = 'SHOW' | 'VENUE';
 /** Whose a venue group's member order is in a show (group-order plan D8). */
 export type OrderOwner = 'SHOW' | 'VENUE';
 
-/** The four parts of a venue patch a show can make its own (venue plan D4), each whole. */
-export type PatchFacet = 'ADDRESS' | 'POSITION' | 'FOCUS' | 'MEDIA';
+/**
+ * The parts of a venue patch a show can make its own (venue plan D4), each whole — Name the show's
+ * name for the unit (venue-rig-fixes plan D24), its key, type and head still the venue's.
+ */
+export type PatchFacet = 'ADDRESS' | 'POSITION' | 'FOCUS' | 'MEDIA' | 'NAME';
 
-export const PATCH_FACETS: readonly PatchFacet[] = ['ADDRESS', 'POSITION', 'FOCUS', 'MEDIA'];
+export const PATCH_FACETS: readonly PatchFacet[] = ['ADDRESS', 'POSITION', 'FOCUS', 'MEDIA', 'NAME'];
 
 /**
  * One overridden facet of a venue patch, as the desk reads it (`ShowOverrides.FacetStateDto`).
@@ -152,7 +155,11 @@ export interface PatchFacetState {
 }
 
 /** A facet's fields. Placements are named by the venue placement's uuid, never added or removed. */
-export type FacetValue = AddressFacetValue | PositionFacetValue | FocusFacetValue | MediaFacetValue;
+export type FacetValue = AddressFacetValue | PositionFacetValue | FocusFacetValue | MediaFacetValue | NameFacetValue;
+
+export interface NameFacetValue {
+  displayName: string;
+}
 
 export interface AddressFacetValue {
   /** Stored by uuid; a write may name the universe by number instead (`universe`, `subnet`). */

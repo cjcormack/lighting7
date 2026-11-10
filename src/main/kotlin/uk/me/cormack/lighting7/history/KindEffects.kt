@@ -229,7 +229,7 @@ internal object KindEffects {
         RecordFolders.SHOW_HIDES ->
             if ((after ?: before)?.stringField("recordKind") in setOf(HideKind.PATCH.name, HideKind.GROUP.name)) RigReach.REBUILD else RigReach.NONE
         RecordFolders.SHOW_OVERRIDES -> when ((after ?: before)?.stringField("facet")) {
-            PatchFacet.ADDRESS.name, PatchFacet.MEDIA.name -> RigReach.REBUILD
+            PatchFacet.ADDRESS.name, PatchFacet.MEDIA.name, PatchFacet.NAME.name -> RigReach.REBUILD
             PatchFacet.FOCUS.name -> RigReach.METADATA
             else -> RigReach.NONE
         }

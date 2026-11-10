@@ -411,7 +411,7 @@ private fun DaoBuskRigTile.toDto(fixtures: Fixtures, rig: RigScope): BuskRigTile
             val dao = patch!!
             BuskRigTileDto(
                 id = id.value, uuid = uuid.toString(), kind = kind.name,
-                patch = BuskRigPatchDto(dao.id.value, dao.key, dao.displayName, liveCells(fixtures, dao.key).orEmpty()),
+                patch = BuskRigPatchDto(dao.id.value, dao.key, rig.nameOf(dao), liveCells(fixtures, dao.key).orEmpty()),
                 elementKey = elementKey, cellMode = cellMode, cellSplit = cellSplit, label = label,
             )
         }

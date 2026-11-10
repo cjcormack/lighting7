@@ -110,7 +110,7 @@ internal fun Route.routeApiRestProjectEffects(state: State) {
                 val writes = parseCueEventList(items, cueEventPatchesOf(project), "events", problems)
                 if (problems.isNotEmpty()) return@transaction null to (HttpStatusCode.BadRequest to problems.joinToString("; "))
                 replaceCueEvents(cue, writes)
-                cueEventsOf(cue.id).map { it.toDto() } to null
+                RigScope.of(project).let { rig -> cueEventsOf(cue.id).map { it.toDto(rig) } } to null
             }
             val (events, error) = outcome
             if (events == null) {

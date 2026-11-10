@@ -246,7 +246,7 @@ internal object VenueRigChecks {
     data class Keys(val fixtures: Map<String, String>, val groups: Set<String>)
 
     fun keysOf(rig: RigScope) = Keys(
-        fixtures = rig.patches().associate { it.key to it.displayName },
+        fixtures = rig.patches().associate { it.key to rig.nameOf(it) },
         groups = rig.groups().map { it.name }.toSet(),
     )
 

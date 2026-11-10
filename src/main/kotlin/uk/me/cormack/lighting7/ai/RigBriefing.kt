@@ -85,9 +85,9 @@ class RigBriefing(private val state: State) {
             sb.appendLine("## Venue")
             sb.appendLine(
                 "This show sits on the venue **${o.venueName}** at v${o.version}. Every record below says whose it is: " +
-                    "`owner=venue` is the venue's — its identity (name, key, type, head) is the venue's, and the setup " +
+                    "`owner=venue` is the venue's — its identity (key, type, head) is the venue's, and the setup " +
                     "tools refuse a write to it with VENUE_OWNED; a venue fixture can be hidden in this show, or one of its " +
-                    "four facets — address, position, focus, media — made this show's own, with override_venue_fixtures " +
+                    "five facets — address, position, focus, media, name — made this show's own, with override_venue_fixtures " +
                     "(place_fixtures then edits the ones this show owns). `overrides=` names the facets this show overrides, and every " +
                     "field shown is already the overridden one — but for a `(dormant)` one, where the venue's stands; " +
                     "`(drifted)` marks one the venue has changed since. " +

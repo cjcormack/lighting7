@@ -65,7 +65,7 @@ installs.json                  # populated with the local install's identity (Ph
 showHides/{uuid}.json          # v24+: a show on a venue's hides of venue records (recordKind,
                                # recordUuid)
 showOverrides/{uuid}.json      # v24+ (venue plan session 5): a show's facet overrides of venue
-                               # patches (recordUuid, facet, value, base)
+                               # patches (recordUuid, facet, value, base); NAME from v56
 showParkReleases/{uuid}.json   # v27+: a show on a venue's releases of venue parks (universe,
                                # channel)
 showColours/{uuid}.json        # v36+: a show on a venue's recolours of venue patches and groups
@@ -450,6 +450,15 @@ and an explicit list now write distinct orders (one whose orders do not rise is 
 position); a tie survives only in a home written before, and in its copies and imports. A desk plays
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
+
+### Version 56 — A show's name for a venue fixture
+
+Venue-rig-fixes plan D24–D27: a show's facet override may be `NAME`, the show's name for a venue fixture,
+its value `{displayName}` (`docs/fixtures-engineering.md` §"Facet overrides"). No field and no folder is
+new: the override travels in `showOverrides/` as every facet does, and a clone keeps it. An older archive
+holds none and reads as before. `SUPPORTED_FORMAT_VERSION = 56`; `MIN_SUPPORTED_FORMAT_VERSION` **stays
+5**, and **`minReader` moves to 56**: a v55 desk would fail to decode the enum value in `showOverrides/`,
+and a clean refusal is what the gate is for.
 
 ### Version 55 — Surface jobs
 

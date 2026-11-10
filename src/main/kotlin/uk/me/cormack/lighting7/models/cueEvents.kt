@@ -84,10 +84,12 @@ data class CueEventWrite(
 )
 
 /** The project's patches as an event write checks them, by id. Must run inside a transaction. */
-fun cueEventPatchesOf(project: DaoProject): Map<Int, CueEventPatchInfo> =
-    RigScope.of(project).patches().associate { p ->
-        p.id.value to CueEventPatchInfo(p.id.value, p.uuid, p.key, p.displayName, FixtureTriggers.specsForTypeKey(p.fixtureTypeKey))
+fun cueEventPatchesOf(project: DaoProject): Map<Int, CueEventPatchInfo> {
+    val rig = RigScope.of(project)
+    return rig.patches().associate { p ->
+        p.id.value to CueEventPatchInfo(p.id.value, p.uuid, p.key, rig.nameOf(p), FixtureTriggers.specsForTypeKey(p.fixtureTypeKey))
     }
+}
 
 /**
  * A whole event list in the REST shape — `[{patchId, trigger, offsetMs}]` — checked against the
@@ -218,7 +220,8 @@ data class CueEventDto(
 @Serializable
 data class CueEventListRequest(val events: List<JsonElement>? = null)
 
-internal fun DaoCueEvent.toDto(): CueEventDto {
+/** [rig] is the cue's project's: a venue fixture's name there is the show's (`RigScope.nameOf`). */
+internal fun DaoCueEvent.toDto(rig: RigScope): CueEventDto {
     val p = patch
     val spec = FixtureTriggers.specsForTypeKey(p.fixtureTypeKey).firstOrNull { it.name == trigger }
     return CueEventDto(
@@ -226,7 +229,7 @@ internal fun DaoCueEvent.toDto(): CueEventDto {
         patchId = p.id.value,
         patchUuid = p.uuid.toString(),
         fixtureKey = p.key,
-        fixtureName = p.displayName,
+        fixtureName = rig.nameOf(p),
         trigger = trigger,
         triggerLabel = spec?.label ?: trigger,
         offsetMs = offset.toMillis(),

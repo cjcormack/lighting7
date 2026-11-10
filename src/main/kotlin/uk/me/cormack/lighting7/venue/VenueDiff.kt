@@ -303,10 +303,11 @@ object VenueDiff {
     private val PATCH_ADDRESS_FIELDS = setOf("universeConfigUuid", "startChannel")
     private val UNIVERSE_OUTPUT_FIELDS = setOf("subnet", "universe", "controllerType")
 
-    /** A patch field's facet (venue plan §3.2's table, plus Type and Identity, which are the venue's). */
+    /** A patch field's facet (venue plan §3.2's table and Name, plus Type and Identity, which are the venue's). */
     private val PATCH_FACETS: Map<String, VenueFacet> = buildMap {
         put("fixtureTypeKey", VenueFacet.TYPE)
-        listOf("key", "displayName", "headNumber").forEach { put(it, VenueFacet.IDENTITY) }
+        listOf("key", "headNumber").forEach { put(it, VenueFacet.IDENTITY) }
+        put("displayName", VenueFacet.NAME)
         listOf("stageX", "stageY", "stageZ", "baseYawDeg", "basePitchDeg", "baseRollDeg", "lengthM")
             .forEach { put(it, VenueFacet.POSITION) }
         listOf(
@@ -345,11 +346,12 @@ enum class VenueChangeKind { UNIVERSE, PATCH, PARK, GROUP, RIGGING, REGION, ELEM
 enum class VenueChangeType { ADDED, REMOVED, CHANGED }
 
 /**
- * Which part of a patch a change touches: the plan's four facets (§3.2) — Address, Position, Focus,
- * Media — plus Type and Identity, which no show may override but a venue may change, and Other.
+ * Which part of a patch a change touches: the facets a show may override (§3.2) — Address, Position,
+ * Focus, Media, Name — plus Type and Identity (key and head), which no show may override but a venue
+ * may change, and Other.
  */
 @Serializable
-enum class VenueFacet { ADDRESS, TYPE, IDENTITY, POSITION, FOCUS, MEDIA, OTHER }
+enum class VenueFacet { ADDRESS, TYPE, IDENTITY, POSITION, FOCUS, MEDIA, NAME, OTHER }
 
 /** One field that changed, each side as one short line (null for none). */
 @Serializable

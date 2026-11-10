@@ -5,6 +5,7 @@ import {
   type FixturePatch,
   type FocusFacetValue,
   type MediaFacetValue,
+  type NameFacetValue,
   type PatchFacet,
   type PatchFacetState,
   type PositionFacetValue,
@@ -13,7 +14,7 @@ import { focusFields } from './lanterns'
 import { formatPatchAddress } from './patchAddress'
 
 /**
- * A venue patch's four **facets** in a show (venue plan session 5, D4): what the fixture sheet's
+ * A venue patch's **facets** in a show (venue plan session 5, D4): what the fixture sheet's
  * Venue | This show switches read and write, and what the Patch list's chips say. Pure: no store,
  * no React. The desk owns every rule — what a facet's fields are, what is valid, what drift is —
  * and this side only reads its answers and builds a value in `PUT …/facets/{facet}`'s shape.
@@ -28,6 +29,7 @@ export const FACET_LABEL: Readonly<Record<PatchFacet, string>> = {
   POSITION: 'Position',
   FOCUS: 'Focus',
   MEDIA: 'Media',
+  NAME: 'Name',
 }
 
 /** The show's override of [facet] on [patch], or null when the facet is the venue's. */
@@ -99,6 +101,8 @@ export function facetValueOf(patch: FixturePatch, facet: PatchFacet): FacetValue
         media: patch.media ?? null,
         placements: placements.map((p) => ({ placementUuid: p.uuid, media: p.media ?? null })),
       }
+    case 'NAME':
+      return { displayName: patch.displayName }
   }
 }
 
@@ -149,6 +153,8 @@ export function describeFacet(facet: PatchFacet, value: FacetValue, names: Facet
       if (slots > 0) parts.push(`${slots} slot${slots === 1 ? '' : 's'} fitted`)
       return parts.join(' · ')
     }
+    case 'NAME':
+      return (value as NameFacetValue).displayName
   }
 }
 

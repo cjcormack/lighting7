@@ -79,6 +79,7 @@ import uk.me.cormack.lighting7.models.DaoUniverseConfigs
 import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.ParkAddress
 import uk.me.cormack.lighting7.models.ProjectKind
+import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.RigOwner
 import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.TargetRef
@@ -164,6 +165,26 @@ class VenueAttachTest : RouteIntegrationTest() {
             val show = DaoProject[f.showId]
             assertEquals(1, show.venueVersion)
             assertNull(show.detachedFromVenueUuid)
+        }
+    }
+
+    @Test
+    fun `a show patch that differs from the venue's only by name attaches as that patch with a Name override`() {
+        val h = detachedShow()
+        val uuid = transaction(state.database) {
+            patch(h.showId, "hex-3").apply { displayName = "Panto boom special" }.uuid
+        }
+        val result = attach(h, to = 1)
+
+        assertTrue(result.applied)
+        val name = result.overrides.single { it.facet == PatchFacet.NAME }
+        assertEquals(uuid.toString(), name.venue.uuid)
+        assertTrue(result.additions.none { it.kind == AttachKind.PATCH }, "paired, not kept as a patch of its own: ${result.additions}")
+        transaction(state.database) {
+            val rig = RigScope.of(h.showId)
+            val unit = rig.patches().single { it.key == "hex-3" }
+            assertTrue(rig.ownerOf(unit.project.id) == RigOwner.VENUE, "the venue's patch")
+            assertEquals("Panto boom special", rig.nameOf(unit))
         }
     }
 

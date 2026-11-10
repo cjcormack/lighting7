@@ -97,7 +97,7 @@ data class SurfaceNames(
                 bank.uuid to listOfNotNull(bank.name, pageByColumn[bank.column.id.value]).joinToString(" · ")
             }
             return SurfaceNames(
-                fixtures = elements + patches.associate { it.key to it.displayName },
+                fixtures = elements + patches.associate { it.key to rig.nameOf(it) },
                 groups = groupRows.associate { it.name to it.name },
                 fixtureColours = patches.mapNotNull { p -> rig.colourOf(p)?.let { p.key to it } }.toMap(),
                 groupColours = groupRows.mapNotNull { g -> rig.colourOf(g)?.let { g.name to it } }.toMap(),

@@ -522,6 +522,7 @@ class ProjectCloneTest {
             val unit = rig.effective(rig.patches().first { it.uuid == f.overriddenUuid })
             assertEquals(470, unit.startChannel)
             assertEquals(result.uuidMapping.getValue(f.boomUuid), unit.rigging?.uuid)
+            assertEquals("Panto SR special", unit.displayName, "the clone keeps the show's name for it")
         }
     }
 

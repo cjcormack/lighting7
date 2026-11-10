@@ -152,6 +152,7 @@ class RigScope private constructor(
         return EffectivePatch(
             row = patch,
             overridden = o.keys,
+            displayName = (o[PatchFacet.NAME] as NameFacet?)?.displayName ?: patch.displayName,
             universeConfig = address?.let { universeIn(it.universeConfigUuid) } ?: patch.universeConfig,
             startChannel = address?.startChannel ?: patch.startChannel,
             rigging = if (position != null) position.riggingUuid?.let(::riggingIn) else patch.rigging,
@@ -172,6 +173,14 @@ class RigScope private constructor(
             fittedMedia = if (media != null) media.media else patch.fittedMedia,
         )
     }
+
+    /**
+     * [patch]'s name as this rig shows it: the show's Name override of a venue patch (venue-rig-fixes
+     * plan D24), else the row's. Every name a person reads off a patch in a show goes through this or
+     * [effective].
+     */
+    fun nameOf(patch: DaoFixturePatch): String =
+        (overridesOf(patch)[PatchFacet.NAME] as NameFacet?)?.displayName ?: patch.displayName
 
     /** [effective] over many rows, in their order. */
     fun effective(patches: Iterable<DaoFixturePatch>): List<EffectivePatch> = patches.map(::effective)

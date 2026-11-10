@@ -212,6 +212,26 @@ class McpVenueFixtureOverridesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a venue fixture is renamed for the show, the live rig follows, and VENUE takes the venue's name back`() {
+        val showId = liveShowOnVenue()
+        val venueName = profile(showId) { p, _ -> p.displayName }
+        val renamed = ok("override_venue_fixtures", """{"fixtures":[{"key":"adv2-1","name":"SR special"}]}""")
+        assertEquals("NAME", renamed["fixtures"]!!.jsonArray.single().jsonObject["overrides"]!!.jsonArray.single().jsonObject["facet"]!!.jsonPrimitive.content)
+        assertEquals("SR special", profile(showId) { p, _ -> p.displayName })
+        assertEquals("adv2-1", profile(showId) { p, _ -> p.key })
+        assertEquals("SR special", state.show.fixtures.untypedFixture("adv2-1").fixtureName, "the live rig reloaded")
+
+        val blank = call("override_venue_fixtures", """{"fixtures":[{"key":"adv2-1","name":"  "}]}""")
+        assertFalse(blank.success, blank.result)
+        val conflicting = call("override_venue_fixtures", """{"fixtures":[{"key":"adv2-1","facets":{"NAME":"VENUE"},"name":"x"}]}""")
+        assertFalse(conflicting.success, conflicting.result)
+
+        ok("override_venue_fixtures", """{"fixtures":[{"key":"adv2-1","facets":{"NAME":"VENUE"}}]}""")
+        assertEquals(venueName, profile(showId) { p, _ -> p.displayName })
+        assertEquals(venueName, state.show.fixtures.untypedFixture("adv2-1").fixtureName)
+    }
+
+    @Test
     fun `a venue fixture is hidden and shown, and the refusals name what to do`() {
         val showId = liveShowOnVenue()
         val notMine = call("override_venue_fixtures", """{"fixtures":[{"key":"adv2-1","facets":{"FOCUS":"KEEP_MINE"}}]}""")

@@ -336,10 +336,11 @@ are that commit's and will drift.
   under a show's Name override is drift, else it reaches the show as today. Update's review lists it
   with facet drift. Detach writes the effective name into the copy. Attach pairs a show patch that
   matches a venue patch but for its name as that patch plus a Name override (`VenueAttachPairing`).
-- **D27 — Sync 55.** The DTO's `formatVersion` and `minReader` and the importer's
-  `SUPPORTED_FORMAT_VERSION` to 55 (session 2 takes 54): an older reader would fail on the enum value
-  in `showOverrides/`, and a clean refusal is what the gate is for. `RichProjectFixture` carries a
-  Name override; `ProjectRoundTripTest` and the clone test cover it.
+- **D27 — Sync 56.** The DTO's `formatVersion` and `minReader` and the importer's
+  `SUPPORTED_FORMAT_VERSION` to 56 (session 2 took 54, surface-setup session 5 55): an older reader would
+  fail on the enum value in `showOverrides/`, and a clean refusal is what the gate is for.
+  `seedShowOnVenue` (`testsupport/VenueTestSupport.kt`) carries a Name override — the rich fixture is a
+  standalone show, which holds no overrides; `ProjectRoundTripTest` and the clone test cover it.
 
 ### Prompt Book
 
@@ -382,7 +383,7 @@ Decided by Chris on 2026-11-09, in three rounds (`venue-rig-fixes-design/INDEX.m
 - **`ColourEditor` grows a second mode.** Its programmer hosts must not change: session 5 keeps the
   existing `ColourEditor` tests green unmodified.
 - **Two sync bumps.** Session 2's 54 makes a desk at 53 refuse every show this desk pushes, since
-  it would derive other auto numbers; session 8's 55 makes a desk at 54 refuse one. Desks update
+  it would derive other auto numbers; session 8's 56 makes a desk at 55 refuse one. Desks update
   together; that is the rule the importer's gate encodes.
 
 ## 5. Implementation — nine sessions
@@ -407,9 +408,9 @@ run `./gradlew compileTestKotlin` and the touched packages' tests where they tou
 | 3 | The Show view follows the show | merged | `claude/zen-dirac-kc1wi2` | [#413](https://github.com/cjcormack/lighting7/pull/413) | `5a7f5cc` |
 | 4 | Include, and Record's cue list and placement | merged | `claude/sharp-lamport-6erbz0` | [#415](https://github.com/cjcormack/lighting7/pull/415) | `0015e0e` |
 | 5 | One colour editor for FX | merged | `claude/venue-rig-fixes-1fe92b` | [#417](https://github.com/cjcormack/lighting7/pull/417) | `35394c6` |
-| 6 | Path's Size | in review | `claude/lucid-keller-q7h8l3` | [#418](https://github.com/cjcormack/lighting7/pull/418) | `9f0b797` |
-| 7 | Move in dark's instant rows | in review | `claude/brave-darwin-jeducv` | | |
-| 8 | A show's name for a venue fixture | planned | | | |
+| 6 | Path's Size | merged | `claude/lucid-keller-q7h8l3` | [#418](https://github.com/cjcormack/lighting7/pull/418) | `9f0b797` |
+| 7 | Move in dark's instant rows | merged | `claude/brave-darwin-jeducv` | [#420](https://github.com/cjcormack/lighting7/pull/420) | `4b5ccf3` |
+| 8 | A show's name for a venue fixture | in review | `claude/eloquent-planck-9djcze` | | |
 | 9 | Selecting in the Prompt Book while the show plays | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -700,7 +701,7 @@ D24–D27.
   `venue/ShowOverrides.kt`, `routes/patchFacets.kt`, `venue/VenueDiff.kt`, `venue/VenueUpdate.kt`'s
   review, `venue/VenueDetach.kt`, `venue/VenueAttachPairing.kt`, `ai/VenueFixtureTools.kt` and
   `ai/SetupToolSchemas.kt`, `venue/VenueRigGuard.kt`'s hint; NAME in `announceFacetChange`'s and
-  the tool's reload (D24); the row readers of §1.9 onto the effective name; sync 55 (D27), the DTO
+  the tool's reload (D24); the row readers of §1.9 onto the effective name; sync 56 (D27), the DTO
   and `ProjectImporter.SUPPORTED_FORMAT_VERSION`.
 - Frontend: `api/patchApi.ts` (`PatchFacet`), `lib/patchFacets.ts` (label), `VenuePatchPanel.tsx`
   (the Name card and its line), `PatchSheet.tsx` (the venue row's name cell through the facet).
@@ -711,10 +712,22 @@ D24–D27.
   Update review listing the drift; `ProjectRoundTripTest` / clone with `RichProjectFixture`'s Name
   override; a 54 archive still reads; an MCP tool test. `VenueFacetCard.test.tsx`,
   `VenuePatchPanel.test.tsx` (new) and `PatchSheet.test.tsx` for the write.
-- Docs: `docs/fixtures-engineering.md` §"Facet overrides"; `docs/sync-engineering.md` (55); root
+- Docs: `docs/fixtures-engineering.md` §"Facet overrides"; `docs/sync-engineering.md` (56); root
   `CLAUDE.md`'s facet lines (*identity (name, key, type, head) still the venue's*, the facet list,
   the `PUT …/facets/{facet}` row) and the sync history.
 - Local: the full `./gradlew test` and `npm run check`.
+- *As built:* sync is **56**, not 55: surface-setup session 5 took 55 first. The Name facet's value is
+  `{displayName}`, trimmed, at most 255 characters; `RigScope.nameOf(patch)` answers it where a reader
+  holds the row, and `PatchFacet.reloadsRig` (Address, Media, Name) is the one reload rule the route and
+  `override_venue_fixtures` share; undo's `KindEffects` rebuilds on a Name override too. Of §1.9's
+  readers, `state/VenueHoldService.kt:232` was left as it is: it names an internal fixture the hold
+  builds to guard trigger and command channels, which no person reads. Readers the grep found beyond
+  §1.9: `SurfaceLabels`, the Update review's names. Attach needed no pairing code of its own:
+  `venueFacetOf` reads the name as a facet and the pairing loops every facet, so dropping
+  `displayName` from a patch row's `attributes` was enough. The Name override sits in
+  `seedShowOnVenue`, not `RichProjectFixture`, which is a standalone show; the export golden hashes
+  moved with the version and that file. The Patch sheet's venue-row name cell is the own row's rename
+  popover, writing `PUT …/facets/NAME`, and the venue panel's Name card sits inside its Identity block.
 
 ### Session 9 — Selecting in the Prompt Book while the show plays
 

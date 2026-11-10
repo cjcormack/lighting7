@@ -20,10 +20,12 @@ const updatePatch = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 const setHeadNumbers = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 const setPatchHidden = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 const setPatchColours = vi.fn((_args: unknown) => ({ unwrap: () => Promise.resolve() }))
+const setPatchFacet = vi.fn((_args: unknown) => ({ unwrap: () => Promise.resolve() }))
 vi.mock('@/store/patches', () => ({
   useUpdatePatchMutation: () => [updatePatch],
   useSetHeadNumbersMutation: () => [setHeadNumbers],
   useSetPatchColoursMutation: () => [setPatchColours],
+  useSetPatchFacetMutation: () => [setPatchFacet],
   useSetPatchHiddenMutation: () => [setPatchHidden],
   useDeletePatchMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve() }))],
 }))
@@ -154,6 +156,7 @@ afterEach(() => {
   // `mockClear` keeps the implementation, and one test swaps in a PUT that never resolves — so the
   // default has to be put back, or every later test in this file inherits the hang.
   updatePatch.mockClear()
+  setPatchFacet.mockClear()
   updatePatch.mockImplementation(() => ({ unwrap: () => Promise.resolve() }))
   setHeadNumbers.mockClear()
   setPatchHidden.mockClear()
@@ -291,12 +294,27 @@ describe('PatchSheet', () => {
       expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 1, startChannel: 7 })
     })
 
-    it("draws a venue head's identity read-only: no rename, no live cell", () => {
+    it("draws a venue head's address inert, and renames it for this show through the Name facet", () => {
       drawVenue()
-      // The name is plain text, not the rename's trigger; the address is drawn but inert.
-      expect(screen.getByText('PAR 2').closest('button')).toBeNull()
       expect(addressCell('PAR 2')).toBeDisabled()
-      expect(screen.getByText('PAR 1').closest('button')).not.toBeNull()
+      const name = screen.getByText('PAR 2')
+      expect(name.closest('button')).not.toBeNull()
+      fireEvent.doubleClick(name)
+      const field = screen.getByLabelText('Fixture name') as HTMLInputElement
+      fireEvent.change(field, { target: { value: ' Front wash 2 ' } })
+      fireEvent.keyDown(field, { key: 'Enter' })
+      expect(setPatchFacet).toHaveBeenCalledWith({ projectId: 1, patchId: 2, facet: 'NAME', value: { displayName: 'Front wash 2' } })
+      expect(updatePatch).not.toHaveBeenCalled()
+    })
+
+    it("takes the venue's name back when a venue head's name is committed blank", () => {
+      drawVenue()
+      fireEvent.doubleClick(screen.getByText('PAR 2'))
+      const field = screen.getByLabelText('Fixture name') as HTMLInputElement
+      fireEvent.change(field, { target: { value: '  ' } })
+      fireEvent.keyDown(field, { key: 'Enter' })
+      expect(setPatchFacet).toHaveBeenCalledWith({ projectId: 1, patchId: 2, facet: 'NAME', value: null })
+      expect(updatePatch).not.toHaveBeenCalled()
     })
 
     it('hides a selected venue head, and will not unpatch one', async () => {

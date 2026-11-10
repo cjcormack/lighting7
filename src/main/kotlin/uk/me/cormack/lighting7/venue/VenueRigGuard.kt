@@ -38,8 +38,8 @@ object VenueRigGuard {
         return VenueException.conflict(
             CODE_VENUE_OWNED,
             "$what is $whose, so this show cannot change it. A show can hide a venue record " +
-                "(PUT …/hidden), and make a venue fixture's address, position, focus or media its own with a " +
-                "facet override (PUT …/patches/{id}/facets/{ADDRESS|POSITION|FOCUS|MEDIA}); its name, key, type " +
+                "(PUT …/hidden), and make a venue fixture's address, position, focus, media or name its own with a " +
+                "facet override (PUT …/patches/{id}/facets/{ADDRESS|POSITION|FOCUS|MEDIA|NAME}); its key, type " +
                 "and head are the venue's. To change it for every show, edit the venue and publish.",
         )
     }
@@ -86,9 +86,9 @@ object VenueRigGuard {
 
     /** [ownedProblem]'s hint for a venue fixture: what a show may change about one, and with which tool. */
     const val VENUE_FIXTURE_HINT =
-        " A show can make a venue fixture's address, position, focus or media its own, recolour it, or hide it, with " +
-            "override_venue_fixtures (place_fixtures then edits the position, focus and media it owns, and its colour); " +
-            "its name, key, type, head and kind are the venue's."
+        " A show can make a venue fixture's address, position, focus or media its own, give it its own name, recolour it, " +
+            "or hide it, with override_venue_fixtures (place_fixtures then edits the position, focus and media it owns, and " +
+            "its colour); its key, type, head and kind are the venue's."
 
     /** [ownedProblem]'s hint for a venue group: what a show may change about one, and with which tool. */
     const val VENUE_GROUP_HINT =

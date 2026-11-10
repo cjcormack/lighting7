@@ -11,8 +11,8 @@ import org.jetbrains.exposed.v1.dao.IntEntityClass
  * changes for itself — the panto hanging a house mover on its own boom. The patch is named by its
  * uuid ([recordUuid]), a record's identity across the venue's versions, so an override outlives an
  * Update to a version that still holds the patch. `RigScope` lays [value] over the pinned snapshot's
- * patch; the rest of the patch — its identity (name, key, type, head number) and every facet the
- * show does not override — stays the venue's.
+ * patch; the rest of the patch — its identity (key, type, head number) and every facet the show does
+ * not override — stays the venue's.
  *
  * Each facet is **whole**: [value] is the canonical JSON of every field the facet covers, the primary
  * placement's and each extra placement's (`models/patchFacets.kt`), never a partial edit. [base] is the
@@ -43,10 +43,11 @@ object DaoShowOverrides : IntIdTable("show_overrides") {
 }
 
 /**
- * The four parts of a venue patch a show can make its own (venue plan D4). Each is whole; together
- * they are everything about a unit but its identity. `models/patchFacets.kt` says which fields each is.
+ * The parts of a venue patch a show can make its own (venue plan D4; Name, venue-rig-fixes plan D24).
+ * Each is whole; together they are everything about a unit but its identity — its key, type and head.
+ * `models/patchFacets.kt` says which fields each is.
  */
-enum class PatchFacet { ADDRESS, POSITION, FOCUS, MEDIA }
+enum class PatchFacet { ADDRESS, POSITION, FOCUS, MEDIA, NAME }
 
 class DaoShowOverride(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<DaoShowOverride>(DaoShowOverrides)

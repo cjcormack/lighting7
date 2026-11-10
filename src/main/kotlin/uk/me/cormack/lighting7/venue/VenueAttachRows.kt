@@ -143,7 +143,6 @@ object VenueAttachRows {
             placements = placements.map { PlacementRow(it.id.value, it.uuid, it.label) },
             facets = PatchFacet.entries.associateWith { venueFacetOf(patch, placements, it) },
             attributes = buildMap {
-                put("displayName", patch.displayName)
                 put("stageHidden", patch.stageHidden.toString())
                 put("infrastructure", patch.infrastructure.toString())
                 // A lantern derives its kind (`resolvePatchFocus`), so only a hand-set one is the patch's own.

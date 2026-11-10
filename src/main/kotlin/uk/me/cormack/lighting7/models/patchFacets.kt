@@ -18,7 +18,7 @@ import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import java.util.UUID
 
 /**
- * A venue patch's four **facets** (venue plan §3.2, D4) as values: what a show's override stores and
+ * A venue patch's **facets** (venue plan §3.2, D4) as values: what a show's override stores and
  * what the venue's patch holds, in one shape so the two compare field for field. Each facet is
  * **whole** — every field it covers, on the primary placement and on each extra placement — because
  * shutters without the position they were cut against mean nothing.
@@ -29,6 +29,7 @@ import java.util.UUID
  * | Position | `riggingUuid`, `stageX/Y/Z`, `baseYaw/Pitch/RollDeg`, `lengthM`, and each placement's |
  * | Focus | `lanternType`, `beamAngleDeg`, `lampWatts`, `lampKelvin`, `zoomDeg`, `lampRotationDeg`, `shutters`, `gateRotationDeg`, `iris`, `focusSoftness`, `locate`, and each placement's lantern fields |
  * | Media | `gelCode`, `media`, and each placement's |
+ * | Name | `displayName` — the show's name for the unit, its key the venue's (venue-rig-fixes plan D24) |
  *
  * **Placements are carried by the venue placement's uuid** (`placements: [{placementUuid, …}]`), each
  * entry the placement's own fields of that facet. A placement is the venue's — its count, order and
@@ -132,6 +133,13 @@ data class MediaFacet(
 }
 
 @Serializable
+data class NameFacet(
+    val displayName: String,
+) : FacetValue {
+    override val facet: PatchFacet get() = PatchFacet.NAME
+}
+
+@Serializable
 data class PlacementMedia(
     val placementUuid: String,
     val media: FittedMedia? = null,
@@ -150,6 +158,7 @@ private fun serializerOf(facet: PatchFacet): KSerializer<FacetValue> = when (fac
     PatchFacet.POSITION -> PositionFacet.serializer()
     PatchFacet.FOCUS -> FocusFacet.serializer()
     PatchFacet.MEDIA -> MediaFacet.serializer()
+    PatchFacet.NAME -> NameFacet.serializer()
 } as KSerializer<FacetValue>
 
 /** [value] as a JSON element with its keys sorted: what the wire and the sync archive carry. */
@@ -217,19 +226,23 @@ fun venueFacetOf(patch: DaoFixturePatch, placements: List<DaoFixturePatchPlaceme
             media = patch.fittedMedia,
             placements = placements.map { p -> PlacementMedia(p.uuid.toString(), p.fittedMedia) },
         )
+        PatchFacet.NAME -> NameFacet(patch.displayName)
     }
 
 /**
  * A patch as its rig sees it (venue plan §3.3): the stored row with each facet the show overrides
  * laid over it. For a show's own patch, a venue's, a version's or a standalone show's, every field is
  * the row's own. Read every facet field through this — the loader, the Patch list, the Stage view's
- * data, `describe_rig` and every check of where a unit is — and the row's identity through [row].
+ * data, `describe_rig` and every check of where a unit is — and every name a person reads: the show's
+ * Name override where it has one. The row's identity (key, type, head) is [row]'s.
  * Built by [RigScope.effective]; inside a transaction.
  */
 class EffectivePatch internal constructor(
     val row: DaoFixturePatch,
     /** The facets an override replaced here; empty for every patch but an overridden venue one. */
     val overridden: Set<PatchFacet>,
+    /** The unit's name, the Name override's where the show renames it. */
+    val displayName: String,
     val universeConfig: DaoUniverseConfig,
     val startChannel: Int,
     val rigging: DaoRigging?,
@@ -255,7 +268,6 @@ class EffectivePatch internal constructor(
     val uuid: UUID get() = row.uuid
     val project: DaoProject get() = row.project
     val key: String get() = row.key
-    val displayName: String get() = row.displayName
     val headNumber: Int? get() = row.headNumber
     val fixtureTypeKey: String get() = row.fixtureTypeKey
     val sortOrder: Int get() = row.sortOrder
