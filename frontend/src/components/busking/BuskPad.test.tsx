@@ -12,6 +12,7 @@ import type { BuskPad } from '@/api/buskApi'
 import type { PaletteSummary } from '@/api/palettesApi'
 import type { CueStack } from '@/api/cueStacksApi'
 import { BuskPadButton } from './BuskPad'
+import { assignTargetNow, closeAssignToSurface } from '@/components/surfaces/AssignToSurface'
 
 /**
  * The one pad, and the two faces inside it.
@@ -216,7 +217,15 @@ describe('the hold menu', () => {
     draw(palettePad(), { onApplyValues: () => {} })
     hold(screen.getByRole('button'))
     const items = screen.getAllByRole('menuitem').map((i) => i.textContent)
-    expect(items).toEqual(['Put on', 'Apply as values', 'Pick up', 'View'])
+    expect(items).toEqual(['Put on', 'Apply as values', 'Pick up', 'Assign to surface…', 'View'])
+  })
+
+  it('opens Assign to surface… on the pad itself', () => {
+    draw(palettePad(), { onApplyValues: () => {} })
+    hold(screen.getByRole('button'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Assign to surface…' }))
+    expect(assignTargetNow()?.subjects).toEqual([{ type: 'record', kind: 'PAD', uuid: 'p1' }])
+    closeAssignToSurface()
   })
 
   it('says *Take off these heads* when the pad covers them all', () => {
@@ -268,7 +277,7 @@ describe('the hold menu', () => {
   it('offers a cue pad only Pick up and View — a cue is playback', () => {
     draw(cuePad, { onApplyValues: () => {} })
     hold(screen.getByRole('button'))
-    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Pick up', 'View'])
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Pick up', 'Assign to surface…', 'View'])
   })
 
   it('picks the record up, and leaves the pad where it is', () => {
@@ -370,13 +379,13 @@ describe('a stack pad', () => {
     draw(stackPad, { stack: stack({ cues: [] }), onStackBack: () => {}, onStackRelease: () => {} })
     expect(screen.getByText('no cues')).toBeTruthy()
     hold(screen.getByRole('button'))
-    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['View'])
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Assign to surface…', 'View'])
   })
 
   it('offers GO and View while stopped, and Back and Release besides while running — never Pick up', () => {
     draw(stackPad, { stack: stack(), onStackBack: () => {}, onStackRelease: () => {} })
     hold(screen.getByRole('button'))
-    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['GO', 'View'])
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['GO', 'Assign to surface…', 'View'])
     cleanup()
 
     const onPress = vi.fn()
@@ -384,7 +393,7 @@ describe('a stack pad', () => {
     const onStackRelease = vi.fn()
     draw(stackPad, { stack: stack({ activeCueId: 12, activeEntryId: 2 }), onPress, onStackBack, onStackRelease })
     hold(screen.getByRole('button'))
-    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['GO', 'Back', 'Release', 'View'])
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['GO', 'Back', 'Release', 'Assign to surface…', 'View'])
     fireEvent.click(screen.getByText('Back'))
     expect(onStackBack).toHaveBeenCalledTimes(1)
     cleanup()
@@ -400,13 +409,13 @@ describe('a stack pad', () => {
     // A Stay stack on its last cue: a tap does nothing, so no GO; Back still steps it.
     draw(stackPad, { stack: stack({ releaseAtEnd: false, activeCueId: 13, activeEntryId: 3 }), onStackBack: () => {}, onStackRelease: () => {} })
     hold(screen.getByRole('button'))
-    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Back', 'Release', 'View'])
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Back', 'Release', 'Assign to surface…', 'View'])
     cleanup()
 
     // The first cue of a stack that does not loop: nothing behind it.
     draw(stackPad, { stack: stack({ activeCueId: 11, activeEntryId: 1 }), onStackBack: () => {}, onStackRelease: () => {} })
     hold(screen.getByRole('button'))
-    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['GO', 'Release', 'View'])
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['GO', 'Release', 'Assign to surface…', 'View'])
   })
 
   it('names the stack as the list holds it, so a rename by any door shows', () => {

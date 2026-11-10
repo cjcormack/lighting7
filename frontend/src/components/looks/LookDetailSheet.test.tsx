@@ -33,6 +33,7 @@ vi.mock('./useLookDelete', () => ({ useLookDelete: () => ({ run: vi.fn(), busy: 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }))
 
 import { LookDetailSheet } from './LookDetailSheet'
+import { assignTargetNow, closeAssignToSurface } from '@/components/surfaces/AssignToSurface'
 
 const SUMMARY: LookSummary = {
   id: 5,
@@ -103,6 +104,15 @@ async function copy(): Promise<string> {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+})
+
+describe('LookDetailSheet — Assign to surface…', () => {
+  it('opens the sheet on the Look', () => {
+    draw()
+    fireEvent.click(screen.getByRole('button', { name: 'Assign to surface…' }))
+    expect(assignTargetNow()?.subjects).toEqual([{ type: 'record', kind: 'LOOK', uuid: 'l5' }])
+    closeAssignToSurface()
+  })
 })
 
 describe('LookDetailSheet — references', () => {

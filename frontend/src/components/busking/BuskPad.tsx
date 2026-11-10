@@ -34,6 +34,7 @@ import { buskDragData, DROP_DEPTH, type BuskDropData, type BuskPadDragData } fro
 import { tapVerb } from '@/components/press/PressGestures'
 import type { PressInto } from '@/hooks/usePress'
 import { CopyOscAddressMenu } from '@/components/osc/CopyOscAddressMenu'
+import { AssignToSurfaceMenuItem } from '@/components/surfaces/AssignToSurface'
 import { useCurrentProjectQuery } from '@/store/projects'
 
 /** A busk pad presses the programmer: it has no focused Look to write into. */
@@ -399,6 +400,9 @@ export function BuskPadButton({
             </ContextMenuItem>
           )}
           {pad.id != null && <PadOscAddress padId={pad.id} />}
+          {pad.uuid != null && (
+            <AssignToSurfaceMenuItem target={{ name: face.name, subjects: [{ type: 'record', kind: 'PAD', uuid: pad.uuid }] }} menu="context" />
+          )}
           <ContextMenuSeparator />
           <ContextMenuItem onSelect={onInspect}>
             <Eye className="mr-2 size-4" />
@@ -435,6 +439,9 @@ export function BuskPadButton({
           Pick up
         </ContextMenuItem>
         {pad.id != null && <PadOscAddress padId={pad.id} />}
+        {pad.uuid != null && (
+          <AssignToSurfaceMenuItem target={{ name: face.name, subjects: [{ type: 'record', kind: 'PAD', uuid: pad.uuid }] }} menu="context" />
+        )}
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={onInspect}>
           <Eye className="mr-2 size-4" />

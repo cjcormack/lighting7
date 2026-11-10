@@ -1,0 +1,104 @@
+{
+    "projectId": 7,
+    "uses": {
+        "group:front-wash": [
+            {
+                "deviceTypeKey": "x-touch-compact-standard",
+                "deviceLabel": "X-Touch Compact",
+                "controlId": "fader-1",
+                "part": "MAIN",
+                "layer": "layer-a",
+                "label": "Fader 1 · A",
+                "does": "Dimmer · Front wash",
+                "fromJob": true
+            },
+            {
+                "deviceTypeKey": "x-touch-compact-standard",
+                "deviceLabel": "X-Touch Compact",
+                "controlId": "enc-1",
+                "part": "MAIN",
+                "label": "Encoder 1",
+                "does": "Dimmer · Front wash",
+                "fromJob": true
+            },
+            {
+                "deviceTypeKey": "x-touch-compact-standard",
+                "deviceLabel": "X-Touch Compact",
+                "controlId": "btn-1",
+                "part": "MAIN",
+                "label": "Button 1",
+                "does": "Flash · Front wash",
+                "fromJob": true
+            },
+            {
+                "deviceTypeKey": "x-touch-compact-standard",
+                "deviceLabel": "X-Touch Compact",
+                "controlId": "btn-25",
+                "part": "MAIN",
+                "label": "Button 25",
+                "does": "Select · Front wash",
+                "fromJob": true
+            }
+        ],
+        "fixture:hex-1": [
+            {
+                "deviceTypeKey": "x-touch-compact-standard",
+                "deviceLabel": "X-Touch Compact",
+                "controlId": "fader-1",
+                "part": "MAIN",
+                "layer": "layer-b",
+                "label": "Fader 1 · B",
+                "does": "Dimmer · Hex 1"
+            }
+        ],
+        "record:MASTER:22222222-2222-4222-8222-222222222222": [
+            {
+                "deviceTypeKey": "x-touch-compact-standard",
+                "deviceLabel": "X-Touch Compact",
+                "controlId": "fader-9",
+                "part": "MAIN",
+                "label": "Master",
+                "does": "Tempo · M2 · Chase"
+            },
+            {
+                "deviceTypeKey": "x-touch-compact-standard",
+                "deviceLabel": "X-Touch Compact",
+                "controlId": "enc-10",
+                "part": "MAIN",
+                "label": "Encoder 10",
+                "does": "Tempo · M2 · Chase",
+                "fromJob": true
+            }
+        ],
+        "record:STACK:11111111-1111-4111-8111-111111111111": [
+            {
+                "deviceTypeKey": "x-touch-compact-standard",
+                "deviceLabel": "X-Touch Compact",
+                "controlId": "btn-3",
+                "part": "MAIN",
+                "label": "Button 3",
+                "does": "GO · Act 1"
+            }
+        ],
+        "record:STACK:99999999-1111-4111-8111-111111111111": [
+            {
+                "deviceTypeKey": "x-touch-compact-standard",
+                "deviceLabel": "X-Touch Compact",
+                "controlId": "btn-4",
+                "part": "MAIN",
+                "label": "Button 4",
+                "does": "GO · A missing cue stack"
+            }
+        ],
+        "record:PALETTE:33333333-3333-4333-8333-333333333333": [
+            {
+                "deviceTypeKey": "x-touch-compact-standard",
+                "deviceLabel": "X-Touch Compact",
+                "controlId": "btn-6",
+                "part": "MAIN",
+                "label": "Button 6",
+                "does": "A missing palette"
+            }
+        ]
+    }
+}

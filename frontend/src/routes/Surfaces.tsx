@@ -89,31 +89,33 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
   const layered = (selectedProfile?.banks.length ?? 0) > 0
   const deviceOnNoLayer = layered && selectedDevice != null && deviceLayer == null
 
-  // `?binding=<id>` is minted from the fixtures and groups pages (`BoundControlBadge`): it picks the
-  // binding's device and control and **views** its layer, moving nothing on the hardware.
-  const highlightBindingId = useMemo(() => {
-    const v = searchParams.get("binding")
-    return v ? Number(v) : null
-  }, [searchParams])
+  // `?type=&control=&layer=` is minted by a record's *Bound on* chip (`BoundOnChip`): it picks a
+  // device of that type and the control, and **views** the layer, moving nothing on the hardware.
+  const linkedControl = searchParams.get("control")
+  const linkedType = searchParams.get("type")
+  const linkedLayer = searchParams.get("layer")
   const selectedDisplayKeyRef = useRef(selectedDisplayKey)
   useEffect(() => {
     selectedDisplayKeyRef.current = selectedDisplayKey
   }, [selectedDisplayKey])
   useEffect(() => {
-    if (!highlightBindingId || !bindings) return
-    const binding = bindings.find((b) => b.id === highlightBindingId)
-    if (!binding) return
+    if (linkedControl == null) return
     const shown = devices.find((d) => d.displayKey === selectedDisplayKeyRef.current)
     const device =
-      shown?.typeKey === binding.deviceTypeKey ? shown : devices.find((d) => d.typeKey === binding.deviceTypeKey)
-    if (device) setSelectedDisplayKey(device.displayKey)
-    setSelectedControlId(binding.controlId)
-    if (binding.bank != null) setViewed(binding.bank)
-    setView("picture")
+      linkedType == null || shown?.typeKey === linkedType ? shown : devices.find((d) => d.typeKey === linkedType)
+    // A link to a type with no device attached selects nothing; it is still consumed.
+    if (linkedType == null || device != null) {
+      if (device) setSelectedDisplayKey(device.displayKey)
+      setSelectedControlId(linkedControl)
+      if (linkedLayer != null) setViewed(linkedLayer)
+      setView("picture")
+    }
     const params = new URLSearchParams(searchParams)
-    params.delete("binding")
+    params.delete("control")
+    params.delete("type")
+    params.delete("layer")
     setSearchParams(params, { replace: true })
-  }, [highlightBindingId, bindings, devices, searchParams, setSearchParams])
+  }, [linkedControl, linkedType, linkedLayer, devices, searchParams, setSearchParams])
 
   // A touch on the desk selects its control, on the device it came from.
   const onCapture = useCallback((capture: IdentifyCapture) => {

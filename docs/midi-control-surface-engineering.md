@@ -569,12 +569,25 @@ tables or the label rules (P5). Three things serve it:
   binding or a job in the project, or already built (so a type that drops out still gets the frame that empties
   it). The frame is sent again only when it changed; a speed master's rename rebuilds it, as a
   record's does.
+- **`surfaceUses.state`** — `{projectId, uses}`, the map's reverse index (`midi/SurfaceUses.kt`), rebuilt
+  with the map and sent beside it when it changed: `group:<key>`, `fixture:<key>` or `record:<KIND>:<uuid>`
+  → every control part acting on it, read from the map frames so a job's parts count. A record named in a
+  catalogue parameter of kind `RECORD` (a palette's press) is filed under it as well as the part's
+  subject. A part reaching every layer is one use with no `layer`; one reaching some is a use per layer.
+  Each says where it is (`label`, *Button 36 · A*), what it does there (`does`, the map's label) and
+  `fromJob`. Editor D's *Bound on* reads it; `uses.fixture.json` pins it beside the map's fixture.
 - **`GET /api/rest/surface-functions`** — `SurfaceCatalogue.entries`, static per build.
 - **The slot write** — `PUT /projects/{id}/surface-bindings/slot` `{deviceTypeKey, controlId, part,
   layer, binding, takeoverPolicy?}` makes whatever the slot holds this binding (the row kept, rewritten in
   place), and `DELETE …/slot` `{deviceTypeKey, controlId, part, layer}` clears it (404 when empty). Every
   §"Bind-time refusals" rule applies. A slot write states the whole slot, so an absent `takeoverPolicy`
   is the control's default.
+- **The slot preview** — `GET …/surface-bindings/slot/preview?deviceTypeKey=&controlId=&part=&layer=`
+  answers `{place, replaces}` (`SurfaceUses.slotPreview`, over the type's map built at the call): `place`
+  is `SurfaceUses.placeLabel` (*Encoder 9 push · A*), and `replaces` what a write there would change, a
+  line each — *Replaces X.*, *Layer B keeps its own: X.*, *Beats X on Layer A; every other layer keeps
+  it.*, *Takes it out of <job> (X).* — empty when nothing acts there. Editor D's heading and *Replaces …*
+  read it, so the layer precedence stays on the desk (P5). 400 for an unknown type, control or layer.
 
 `src/test/resources/surfaces/catalogue.fixture.json` and `map.fixture.json` pin both answers;
 `SurfaceCatalogueTest` writes and checks them (`REGENERATE_SURFACE_FIXTURES=1` after a deliberate
@@ -956,6 +969,7 @@ From `State.kt`:
 | `surfaceBank.bindingsChanged` | Broadcast on every binding mutation |
 | `surfaceIdentify.state` / `.captured` | The window's wait and its capture, to that window only |
 | `surfaceMap.state` | `{ projectId, deviceTypeKey, layers }` — the served picture, a frame per device type, sent when it changed |
+| `surfaceUses.state` | `{ projectId, uses }` — what each group, fixture and record is bound on, the map's reverse index, sent when it changed |
 | `surfaceControls.state` / `.changed` | `{ displayKey, controls: {controlId: ControlState} }` — whole device / conflated delta |
 | `selection.state` | `{ targets }` — connect snapshot + broadcast (`SelectionSocket.kt`) |
 | `busk.pageState` | `{ pageId }` — connect snapshot + broadcast; `null` means the desk has not been pointed at a page (`BuskSocket.kt`). Shares only a namespace with the `busk.layoutChanged` broadcast, which is about *documents* |
@@ -970,6 +984,7 @@ From `State.kt`:
 | `PATCH /api/rest/projects/{projectId}/surface-bindings/{id}` | Update (uses `FieldUpdate<T>` sentinel for nullable fields). Shape-validated against the row it *becomes*, the same check `POST` runs |
 | `DELETE /api/rest/projects/{projectId}/surface-bindings/{id}` | Delete |
 | `PUT` / `DELETE /api/rest/projects/{projectId}/surface-bindings/slot` | The editors' one write: a control part on a layer, named in the body (§"The served picture") |
+| `GET /api/rest/projects/{projectId}/surface-bindings/slot/preview` | Where a slot is and what a write there would change (§"The served picture") |
 | `GET /api/rest/surface-functions` | The function catalogue |
 
 ## Known limitations

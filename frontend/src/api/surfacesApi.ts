@@ -409,6 +409,54 @@ export interface SurfaceMapFrame {
   jobs?: SurfaceJobView[]
 }
 
+// ─── What each record is bound to (D15) ────────────────────────────────────────────────────
+// Mirrors `midi/SurfaceUses.kt`: the map's reverse index, so a record's *Bound on* chip reads the
+// desk's answer and never resolves a binding itself.
+
+/** One control part acting on a subject. */
+export interface SurfaceUse {
+  deviceTypeKey: string
+  /** The profile's product name: `X-Touch Compact`. */
+  deviceLabel: string
+  controlId: string
+  part: ControlPart
+  /** The layer it acts on; absent for every layer. */
+  layer?: string | null
+  /** Where it is, in the desk's words: `Button 36 · A`, `Encoder 9 push`. */
+  label: string
+  /** What it does there: `GO · Act 1`. */
+  does?: string | null
+  /** Its region's job derives it, rather than a binding of its own. */
+  fromJob?: boolean
+}
+
+/** Every subject's uses, keyed by [surfaceUseKey]. */
+export interface SurfaceUsesFrame {
+  projectId: number
+  uses: Record<string, SurfaceUse[]>
+}
+
+/** Where a slot is and what assigning to it would change, in the desk's words (`GET …/surface-bindings/slot/preview`). */
+export interface SurfaceSlotPreview {
+  /** `Button 36 · A`, `Encoder 9 push`. */
+  place: string
+  /** `Replaces GO · Act 1.` and the like; empty when nothing acts there. */
+  replaces: string[]
+}
+
+/** The key a subject's uses are filed under, as the desk files them; null for one that names nothing. */
+export function surfaceUseKey(subject: SurfaceSubject | null | undefined): string | null {
+  switch (subject?.type) {
+    case "group":
+    case "fixture":
+      return `${subject.type}:${subject.key}`
+    case "record":
+      return `record:${subject.kind}:${subject.uuid}`
+    default:
+      return null
+  }
+}
+
 // ─── Jobs (surface-setup plan D11) ─────────────────────────────────────────────────────────
 // Mirrors `midi/SurfaceJobs.kt` and `routes/projectSurfaceJobs.kt`.
 
@@ -555,6 +603,8 @@ export interface SurfacesWsApi {
   subscribeEncoderBanks(fn: (attributes: Record<string, EncoderBankSelection>) => void): Subscription
   /** Every device type's served map, keyed by its type; each frame replaces its type's. */
   subscribeMaps(fn: (maps: Readonly<Record<string, SurfaceMapFrame>>) => void): Subscription
+  /** What each group, fixture and record is bound to; each frame replaces the last. */
+  subscribeUses(fn: (uses: SurfaceUsesFrame) => void): Subscription
 
   // The last snapshot of each cached stream, or null before its first frame, for a reader that is
   // not a subscriber — an RTK Query `queryFn` seeding its cache entry.
@@ -564,6 +614,7 @@ export interface SurfacesWsApi {
   getControls(): SurfaceControlStates | null
   getEncoderBanks(): Record<string, EncoderBankSelection> | null
   getMaps(): Readonly<Record<string, SurfaceMapFrame>> | null
+  getUses(): SurfaceUsesFrame | null
 
   /** Binding list membership changed (added / updated / removed / reloaded). */
   subscribeBindingsChanged(fn: (event: BindingsChangeEvent) => void): Subscription
@@ -606,6 +657,7 @@ type InboundMessage =
   | ({ type: "surfaceBank.bindingsChanged" } & BindingsChangeEvent)
   | ({ type: "surfaceScaler.state" } & ScalerState)
   | ({ type: "surfaceMap.state" } & SurfaceMapFrame)
+  | ({ type: "surfaceUses.state" } & SurfaceUsesFrame)
   | ({ type: "surfaceIdentify.state" } & IdentifyState)
   | ({ type: "surfaceIdentify.captured" } & IdentifyCapture)
 
@@ -619,6 +671,7 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
   const controls = createWsSubscribable<SurfaceControlStates>()
   const encoderBanks = createWsSubscribable<Record<string, EncoderBankSelection>>()
   const maps = createWsSubscribable<Readonly<Record<string, SurfaceMapFrame>>>()
+  const uses = createWsSubscribable<SurfaceUsesFrame>()
 
   let lastDevices: SurfaceDeviceInfo[] | null = null
   let lastBanks: Record<string, string> | null = null
@@ -626,6 +679,7 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
   let lastControls: SurfaceControlStates | null = null
   let lastEncoderBanks: Record<string, EncoderBankSelection> | null = null
   let lastMaps: Readonly<Record<string, SurfaceMapFrame>> | null = null
+  let lastUses: SurfaceUsesFrame | null = null
 
   conn.subscribe((evType, _ev, frame) => {
     if (evType !== "message") return
@@ -702,6 +756,10 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
         maps.notify(lastMaps)
         break
       }
+      case "surfaceUses.state":
+        lastUses = { projectId: parsed.projectId, uses: parsed.uses }
+        uses.notify(lastUses)
+        break
       case "surfaceIdentify.state": {
         const { type: _type, ...rest } = parsed
         identify.notify({ type: "state", ...rest })
@@ -732,12 +790,14 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
     subscribeControls: subscribeCached(controls.api, () => lastControls),
     subscribeEncoderBanks: subscribeCached(encoderBanks.api, () => lastEncoderBanks),
     subscribeMaps: subscribeCached(maps.api, () => lastMaps),
+    subscribeUses: subscribeCached(uses.api, () => lastUses),
     getDevices: () => lastDevices,
     getBanks: () => lastBanks,
     getScaler: () => lastScaler,
     getControls: () => lastControls,
     getEncoderBanks: () => lastEncoderBanks,
     getMaps: () => lastMaps,
+    getUses: () => lastUses,
     subscribeBindingsChanged: bindings.api.subscribe,
     subscribeIdentify: identify.api.subscribe,
     subscribeScaler: subscribeCached(scaler.api, () => lastScaler),

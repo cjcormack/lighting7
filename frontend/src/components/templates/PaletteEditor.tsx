@@ -10,6 +10,8 @@ import {
 } from '@/components/ui/sheet'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
+import { AssignToSurfaceButton } from '@/components/surfaces/AssignToSurface'
+import { BoundOnChip } from '@/components/surfaces/BoundOnChip'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -358,6 +360,14 @@ export function PaletteEditor({
       <SheetContent className="flex flex-col sm:max-w-lg">
         <SheetHeader>
           <SheetTitle>{template == null ? 'New palette' : template.name}</SheetTitle>
+          {template != null && (
+            <div className="flex flex-wrap items-center gap-2">
+              <AssignToSurfaceButton
+                target={{ name: template.name, subjects: [{ type: 'record', kind: 'PALETTE', uuid: template.uuid }], projectId }}
+              />
+              <BoundOnChip subjects={[{ type: 'record', kind: 'PALETTE', uuid: template.uuid }]} projectId={projectId} />
+            </div>
+          )}
         </SheetHeader>
         <SheetBody>
           {saveError != null && (

@@ -8,6 +8,7 @@ import type {
   ControlSurfaceType,
   EncoderBankSelection,
   IdentifyCapture,
+  IdentifyEvent,
   JobItem,
   JobKindInfo,
   PickupChange,
@@ -16,9 +17,12 @@ import type {
   SurfaceControlStates,
   SurfaceDeviceInfo,
   SurfaceMapFrame,
+  SurfaceSlotPreview,
+  SurfaceUse,
+  SurfaceUsesFrame,
   TakeoverPolicy,
 } from "../api/surfacesApi"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 
 export type {
   BankButtonControl,
@@ -65,10 +69,14 @@ export type {
   SurfaceJobView,
   SurfaceLayout,
   SurfaceMapFrame,
+  SurfaceSlotPreview,
   SurfaceSubject,
+  SurfaceUse,
+  SurfaceUsesFrame,
   TakeoverPolicy,
   WritesTo,
 } from "../api/surfacesApi"
+export { surfaceUseKey } from "../api/surfacesApi"
 
 /** One job region on one layer: what the job write and its clear name. `layer` null is both. */
 export interface SurfaceJobSlot {
@@ -111,6 +119,7 @@ const NO_PICKUPS: PickupStates = {}
 const NO_CONTROLS: SurfaceControlStates = {}
 const NO_ENCODER_BANKS: Record<string, EncoderBankSelection> = {}
 const NO_MAPS: Readonly<Record<string, SurfaceMapFrame>> = {}
+const NO_USE_LIST: readonly SurfaceUse[] = []
 /** What the scaler is before its first frame: nothing blacked out, grand master live. */
 const SCALER_AT_REST: ScalerState = { blackoutEnabled: false, grandMasterEnabled: true }
 
@@ -199,6 +208,20 @@ export const surfacesApi = restApi.injectEndpoints({
         { type: 'SurfaceBinding', id: projectId },
         { type: 'CueList', id: projectId },
       ],
+    }),
+
+    /**
+     * What a slot write would change, the desk's answer. [revision] is the caller's count of map
+     * frames, so a frame that moved what the slot resolves to asks again.
+     */
+    surfaceSlotPreview: build.query<SurfaceSlotPreview, { projectId: number; slot: SurfaceSlot; revision: number }>({
+      query: ({ projectId, slot }) => {
+        const params = new URLSearchParams({ deviceTypeKey: slot.deviceTypeKey, controlId: slot.controlId, part: slot.part })
+        if (slot.layer != null) params.set('layer', slot.layer)
+        return `projects/${projectId}/surface-bindings/slot/preview?${params}`
+      },
+      providesTags: (_result, _error, { projectId }) => [{ type: 'SurfaceBinding', id: projectId }],
+      keepUnusedDataFor: 5,
     }),
 
     clearSurfaceSlot: build.mutation<void, { projectId: number; slot: SurfaceSlot }>({
@@ -343,6 +366,7 @@ export const {
   usePutSurfaceJobMutation,
   useDeleteSurfaceJobMutation,
   useWriteSurfaceSlotMutation,
+  useSurfaceSlotPreviewQuery,
   useClearSurfaceSlotMutation,
   useSurfaceMapsQuery,
   useSurfaceDevicesQuery,
@@ -398,6 +422,45 @@ export function useSurfaceMap(deviceTypeKey: string | null | undefined): Surface
   return deviceTypeKey == null ? null : (data?.[deviceTypeKey] ?? null)
 }
 
+const subscribeUses = (fn: () => void) => {
+  const subscription = lightingApi.surfaces?.subscribeUses?.(() => fn())
+  return () => subscription?.unsubscribe?.()
+}
+const readUses = (): SurfaceUsesFrame | null => {
+  const frame = lightingApi.surfaces?.getUses?.()
+  return frame != null && typeof frame.uses === "object" ? frame : null
+}
+
+/**
+ * Every control part acting on the subjects filed under [keys], in the desk's order, a part listed
+ * once though two keys name it. The index is the current project's; given a [projectId] that is not
+ * it, there are none. Read straight off the socket rather than through the store, so a record's door
+ * draws it wherever it is mounted.
+ */
+export function useSurfaceUses(keys: readonly (string | null | undefined)[], projectId?: number): readonly SurfaceUse[] {
+  const data = useSyncExternalStore(subscribeUses, readUses)
+  const joined = keys.filter((k): k is string => k != null).join("\n")
+  return useMemo(() => {
+    if (data == null || joined === "" || (projectId != null && data.projectId !== projectId)) return NO_USE_LIST
+    const seen = new Set<string>()
+    const out: SurfaceUse[] = []
+    for (const key of joined.split("\n")) {
+      for (const use of data.uses[key] ?? []) {
+        const id = `${use.deviceTypeKey}|${use.controlId}|${use.part}|${use.layer ?? ""}`
+        if (seen.has(id)) continue
+        seen.add(id)
+        out.push(use)
+      }
+    }
+    return out.length === 0 ? NO_USE_LIST : out
+  }, [data, projectId, joined])
+}
+
+/** The project the uses index is for, or null before its first frame. */
+export function useSurfaceUsesProjectId(): number | null {
+  return useSyncExternalStore(subscribeUses, readUses)?.projectId ?? null
+}
+
 /** This window's wait for a touch on the desk (D14). */
 export interface IdentifyWait {
   waiting: boolean
@@ -407,9 +470,46 @@ export interface IdentifyWait {
   ended: string | null
 }
 
+// Every identify event reaches the hooks through one dispatcher, so a begin whose hook unmounted
+// before the desk answered can have its wait cancelled when the answer arrives.
+const identifyHandlers = new Set<(event: IdentifyEvent) => void>()
+/** Begins sent and not yet answered by a waiting state, oldest first; one the desk never answered expires. */
+const unansweredBegins: { live: boolean; at: number }[] = []
+const BEGIN_ANSWER_MS = 10_000
+const answeredSessions: string[] = []
+let identifySubscription: { unsubscribe(): void } | null = null
+
+function onIdentifyEvent(event: IdentifyEvent) {
+  if (event.type === 'state' && event.waiting && !answeredSessions.includes(event.sessionId)) {
+    answeredSessions.push(event.sessionId)
+    if (answeredSessions.length > 16) answeredSessions.shift()
+    while (unansweredBegins.length > 0 && Date.now() - unansweredBegins[0].at > BEGIN_ANSWER_MS) unansweredBegins.shift()
+    const begin = unansweredBegins.shift()
+    if (begin != null && !begin.live) {
+      lightingApi.surfaces.cancelIdentify(event.sessionId)
+      settleIdentify()
+      return
+    }
+  }
+  identifyHandlers.forEach((handler) => handler(event))
+  settleIdentify()
+}
+
+function watchIdentify() {
+  identifySubscription ??= lightingApi.surfaces.subscribeIdentify(onIdentifyEvent)
+}
+
+function settleIdentify() {
+  if (identifyHandlers.size > 0 || unansweredBegins.length > 0) return
+  identifySubscription?.unsubscribe()
+  identifySubscription = null
+  answeredSessions.length = 0
+}
+
 /**
  * Identify mode for this window: [begin] asks the desk for the next touch, which arrives through
- * [onCapture] and is never dispatched. One wait at a time; unmounting ends it.
+ * [onCapture] and is never dispatched. One wait at a time; unmounting ends it, even one the desk
+ * has not answered yet.
  */
 export function useIdentify(onCapture: (capture: IdentifyCapture) => void): {
   wait: IdentifyWait
@@ -418,13 +518,14 @@ export function useIdentify(onCapture: (capture: IdentifyCapture) => void): {
 } {
   const [wait, setWait] = useState<IdentifyWait>({ waiting: false, endsAt: null, ended: null })
   const session = useRef<string | null>(null)
+  const begins = useRef<{ live: boolean; at: number }[]>([])
   const captureRef = useRef(onCapture)
   useEffect(() => {
     captureRef.current = onCapture
   }, [onCapture])
 
   useEffect(() => {
-    const subscription = lightingApi.surfaces.subscribeIdentify((event) => {
+    const handler = (event: IdentifyEvent) => {
       if (event.type === 'state') {
         if (event.waiting) {
           session.current = event.sessionId
@@ -440,17 +541,27 @@ export function useIdentify(onCapture: (capture: IdentifyCapture) => void): {
       session.current = null
       setWait({ waiting: false, endsAt: null, ended: null })
       captureRef.current(event)
-    })
+    }
+    const mine = begins.current
+    identifyHandlers.add(handler)
+    watchIdentify()
     return () => {
-      subscription.unsubscribe()
+      identifyHandlers.delete(handler)
+      for (const begin of mine) begin.live = false
       if (session.current != null) lightingApi.surfaces.cancelIdentify(session.current)
+      settleIdentify()
     }
   }, [])
 
   const begin = useCallback((deviceTypeKey?: string | null) => {
     if (!lightingApi.surfaces.beginIdentify(deviceTypeKey)) {
       setWait({ waiting: false, endsAt: null, ended: 'offline' })
+      return
     }
+    const sent = { live: true, at: Date.now() }
+    begins.current.push(sent)
+    unansweredBegins.push(sent)
+    watchIdentify()
   }, [])
   const cancel = useCallback(() => {
     if (session.current != null) lightingApi.surfaces.cancelIdentify(session.current)

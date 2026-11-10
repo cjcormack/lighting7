@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AudioWaveform, Blinds, CopyPlus, Download, Loader2, XCircle } from 'lucide-react'
 import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
 import { CopyOscAddressButton } from '@/components/osc/CopyOscAddressMenu'
+import { AssignToSurfaceButton } from '@/components/surfaces/AssignToSurface'
+import { BoundOnChip } from '@/components/surfaces/BoundOnChip'
 import {
   Sheet,
   SheetBody,
@@ -267,6 +269,8 @@ export function LookDetailSheet({
               record={{ kind: 'LOOK', id: look.id, name: look.name }}
             />
             <CopyOscAddressButton projectId={projectId} records={[{ kind: 'LOOK', id: look.id }]} />
+            <AssignToSurfaceButton target={{ name: look.name, subjects: [{ type: 'record', kind: 'LOOK', uuid: look.uuid }], projectId }} />
+            <BoundOnChip subjects={[{ type: 'record', kind: 'LOOK', uuid: look.uuid }]} projectId={projectId} />
           </div>
 
           <div className="space-y-2">

@@ -50,6 +50,7 @@ import { useCueActionDialogs } from './cueActionDialogs'
 import { TIMELINE_LAST_FOLD_CLASS } from './timelineFolds'
 import { isRemoteMode } from '@/lib/remoteMode'
 import { CopyOscAddressMenu } from '@/components/osc/CopyOscAddressMenu'
+import { AssignCueToSurfaceItem } from '@/components/surfaces/AssignCueToSurface'
 
 /** One row the actions act on: a cue, and the entry it was opened from (null for a loose cue). */
 export interface CueActionRow {
@@ -480,6 +481,9 @@ export function CueActions({
           records={[...(one.entryId != null ? [{ kind: 'ENTRY' as const, id: one.entryId }] : []), { kind: 'CUE', id: one.cueId }]}
           menu="dropdown"
         />
+      )}
+      {one != null && (
+        <AssignCueToSurfaceItem projectId={projectId} cueId={one.cueId} entryId={one.entryId} name={one.cueNumber != null ? `Q${one.cueNumber} · ${one.name}` : one.name} menu="dropdown" />
       )}
       {/* A link names this origin, which only the cloud's shell can open in remote mode. */}
       {!isRemoteMode() && (

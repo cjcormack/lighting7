@@ -32,6 +32,7 @@ vi.mock('@/store/cues', () => ({
     isError: false,
   }),
   useUpdateCueStageMutation: () => [updateStage, { isLoading: false }],
+  useProjectCueListQuery: () => ({ data: [{ id: 1, uuid: 'cue-1', name: 'Opener' }] }),
 }))
 vi.mock('@/store/cueHolds', () => ({ useCueEdited: () => edited }))
 vi.mock('@/store/cueStacks', () => ({
@@ -66,6 +67,7 @@ import { CueActionDialogsProvider } from './cueActionDialogs'
 import { cuePaneOpenStore } from './CueEditorPane'
 import { resetShowIncludeForTests } from '@/lib/showInclude'
 import { setRemoteLinkForTests, type RemoteLink } from '@/lib/remoteMode'
+import { assignTargetNow, closeAssignToSurface } from '@/components/surfaces/AssignToSurface'
 
 const ROWS: CueActionRow[] = [
   { cueId: 1, name: 'Opener', cueNumber: '1', entryId: 101, stackId: 7 },
@@ -357,8 +359,17 @@ describe('CueActions', () => {
       'Add to stack…',
       'Move to stack…',
       'Copy OSC address',
+      'Assign to surface…',
       'Copy link',
     ])
+  })
+
+  it('opens Assign to surface… on the cue, named by its number', async () => {
+    draw({ host: 'menu' })
+    openMenu(screen.getByRole('button', { name: 'Cue actions' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Assign to surface…' }))
+    expect(assignTargetNow()).toEqual({ name: 'Q1 · Opener', subjects: [{ type: 'record', kind: 'CUE', uuid: 'cue-1' }], projectId: 1 })
+    closeAssignToSurface()
   })
 
   it('draws no Copy link in remote mode, whose origin only the cloud’s shell can open', async () => {

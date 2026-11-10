@@ -30,6 +30,7 @@ import { pagedWithDeskTitle } from './BuskPageChip'
 import type { BuskingTarget } from './buskingTypes'
 import type { SelectionVerbs } from './selectionVerbs'
 import type { Fixture } from '@/store/fixtures'
+import { assignTargetNow, closeAssignToSurface } from '@/components/surfaces/AssignToSurface'
 
 const programmer = { blind: false }
 vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => programmer.blind }))
@@ -107,6 +108,16 @@ afterEach(() => {
   window.sessionStorage.clear()
   resetBuskPageFollowStores()
   resetDeskFollowStores()
+})
+
+describe('the page menu', () => {
+  it('opens Assign to surface… on the page shown, while editing', async () => {
+    draw({ editing: true })
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Options for Ballads' }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Assign to surface…' }))
+    expect(assignTargetNow()?.subjects).toEqual([{ type: 'record', kind: 'PAGE', uuid: 'p4' }])
+    closeAssignToSurface()
+  })
 })
 
 describe('the pad row', () => {

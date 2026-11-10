@@ -278,6 +278,27 @@ class SurfaceBindingRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a slot preview names the place and the binding a write there replaces`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        client.put(slotUrl) { contentType(ContentType.Application.Json); setBody(slot("btn-2", Binding(Does.Blackout, how = How.ON))) }
+
+        val both = client.get("$slotUrl/preview?deviceTypeKey=$deviceTypeKey&controlId=btn-2").body<uk.me.cormack.lighting7.midi.SurfaceSlotPreview>()
+        assertEquals("Button 2", both.place)
+        assertEquals(1, both.replaces.size)
+        assertTrue(both.replaces.single().startsWith("Replaces "), both.replaces.single())
+
+        val onA = client.get("$slotUrl/preview?deviceTypeKey=$deviceTypeKey&controlId=btn-2&layer=layer-a").body<uk.me.cormack.lighting7.midi.SurfaceSlotPreview>()
+        assertEquals("Button 2 · A", onA.place)
+        assertTrue(onA.replaces.single().startsWith("Beats "), onA.replaces.single())
+
+        val empty = client.get("$slotUrl/preview?deviceTypeKey=$deviceTypeKey&controlId=btn-7&part=MAIN").body<uk.me.cormack.lighting7.midi.SurfaceSlotPreview>()
+        assertEquals(emptyList(), empty.replaces)
+
+        assertEquals(HttpStatusCode.BadRequest, client.get("$slotUrl/preview?deviceTypeKey=$deviceTypeKey&controlId=btn-2&layer=layer-z").status)
+    }
+
+    @Test
     fun `a POST answers the binding and its part`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()

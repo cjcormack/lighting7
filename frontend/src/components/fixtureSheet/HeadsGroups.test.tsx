@@ -95,7 +95,7 @@ vi.mock('./fxLabels', () => ({
   useCueLabel: () => (id: number) => `Q${id}`,
   usePaletteNameByUuid: () => () => undefined,
 }))
-vi.mock('../surfaces/FixtureBoundControlsRow', () => ({ FixtureBoundControlsRow: () => null, GroupBoundControlsRow: () => null }))
+vi.mock('../surfaces/SurfaceAssignRow', () => ({ SurfaceAssignRow: () => null }))
 vi.mock('../fixtures/LocateButton', () => ({ LocateTargetsButton: () => <button type="button">Locate</button> }))
 vi.mock('../fixtures/FixtureParkButton', () => ({
   FixtureParkButton: () => <button type="button">Park</button>,

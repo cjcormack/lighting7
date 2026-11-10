@@ -119,6 +119,7 @@ vi.mock('@/store/windows', () => ({ useDeskWindows: () => [], thisWindowRow: () 
 
 import { RigBand } from './RigBand'
 import { RigStrip } from './RigStrip'
+import { assignTargetNow, closeAssignToSurface } from '@/components/surfaces/AssignToSurface'
 
 function group(name: string, memberCount: number): GroupSummary {
   return { name, memberCount, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NONE' }
@@ -1348,6 +1349,14 @@ describe('Fixture sheet… on a rig tile (fixture-fx-sheets plan D21)', () => {
     fireEvent.contextMenu(screen.getByRole('button', { name: 'Front wash' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Group sheet…' }))
     expect(screen.getByTestId('fixture-sheet')).toHaveAttribute('data-target', 'group:Front wash')
+  })
+
+  it('opens Assign to surface… on a tile’s group or fixture from its menu', () => {
+    draw()
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Front wash' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Assign to surface…' }))
+    expect(assignTargetNow()?.subjects).toEqual([{ type: 'group', key: 'Front wash' }])
+    closeAssignToSurface()
   })
 
   it('joins the tile menu’s items in edit mode', () => {

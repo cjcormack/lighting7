@@ -8,6 +8,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { AssignToSurfaceButton } from '@/components/surfaces/AssignToSurface'
+import { BoundOnChip } from '@/components/surfaces/BoundOnChip'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -245,6 +247,16 @@ export function SpeedMasterDetailSheet({
           <SheetTitle>
             M{master.masterIndex} · {master.name}
           </SheetTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <AssignToSurfaceButton
+              target={{
+                name: `M${master.masterIndex} · ${master.name}`,
+                subjects: [{ type: 'record', kind: 'MASTER', uuid: master.uuid }],
+                projectId,
+              }}
+            />
+            <BoundOnChip subjects={[{ type: 'record', kind: 'MASTER', uuid: master.uuid }]} projectId={projectId} />
+          </div>
         </SheetHeader>
 
         <SheetBody>

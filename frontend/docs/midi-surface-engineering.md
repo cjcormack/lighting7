@@ -33,8 +33,15 @@ the desk serves replace what the client used to compute:
   …/surface-bindings/slot` with the slot in the body. Whatever the slot holds becomes the binding, and
   the desk refuses what the function's spec does not admit. Nothing patches a cache: the map comes back
   on the socket.
+- **`surfaceUses.state`** (`store/surfaces.ts`' `useSurfaceUses`): the map's reverse index, every
+  control part acting on each group (`group:<key>`), fixture (`fixture:<key>`) and record
+  (`record:<KIND>:<uuid>`, `surfaceUseKey`), a record a function names in a parameter (a palette's
+  press) included, each with its place in words (*Button 36 · A*, *Encoder 9 push*), what it does there
+  and whether a job derives it. It is read **straight off the socket** with `useSyncExternalStore`, not
+  through RTK Query, because the doors that draw it — sheets, menus, a stack card — are mounted in tests
+  and hosts with no store; the hooks call the API optionally for the same reason.
 
-`src/test/resources/surfaces/catalogue.fixture.json` and `map.fixture.json` are the desk's answers,
+`src/test/resources/surfaces/catalogue.fixture.json`, `map.fixture.json` and `uses.fixture.json` are the desk's answers,
 pinned by lighting7's `SurfaceCatalogueTest` and read here (`components/surfaces/surfaceFixtures.ts`)
 by every surface test, so a change to the wire fails on both sides.
 
@@ -63,9 +70,9 @@ a layer in both editors. They send nothing: the desk changes layer on its own ke
 layer* binding. While the viewed layer is not the one the device is on, the picture's live state is
 drawn faint (`data-live-dimmed`) and a line says so. A device starts on **no layer** after a desk
 restart, where only the bindings on both layers fire: the tab then views the map's `""` entry, a *No
-layer* chip carries the device's dot, and a line says the desk's own layer key switches it. The
-`?binding=` link minted by the fixture and group sheets' badges views its binding's layer too, and moves
-nothing on the hardware.
+layer* chip carries the device's dot, and a line says the desk's own layer key switches it. A *Bound
+on* chip's link (`?type=&control=&layer=`) picks a device of the type and the control and views the
+layer too, and moves nothing on the hardware.
 
 ## Editor A: the inspector
 
@@ -150,3 +157,35 @@ desk from the window this socket announced (`api/windowsApi.ts` — the name and
 chip matches by id); a MIDI write stamps
 `{kind: "surface"}`, which no chip draws any more — the desk chip is drawn only while its window is unlinked (busk-chrome plan D18) and names no mover. The long form is
 CLAUDE.md §"One selection, two shapes" and §"The desk selection has a mask".
+
+## Editor D: *Assign to surface…*
+
+Each record's own door onto a control (surface-setup plan session 6): stacks (the stack row's menu),
+cues (`CueActions`, its place then the cue — GO TO and Standby, then a loose hold), busk pads and pages,
+Looks, palettes, speed masters, and fixtures and groups (the fixture and group sheets, a rig tile's
+menu). A menu door is `AssignToSurfaceMenuItem`, drawn in a dropdown or a context menu through
+`components/menus/menuAdapter.ts` (the adapter *Copy OSC address* uses), with *Bound on …* under its
+words; a sheet's is `AssignToSurfaceButton` beside a `BoundOnChip`. Every door opens one sheet,
+`AssignToSurfaceHost` in `Layout`, through a module store (`openAssignToSurface`), so a menu that closes
+on select does not take the sheet with it.
+
+The sheet waits for a touch on the desk at once (`useIdentify`, D14: captured, never fired; *Cancel*,
+and *Nothing was touched.* after 30 s) — except in remote mode, where a click on the picture is the only
+way and no wait starts. A touch or a click picks the control and the first part anything fits; an
+encoder's *Turn* and *Push* are chips. What it offers is `assignOffer.ts`'s `fitEntries`: the catalogue
+entries the part's input reaches whose subjects include the record's kind — narrowed to that kind, so
+*On* offers the record alone — or whose parameter names a record of the kind (a palette's press, on the
+selection, the palette filled in), a programmer verb on a record (Record into a stack) after what plays
+it. The rest is `BindingForm` over that narrowed catalogue, held in the sheet until *Assign*, with the
+sheet's own Layer chips (*Both*, *A only*, *B only*). The slot's heading and *Replaces …* are the desk's
+answer, `GET …/surface-bindings/slot/preview` (`useSurfaceSlotPreviewQuery`, asked again whenever the
+type's map frame moves): the binding the write replaces, one layer's binding that keeps beating a
+both-layers assign, a both-layers binding a one-layer assign beats there, a job it takes the control from.
+A slot on a type no longer offered is dropped, a layer the shown profile lacks reads as *Both*, and each
+open is a fresh sheet; a wait begun on open and abandoned before the desk answered is cancelled when the
+answer arrives. A record of a show other than the current
+one assigns nothing: surfaces are bound in the current show.
+
+**Bound on** (`BoundOnChip`) replaced `BoundControlBadge` and `FixtureBoundControlsRow`, whose fixture
+and group rows read binding rows and so never saw a job. It reads `surfaceUses`, so a strip a job derives
+counts, and a fixture's chip counts its heads' bindings too (`SurfaceAssignRow`'s `also`).

@@ -241,7 +241,7 @@ WS   surfaceMap.state  { projectId, deviceTypeKey, layers: { [layer]: { [`${cont
                       label, subjectLabel?, colour?, writesTo?, health, healthText?, beats? }
 PUT/DELETE /api/rest/projects/{id}/surface-bindings/slot  { deviceTypeKey, controlId, part, layer, binding, takeoverPolicy? }
 WS   surfaceIdentify.begin / .cancel / .captured        replaces surfaceLearn.*
-WS   surfaceUses.state  { projectId, uses: { [subjectKey]: [{ deviceTypeKey, controlId, part, layer, label }] } }
+WS   surfaceUses.state  { projectId, uses: { [subjectKey]: [{ deviceTypeKey, deviceLabel, controlId, part, layer?, label, does?, fromJob? }] } }
 ```
 
 ## 4. UX
@@ -282,8 +282,8 @@ and its row marked *in review* with its branch. A session's PR is titled
 | 2 | Feedback | merged | `claude/happy-heisenberg-vh2hqw` | [#409](https://github.com/cjcormack/lighting7/pull/409) | 1c407f7 |
 | 3 | The served picture, and editors A and C | merged | `claude/beautiful-heisenberg-fvjsu7` | [#412](https://github.com/cjcormack/lighting7/pull/412) | 6f12ce6 |
 | 4 | New functions | merged | `claude/beautiful-turing-37vey4` | [#414](https://github.com/cjcormack/lighting7/pull/414) | 67f8350 |
-| 5 | Jobs | in review | `claude/zen-mendel-10xked` | | |
-| 6 | Assign from the thing | planned | | | |
+| 5 | Jobs | in review | `claude/zen-mendel-10xked` | [#416](https://github.com/cjcormack/lighting7/pull/416) | a05b996 |
+| 6 | Assign from the thing | in review | `claude/sweet-meitner-62h2o7` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -660,6 +660,11 @@ session 2, and the screens keep today's shape until session 3.
   *Bound on* updating after an assign elsewhere.
 - **Docs:** frontend `docs/midi-surface-engineering.md` and `CLAUDE.md`; `FU-MANUAL-SURFACE-SETUP-S6`.
 - **Local:** `./gradlew test` for the `midi` and `plugins` packages; `npm run check:quick`.
+
+As built: a use also carries the device's name, what the part does there and whether a job derives it,
+and a record a function names in a parameter (a palette's press) is indexed as well as its subject. The
+busk page strip's menu exists only while editing, so a page's door is there. A menu door draws *Bound
+on* under its own words; the sheets and the stack row draw the chip.
 
 ## 6. Operator checks
 

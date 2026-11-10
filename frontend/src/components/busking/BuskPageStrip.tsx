@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { AssignToSurfaceMenuItem } from '@/components/surfaces/AssignToSurface'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -528,6 +529,12 @@ export function BuskPageStrip({
             >
               Rename page
             </DropdownMenuItem>
+            {active.uuid != null && (
+              <AssignToSurfaceMenuItem
+                target={{ name: active.name, subjects: [{ type: 'record', kind: 'PAGE', uuid: active.uuid }] }}
+                menu="dropdown"
+              />
+            )}
             <DropdownMenuItem
               variant="destructive"
               onSelect={() => setConfirmingDelete(true)}
