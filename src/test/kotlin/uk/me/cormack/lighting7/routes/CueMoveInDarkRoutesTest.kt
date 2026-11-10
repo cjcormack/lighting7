@@ -179,6 +179,45 @@ class CueMoveInDarkRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a blinder stack following through its dark lists nothing moving lit`() = testApplication {
+        mountTestApp(state)
+        // Q2 takes the blinder out and follows into Q3 in 500 ms, well inside the 1 s delay and 2 s move.
+        LocateTestSupport.seedFixture(state, projectId, "china-2-cell-led-blinder-8ch", "blinder", 1)
+        val (stackId, entries) = transaction(state.database) {
+            val project = DaoProject.findById(projectId)!!
+            val stack = DaoCueStack.new {
+                this.project = project; name = "Blinders"; type = CueStackType.STACK.name
+                moveInDarkSettings = MoveInDarkSettings.NEW_STACK
+            }
+            fun cue(name: String, vararg rows: Pair<String, String>) = DaoCue.new { this.project = project; this.name = name }.also { cue ->
+                rows.forEachIndexed { index, (target, assignment) ->
+                    val (attribute, value) = assignment.split("=")
+                    DaoCueAttributeAssignment.new {
+                        this.cue = cue; targetType = "fixture"; targetKey = target
+                        this.attribute = attribute; this.value = value; sortOrder = index
+                    }
+                }
+            }
+            val list = listOf(
+                cue("Q1", "blinder" to "dimmer=255", "blinder.cell-1" to "rgbColour=#ffb45a", "blinder.cell-2" to "rgbColour=#ffb45a"),
+                cue("Q2", "blinder" to "dimmer=0"),
+                cue("Q3", "blinder" to "dimmer=255", "blinder.cell-1" to "rgbColour=#ffffff", "blinder.cell-2" to "rgbColour=#ffffff",
+                    "blinder" to "program=80", "blinder" to "progSpeed=120"),
+            )
+            stack.id.value to list.mapIndexed { index, cue ->
+                DaoCueStackEntry.new {
+                    this.stack = stack; this.cue = cue; ordinal = index.toDouble(); cueNumber = cue.name.drop(1)
+                    if (index == 1) { autoAdvance = true; autoAdvanceDelay = Duration.ofMillis(500) }
+                }.id.value
+            }
+        }
+        val plan = jsonClient().get("/api/rest/projects/$projectId/cue-stacks/$stackId/move-in-dark").body<StackMoveInDarkPlanDto>()
+        assertTrue(plan.entries.all { it.live.isEmpty() }, "nothing too quick: ${plan.entries.map { it.live }}")
+        assertEquals(setOf("blinder", "blinder.cell-1", "blinder.cell-2"), plan.entries[2].heads.map { it.target }.toSet())
+        assertTrue(plan.entries[2].heads.all { it.fromEntryId == entries[1] })
+    }
+
+    @Test
     fun `a project that is not current answers its entries empty`() = testApplication {
         mountTestApp(state)
         seedStack(follow = null)
