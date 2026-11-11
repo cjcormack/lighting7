@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   forwardRef,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
@@ -28,6 +29,7 @@ import {
   verticalBounds,
 } from '../../lib/promptBook/geometry'
 import { scriptPosition } from '../../lib/promptBook/desync'
+import { textPositionNear } from '../../lib/promptBook/textCaret'
 import { CueWash, CueMarginMarker, type CueRunStatus } from './AnchorOverlay'
 import {
   CueNoteCallout,
@@ -575,6 +577,56 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     }
   }, [locked])
 
+  // ── Selection from a gap ──
+  // A press beside or between lines anchors at the nearest text, and the drag is driven here.
+  const gapDragEndRef = useRef<(() => void) | null>(null)
+  useEffect(() => () => gapDragEndRef.current?.(), [])
+
+  const onMouseDownCapture = useCallback(
+    (e: ReactMouseEvent<HTMLDivElement>) => {
+      if (e.button !== 0 || e.detail > 1 || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return
+      if (locked || tool === 'freetext') return
+      const target = e.target as Element
+      const layer = target.classList.contains('endOfContent') ? target.parentElement : target
+      if (!layer?.classList.contains('textLayer')) return
+      const pageIndex = Number(layer.closest<HTMLElement>('[data-page-index]')?.dataset.pageIndex)
+      if (hasTextByPage.get(pageIndex) === false) return
+      const anchor = textPositionNear(layer, e.clientX, e.clientY)
+      if (!anchor) return
+      e.preventDefault()
+      const active = document.activeElement
+      if (active instanceof HTMLElement && active !== document.body) active.blur()
+      window.getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, anchor.node, anchor.offset)
+
+      gapDragEndRef.current?.()
+      const container = containerRef.current
+      let pointer = { x: e.clientX, y: e.clientY }
+      const extendTo = ({ x, y }: { x: number; y: number }) => {
+        const focusLayer = nearestPageLayer(pageElsRef.current, y)
+        const focus = focusLayer && textPositionNear(focusLayer, x, y)
+        if (focus) window.getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset)
+      }
+      const onMove = (ev: MouseEvent) => {
+        if ((ev.buttons & 1) === 0) return end()
+        pointer = { x: ev.clientX, y: ev.clientY }
+        extendTo(pointer)
+      }
+      // The book scrolling under a still pointer moves the text the drag is over.
+      const onScroll = () => extendTo(pointer)
+      const end = () => {
+        window.removeEventListener('mousemove', onMove)
+        window.removeEventListener('mouseup', end)
+        container?.removeEventListener('scroll', onScroll)
+        gapDragEndRef.current = null
+      }
+      window.addEventListener('mousemove', onMove)
+      window.addEventListener('mouseup', end)
+      container?.addEventListener('scroll', onScroll, { passive: true })
+      gapDragEndRef.current = end
+    },
+    [locked, tool, hasTextByPage],
+  )
+
   // ── Anchor drag (move) ──
   // The ref carries the authoritative in-flight geometry (mutations commit from it
   // on pointer-up — never from inside a setState updater, which React may re-invoke);
@@ -765,6 +817,7 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
       onPointerDownCapture={(e) => {
         if (containerRef.current?.contains(e.target as Node)) setPointerHeld(true)
       }}
+      onMouseDownCapture={onMouseDownCapture}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
@@ -1053,6 +1106,23 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     </div>
   )
 }))
+
+/** The mounted text layer of the page nearest a client y, or null when none is mounted. */
+function nearestPageLayer(pageEls: Map<number, HTMLDivElement>, y: number): Element | null {
+  let best: Element | null = null
+  let bestDistance = Infinity
+  for (const el of pageEls.values()) {
+    const layer = el.querySelector('.textLayer')
+    if (!layer) continue
+    const r = el.getBoundingClientRect()
+    const distance = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0
+    if (distance < bestDistance) {
+      bestDistance = distance
+      best = layer
+    }
+  }
+  return best
+}
 
 /** The indices of the first and last pages a selection reaches. */
 type SelectionEnds = readonly [number, number]
