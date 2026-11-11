@@ -206,9 +206,9 @@ GO TO and standby, then the cue's loose hold), a busk pad's hold menu, and an *O
 a Look's sheet (`components/osc/CopyOscAddressMenu.tsx`). It reads the listing as it opens, so it
 follows a rename, and says why where a record has none.
 
-**The address list** (`components/osc/OscAddressList.tsx`, D4) is on the OSC tab under the listener
-settings, for the current project and either role, and absent in remote mode, where the desk refuses
-the listing (403 `OSC_LOCAL_ONLY`): *Addresses · `<project>`* with what the desk listens on (*port N ·
+**The address list** (`components/osc/OscAddressList.tsx`, D4) is the OSC tab's *Addresses* tab,
+beside *Received* (the log), under the listener settings, for the current project and either role, and
+absent in remote mode, where the desk refuses the listing (403 `OSC_LOCAL_ONLY`): *Addresses · `<project>`* with what the desk listens on (*port N ·
 UDP and TCP*, *· UDP* or *· TCP*, *OSC is off*), a filter over the address, what it reaches and what it does, then the addresses by kind (Cue
 stacks, Loose cues, Looks, Busk pads and pages, Masters and tempo, Other — `oscAddressSections` in
 `lib/oscAddresses.ts`), each a row of Address, Args, Reaches and a copy button, then *Ambiguous* and
