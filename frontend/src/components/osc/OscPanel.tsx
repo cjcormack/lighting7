@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatError } from '@/lib/formatError'
+import { isRemoteMode } from '@/lib/remoteMode'
 import { useAuthStatusQuery } from '@/store/auth'
 import {
   useOscSettingsQuery,
@@ -26,8 +28,8 @@ import { OscAddressList } from './OscAddressList'
  * QLab and other show-control senders, and the log of what each message did. Every window on the
  * desk's own listener sees the status and the log, from `osc.state` alone, so the operator at the
  * desk can see that a QLab cue did nothing (D12); an admin also sees the settings and the senders,
- * from `GET /install/osc`, and may allow a refused sender in one step. Under them, every address the
- * current show answers to.
+ * from `GET /install/osc`, and may allow a refused sender in one step. Under them, two tabs: the log,
+ * and every address the current show answers to.
  */
 export function OscPanel() {
   const { data: authStatus } = useAuthStatusQuery()
@@ -50,9 +52,33 @@ export function OscPanel() {
       {state != null && state.refusedSenders.length > 0 && (
         <RefusedCard state={state} isAdmin={isAdmin} onAllow={setAllowing} />
       )}
-      <OscAddressList state={state} />
+      {isRemoteMode() ? (
+        <Received state={state} titled />
+      ) : (
+        <Tabs defaultValue="received">
+          <TabsList>
+            <TabsTrigger value="received">Received</TabsTrigger>
+            <TabsTrigger value="addresses">Addresses</TabsTrigger>
+          </TabsList>
+          <TabsContent value="received">
+            <Received state={state} />
+          </TabsContent>
+          {/* Kept mounted so the filter survives a visit to Received. */}
+          <TabsContent value="addresses" forceMount className="data-[state=inactive]:hidden">
+            <OscAddressList state={state} />
+          </TabsContent>
+        </Tabs>
+      )}
+    </div>
+  )
+}
+
+/** The log, under any addresses a change has moved since a sender used them. */
+function Received({ state, titled = false }: { state: OscState | null; titled?: boolean }) {
+  return (
+    <div className="space-y-4">
       {(state?.warnings?.length ?? 0) > 0 && <WarningsCard warnings={state!.warnings!} />}
-      <LogCard rows={state?.recent ?? []} />
+      <LogCard rows={state?.recent ?? []} titled={titled} />
     </div>
   )
 }
@@ -355,10 +381,10 @@ function WarningsCard({ warnings }: { warnings: OscAddressWarning[] }) {
   )
 }
 
-function LogCard({ rows }: { rows: OscLogRow[] }) {
+function LogCard({ rows, titled }: { rows: OscLogRow[]; titled: boolean }) {
   return (
     <Card className="p-4 space-y-2">
-      <div className="text-sm font-medium">Received</div>
+      {titled && <div className="text-sm font-medium">Received</div>}
       {rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">Nothing received since the desk started.</p>
       ) : (

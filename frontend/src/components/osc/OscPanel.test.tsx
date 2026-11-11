@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OscSettings } from '@/store/osc'
 import type { OscState } from '@/api/oscWsApi'
+import { setRemoteLinkForTests } from '@/lib/remoteMode'
 
 // Store-connected: mocking the store keeps this a component test and the import graph away from
 // lightingApi's real WebSocket.
@@ -242,11 +243,29 @@ describe('OscPanel', () => {
     expect((screen.getByLabelText('Replies to QLab') as HTMLInputElement).checked).toBe(true)
   })
 
-  it('shows the address list under the settings, for either role, on the listener’s port', () => {
+  it('opens on Received and keeps the address list mounted on its own tab, for either role', () => {
     mocks.role = 'OPERATOR'
     render(<OscPanel />)
+    expect(screen.getByRole('tab', { name: 'Received' }).getAttribute('aria-selected')).toBe('true')
+    const panel = () => screen.getByTestId('address-list').closest('[role="tabpanel"]')!
+    expect(panel().getAttribute('data-state')).toBe('inactive')
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Addresses' }), { button: 0 })
+    expect(panel().getAttribute('data-state')).toBe('active')
     expect(screen.getByTestId('address-list').textContent).toBe('port 8415')
     expect(screen.queryByRole('button', { name: 'Print cheat sheet' })).toBeNull()
+  })
+
+  it('shows the log under its own heading, with no tabs, in remote mode', () => {
+    mocks.role = 'OPERATOR'
+    setRemoteLinkForTests({} as Parameters<typeof setRemoteLinkForTests>[0])
+    try {
+      render(<OscPanel />)
+      expect(screen.queryByRole('tab')).toBeNull()
+      expect(screen.getByText('Received')).toBeTruthy()
+      expect(screen.getByText('GO TO 5 Storm in Act 1')).toBeTruthy()
+    } finally {
+      setRemoteLinkForTests(null)
+    }
   })
 
   it('marks a range sender with how many addresses it admits, and a single address with nothing', () => {
