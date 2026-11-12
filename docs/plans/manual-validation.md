@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-CLOUD-P2-S3`](#fu-manual-cloud-p2-s3) | *Sync to the cloud* on a new show puts it on the portal's Projects page, a second desk imports it from *Import from the cloud*, and an edit on one reaches the other within seconds by `sync.changed`; onboarding lists the org's projects venues first | Cloud P2 S3, 2026-11-12 |
 | [`FU-MANUAL-CLOUD-P2-S2`](#fu-manual-cloud-p2-s2) | a show attached to its cloud repo by hand syncs from an adopted desk, a second desk pulls it, and an edit reaches the second by `sync.changed` before its auto-sync interval | Cloud P2 S2, 2026-11-12 |
 | [`FU-MANUAL-RIG-SESSION-FIXES`](#fu-manual-rig-session-fixes) | QLab from an address inside a sender range; the OSC tab's address list beside QLab; Safari's Show view not scrolling the page; a blinder stack with follows reading no *too quick*; a Shehds' FX colour offering W; a venue fixture renamed in the show; text anchored in the Prompt Book mid-show | Rig session fixes, 2026-11-10 |
 | [`FU-MANUAL-SURFACE-SETUP-S6`](#fu-manual-surface-setup-s6) | *Assign to surface…* from a stack card by touching a button, which does not fire; *Bound on* on the card; a palette pressed from an encoder's push; the picture's click in remote mode | Surface setup session 6, 2026-11-09 |
@@ -880,6 +881,35 @@ shows the migration moving nothing on stage.
    rig moves, and the four cells take the teal edge and the palette's pill, and the source chip names
    it. Select two of them: the palette's chip reads *2 of 4*. Delete one head's row from
    the palette: that cell's pill turns dashed (unresolved) and keeps its value.
+
+---
+
+## `FU-MANUAL-CLOUD-P2-S3`
+
+**What it proves**: a project reaches the cloud and another desk from the desk's own UI (cloud-p2 plan
+session 3, D6). **Needs** the cloud's P2 sessions 1 and 2 deployed (`lighting7-cloud`
+`docs/plans/p2-plan.md`), and `sync.access` on for the org with storage to spare.
+
+**Test**, with two desks adopted into one org:
+
+1. On desk A, make a new show, open its Sync tab and press *Sync to the cloud*. The toast names the repo,
+   the panel reads *Synced to a Lighting7 Cloud repo* with the show's name (no URL), and the portal's
+   Projects page lists it.
+2. On desk B, *Projects* › *Import from the cloud*: the show is listed by name, a venue badged; pick it
+   and import. On desk A, the same dialog lists it as *Already on this desk*.
+3. Turn B's auto-sync interval up to an hour. Edit the show on A; within seconds B's activity log has the
+   run that pulled it, well before its hour.
+4. Disconnect the show on A, add a cue stack there, and press *Sync to the cloud* again: the toast says
+   the cloud already had the repo, and the show holds A's new stack and B's history.
+5. Publish a venue on A and *Sync to the cloud* it; a show on it synced after reads, on a fresh desk's
+   import, `VENUE_MISSING` naming the venue's repo by its cloud name. Import the venue, then the show.
+6. On a fresh desk, onboarding's projects step offers *Adopt this desk*; approve it in the portal, and
+   the step lists the org's projects with venues badged. Importing a venue and a show on it brings the
+   venue in first.
+7. Unadopt desk B: its Sync tab offers *Adopt this desk to sync* and nothing else of the cloud, and
+   *GitHub (legacy)* still opens GitHub's attach.
+
+Record the date and anything that read differently here.
 
 ---
 

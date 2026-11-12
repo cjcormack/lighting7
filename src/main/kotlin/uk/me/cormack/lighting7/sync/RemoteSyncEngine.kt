@@ -1523,6 +1523,12 @@ enum class SyncErrorCode {
     SYNC_QUOTA_EXCEEDED,
     /** The cloud cannot store a push now, whatever the org's storage (D4). */
     SYNC_STORAGE_UNAVAILABLE,
+    /** The cloud's repo API did not answer: making or listing repos waits for it (cloud-p2 plan D6). */
+    CLOUD_UNREACHABLE,
+    /** The cloud's repo API answered with a refusal no other code names; the message is the cloud's. */
+    CLOUD_REFUSED,
+    /** A pull-only install (`sync.push = false`) cannot make a cloud repo: it could never push to it. */
+    CLOUD_SYNC_PULL_ONLY,
 }
 
 open class SyncException(val code: SyncErrorCode, message: String, cause: Throwable? = null) :
@@ -1548,6 +1554,7 @@ fun SyncErrorCode.toHttpStatus(): HttpStatusCode = when (this) {
     SyncErrorCode.RESTORE_INVALID -> HttpStatusCode.BadRequest
     SyncErrorCode.RESTORE_TOO_OLD, SyncErrorCode.RESTORE_UNREADABLE -> HttpStatusCode.UnprocessableEntity
     SyncErrorCode.CLOUD_NOT_ADOPTED, SyncErrorCode.SYNC_OFF, SyncErrorCode.REPO_NOT_FOUND,
-    SyncErrorCode.SYNC_QUOTA_EXCEEDED -> HttpStatusCode.Conflict
-    SyncErrorCode.SYNC_STORAGE_UNAVAILABLE -> HttpStatusCode.ServiceUnavailable
+    SyncErrorCode.SYNC_QUOTA_EXCEEDED, SyncErrorCode.CLOUD_SYNC_PULL_ONLY -> HttpStatusCode.Conflict
+    SyncErrorCode.SYNC_STORAGE_UNAVAILABLE, SyncErrorCode.CLOUD_UNREACHABLE -> HttpStatusCode.ServiceUnavailable
+    SyncErrorCode.CLOUD_REFUSED -> HttpStatusCode.BadGateway
 }

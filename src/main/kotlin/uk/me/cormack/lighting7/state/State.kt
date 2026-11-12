@@ -507,6 +507,11 @@ class State(val config: ApplicationConfig) {
         )
     }
 
+    /** The org's cloud repos: make, list and name them (cloud-p2 plan D6). */
+    val cloudRepos: uk.me.cormack.lighting7.sync.CloudRepos by lazy {
+        uk.me.cormack.lighting7.sync.CloudRepos(database, authResolver.cloud)
+    }
+
     /**
      * Activity-log writer. Single instance shared across engines, route handlers, and
      * the scheduler so all writes pass through one place (and so test coverage

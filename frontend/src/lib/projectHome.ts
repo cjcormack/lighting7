@@ -5,7 +5,7 @@ import type { CueStack, CueStackCueRow } from '../api/cueStacksApi'
 import { cueRowById, isCueRow } from '../api/cueStacksApi'
 import type { CueHoldsState } from '../api/cueHoldsApi'
 import type { SyncConfig } from '../store/cloudSync'
-import { formatRepoUrl } from './formatRepoUrl'
+import { repoLabel } from './formatRepoUrl'
 import { pinChipOf, type PinChip } from './projectSwitch'
 import { changesPhrase, publishedDate } from './venue'
 import { behindBanner, behindTone, type BehindBanner, type BehindTone } from './venueHold'
@@ -86,7 +86,7 @@ export function agoOf(iso: string, now: number): string {
 /** The Sync line: `Synced · owner/repo · 2 min ago`, or `Not synced`. */
 export function syncLineOf(config: SyncConfig | undefined, now: number): string {
   if (config?.synced !== true || config.repoUrl == null) return 'Not synced'
-  const repo = formatRepoUrl(config.repoUrl) ?? config.repoUrl
+  const repo = repoLabel(config) ?? config.repoUrl
   const when = config.lastSyncedAt ? agoOf(config.lastSyncedAt, now) : 'never synced'
   return `Synced · ${repo} · ${when}`
 }

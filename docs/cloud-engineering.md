@@ -629,8 +629,18 @@ and auto-sync are unchanged. What the cloud adds, all of it in `docs/sync-engine
   brings forward the ticks of the projects syncing that org and repo, at most once in 10 s each, and
   never a backoff's. A hostile cloud can wake only its own repos' projects.
 
-Nothing here is on the channel's thread but the hand-off, and nothing is stored: the token is minted
-for each run, the developer token lives in the environment, and the hand-off holds at most 64 URLs.
+- **Where a repo comes from** (D6): `sync/CloudRepos.kt` makes a project's repo (`POST
+  /projects/{id}/sync/cloud`, adopted desks only: a developer token may read but not create), lists the
+  org's (`GET /cloud-sync/repos`, each row's `syncedHere` and `kind`) and caches each repo's name in
+  `sync_configs.repo_name`, which every place the desk names a cloud repo shows instead of its URL — the
+  Sync tab, *Import from the cloud*, onboarding, and a show's `venueRepo` hint (`VenuePins.repoHintOf`).
+  A refused call is `CLOUD_NOT_ADOPTED`, `SYNC_OFF`, `AUTH_FAILED`, `REPO_NOT_FOUND` or 502
+  `CLOUD_REFUSED` in the cloud's words; 503 `CLOUD_UNREACHABLE` is only a cloud that did not answer. A
+  pull-only desk makes no repo (409 `CLOUD_SYNC_PULL_ONLY`).
+
+Nothing here is on the channel's thread but the hand-off, and nothing is stored but a repo's name: the
+token is minted for each run, the developer token lives in the environment, and the hand-off holds at
+most 64 URLs.
 
 ## Show safety
 

@@ -96,6 +96,12 @@ function CloudBody({ state }: { state: CloudState }) {
   )
 }
 
+/** Adoption alone — the button, or the code while it waits — without the rest of the tab: onboarding's. */
+export function CloudAdoptionFlow({ state }: { state: CloudState }) {
+  if (state.adoption != null) return <Adopting adoption={state.adoption} state={state} />
+  return <NotAdopted remote={state.remote === true} />
+}
+
 function Unavailable({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-1">

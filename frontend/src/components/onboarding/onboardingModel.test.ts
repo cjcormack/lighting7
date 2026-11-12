@@ -2,6 +2,8 @@
 import { describe, expect, it } from "vitest"
 import type { GithubRepo } from "@/store/oauthGithub"
 import {
+  cloudCandidate,
+  githubCandidate,
   importedProjects,
   importOrder,
   onboardingImportsStore,
@@ -31,8 +33,29 @@ function repo(name: string, projectKind: GithubRepo["projectKind"], projectName:
 
 describe("importOrder", () => {
   it("puts venues first and keeps the rest in their listed order", () => {
-    const order = importOrder([repo("panto", "SHOW"), repo("hall", "VENUE"), repo("gala", null), repo("barn", "VENUE")])
+    const none = new Set<string>()
+    const order = importOrder(
+      [repo("panto", "SHOW"), repo("hall", "VENUE"), repo("gala", null), repo("barn", "VENUE")].map((r) =>
+        githubCandidate(r, none),
+      ),
+    )
     expect(order.map((r) => r.name)).toEqual(["hall", "barn", "panto", "gala"])
+  })
+
+  it("orders the cloud's repos the same way, by their kind", () => {
+    const cloud = (name: string, kind: "SHOW" | "VENUE", syncedHere = false) =>
+      cloudCandidate({
+        repoId: name,
+        url: `https://cloud.example/git/org/${name}.git`,
+        name,
+        kind,
+        projectUuid: name,
+        sizeBytes: 0,
+        syncedHere,
+      })
+    const order = importOrder([cloud("Panto", "SHOW"), cloud("Hall", "VENUE", true), cloud("Gala", "SHOW")])
+    expect(order.map((r) => r.name)).toEqual(["Hall", "Panto", "Gala"])
+    expect(order[0]).toMatchObject({ kind: "VENUE", alreadyHere: true, detail: null, branch: "main" })
   })
 })
 

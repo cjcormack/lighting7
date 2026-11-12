@@ -196,6 +196,7 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'cloudSyncDisconnect',
   'cloudSyncSnapshot',
   'cloudSyncImport', // ImportFromRemoteDialog toasts it; onboarding draws it on the repo's row
+  'cloudSyncToCloud', // ConfigPanel toasts it
   'cloudSyncResolve',
   'cloudSyncApply',
   'cloudSyncAbort',

@@ -2034,6 +2034,7 @@ sync_configs
   auto_sync_interval BIGINT? NULL -- java.time.Duration, nanoseconds
   last_synced_sha VARCHAR? NULL   -- last successful push sha (phase 4+)
   last_synced_at TEXT? NULL      -- UTC instant, 'YYYY-MM-DD HH:MM:SS.mmmZ'
+  repo_name VARCHAR? NULL         -- a cloud repo's name, cached from the cloud (cloud-p2 plan D2)
 ```
 
 Phase 3 reads/writes only `branch`. The other fields exist so the form on
@@ -2057,6 +2058,8 @@ All endpoints live under `/api/rest/projects/{projectId}/sync/...`:
 | PUT | `/config` | Update `repo_url` / `branch` / `enabled` |
 | PUT | `/credentials` | Store a PAT against the configured `repo_url` (Advanced fallback). |
 | DELETE | `/credentials` | Clear the stored PAT |
+| POST | `/cloud` | *Sync to the cloud*: make the project's cloud repo (or attach the one it has), then its first sync (§"The cloud") |
+| GET | `/api/rest/cloud-sync/repos` | The org's cloud repos, each with `syncedHere`, `projectId` and `kind` |
 | GET | `/api/rest/oauth/github/identity` | Connected GitHub user (or 404-shape "not connected") |
 | DELETE | `/api/rest/oauth/github/identity` | Clear the install-wide OAuth identity |
 | GET | `/api/rest/oauth/github/start?projectId=…` | Kick off the OAuth web flow |
@@ -2367,7 +2370,30 @@ carries the status it read) is put in the cloud's words by asking the repo API f
 `REPO_NOT_FOUND` or `SYNC_OFF` with its message, else a 404 is `REPO_NOT_FOUND` and a 403
 `AUTH_FAILED`. `RemoteSyncEngine.withProjectLock` turns both into `SyncException`s
 (`sync/CloudSyncCodes.kt`), each message ending with what to do, so the activity log and auto-sync's
-backoff see them as every other failure.
+backoff see them as every other failure. The Sync tab and the app header's refusal banner
+(`CloudSyncRefusalBanner`, beside the GitHub re-auth banner) read the code back from the failure or the
+activity log's `CODE: words` line and say what to do.
+
+**Where a repo comes from** (D6, `sync/CloudRepos.kt`). *Sync to the cloud* (`POST
+/projects/{id}/sync/cloud`) asks the cloud to make the project's repo (`POST /v1/repos` with its uuid,
+kind and name), attaches it with auto-sync on and its name in `repo_name`, and runs the first sync,
+answering `{config, existed, sync, syncError}`; the repo stays attached whatever that sync does. A
+project whose uuid the cloud already has a repo for (another desk made it) attaches that one
+(`existed`), and its first sync pulls and, where both sides have history, merges three ways. Only an
+adopted desk may make one: a developer token reads the list but cannot create. *Import from the cloud*,
+*Add remote project* and onboarding list `GET /cloud-sync/repos` — the org's repos, each marked
+`syncedHere` when a project here has it as its `repoUrl`, whose names the list refreshes in `repo_name`
+— and import through `POST /cloud-sync/import` as any URL, which caches the name too. Refusals:
+`CLOUD_NOT_ADOPTED`, `SYNC_OFF`, `REPO_URL_IMMUTABLE` for a project already synced, `AUTH_FAILED`,
+`REPO_NOT_FOUND`, 409 `CLOUD_SYNC_PULL_ONLY` on a `sync.push = false` desk (which never makes a repo it
+could not push to), 502 `CLOUD_REFUSED` for any other refusal, in the cloud's words, and 503
+`CLOUD_UNREACHABLE` only when the cloud does not answer. `repo_name` is cleared whenever `repoUrl` is
+cleared or set to another repo, and a name lookup after an import or a reconnect is bounded and never
+fails the write. Every place the desk names a cloud repo shows its name, never its URL; a show's
+`venueRepo` hint for a venue on a cloud repo is that name (`VenuePins.repoHintOf`), so `VENUE_MISSING`
+names the repo to import first, and a GitHub `owner/repo` hint already in a show is read as it is.
+`SyncConfigDto` and each `LinkedRepoDto` carry `cloud`; GitHub's attach stays under the Sync tab's
+*GitHub (legacy)* until the move.
 
 ### GitHub OAuth
 
@@ -2631,6 +2657,9 @@ person.
 | `REPO_NOT_FOUND` | 409 | The cloud repo was deleted in the portal, or is another org's. |
 | `SYNC_QUOTA_EXCEEDED` | 409 | The cloud refused a push that would take the org past its storage. |
 | `SYNC_STORAGE_UNAVAILABLE` | 503 | The cloud could not store a push just now. |
+| `CLOUD_UNREACHABLE` | 503 | The cloud's repo API did not answer making or listing repos. |
+| `CLOUD_REFUSED` | 502 | The cloud's repo API refused for a reason no other code names; the message is the cloud's. |
+| `CLOUD_SYNC_PULL_ONLY` | 409 | *Sync to the cloud* on a pull-only desk (`sync.push = false`): it could never push to the repo. |
 | `RESTORE_COMMIT_UNKNOWN` | 404 | The snapshot to restore isn't HEAD or an ancestor of it, or the show has no history. |
 | `RESTORE_REVIEW_STALE` | 409 | The restore would now do something else, or a write landed during it; the body carries `review`. A bring-back's would now bring back something else; its body carries `selection`. |
 | `RESTORE_NO_CHANGES` | 409 | The snapshot is the show as it is. |

@@ -69,6 +69,9 @@ class FakeCloudRepos(private val cloud: FakeCloud) {
     /** The org has no cloud sync: every repo and git route answers 403 `SYNC_OFF`. */
     @Volatile var syncOff: Boolean = false
 
+    /** Refuse every repo API call with this status and error code. */
+    @Volatile var refuseApi: Pair<HttpStatusCode, String>? = null
+
     /** Refuse every pushed ref with this push refusal code, whatever it is. */
     @Volatile var refusePushes: String? = null
 
@@ -148,6 +151,7 @@ class FakeCloudRepos(private val cloud: FakeCloud) {
     /** The install that signed this repo API call (or `""` for a developer token), or null once refused. */
     private suspend fun repoCaller(call: ApplicationCall, body: ByteArray, mayDevToken: Boolean): String? {
         if (syncOff) return null.also { call.apiError(HttpStatusCode.Forbidden, ErrorCode.SYNC_OFF) }
+        refuseApi?.let { (status, code) -> return null.also { call.apiError(status, code) } }
         val bearer = call.request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")
         if (bearer != null && mayDevToken && devTokens.containsKey(bearer)) return ""
         val installId = call.request.headers[SignatureHeaders.INSTALL]

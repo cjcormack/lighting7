@@ -13,7 +13,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RepoPicker } from "./RepoPicker"
-import { useCloudSyncImportMutation, useCloudSyncConfigsQuery } from "@/store/cloudSync"
+import { CloudRepoPicker } from "./CloudRepoPicker"
+import { AdoptToSync } from "./AdoptToSync"
+import { useCloudAdopted } from "./useCloudAdopted"
+import {
+  useCloudSyncImportMutation,
+  useCloudSyncConfigsQuery,
+  type CloudRepo,
+} from "@/store/cloudSync"
 import { useProjectListQuery } from "@/store/projects"
 import type { GithubRepo } from "@/store/oauthGithub"
 import { formatError } from "@/lib/formatError"
@@ -22,18 +29,42 @@ import { venueSyncRefusal } from "@/lib/venueSyncRefusal"
 interface AddRemoteProjectDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Drives the picker's connect-prompt — the trigger button itself is gated higher up. */
+  /** Drives the GitHub picker's connect-prompt. */
   oauthConnected: boolean
 }
 
+/** The repo picked, from the cloud's list or GitHub's, as the import reads it. */
+interface PickedRepo {
+  url: string
+  /** What the toast and the placeholder call it. */
+  label: string
+  projectName: string
+  description: string | null
+  branch: string
+}
+
+function fromCloud(repo: CloudRepo): PickedRepo {
+  return { url: repo.url, label: repo.name, projectName: repo.name, description: null, branch: "main" }
+}
+
+function fromGithub(repo: GithubRepo): PickedRepo {
+  return {
+    url: repo.cloneUrl,
+    label: repo.fullName,
+    projectName: repo.projectName ?? repo.name,
+    description: repo.projectDescription,
+    branch: repo.defaultBranch || "main",
+  }
+}
+
 /**
- * Pick a remote repo + name and POST to `/cloud-sync/import` to add it as a new local
- * project that stays continuously synced (not a one-time import). On success, navigates
- * to the new project's Sync settings so the user can verify and run the first sync.
+ * *Import from the cloud* (lighting7 cloud-p2 plan D6): pick one of the org's cloud repos — or, under
+ * *GitHub (legacy)*, a GitHub repo — and a name, and POST to `/cloud-sync/import` to add it as a new
+ * local project that stays continuously synced. On success, navigates to the new project's Sync
+ * settings.
  *
- * The picker lists only lighting projects (repos with a `project.json`) and the name input
- * is pre-filled from that `project.json` name, but editable. Collisions with an existing
- * local project name are flagged inline before submit; `ProjectImporter` remains the
+ * The name input is pre-filled from the repo's project name, but editable. Collisions with an
+ * existing local project name are flagged inline before submit; `ProjectImporter` remains the
  * server-side source of truth and any error it returns is surfaced as a toast.
  */
 export function AddRemoteProjectDialog({
@@ -45,7 +76,9 @@ export function AddRemoteProjectDialog({
   const [importFromRemote, { isLoading }] = useCloudSyncImportMutation()
   const { data: syncConfigs } = useCloudSyncConfigsQuery()
   const { data: projects } = useProjectListQuery()
-  const [repo, setRepo] = useState<GithubRepo | null>(null)
+  const { adopted } = useCloudAdopted()
+  const [source, setSource] = useState<"cloud" | "github">("cloud")
+  const [repo, setRepo] = useState<PickedRepo | null>(null)
   const [projectName, setProjectName] = useState("")
   // Track whether the user has typed in the name field — once they have, stop
   // overwriting their text on repo re-pick.
@@ -53,6 +86,7 @@ export function AddRemoteProjectDialog({
 
   useEffect(() => {
     if (!open) {
+      setSource("cloud")
       setRepo(null)
       setProjectName("")
       setNameTouched(false)
@@ -79,13 +113,17 @@ export function AddRemoteProjectDialog({
     [projects],
   )
 
-  const handleRepoChange = (next: GithubRepo) => {
+  const handleRepoChange = (next: PickedRepo) => {
     setRepo(next)
-    // Prefer the real project.json name over the raw GitHub repo name.
-    if (!nameTouched) setProjectName(next.projectName ?? next.name)
+    if (!nameTouched) setProjectName(next.projectName)
   }
 
-  const branch = repo?.defaultBranch ?? "main"
+  const chooseSource = (next: "cloud" | "github") => {
+    setSource(next)
+    setRepo(null)
+  }
+
+  const branch = repo?.branch ?? "main"
   const trimmedName = projectName.trim()
   const nameCollision = trimmedName.length > 0 && existingNames.has(trimmedName)
   const canSubmit = !!repo && trimmedName.length > 0 && !nameCollision && !isLoading
@@ -94,11 +132,11 @@ export function AddRemoteProjectDialog({
     if (!repo) return
     try {
       const result = await importFromRemote({
-        repoUrl: repo.cloneUrl,
+        repoUrl: repo.url,
         branch,
         projectName: projectName.trim(),
       }).unwrap()
-      toast.success(`Added "${result.name}" from ${repo.fullName}`)
+      toast.success(`Added "${result.name}" from ${repo.label}`)
       onOpenChange(false)
       navigate(`/projects/${result.projectId}/settings/sync`)
     } catch (err) {
@@ -113,32 +151,50 @@ export function AddRemoteProjectDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add remote project</DialogTitle>
+          <DialogTitle>Import from the cloud</DialogTitle>
           <DialogDescription>
-            Add an existing GitHub repository as a new local project. The remote&rsquo;s
-            default branch is used and the project stays continuously synced &mdash; changes
-            push and pull automatically.
+            Add one of the org&rsquo;s cloud projects to this desk. It stays continuously synced
+            &mdash; changes push and pull automatically.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 py-2">
           <div className="space-y-1">
-            <Label>Repository *</Label>
-            <RepoPicker
-              value={repo?.cloneUrl ?? null}
-              onChange={handleRepoChange}
-              oauthConnected={oauthConnected}
-              lightingOnly
-              linkedRepoUrls={linkedRepoUrls}
-            />
-            {repo?.projectDescription && (
-              <p className="text-xs text-muted-foreground">{repo.projectDescription}</p>
+            <Label>{source === "cloud" ? "Project *" : "Repository *"}</Label>
+            {source === "cloud" ? (
+              adopted === false ? (
+                <AdoptToSync what="import the org's projects" />
+              ) : (
+                <CloudRepoPicker
+                  value={repo?.url ?? null}
+                  onChange={(next) => handleRepoChange(fromCloud(next))}
+                  skip={adopted !== true}
+                />
+              )
+            ) : (
+              <RepoPicker
+                value={repo?.url ?? null}
+                onChange={(next) => handleRepoChange(fromGithub(next))}
+                oauthConnected={oauthConnected}
+                lightingOnly
+                linkedRepoUrls={linkedRepoUrls}
+              />
             )}
-            {repo && (
+            {repo?.description && (
+              <p className="text-xs text-muted-foreground">{repo.description}</p>
+            )}
+            {repo && source === "github" && (
               <p className="text-[10px] text-muted-foreground font-mono break-all">
-                {repo.cloneUrl}
+                {repo.url}
               </p>
             )}
+            <button
+              type="button"
+              className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+              onClick={() => chooseSource(source === "cloud" ? "github" : "cloud")}
+            >
+              {source === "cloud" ? "GitHub (legacy)…" : "Back to the cloud"}
+            </button>
           </div>
           <div className="space-y-1">
             <Label htmlFor="import-project-name">Project name *</Label>
@@ -149,7 +205,7 @@ export function AddRemoteProjectDialog({
                 setProjectName(e.target.value)
                 setNameTouched(true)
               }}
-              placeholder={repo?.projectName ?? repo?.name ?? "Project name"}
+              placeholder={repo?.projectName ?? "Project name"}
               disabled={!repo}
             />
             {nameCollision ? (
@@ -164,7 +220,7 @@ export function AddRemoteProjectDialog({
               </p>
             )}
           </div>
-          {repo && (
+          {repo && source === "github" && (
             <div className="text-xs text-muted-foreground">
               Branch: <span className="font-mono">{branch}</span>
             </div>

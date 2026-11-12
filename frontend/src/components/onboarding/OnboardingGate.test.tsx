@@ -50,9 +50,28 @@ const VENUE_REPO = {
   projectUuid: "v-1",
   projectKind: "VENUE",
 }
+const CLOUD_SHOW = {
+  repoId: "r-show",
+  url: "https://cloud.example/git/org/r-show.git",
+  name: "Panto",
+  kind: "SHOW",
+  projectUuid: "p-1",
+  sizeBytes: 1,
+  syncedHere: false,
+}
+const CLOUD_VENUE = {
+  ...CLOUD_SHOW,
+  repoId: "r-venue",
+  url: "https://cloud.example/git/org/r-venue.git",
+  name: "Village Hall",
+  kind: "VENUE",
+  projectUuid: "v-1",
+}
 const IMPORTED: Record<string, { projectId: number; name: string }> = {
   [SHOW_REPO.cloneUrl]: { projectId: 7, name: "Panto" },
   [VENUE_REPO.cloneUrl]: { projectId: 8, name: "Village Hall" },
+  [CLOUD_SHOW.url]: { projectId: 7, name: "Panto" },
+  [CLOUD_VENUE.url]: { projectId: 8, name: "Village Hall" },
 }
 
 /** An error answer: `installBackend` sends [body] with [status]. */
@@ -97,7 +116,11 @@ function installBackend(routes: Record<string, (body: unknown) => unknown>) {
 function backend(
   auth: AuthStatus,
   onboardingPending: boolean,
-  { projectNames = ["Default"], finished = false }: { projectNames?: string[]; finished?: boolean } = {},
+  {
+    projectNames = ["Default"],
+    finished = false,
+    adopted = true,
+  }: { projectNames?: string[]; finished?: boolean; adopted?: boolean } = {},
 ) {
   return installBackend({
     "auth/status": () => auth,
@@ -117,10 +140,16 @@ function backend(
       replaysSessionSampleRate: 0,
       replaysOnErrorSampleRate: 0,
     }),
+    "install/cloud": () => ({
+      configured: true,
+      enabled: true,
+      adopted: adopted ? { installId: "inst", orgName: "Org", adoptedAt: "", fingerprint: "f" } : null,
+    }),
     install: () => ({ uuid: "i-1", friendlyName: "Desk", createdAt: "2026-10-14 00:00:00.000Z", onboardingPending }),
     "oauth/github/identity": () => ({ connected: true, oauthConfigured: true, login: "me" }),
     "oauth/github/repositories": () => [SHOW_REPO, VENUE_REPO],
     "cloud-sync/configs": () => ({}),
+    "cloud-sync/repos": () => ({ repos: [CLOUD_SHOW, CLOUD_VENUE] }),
     "cloud-sync/import": (body) => {
       const imported = IMPORTED[(body as { repoUrl: string }).repoUrl]
       return { ...imported, projectUuid: "u" }
@@ -218,16 +247,29 @@ describe("OnboardingGate", () => {
     await waitFor(() => expect(screen.getAllByText("Imported")).toHaveLength(2))
 
     const imports = calls.filter((c) => c.url.includes("cloud-sync/import"))
-    expect(imports.map((c) => (c.body as { repoUrl: string }).repoUrl)).toEqual([
-      VENUE_REPO.cloneUrl,
-      SHOW_REPO.cloneUrl,
-    ])
-    expect(imports[0].body).toEqual({ repoUrl: VENUE_REPO.cloneUrl, branch: "main", projectName: "Village Hall" })
+    expect(imports.map((c) => (c.body as { repoUrl: string }).repoUrl)).toEqual([CLOUD_VENUE.url, CLOUD_SHOW.url])
+    expect(imports[0].body).toEqual({ repoUrl: CLOUD_VENUE.url, branch: "main", projectName: "Village Hall" })
 
     fireEvent.click(screen.getByRole("button", { name: "Finish" }))
     await waitFor(() =>
       expect(calls.find((c) => c.url.includes("install/onboarding/finish"))?.body).toEqual({ openProjectId: 7 }),
     )
+  })
+
+  it("offers an unadopted desk its adoption, and imports from GitHub (legacy) too", async () => {
+    onboardingStepStore.set("projects")
+    const calls = backend(ADMIN, true, { adopted: false })
+    renderGate()
+
+    await screen.findByText(/Adopt this desk into the org/)
+    expect(screen.getByRole("button", { name: "Adopt this desk" })).toBeTruthy()
+    expect(calls.some((c) => c.url.includes("cloud-sync/repos"))).toBe(false)
+    fireEvent.click(screen.getByRole("button", { name: "GitHub (legacy)" }))
+    fireEvent.click(await screen.findByLabelText(/Village Hall/))
+    fireEvent.click(screen.getByRole("button", { name: "Import 1" }))
+    await screen.findByText("Imported")
+    const imported = calls.find((c) => c.url.includes("cloud-sync/import"))
+    expect((imported?.body as { repoUrl: string }).repoUrl).toBe(VENUE_REPO.cloneUrl)
   })
 
   it("names the blank project the desk booted on and keeps it", async () => {

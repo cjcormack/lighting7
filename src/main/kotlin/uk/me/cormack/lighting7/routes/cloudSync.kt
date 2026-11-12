@@ -92,7 +92,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                 val cfg = ensureSyncConfig(project)
                 cfg.toBareDto() to cfg.repoUrl
             }
-            call.respond(config.copy(tokenPresent = resolveTokenPresent(state, repoUrl)))
+            call.respond(decorateSyncConfig(state, config, repoUrl))
         }
     }
 
@@ -128,6 +128,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                         // defaults on for a freshly-attached repo.
                         current == null -> {
                             cfg.repoUrl = incoming
+                            cfg.repoName = null
                             cfg.autoSyncEnabled = true
                         }
                         current == incoming -> Unit
@@ -150,7 +151,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                 return@withProject
             }
             state.autoSyncScheduler.reschedule(project.id.value)
-            call.respond(config.copy(tokenPresent = resolveTokenPresent(state, repoUrl)))
+            call.respond(decorateSyncConfig(state, config, repoUrl))
         }
     }
 
@@ -285,43 +286,11 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
 
     post<ProjectSyncRunResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
-            val install = transaction(state.database) {
-                DaoInstall.all().firstOrNull()?.let { it.uuid to it.friendlyName }
-                    ?: error("Install row missing — `ensureInstallRow` should have created it on startup.")
-            }
-            state.emitCloudSyncEvent(CloudSyncStartedOutMessage(project.id.value))
             val result = try {
-                remoteSyncEngine.runSync(
-                    projectId = project.id.value,
-                    projectUuid = project.uuid,
-                    installUuid = install.first,
-                    installFriendlyName = install.second,
-                )
+                runSyncAndAnnounce(state, project)
             } catch (e: SyncException) {
-                state.emitCloudSyncEvent(
-                    CloudSyncFailedOutMessage(
-                        projectId = project.id.value,
-                        errorCode = e.code.name,
-                        message = e.message ?: e.code.name,
-                    ),
-                )
                 respondSyncError(e)
                 return@withProject
-            }
-            // A CONFLICTS_PENDING run emits its own bespoke message from the engine;
-            // don't double-fire `cloudSyncDone` for that case.
-            if (result.outcome != SyncOutcome.CONFLICTS_PENDING) {
-                state.emitCloudSyncEvent(
-                    CloudSyncDoneOutMessage(
-                        projectId = project.id.value,
-                        outcome = result.outcome.name,
-                        headSha = result.headSha,
-                        pushed = result.pushed,
-                        pulled = result.pulled,
-                        replaced = result.replaced,
-                        message = result.message,
-                    ),
-                )
             }
             call.respond(result)
         }
@@ -584,6 +553,73 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
         }
     }
 
+    // ─── Sync to the cloud (cloud-p2 plan D6) ──────────────────────────
+
+    /**
+     * Make the project's cloud repo, or find the one the cloud already has for its uuid (another desk
+     * made it), attach it with auto-sync on, and run the first sync: a push, or where both sides have
+     * history a pull and three-way merge. The repo is attached whatever the first sync does.
+     */
+    post<ProjectSyncCloudResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            if (!state.syncPushEnabled) {
+                respondSyncError(
+                    SyncException(
+                        SyncErrorCode.CLOUD_SYNC_PULL_ONLY,
+                        "This desk only pulls (sync.push = false in local.conf), so it cannot make a cloud repo: make it from a desk that pushes.",
+                    ),
+                )
+                return@withProject
+            }
+            val uuid = project.uuid
+            val (kind, name) = transaction(state.database) { project.kind to project.name }
+            if (transaction(state.database) { !ensureSyncConfig(project).repoUrl.isNullOrBlank() }) {
+                respondSyncError(SyncException(SyncErrorCode.REPO_URL_IMMUTABLE, "This project already syncs with a repository: disconnect it first."))
+                return@withProject
+            }
+            val created = try {
+                state.cloudRepos.create(uuid, kind, name)
+            } catch (e: SyncException) {
+                respondSyncError(e)
+                return@withProject
+            }
+            val repo = created.repo
+            try {
+                transaction(state.database) {
+                    val cfg = ensureSyncConfig(project)
+                    if (!cfg.repoUrl.isNullOrBlank()) {
+                        throw SyncException(SyncErrorCode.REPO_URL_IMMUTABLE, "This project already syncs with a repository: disconnect it first.")
+                    }
+                    cfg.repoUrl = repo.url
+                    cfg.repoName = repo.name
+                    cfg.branch = JGitClient.DEFAULT_BRANCH
+                    cfg.autoSyncEnabled = true
+                }
+            } catch (e: SyncException) {
+                respondSyncError(e)
+                return@withProject
+            }
+            state.autoSyncScheduler.reschedule(project.id.value)
+
+            var syncError: SyncErrorResponse? = null
+            val sync = try {
+                runSyncAndAnnounce(state, project)
+            } catch (e: SyncException) {
+                syncError = SyncErrorResponse(e.message ?: e.code.name, e.code.name)
+                null
+            }
+            val config = transaction(state.database) { ensureSyncConfig(project).toBareDto() }
+            call.respond(
+                SyncToCloudResponse(
+                    config = decorateSyncConfig(state, config, repo.url),
+                    existed = created.existed,
+                    sync = sync,
+                    syncError = syncError,
+                ),
+            )
+        }
+    }
+
     // ─── Disconnect / reconnect ────────────────────────────────────────
 
     /**
@@ -615,12 +651,13 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                     }
                 }
                 cfg.repoUrl = null
+                cfg.repoName = null
                 cfg.autoSyncEnabled = false
                 cfg.toBareDto() to cfg.repoUrl
             }
             // Cancels the auto-sync loop for this project (no repo → nothing to sync).
             state.autoSyncScheduler.reschedule(project.id.value)
-            call.respond(config.copy(tokenPresent = resolveTokenPresent(state, repoUrl)))
+            call.respond(decorateSyncConfig(state, config, repoUrl))
         }
     }
 
@@ -656,6 +693,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                         return@transaction null
                     }
                     cfg.repoUrl = target
+                    cfg.repoName = null
                     cfg.autoSyncEnabled = true
                     remembered.lastLinkedAt = nowUtc()
                     cfg.toBareDto() to cfg.repoUrl
@@ -674,9 +712,10 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                 )
                 return@withProject
             }
-            val (config, repoUrl) = result!!
+            val (bare, repoUrl) = result!!
             state.autoSyncScheduler.reschedule(project.id.value)
-            call.respond(config.copy(tokenPresent = resolveTokenPresent(state, repoUrl)))
+            val name = repoUrl?.let { state.cloudRepos.refreshName(it) }
+            call.respond(decorateSyncConfig(state, bare.copy(repoName = name), repoUrl))
         }
     }
 }
@@ -745,6 +784,19 @@ data class ProjectSyncDisconnectResource(val parent: ProjectSyncResource)
 @Resource("/reconnect")
 data class ProjectSyncReconnectResource(val parent: ProjectSyncResource)
 
+@Resource("/cloud")
+data class ProjectSyncCloudResource(val parent: ProjectSyncResource)
+
+/** `POST /sync/cloud`'s answer: the attached config, whether the cloud had the repo already, and the first sync. */
+@Serializable
+data class SyncToCloudResponse(
+    val config: SyncConfigDto,
+    val existed: Boolean,
+    /** The first sync's result; null when it failed, with [syncError] saying why. */
+    val sync: SyncRunResult? = null,
+    val syncError: SyncErrorResponse? = null,
+)
+
 @Serializable
 data class SyncConfigDto(
     val branch: String,
@@ -768,6 +820,10 @@ data class SyncConfigDto(
      * sanctioned way to re-attach an existing, non-empty repo.
      */
     val linkedRepos: List<LinkedRepoDto> = emptyList(),
+    /** A cloud repo's name, cached from the cloud (cloud-p2 plan D2); what the desk shows instead of the URL. */
+    val repoName: String? = null,
+    /** Whether [repoUrl] is a repo of this desk's Lighting7 Cloud. */
+    val cloud: Boolean = false,
 )
 
 @Serializable
@@ -775,6 +831,8 @@ data class LinkedRepoDto(
     val repoUrl: String,
     /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
     val lastLinkedAt: String,
+    /** Whether [repoUrl] is a repo of this desk's Lighting7 Cloud. */
+    val cloud: Boolean = false,
 )
 
 @Serializable
@@ -922,6 +980,57 @@ private fun ensureSyncConfig(project: DaoProject): DaoSyncConfig {
 }
 
 /**
+ * Run [project]'s sync and announce it on the cloud-sync stream: started, then done or failed. A
+ * `CONFLICTS_PENDING` run announces itself from the engine. A refusal is rethrown once announced.
+ */
+private suspend fun runSyncAndAnnounce(state: State, project: DaoProject): SyncRunResult {
+    val install = transaction(state.database) {
+        DaoInstall.all().firstOrNull()?.let { it.uuid to it.friendlyName }
+            ?: error("Install row missing — `ensureInstallRow` should have created it on startup.")
+    }
+    state.emitCloudSyncEvent(CloudSyncStartedOutMessage(project.id.value))
+    val result = try {
+        state.remoteSyncEngine.runSync(
+            projectId = project.id.value,
+            projectUuid = project.uuid,
+            installUuid = install.first,
+            installFriendlyName = install.second,
+        )
+    } catch (e: SyncException) {
+        state.emitCloudSyncEvent(CloudSyncFailedOutMessage(project.id.value, e.code.name, e.message ?: e.code.name))
+        throw e
+    }
+    if (result.outcome != SyncOutcome.CONFLICTS_PENDING) {
+        state.emitCloudSyncEvent(
+            CloudSyncDoneOutMessage(
+                projectId = project.id.value,
+                outcome = result.outcome.name,
+                headSha = result.headSha,
+                pushed = result.pushed,
+                pulled = result.pulled,
+                replaced = result.replaced,
+                message = result.message,
+            ),
+        )
+    }
+    return result
+}
+
+/**
+ * [dto] with what only [state] knows: whether a PAT is stored for [repoUrl], and which repos are the
+ * cloud's. A cloud repo never has a PAT, so its lookup is skipped.
+ */
+internal suspend fun decorateSyncConfig(state: State, dto: SyncConfigDto, repoUrl: String?, tokenPresent: Boolean? = null): SyncConfigDto {
+    val isCloud = { url: String -> state.authResolver.isCloudRepo(url) }
+    val cloud = repoUrl?.takeIf { it.isNotBlank() }?.let(isCloud) ?: false
+    return dto.copy(
+        tokenPresent = tokenPresent ?: (!cloud && resolveTokenPresent(state, repoUrl)),
+        cloud = cloud,
+        linkedRepos = dto.linkedRepos.map { it.copy(cloud = isCloud(it.repoUrl)) },
+    )
+}
+
+/**
  * Look up [repoUrl] in the credential store on the IO dispatcher. The keychain backend
  * is a JNA round-trip; we use [CredentialStore.contains] rather than `get` so the PAT
  * itself never leaves the store just to compute a UI flag.
@@ -962,4 +1071,5 @@ internal fun DaoSyncConfig.toBareDto(
     lastSyncedAt = lastSyncedAt?.toIsoUtc(),
     tokenPresent = false,
     linkedRepos = linkedRepos,
+    repoName = repoName,
 )

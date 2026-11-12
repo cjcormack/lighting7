@@ -201,9 +201,9 @@ runs the checks §"Pre-commit checks" names for what it touches; a session with 
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The protocol for P2 | in review | `claude/upbeat-babbage-j93q01` | [#427](https://github.com/cjcormack/lighting7/pull/427) | b43bb61 |
-| 2 | Syncing with a cloud repo | in review | `claude/bold-johnson-02cpix` | | |
-| 3 | Sync to the cloud, import from the cloud | planned | | | |
+| 1 | The protocol for P2 | merged | `claude/upbeat-babbage-j93q01` | [#427](https://github.com/cjcormack/lighting7/pull/427) | b43bb61 |
+| 2 | Syncing with a cloud repo | merged | `claude/bold-johnson-02cpix` | [#428](https://github.com/cjcormack/lighting7/pull/428) | d672020 |
+| 3 | Sync to the cloud, import from the cloud | in review | `claude/cloud-p2-6vf8vk` | | |
 | 4 | Move GitHub-synced projects to the cloud | planned | | | |
 | 5 | Claude Code sessions from the cloud | planned | | | |
 | 6 | Delete GitHub sync | planned | | | |
@@ -263,6 +263,28 @@ next; whoever merges the last fills its own.
 - **Operator check** `FU-MANUAL-CLOUD-P2-S3` (needs the cloud's sessions 1 and 2 deployed): *Sync to the
   cloud* on a new show, the repo on the portal's Projects page, the show imported on a second desk from
   *Import from the cloud*, and an edit on one reaching the other within seconds by `sync.changed`.
+
+- **As built.** Where the code needed more than D6 said:
+  - Making a repo needs the adoption: a developer token reads `GET /v1/repos` but cannot sign a create,
+    so `POST /sync/cloud` on a desk with only `LIGHTING7_CLOUD_TOKEN` is `CLOUD_NOT_ADOPTED`. A repo API
+    refusal other than `SYNC_OFF` is `AUTH_FAILED` (401, 403), `REPO_NOT_FOUND` (404) or a new
+    `CLOUD_REFUSED` at 502 in the cloud's words; `CLOUD_UNREACHABLE`, new at 503, is only a cloud that did
+    not answer.
+  - A pull-only desk (`sync.push = false`) never makes a repo: `POST /sync/cloud` there is 409
+    `CLOUD_SYNC_PULL_ONLY`, as a venue's publish is `VENUE_PUBLISH_PULL_ONLY`.
+  - `repo_name` is cleared wherever `repoUrl` is cleared or attached anew (disconnect, the config `PUT`,
+    reconnect); the name after an import or a reconnect is looked up within 3 s and never fails the
+    write, and the list refreshes names anyway. Configs match cloud repos by org and repo id, not URL
+    text.
+  - The answer is `{config, existed, sync, syncError}`: the repo stays attached when its first sync
+    fails, as GitHub's attach did, and the failure is the answer's rather than the route's status.
+  - A remembered repo has no cached name (`repo_name` is the attached one's), so the Sync tab names a
+    remembered cloud repo from the org's list, and `LinkedRepoDto` says which are the cloud's.
+  - Onboarding runs before the app, so the Cloud tab is out of reach: an unadopted desk's projects step
+    adopts in place, with the Cloud tab's own adoption (`CloudAdoptionFlow`), and lists the org's repos
+    once adopted.
+  - D4's banners are `CloudSyncRefusalBanner`, beside `SyncReauthBanner`, read from the activity log's
+    `CODE: words` lines, which auto-sync writes too, and cleared by the project's next good run.
 
 ### Session 4 — Move GitHub-synced projects to the cloud
 

@@ -19,6 +19,7 @@ import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncLinkedRepos
 import uk.me.cormack.lighting7.plugins.CloudSyncProjectImportedOutMessage
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.CloudRepoRow
 import uk.me.cormack.lighting7.sync.CloudSyncImporter
 import uk.me.cormack.lighting7.sync.CueNumberClash
 import uk.me.cormack.lighting7.sync.ImportError
@@ -27,9 +28,9 @@ import uk.me.cormack.lighting7.models.toIsoUtc
 
 /**
  * Install-scoped cloud-sync REST endpoints — the per-project routes live in `cloudSync.kt`
- * under `/projects/{projectId}/sync/`. These two are siblings of `/projects` because they
- * either span all projects (`/cloud-sync/configs`) or pre-date a project's existence
- * (`/cloud-sync/import`).
+ * under `/projects/{projectId}/sync/`. These are siblings of `/projects` because they
+ * either span all projects (`/cloud-sync/configs`, `/cloud-sync/repos`) or pre-date a
+ * project's existence (`/cloud-sync/import`).
  */
 internal fun Route.routeApiRestCloudSync(state: State) {
 
@@ -67,12 +68,23 @@ internal fun Route.routeApiRestCloudSync(state: State) {
         val resolved = withContext(Dispatchers.IO) {
             val urls = rows.mapNotNull { it.repoUrl?.takeIf(String::isNotBlank) }.toSet()
             val present = if (urls.isNotEmpty()) state.credentialStore.containsAll(urls) else emptySet()
-            rows.associate { entry ->
-                val tokenPresent = entry.repoUrl?.let { it in present } ?: false
-                entry.projectId.toString() to entry.dto.copy(tokenPresent = tokenPresent)
-            }
+            rows.map { entry -> entry to (entry.repoUrl?.let { it in present } ?: false) }
+        }.associate { (entry, tokenPresent) ->
+            entry.projectId.toString() to decorateSyncConfig(state, entry.dto, entry.repoUrl, tokenPresent)
         }
         call.respond(resolved)
+    }
+
+    /**
+     * The org's cloud repos (cloud-p2 plan D6), each with whether a project here already syncs it and
+     * its kind, which *Import from the cloud* and onboarding's venues-first order read.
+     */
+    get<CloudSyncReposResource> {
+        try {
+            call.respond(CloudReposResponse(state.cloudRepos.list()))
+        } catch (e: SyncException) {
+            respondSyncError(e)
+        }
     }
 
     /**
@@ -97,11 +109,13 @@ internal fun Route.routeApiRestCloudSync(state: State) {
             return@post
         }
         try {
+            val repoUrl = request.repoUrl.trim()
             val result = CloudSyncImporter(state, state.authResolver).import(
-                repoUrl = request.repoUrl.trim(),
+                repoUrl = repoUrl,
                 branch = request.branch,
                 projectName = request.projectName,
             )
+            state.cloudRepos.refreshName(repoUrl)
             state.emitCloudSyncEvent(
                 CloudSyncProjectImportedOutMessage(
                     projectId = result.projectId,
@@ -146,6 +160,12 @@ class CloudSyncConfigsResource
 
 @Resource("/cloud-sync/import")
 class CloudSyncImportResource
+
+@Resource("/cloud-sync/repos")
+class CloudSyncReposResource
+
+@Serializable
+data class CloudReposResponse(val repos: List<CloudRepoRow>)
 
 @Serializable
 data class ImportFromRemoteRequest(

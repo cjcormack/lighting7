@@ -62,9 +62,10 @@ export function CloudSyncHubBody() {
     <div className="space-y-4 max-w-5xl">
       <Card className="p-4 space-y-3">
         <div>
-          <h2 className="text-sm font-semibold">GitHub</h2>
+          <h2 className="text-sm font-semibold">GitHub (legacy)</h2>
           <p className="text-xs text-muted-foreground">
-            Connect once — the same identity is used by every project.
+            For projects still synced to GitHub until they move to the cloud. Connect once — the
+            same identity is used by every one.
           </p>
         </div>
         <IdentityRow projectId={null} />
@@ -78,10 +79,7 @@ export function CloudSyncHubBody() {
               Select a project to manage its sync, take snapshots, or resolve conflicts.
             </p>
           </div>
-          <AddRemoteProjectButton
-            oauthConnected={oauthConnected}
-            onClick={() => setImportOpen(true)}
-          />
+          <AddRemoteProjectButton onClick={() => setImportOpen(true)} />
         </div>
         {isLoading ? (
           <div className="flex justify-center py-6">

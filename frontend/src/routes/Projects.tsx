@@ -15,7 +15,7 @@ import { useProjectListQuery } from "../store/projects"
 import { useCloudSyncConfigsQuery, type SyncConfig } from "../store/cloudSync"
 import { useOauthGithubIdentityQuery } from "../store/oauthGithub"
 import { useIsNavAdmin } from "../navigation"
-import { formatRepoUrl } from "@/lib/formatRepoUrl"
+import { repoLabel } from "@/lib/formatRepoUrl"
 import { ProjectSummary } from "../api/projectApi"
 import CreateProjectDialog from "../CreateProjectDialog"
 import ImportProjectDialog from "../ImportProjectDialog"
@@ -31,25 +31,12 @@ export default function Projects() {
   const [addVenueOpen, setAddVenueOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [addRemoteOpen, setAddRemoteOpen] = useState(false)
-  // Skipped for operators: `/api/rest/oauth/` is admin-gated, so their refetch can only 403 —
-  // the same reliance `store/users.ts` documents for `useUsersQuery`. They lose nothing, since
-  // the button it gates is one they cannot use either.
+  // Skipped for operators: `/api/rest/oauth/` and `/install/cloud` are admin-gated, so their
+  // refetch can only 403 — and importing a project is an admin's.
   const isAdmin = useIsNavAdmin()
   const { data: identity } = useOauthGithubIdentityQuery(undefined, { skip: !isAdmin })
-  // Usable, not merely present — importing a remote project needs a working token, so a
-  // rejected identity must not offer the flow. See `OAuthIdentity.reauthRequired`.
+  // Usable, not merely present — the GitHub (legacy) picker needs a working token.
   const oauthConnected = identity?.connected === true && identity.reauthRequired !== true
-
-  const addRemoteButton = (
-    <Button
-      variant="outline"
-      disabled={!oauthConnected}
-      onClick={oauthConnected ? () => setAddRemoteOpen(true) : undefined}
-    >
-      <CloudDownload className="size-4" />
-      Add remote project
-    </Button>
-  )
 
   return (
     <>
@@ -68,11 +55,13 @@ export default function Projects() {
         open={importDialogOpen}
         setOpen={setImportDialogOpen}
       />
-      <AddRemoteProjectDialog
-        open={addRemoteOpen}
-        onOpenChange={setAddRemoteOpen}
-        oauthConnected={oauthConnected}
-      />
+      {isAdmin && (
+        <AddRemoteProjectDialog
+          open={addRemoteOpen}
+          onOpenChange={setAddRemoteOpen}
+          oauthConnected={oauthConnected}
+        />
+      )}
       <Card className="m-4 p-4">
         {/* Wraps: at phone width the five actions do not fit beside the title (venue plan session 7). */}
         <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
@@ -84,18 +73,11 @@ export default function Projects() {
                 Import
               </Button>
             )}
-            {oauthConnected ? (
-              addRemoteButton
-            ) : (
-              // Radix tooltip needs a focusable wrapper to fire on a disabled button.
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span tabIndex={0}>{addRemoteButton}</span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  Connect GitHub in Install Settings &rsaquo; Sync to add a remote project.
-                </TooltipContent>
-              </Tooltip>
+            {isAdmin && (
+              <Button variant="outline" onClick={() => setAddRemoteOpen(true)}>
+                <CloudDownload className="size-4" />
+                Import from the cloud
+              </Button>
             )}
             {isAdmin && (
               <Button variant="outline" onClick={() => setAddVenueOpen(true)}>
@@ -252,7 +234,7 @@ function ProjectCard({
                 </Badge>
               </TooltipTrigger>
               <TooltipContent>
-                {formatRepoUrl(syncConfig.repoUrl) ?? "synced"}
+                {repoLabel(syncConfig) ?? "synced"}
                 {syncConfig.lastSyncedAt
                   ? ` · last synced ${new Date(syncConfig.lastSyncedAt).toLocaleString()}`
                   : " · not yet synced"}
