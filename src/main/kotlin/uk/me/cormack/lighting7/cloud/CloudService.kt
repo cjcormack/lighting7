@@ -76,6 +76,8 @@ class CloudService(
     authService: AuthService? = null,
     /** Runs one relayed MCP message as a desk user (the desk's `McpProtocol`); none, and every call is refused as off. */
     mcpHandler: (suspend (JsonObject, AuthenticatedUser) -> JsonObject?)? = null,
+    /** Takes a `sync.changed`'s repo URL on the channel's thread, and must return at once (cloud-p2 plan D5). */
+    private val onSyncChanged: (url: String) -> Unit = {},
 ) {
     private val logger = LoggerFactory.getLogger(CloudService::class.java)
 
@@ -282,6 +284,8 @@ class CloudService(
         override fun linkRefused(refused: Message.LinkRefused) = links.refused(refused)
 
         override fun mcpCall(id: String, call: Message.McpCall) = mcpRelay.call(id, call)
+
+        override fun syncChanged(changed: Message.SyncChanged) = onSyncChanged(changed.url)
     }
 
     private val adoption = CloudAdoptionService(
@@ -343,6 +347,29 @@ class CloudService(
 
     /** The cloud removed this install: forget it and say so. */
     suspend fun revoked(installId: String? = null) = adoption.revoked(installId)
+
+    /**
+     * The install id and key this desk's git tokens and repo API calls are signed with (cloud-p2 plan D3),
+     * while it is adopted through the configured, enabled cloud; null otherwise. Reads the database and
+     * the credential store, so never on the channel's thread.
+     */
+    fun installSigner(): InstallSigner? {
+        val row = adoption.row() ?: return null
+        if (!config.enabled || row.state != CloudConnectionState.ADOPTED || row.baseUrl != config.baseUrl) return null
+        val installId = row.installId ?: return null
+        val key = keys.load() ?: return null
+        return InstallSigner(installId, key)
+    }
+
+    /** Whether [installSigner] would answer, without loading the key. */
+    fun canSign(): Boolean {
+        val row = adoption.row() ?: return false
+        return config.enabled && row.state == CloudConnectionState.ADOPTED && row.baseUrl == config.baseUrl &&
+            row.installId != null && keys.exists()
+    }
+
+    /** The cloud's HTTP API, or null when no cloud is configured. */
+    fun api(): CloudApi? = if (config.configured) apiDelegate.value else null
 
     /** The state as the database holds it now. */
     fun current(): CloudStateDto {
@@ -451,10 +478,11 @@ class CloudService(
         liveConnection?.refreshCapabilities()
     }
 
-    /** What the desk announces (D6): that it takes remote sessions and relays MCP, and the state entries for each door's switch and the sidecar. */
+    /** What the desk announces (D6): that it takes remote sessions, relays MCP and syncs with cloud repos, and the state entries for each door's switch and the sidecar. */
     fun capabilities(): List<String> = buildList {
         add(Capability.REMOTE_V1)
         add(Capability.MCP_V1)
+        add(Capability.SYNC_V1)
         val now = switches
         if (!now.remoteAccess) add(Capability.REMOTE_OFF)
         if (!now.mcpAccess) add(Capability.MCP_OFF)

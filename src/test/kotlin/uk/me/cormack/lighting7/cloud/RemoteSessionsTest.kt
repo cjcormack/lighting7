@@ -532,13 +532,13 @@ class RemoteSessionsTest : RouteIntegrationTest() {
     @Test
     fun `capabilities follow the switches`() {
         val hello = fake.received.first { it.first == installId && it.second.body is Message.Hello }.second.body as Message.Hello
-        assertEquals(listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.REMOTE_OFF, Capability.MCP_OFF, Capability.REMOTE_NO_SIDECAR), hello.capabilities)
+        assertEquals(listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.SYNC_V1, Capability.REMOTE_OFF, Capability.MCP_OFF, Capability.REMOTE_NO_SIDECAR), hello.capabilities)
         fun latest() = fake.received.lastOrNull { it.second.body is Message.Capabilities }?.second?.body as Message.Capabilities?
-        eventually("capabilities without remote.off") { latest()?.list == listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.MCP_OFF, Capability.REMOTE_NO_SIDECAR) }
+        eventually("capabilities without remote.off") { latest()?.list == listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.SYNC_V1, Capability.MCP_OFF, Capability.REMOTE_NO_SIDECAR) }
         state.cloud.setSwitches(remoteAccess = false)
-        eventually("capabilities with remote.off") { latest()?.list == listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.REMOTE_OFF, Capability.MCP_OFF, Capability.REMOTE_NO_SIDECAR) }
+        eventually("capabilities with remote.off") { latest()?.list == listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.SYNC_V1, Capability.REMOTE_OFF, Capability.MCP_OFF, Capability.REMOTE_NO_SIDECAR) }
         state.cloud.setSwitches(mcpAccess = true)
-        eventually("capabilities without mcp.off") { latest()?.list == listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.REMOTE_OFF, Capability.REMOTE_NO_SIDECAR) }
+        eventually("capabilities without mcp.off") { latest()?.list == listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.SYNC_V1, Capability.REMOTE_OFF, Capability.REMOTE_NO_SIDECAR) }
     }
 
     @Test

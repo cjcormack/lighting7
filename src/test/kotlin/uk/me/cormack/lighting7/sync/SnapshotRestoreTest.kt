@@ -826,6 +826,37 @@ class SnapshotRestoreTest {
     }
 
     @Test
+    fun `a cloud that refuses the first sync restores locally, whatever it refused`() {
+        val desk = Desk("cloud-refused")
+        val id = richShow(desk)
+        val first = desk.snapshot(id).commit!!
+        edit(desk, id)
+        desk.snapshot(id)
+        desk.attach(id, "https://cloud.example/git/org-1/show.git")
+        val (installUuid, name) = desk.install()
+        val refusals = listOf<Throwable>(
+            SyncException(SyncErrorCode.CLOUD_NOT_ADOPTED, "not adopted"),
+            SyncException(SyncErrorCode.SYNC_OFF, "sync off"),
+            SyncException(SyncErrorCode.REPO_NOT_FOUND, "no such repo"),
+            SyncException(SyncErrorCode.SYNC_QUOTA_EXCEEDED, "over quota"),
+            SyncException(SyncErrorCode.SYNC_STORAGE_UNAVAILABLE, "no storage"),
+            GitPushRefusedException("SYNC_QUOTA_EXCEEDED", "over quota"),
+        )
+        var target = first.sha
+        for (refusal in refusals) {
+            val review = desk.review(id, target)
+            val engine = object : SnapshotRestore.Engine {
+                override suspend fun sync(): SyncRunResult = throw refusal
+                override suspend fun reload(projectId: Int) = Unit
+            }
+            val local = runBlocking { SnapshotRestore(desk.state).restore(engine, id, desk.uuidOf(id), installUuid, name, target, review.token, null) }
+            assertNull(local.sync)
+            assertTrue(local.notes.any { it.startsWith("Couldn't reach the repository") }, "$refusal: ${local.notes}")
+            target = local.before.sha
+        }
+    }
+
+    @Test
     fun `an import error maps to the restore's codes without reading its message`() {
         assertEquals(SyncErrorCode.FORMAT_TOO_NEW, ImportError.unsupportedFormat("older or newer").toSyncException(pulled = false).code)
         assertEquals(SyncErrorCode.RESTORE_UNREADABLE, ImportError.unsupportedFormat("older").toSyncException(pulled = true).code)

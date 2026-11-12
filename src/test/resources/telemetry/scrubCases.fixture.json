@@ -2,6 +2,17 @@
   "_comment": "Run by TokenScrubberTest and lib/sentryScrub.test.ts against secret-patterns.json. `expected` absent means the input passes untouched.",
   "cases": [
     {
+      "input": "push to https://cloud.example/git/org1/repo1.git with x-install-token:eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxIn0.c2lnbmF0dXJlLWJ5dGVz_-x failed",
+      "expected": "push to https://cloud.example/git/org1/repo1.git with x-install-token:[redacted] failed"
+    },
+    {
+      "input": "LIGHTING7_CLOUD_TOKEN=l7_dev_01JD2K_aB3-xYz9QwErTy",
+      "expected": "LIGHTING7_CLOUD_TOKEN=[redacted]"
+    },
+    {
+      "input": "a desk access token eyJhbGciOiJFZERTQSIsImtpZCI6ImtleS0xIn0.e30.c2ln is not a git token"
+    },
+    {
       "input": "push failed with ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8",
       "expected": "push failed with [redacted]"
     },

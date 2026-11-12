@@ -140,16 +140,31 @@ class State(val config: ApplicationConfig) {
      * Lighting7 Cloud: this desk's adoption and its `cloud.state` (cloud-p0 plan). Lazy, like
      * [updateService], and started only by `Application.module()`, so a test's `State` polls nothing.
      */
+    private val cloudConfig = uk.me.cormack.lighting7.cloud.CloudConfig.from(config)
+
     private val cloudDelegate = lazy {
         uk.me.cormack.lighting7.cloud.CloudService(
             database = database,
-            config = uk.me.cormack.lighting7.cloud.CloudConfig.from(config),
+            config = cloudConfig,
             credentialStore = { credentialStore },
             userChanges = authService.userChanges,
             authService = authService,
             mcpHandler = { request, user -> mcpProtocol.handle(request, user) },
+            onSyncChanged = { url ->
+                if (uk.me.cormack.lighting7.cloud.CloudRepoUrls.isCloudRepo(url, cloudConfig.baseUrl)) syncNudges.offer(url)
+            },
         )
     }
+
+    /** A cloud's `sync.changed`, handed from the channel's thread to [autoSyncScheduler] (cloud-p2 plan D5). */
+    val syncNudges = uk.me.cormack.lighting7.sync.SyncNudges()
+
+    /**
+     * The developer token an unadopted desk syncs cloud repos with (cloud-p2 plan D3, D9), read from
+     * `LIGHTING7_CLOUD_TOKEN` once, when the desk starts, and never stored.
+     */
+    private val cloudDevToken: String? =
+        System.getenv(uk.me.cormack.lighting7.sync.auth.CloudCredentialSource.DEV_TOKEN_ENV)?.trim()?.takeIf { it.isNotEmpty() }
 
     val cloud: uk.me.cormack.lighting7.cloud.CloudService by cloudDelegate
 
@@ -477,7 +492,19 @@ class State(val config: ApplicationConfig) {
 
     /** Single resolver instance shared by the sync engine and route handlers. */
     val authResolver: AuthResolver by lazy {
-        AuthResolver(credentialStore, oauthTokenStore, oauthTokenProvider)
+        AuthResolver(
+            credentialStore,
+            oauthTokenStore,
+            oauthTokenProvider,
+            uk.me.cormack.lighting7.sync.auth.CloudCredentialSource(
+                baseUrl = cloudConfig.baseUrl,
+                enabled = cloudConfig.enabled,
+                signer = { cloud.installSigner() },
+                adopted = { cloud.canSign() },
+                devToken = cloudDevToken,
+                api = { cloud.api() },
+            ),
+        )
     }
 
     /**
@@ -533,7 +560,7 @@ class State(val config: ApplicationConfig) {
      * scheduler tick racing a manual sync.
      */
     val autoSyncScheduler: AutoSyncScheduler by lazy {
-        AutoSyncScheduler(this, remoteSyncEngine)
+        AutoSyncScheduler(this, remoteSyncEngine, syncNudges, cloudConfig.baseUrl)
     }
 
     // Stored here so [shutdown] can close JmDNS as part of the same teardown sequence

@@ -609,6 +609,29 @@ snapshot.
 The adoption's three mutations and the switches' are in `SILENT_ENDPOINTS`: the tab shows each refusal
 where it was met.
 
+## Cloud sync
+
+The cloud hosts each synced project as a git repo (cloud-p2 plan), and the sync engine syncs with one
+as it does with any remote: snapshots, the three-way diff, conflict sessions, a venue's tagged versions
+and auto-sync are unchanged. What the cloud adds, all of it in `docs/sync-engineering.md`
+§"Auth / credential storage":
+
+- **Which URLs are the cloud's**: `CloudRepoUrls`, `<cloud origin>/git/<orgId>/<repoId>.git`.
+- **Credentials**: `CloudCredentialSource` in `AuthResolver`, a git token per run signed with the install
+  key (`CloudService.installSigner()`), else `LIGHTING7_CLOUD_TOKEN`, else `CLOUD_NOT_ADOPTED`. No
+  control-channel round trip.
+- **The repo API**: `CloudApi.createRepo`, `listRepos` and `getRepo`, signed over a `RepoApiPayload`
+  with `Lighting7-Install`, or a read under a developer token as a bearer. A create for a project that
+  has a repo answers that repo (`RepoCreated.existed`). The engine asks `getRepo` only to put a git 403
+  or 404 in the cloud's words (`SYNC_OFF`, `REPO_NOT_FOUND`).
+- **`sync.changed`** (`sync.v1`, always announced): the channel's thread hands the URL to
+  `SyncNudges` and returns, a URL that is not a repo of `cloud.baseUrl` dropped; `AutoSyncScheduler`
+  brings forward the ticks of the projects syncing that org and repo, at most once in 10 s each, and
+  never a backoff's. A hostile cloud can wake only its own repos' projects.
+
+Nothing here is on the channel's thread but the hand-off, and nothing is stored: the token is minted
+for each run, the developer token lives in the environment, and the hand-off holds at most 64 URLs.
+
 ## Show safety
 
 The cloud is never on the show's path (design record R6, D11). Every change here answers one question:
@@ -638,14 +661,18 @@ does the show run exactly as before with the cloud down, hung or hostile? The ru
    sidecar's peer connections go wherever ICE finds the browser, which is what they are for.
 7. **The sidecar is a process apart.** Its pipes are read and written on threads of their own, through
    bounded queues, and one that hangs is restarted rather than waited on (§"The sidecar").
-8. **A relayed MCP call is the desk's own work, not the channel's.** The channel's thread only judges
+8. **A `sync.changed` is a nudge, not work.** The channel's thread offers the URL to `SyncNudges` — a
+   bounded set behind a conflated wake-up, no lock the show takes, no database — and returns; the sync
+   it brings forward runs on the scheduler's coroutine, as a timed tick would (§"Cloud sync").
+9. **A relayed MCP call is the desk's own work, not the channel's.** The channel's thread only judges
    the switch and the queue and hands the call on: the token, the link and the tool run on
    `Dispatchers.IO`, four at once and four waiting, `DESK_BUSY` beyond (`docs/mcp-engineering.md`
    §"Through the cloud").
 
 `CloudOutageOutputTimingTest` is the rules' proof (NFR-SAFE-1): a fade's Art-Net frames, timed with no
-connector, then with the cloud connected, stopping reading, dropping the connection and refusing every
-reconnect, each run held to the baseline's frame count, end, p99 and longest frame gap, each plus a margin.
+connector, then with the cloud connected, flooding the channel with `sync.changed`, stopping reading,
+dropping the connection and refusing every reconnect, each run held to the baseline's frame count, end,
+p99 and longest frame gap, each plus a margin.
 `LinkSidecarSafetyTest` holds the sidecar to the same (NFR-SAFE-2): the real one running, killed mid-fade
 and stopped with SIGSTOP mid-fade until its stdin queue fills, then a stand-in flooding its stdout and one
 flooding its stderr. `McpRelayLimitsTest` holds the MCP relay to the same: a fade with 200 calls sent
@@ -660,8 +687,11 @@ against the install's key and its own clock (`clockOffset` makes it skewed), kee
 install, closes a removed install `4004`, and can stall a connection, stop reading one, drop it, refuse
 or redirect the upgrade, or force any `4003` reason. For P1 it holds a token-signing key, sends its
 `jwks` after every `welcome` (and `remoteOrigin` in it when set), mints desk access tokens (`mint`),
-rotates its key, sends `revoke` and relays an MCP call (`mcpCall`). Desk tests never use the real
-cloud (R5).
+rotates its key, sends `revoke` and relays an MCP call (`mcpCall`). For P2 it hosts an org's repos
+(`FakeCloudRepos`): the repo API, and git's smart HTTP over in-memory bare repos through JGit's own
+`UploadPack` and `ReceivePack`, keeping the protocol's push rules and answering their codes, with
+switches that turn sync off, delete a repo and refuse every push, or the next, with a code. Desk tests
+never use the real cloud (R5). `CloudRepoSyncTest` syncs shows and venues between desks through it.
 `CloudAdoptionTest` drives `CloudService` through every adoption and unadopt path;
 `InstallCloudRoutesTest` the routes and their refusals on both listeners; `CloudChannelTest` the
 channel against the fake; `CloudChannelBackoffTest` the reconnect loop on a virtual clock; and

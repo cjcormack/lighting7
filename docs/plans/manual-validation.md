@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-CLOUD-P2-S2`](#fu-manual-cloud-p2-s2) | a show attached to its cloud repo by hand syncs from an adopted desk, a second desk pulls it, and an edit reaches the second by `sync.changed` before its auto-sync interval | Cloud P2 S2, 2026-11-12 |
 | [`FU-MANUAL-RIG-SESSION-FIXES`](#fu-manual-rig-session-fixes) | QLab from an address inside a sender range; the OSC tab's address list beside QLab; Safari's Show view not scrolling the page; a blinder stack with follows reading no *too quick*; a Shehds' FX colour offering W; a venue fixture renamed in the show; text anchored in the Prompt Book mid-show | Rig session fixes, 2026-11-10 |
 | [`FU-MANUAL-SURFACE-SETUP-S6`](#fu-manual-surface-setup-s6) | *Assign to surface…* from a stack card by touching a button, which does not fire; *Bound on* on the card; a palette pressed from an encoder's push; the picture's click in remote mode | Surface setup session 6, 2026-11-09 |
 | [`FU-MANUAL-SURFACE-SETUP-S5`](#fu-manual-surface-setup-s5) | an upgraded show's strips are a groups job; the heads job follows the selection with the faders still; the busk-page row follows a page button; a control made its own beats its job; the Jobs panel's up and down | Surface setup session 5, 2026-11-09 |
@@ -879,6 +880,32 @@ shows the migration moving nothing on stage.
    rig moves, and the four cells take the teal edge and the palette's pill, and the source chip names
    it. Select two of them: the palette's chip reads *2 of 4*. Delete one head's row from
    the palette: that cell's pill turns dashed (unresolved) and keeps its value.
+
+---
+
+## `FU-MANUAL-CLOUD-P2-S2`
+
+**What it proves**: an adopted desk syncs with a repo the cloud hosts (cloud-p2 plan session 2, D3–D5),
+before any UI makes one: its own git token, a second desk pulling, and `sync.changed` bringing that
+desk's auto-sync forward. **Needs** the cloud's P2 session 1 deployed (`lighting7-cloud`
+`docs/plans/p2-plan.md`), and `sync.access` on for the org with storage to spare.
+
+**Test**, with two desks adopted into one org:
+
+1. Make a repo for a show from desk A's terminal, signed as the desk would (the Cloud tab cannot yet):
+   there is no route for it until session 3, so make it on the cloud's side with the operator command,
+   or with `CloudApi.createRepo` from a scratch test, and note its `url`.
+2. On desk A, `PUT /api/rest/projects/{id}/sync/config {"repoUrl": "<url>", "autoSyncEnabled": true}`,
+   then *Sync now*: the run reads `PUSHED`, and the portal's Projects page (once the cloud's session 3
+   ships, else the cloud's log) shows the push from desk A's install.
+3. On desk B, import it (`POST /api/rest/cloud-sync/import {"repoUrl": "<url>"}`) and turn its auto-sync
+   on with a long interval (an hour).
+4. Edit the show on A and *Sync now*. Within seconds B's activity log has the run that pulled it,
+   well before its hour: `sync.changed` woke it.
+5. With the cloud's app stopped, *Sync now* on A reads a transport failure and the show runs on; start
+   it again and the next run pushes.
+
+Record the date and anything that read differently here.
 
 ---
 

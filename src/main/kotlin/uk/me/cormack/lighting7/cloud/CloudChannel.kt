@@ -103,6 +103,9 @@ internal interface ChannelHandler {
     /** An `mcp.call`, [id] its envelope's: what `mcp.result`, or a refusal, replies to (D15). */
     fun mcpCall(id: String, call: Message.McpCall) {}
 
+    /** A `sync.changed` (cloud-p2 plan D5): a nudge to sync, handed off and never waited on. */
+    fun syncChanged(changed: Message.SyncChanged) {}
+
     object None : ChannelHandler
 }
 
@@ -382,6 +385,7 @@ internal class ChannelConnection(
                     is Message.LinkAccepted -> handler.linkAccepted(inbound.envelope.id, body)
                     is Message.LinkRefused -> handler.linkRefused(body)
                     is Message.McpCall -> handler.mcpCall(inbound.envelope.id, body)
+                    is Message.SyncChanged -> handler.syncChanged(body)
                     else -> ignore(inbound.envelope)
                 }
             }

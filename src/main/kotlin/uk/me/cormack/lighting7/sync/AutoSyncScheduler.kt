@@ -6,12 +6,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.cloud.CloudRepoUrls
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.ProjectKind
@@ -44,6 +47,12 @@ import java.util.concurrent.ConcurrentHashMap
  * caused the incident this was written for. Backoff is what makes that volume reasonable —
  * ~24 rows a day rather than ~1,440.
  *
+ * A cloud's `sync.changed` reaches it through [nudges] (cloud-p2 plan D5): each repo URL taken that is
+ * a repo of [cloudBaseUrl] wakes the loop of every project syncing that repo, by its org and repo ids,
+ * with auto-sync on, at most once in [NUDGE_SPACING_NANOS] per project, so its next tick runs now rather
+ * than at the end of its interval — the first interval included. A loop backing off waits its backoff
+ * out. A nudge changes only when a tick runs, never what it does.
+ *
  * Lifecycle: [start] is called from the application bootstrap once `State` is fully
  * constructed; [stop] runs from [State.shutdown]. [reschedule] is called by the
  * `PUT /sync/config` handler whenever a project's auto-sync settings change.
@@ -51,10 +60,21 @@ import java.util.concurrent.ConcurrentHashMap
 class AutoSyncScheduler(
     private val state: State,
     private val engine: RemoteSyncEngine,
+    private val nudges: SyncNudges? = null,
+    /** `cloud.baseUrl`: a nudge is honoured only for a repo of this cloud. */
+    private val cloudBaseUrl: String? = null,
+    /** A monotonic clock in nanoseconds, which spaces nudges. */
+    private val nanoClock: () -> Long = System::nanoTime,
 ) {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val perProjectJobs = ConcurrentHashMap<Int, Job>()
+
+    /** Each running loop's wake-up, which a nudge sends to. */
+    private val wakes = ConcurrentHashMap<Int, Channel<Unit>>()
+
+    /** When each project was last woken by a nudge, by [nanoClock]. */
+    private val lastNudged = ConcurrentHashMap<Int, Long>()
 
     /**
      * Projects whose auto-sync has failed at least once since it last succeeded, so the recovery
@@ -83,6 +103,37 @@ class AutoSyncScheduler(
         for ((projectId, interval) in configs) {
             launchLoopFor(projectId, interval)
         }
+        nudges?.let { source ->
+            scope.launch {
+                while (isActive) {
+                    for (url in source.take()) {
+                        runCatching { nudge(url) }.onFailure { if (it is CancellationException) throw it else logger.warn("Couldn't act on a sync nudge", it) }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Wake the loop of every project whose repo is the cloud repo [url] names and whose auto-sync is on,
+     * unless a nudge woke it less than [NUDGE_SPACING_NANOS] ago. Answers the projects woken; none for a
+     * URL that is not a repo of [cloudBaseUrl].
+     */
+    internal fun nudge(url: String): Set<Int> {
+        val repo = CloudRepoUrls.parse(url, cloudBaseUrl) ?: return emptySet()
+        val projects = transaction(state.database) {
+            DaoSyncConfig.find { DaoSyncConfigs.autoSyncEnabled eq true }
+                .filter { cfg -> cfg.repoUrl?.let { CloudRepoUrls.parse(it, cloudBaseUrl) } == repo }
+                .map { it.project.id.value }
+        }
+        val now = nanoClock()
+        return projects.filterTo(mutableSetOf()) { projectId ->
+            val wake = wakes[projectId] ?: return@filterTo false
+            val previous = lastNudged[projectId]
+            if (previous != null && now - previous < NUDGE_SPACING_NANOS) return@filterTo false
+            lastNudged[projectId] = now
+            wake.trySend(Unit).isSuccess
+        }
     }
 
     /**
@@ -92,6 +143,7 @@ class AutoSyncScheduler(
      */
     fun reschedule(projectId: Int) {
         perProjectJobs.remove(projectId)?.cancel()
+        wakes.remove(projectId)
         val interval = transaction(state.database) {
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.firstOrNull()
             // Require an attached repo too — a repo-less config would only tick to Disabled.
@@ -107,20 +159,26 @@ class AutoSyncScheduler(
     fun stop() {
         scope.cancel()
         perProjectJobs.clear()
+        wakes.clear()
         blockedSince.clear()
     }
 
     private fun launchLoopFor(projectId: Int, intervalMs: Long) {
         val effective = intervalMs.coerceAtLeast(MIN_INTERVAL_MS)
+        val wake = Channel<Unit>(Channel.CONFLATED)
+        suspend fun pause(ms: Long) {
+            withTimeoutOrNull(ms) { wake.receive() }
+        }
         val job = scope.launch {
             // Wait one full interval before the first tick so a freshly-enabled auto-sync
-            // doesn't fire mid-form-submission.
-            delay(effective)
+            // doesn't fire mid-form-submission. A cloud's nudge is no form, so it may end the wait.
+            pause(effective)
             // Consecutive blocked ticks, kept in loop-local scope on purpose: `reschedule`
             // cancels and relaunches this coroutine, so a config change (or a fresh OAuth
             // connect, which calls it) resets the backoff for free.
             var consecutiveBlocked = 0
             while (isActive) {
+                wake.tryReceive()
                 when (val result = runOneTick(projectId)) {
                     is TickResult.Blocked -> {
                         consecutiveBlocked += 1
@@ -145,17 +203,18 @@ class AutoSyncScheduler(
                     }
                     // No run happened, so there is nothing to call recovered and nothing to
                     // back off from — the loop is about to exit anyway in both cases.
-                    TickResult.Idle -> delay(effective)
+                    TickResult.Idle -> pause(effective)
                     // The recovery row is written by runOneTick, which owns the cross-loop
                     // failure memory; this branch only decides when to tick next.
                     TickResult.Ran -> {
                         consecutiveBlocked = 0
-                        delay(effective)
+                        pause(effective)
                     }
                 }
             }
         }
         perProjectJobs[projectId] = job
+        wakes[projectId] = wake
     }
 
     /**
@@ -217,6 +276,7 @@ class AutoSyncScheduler(
             TickDecision.ProjectGone -> {
                 // Project deleted under us; cancel and forget so we don't tick forever.
                 perProjectJobs.remove(projectId)?.cancel()
+                wakes.remove(projectId)
                 blockedSince.remove(projectId)
                 return TickResult.Idle
             }
@@ -315,6 +375,9 @@ class AutoSyncScheduler(
         const val MIN_INTERVAL_MS: Long = 60_000
         /** Default interval when `autoSyncIntervalMs` is null but auto-sync is enabled. */
         const val DEFAULT_INTERVAL_MS: Long = 15 * 60_000
+
+        /** The least time between two runs a nudge brings forward for one project (cloud-p2 plan D5). */
+        const val NUDGE_SPACING_NANOS: Long = 10_000_000_000
 
         /** Longest a repeatedly-failing project waits between attempts. */
         const val BACKOFF_CEILING_MS: Long = 60 * 60_000

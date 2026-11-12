@@ -17,8 +17,6 @@ import uk.me.cormack.lighting7.models.nowUtc
 import uk.me.cormack.lighting7.models.toIsoUtc
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.MissingCredentialsException
-import uk.me.cormack.lighting7.sync.auth.oauth.OAuthReauthRequiredException
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.sync.dto.VenueVersionJson
@@ -60,10 +58,11 @@ import java.util.UUID
  */
 class VenueRepoSync(
     private val state: State,
-    private val authResolver: AuthResolver,
+    authResolver: AuthResolver,
 ) {
 
     private val workingTree = SyncWorkingTree(state)
+    private val failures = SyncFailures(authResolver)
 
     /** What an [exchange] did. [draftReplaced] asks the caller to reload a live venue. */
     data class Exchange(val result: SyncRunResult, val draftReplaced: Boolean)
@@ -161,7 +160,7 @@ class VenueRepoSync(
             JGitClient.fetch(repo, RemoteSyncEngine.REMOTE_NAME, branch, credentials)
                 ?.also { JGitClient.fetchTags(repo, RemoteSyncEngine.REMOTE_NAME, credentials) }
         } catch (e: GitAuthException) {
-            throw SyncException(SyncErrorCode.AUTH_FAILED, "GitHub rejected the credentials for this venue's repo. ${e.message}", e)
+            throw failures.authFailed(repoUrl, e, "GitHub rejected the credentials for this venue's repo.")
         }
         val remoteRef = "refs/remotes/${RemoteSyncEngine.REMOTE_NAME}/$branch"
         if (remoteHead != null) checkRemoteIsThisVenue(repo, remoteRef, venue)
@@ -390,9 +389,25 @@ class VenueRepoSync(
      */
     private fun pushVersion(repo: Repository, branch: String, version: VenueVersionJson, credentials: GitCredentials) {
         val tag = tagName(version.number)
-        val results = JGitClient.pushWithTag(repo, RemoteSyncEngine.REMOTE_NAME, branch, tag, credentials)
+        val results = try {
+            JGitClient.pushWithTag(repo, RemoteSyncEngine.REMOTE_NAME, branch, tag, credentials)
+        } catch (e: GitPushRefusedException) {
+            backOffVersion(repo, branch, tag)
+            val code = CloudSyncCodes.ofPushRefusal(e.code)
+            throw SyncException(code, CloudSyncCodes.explained(code, "The cloud refused $tag: ${e.message}"), e)
+        }
         val refused = results.filterValues { it.status != PushStatus.OK }
         if (refused.isEmpty() && results.size == 2) return
+        backOffVersion(repo, branch, tag)
+        throw SyncException(
+            SyncErrorCode.VENUE_VERSION_TAKEN,
+            "The remote refused $tag (${refused.entries.joinToString { "${it.key}: ${it.value.message ?: it.value.status}" }}): " +
+                "another desk published while this one was. Sync the venue, then publish again.",
+        )
+    }
+
+    /** Undo a refused publish's commit and [tag] locally, so the branch is the remote's again. */
+    private fun backOffVersion(repo: Repository, branch: String, tag: String) {
         JGitClient.deleteTag(repo, tag)
         val remoteRef = "refs/remotes/${RemoteSyncEngine.REMOTE_NAME}/$branch"
         when {
@@ -400,11 +415,6 @@ class VenueRepoSync(
             // An empty remote: back off the one commit made for it, when there is one to back off to.
             repo.resolve("HEAD~1") != null -> JGitClient.resetHard(repo, "HEAD~1")
         }
-        throw SyncException(
-            SyncErrorCode.VENUE_VERSION_TAKEN,
-            "The remote refused $tag (${refused.entries.joinToString { "${it.key}: ${it.value.message ?: it.value.status}" }}): " +
-                "another desk published while this one was. Sync the venue, then publish again.",
-        )
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -435,13 +445,7 @@ class VenueRepoSync(
         }
     }
 
-    private suspend fun resolveCredentials(repoUrl: String): GitCredentials = try {
-        authResolver.resolveFor(repoUrl)
-    } catch (e: MissingCredentialsException) {
-        throw SyncException(SyncErrorCode.MISSING_CREDENTIALS, e.message ?: "No GitHub credentials configured for this repository.")
-    } catch (e: OAuthReauthRequiredException) {
-        throw SyncException(SyncErrorCode.OAUTH_REAUTH_REQUIRED, e.message ?: "GitHub OAuth re-authentication required.")
-    }
+    private suspend fun resolveCredentials(repoUrl: String): GitCredentials = failures.credentialsFor(repoUrl)
 
     private fun readVersionJson(repo: Repository, ref: String): VenueVersionJson? =
         JGitClient.readBlob(repo, ref, VERSION_FILE)

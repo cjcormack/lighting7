@@ -143,6 +143,16 @@ export type SyncErrorCode =
   | "RESTORE_TOO_OLD"
   /** The snapshot's tree can't be imported for another reason. */
   | "RESTORE_UNREADABLE"
+  /** A cloud repo, and this desk is not adopted by the cloud (nor started with a developer token). */
+  | "CLOUD_NOT_ADOPTED"
+  /** The org has cloud sync turned off. */
+  | "SYNC_OFF"
+  /** The cloud repo was deleted, or belongs to another org. */
+  | "REPO_NOT_FOUND"
+  /** The org is out of storage for its repos. */
+  | "SYNC_QUOTA_EXCEEDED"
+  /** The cloud cannot store the push just now. */
+  | "SYNC_STORAGE_UNAVAILABLE"
 
 export interface CommitInfo {
   sha: string

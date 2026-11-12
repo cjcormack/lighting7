@@ -9,8 +9,6 @@ import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.MissingCredentialsException
-import uk.me.cormack.lighting7.sync.auth.oauth.OAuthReauthRequiredException
 import java.nio.file.Files
 import java.util.UUID
 import kotlin.io.path.exists
@@ -24,8 +22,8 @@ import uk.me.cormack.lighting7.models.nowUtc
  * drive the full clone → validate → persist pipeline without HTTP plumbing.
  *
  * Errors are surfaced as typed exceptions:
- *  * [SyncException] for credential resolution issues — mapped to 4xx by the route.
- *  * [GitAuthException] when GitHub rejects the clone over HTTPS.
+ *  * [SyncException] for credential resolution issues, a remote refusing the credentials, and a cloud
+ *    repo's refusal (`REPO_NOT_FOUND`, `SYNC_OFF`) — mapped to 4xx by the route.
  *  * [ImportError] for archive validation issues (raised from [ProjectImporter]) — among them 409
  *    `VENUE_MISSING` for a show whose pinned venue version this desk lacks.
  *
@@ -53,19 +51,8 @@ class CloudSyncImporter(
         val resolvedBranch = branch?.trim()?.takeIf { it.isNotBlank() } ?: JGitClient.DEFAULT_BRANCH
         val nameOverride = projectName?.trim()?.takeIf { it.isNotBlank() }
 
-        val credentials = try {
-            authResolver.resolveFor(repoUrl)
-        } catch (e: MissingCredentialsException) {
-            throw SyncException(
-                SyncErrorCode.MISSING_CREDENTIALS,
-                e.message ?: "No GitHub credentials configured.",
-            )
-        } catch (e: OAuthReauthRequiredException) {
-            throw SyncException(
-                SyncErrorCode.OAUTH_REAUTH_REQUIRED,
-                e.message ?: "GitHub OAuth re-authentication required.",
-            )
-        }
+        val failures = SyncFailures(authResolver)
+        val credentials = failures.credentialsFor(repoUrl)
 
         Files.createDirectories(state.syncWorkingTreeRoot)
         val pendingDir = state.syncWorkingTreeRoot.resolve("_import-${System.nanoTime()}")
@@ -73,11 +60,17 @@ class CloudSyncImporter(
         var movedToFinal = false
 
         try {
-            val headSha = withContext(Dispatchers.IO) {
-                JGitClient.clone(repoUrl, cloneTarget, resolvedBranch, credentials).use { repo ->
-                    JGitClient.head(repo)?.sha
-                        ?: throw ImportError.invalidArchive("Cloned remote has no commits on $resolvedBranch")
+            val headSha = try {
+                withContext(Dispatchers.IO) {
+                    JGitClient.clone(repoUrl, cloneTarget, resolvedBranch, credentials).use { repo ->
+                        JGitClient.head(repo)?.sha
+                            ?: throw ImportError.invalidArchive("Cloned remote has no commits on $resolvedBranch")
+                    }
                 }
+            } catch (e: GitAuthException) {
+                throw failures.authFailed(repoUrl, e, "GitHub rejected the credentials during clone:")
+            } catch (e: GitTransportException) {
+                throw failures.cloudRefusalOf(e) ?: e
             }
 
             val result = withContext(Dispatchers.IO) {
