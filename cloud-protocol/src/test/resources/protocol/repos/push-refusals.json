@@ -1,0 +1,61 @@
+{
+  "source": "The reasons the cloud's git refuses a pushed ref with, and the code each parses to (null: none).",
+  "reasons": [
+    {
+      "reason": "SYNC_NON_FAST_FORWARD: main has moved on; pull and push again",
+      "code": "SYNC_NON_FAST_FORWARD"
+    },
+    {
+      "reason": "SYNC_REF_PROTECTED: refs/heads/main cannot be deleted",
+      "code": "SYNC_REF_PROTECTED"
+    },
+    {
+      "reason": "SYNC_TAG_IMMUTABLE: v2 is already published",
+      "code": "SYNC_TAG_IMMUTABLE"
+    },
+    {
+      "reason": "SYNC_FORMAT_INVALID: formatVersion.json is missing from main's tree",
+      "code": "SYNC_FORMAT_INVALID"
+    },
+    {
+      "reason": "SYNC_QUOTA_EXCEEDED: this push would use 2104 MB of the org's 2048 MB",
+      "code": "SYNC_QUOTA_EXCEEDED"
+    },
+    {
+      "reason": "SYNC_STORAGE_UNAVAILABLE: the cloud's disk is nearly full",
+      "code": "SYNC_STORAGE_UNAVAILABLE"
+    },
+    {
+      "reason": "SYNC_TAG_IMMUTABLE: ",
+      "code": "SYNC_TAG_IMMUTABLE"
+    },
+    {
+      "reason": "SYNC_LATER_THING: a code this version does not know",
+      "code": null
+    },
+    {
+      "reason": "REPO_NOT_FOUND: not a push refusal",
+      "code": null
+    },
+    {
+      "reason": "non-fast-forward",
+      "code": null
+    },
+    {
+      "reason": "SYNC_TAG_IMMUTABLE",
+      "code": null
+    },
+    {
+      "reason": "sync_tag_immutable: lowercase",
+      "code": null
+    },
+    {
+      "reason": " SYNC_TAG_IMMUTABLE: leading space",
+      "code": null
+    },
+    {
+      "reason": "",
+      "code": null
+    }
+  ]
+}

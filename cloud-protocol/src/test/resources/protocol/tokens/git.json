@@ -1,0 +1,204 @@
+{
+  "source": "Computed with Python's cryptography from RFC 8032 §7.1's TEST 1 key (signing/test-key.json); wrong-key uses TEST 2.",
+  "installId": "inst_01JBX3Q5Z8",
+  "audience": "https://cloud.example/git",
+  "now": "2026-11-05T12:00:00.000Z",
+  "nowEpochS": 1793880000,
+  "basicUser": "x-install-token",
+  "valid": [
+    {
+      "name": "git",
+      "why": "a sync run's token",
+      "claims": {
+        "iss": "inst_01JBX3Q5Z8",
+        "aud": "https://cloud.example/git",
+        "iat": 1793879940,
+        "exp": 1793880540,
+        "jti": "jti_g001"
+      },
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6Imp0aV9nMDAxIn0.Vcbu07LuDT6GR_H0NAwZk_rT1es5HHog9vG93NjzAcX1ZmZ06_6I5Vvh065nSTtx-se-_ikfvwVXMtsSIWTUDQ"
+    },
+    {
+      "name": "ten-minute-lifetime",
+      "why": "the longest life a git token may have",
+      "claims": {
+        "iss": "inst_01JBX3Q5Z8",
+        "aud": "https://cloud.example/git",
+        "iat": 1793879700,
+        "exp": 1793880300,
+        "jti": "jti_g002"
+      },
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5NzAwLCJleHAiOjE3OTM4ODAzMDAsImp0aSI6Imp0aV9nMDAyIn0.nvO9b99m0eT_3pGkUg7uUO4qfI0rSm-_nPrJ2PvYBTOZIhmjvXiAJ-IRC_9bWXl5mDnsYkmoGOwXys4vPKgVCQ"
+    },
+    {
+      "name": "expired-within-skew",
+      "why": "expired 60 s ago, within the skew",
+      "claims": {
+        "iss": "inst_01JBX3Q5Z8",
+        "aud": "https://cloud.example/git",
+        "iat": 1793879340,
+        "exp": 1793879940,
+        "jti": "jti_g003"
+      },
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5MzQwLCJleHAiOjE3OTM4Nzk5NDAsImp0aSI6Imp0aV9nMDAzIn0.8OUubviDMJPjp0bYQtdZrUD3bmtX0OGtuO0Oi6Olq_4Q50hMo_e13kHEuG-1kck45iIYt_ZhAZADLnT1piknAQ"
+    },
+    {
+      "name": "issued-within-skew",
+      "why": "issued 60 s ahead of the cloud's clock, within the skew",
+      "claims": {
+        "iss": "inst_01JBX3Q5Z8",
+        "aud": "https://cloud.example/git",
+        "iat": 1793880060,
+        "exp": 1793880600,
+        "jti": "jti_g004"
+      },
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODgwMDYwLCJleHAiOjE3OTM4ODA2MDAsImp0aSI6Imp0aV9nMDA0In0.UV_GPo-6owQwX4CSn3yuevoC4dWV8P2nWRBSXvopVe7DVefu52P3VF5uerqAAZkbZkSaHS4lgLN38tjvfDSIBw"
+    }
+  ],
+  "refused": [
+    {
+      "name": "expired",
+      "why": "expired 61 s ago",
+      "refusal": "TOKEN_EXPIRED",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5MzM5LCJleHAiOjE3OTM4Nzk5MzksImp0aSI6Imp0aV9nMDAxIn0.yMrd2WNjYwJy8_xTWl1FTrTawYqi9n3ySNWnobeTArIIKapriSd5DB5UoZWAPs2JTINgvI78-sR0WMwuNXxpAg"
+    },
+    {
+      "name": "issued-in-the-future",
+      "why": "issued 61 s ahead of the cloud's clock",
+      "refusal": "TOKEN_NOT_YET_VALID",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODgwMDYxLCJleHAiOjE3OTM4ODA2MDEsImp0aSI6Imp0aV9nMDAxIn0.nuXJd0BjyTeiigGIe3qnW5-66NnsKvK9mN5nCg0OLEpbNKRifVjH_Tm1VFUkcqSoDZ8Gfxkki4LwLdTtMi9gDQ"
+    },
+    {
+      "name": "too-long-lived",
+      "why": "a lifetime of 601 s",
+      "refusal": "TOKEN_TOO_LONG_LIVED",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTk5LCJleHAiOjE3OTM4ODA2MDAsImp0aSI6Imp0aV9nMDAxIn0.F6N0r8ecu508_r_lkCb-uHSr6WzKW5nyExzyjb7nK-3hoWsz5njK7MZGc33HKpKa-8N9LOnnqHUiLa4YeSOOBQ"
+    },
+    {
+      "name": "wrong-audience",
+      "why": "for another cloud's git",
+      "refusal": "TOKEN_WRONG_AUDIENCE",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL290aGVyLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6Imp0aV9nMDAxIn0.tS0yeREYZKoBfnf8srLLGvycPQBjm8SruJn9Bt2WPmobGIC2ExG9mACReJBvHgtfa-tc-2zED2x5h1mWD8mSAg"
+    },
+    {
+      "name": "desk-audience",
+      "why": "an audience that is the cloud's origin, not its git",
+      "refusal": "TOKEN_WRONG_AUDIENCE",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUiLCJpYXQiOjE3OTM4Nzk5NDAsImV4cCI6MTc5Mzg4MDU0MCwianRpIjoianRpX2cwMDEifQ.a2xKOkKVT8No2-32dZxtv9OgebrzWfg2bBNILDYEOe3pvfVPRrewrpPXM2eFMaBijtTq8ZTSHYn7OKRjceBrCQ"
+    },
+    {
+      "name": "unknown-install",
+      "why": "an iss naming no install the cloud holds a key for",
+      "refusal": "TOKEN_UNKNOWN_KEY",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjkiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6Imp0aV9nMDAxIn0.hMohdI80eoLPdlKiuGqkko69YLjI2mXOZCUuaBBEcCYUkITrCGAT5dxXy0RdkSB1o2lTxO-X31cWns9FiWPiBw"
+    },
+    {
+      "name": "wrong-key",
+      "why": "signed with RFC 8032's TEST 2 key, naming the test key's install",
+      "refusal": "TOKEN_BAD_SIGNATURE",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6Imp0aV9nMDAxIn0.u4r0FyOsWMtA9XON4M8c249JAWffm4ekzkomtLJ8NZeG300UZ6R-sO9C2txg5SLDb2FxW52lNoXWwV55ci8aBw"
+    },
+    {
+      "name": "tampered-claims",
+      "why": "another jti under the first token's signature",
+      "refusal": "TOKEN_BAD_SIGNATURE",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6Imp0aV9vdGhlciJ9.Vcbu07LuDT6GR_H0NAwZk_rT1es5HHog9vG93NjzAcX1ZmZ06_6I5Vvh065nSTtx-se-_ikfvwVXMtsSIWTUDQ"
+    },
+    {
+      "name": "alg-none",
+      "why": "alg none",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJub25lIiwidHlwIjoibDdnaXQifQ.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6Imp0aV9nMDAxIn0."
+    },
+    {
+      "name": "alg-hs256",
+      "why": "an algorithm other than EdDSA",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6Imp0aV9nMDAxIn0.hndlClApgf_koBirD6zC7KYh_pJY9aNwKkhgEXAGS0mY-tR5VdZkQBBQYkOF3Vf6Bh_mnOdUq2ebQGj2pYDRDg"
+    },
+    {
+      "name": "typ-jwt",
+      "why": "typed JWT: a desk access token's type, not a git token's",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6Imp0aV9nMDAxIn0.WhjKLbF9gKF_s_Enewk4QHQ9gPgWY2LkSQpOJ6r-ZqiAtzCu0bYzi6NP4yw0DCSOeAv67xh9YUAnn45AEOU4Ag"
+    },
+    {
+      "name": "typ-missing",
+      "why": "no typ",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJFZERTQSJ9.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6Imp0aV9nMDAxIn0.6uPTUdrx7xyB-vtZUblXh70QkB4Kv7QfulYaze5TXspaQCs4eMGSaQ6LSNtcYQL91_OtJhCuEmOsEMRo7MFMCA"
+    },
+    {
+      "name": "crit-header",
+      "why": "a crit header, which nothing here understands",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0IiwiY3JpdCI6WyJleHAiXX0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6Imp0aV9nMDAxIn0.rnxKPSgOMLuXa1qL17dSV4ck2QocVMJWDmFI2DIFzDSVMCsSTMO_PfiCItPJi-S5yypIiXL5bhEsv3IGM73YAQ"
+    },
+    {
+      "name": "two-parts",
+      "why": "no signature part",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6Imp0aV9nMDAxIn0"
+    },
+    {
+      "name": "padded",
+      "why": "a padded part: one value has one spelling",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6Imp0aV9nMDAxIn0==.Vcbu07LuDT6GR_H0NAwZk_rT1es5HHog9vG93NjzAcX1ZmZ06_6I5Vvh065nSTtx-se-_ikfvwVXMtsSIWTUDQ"
+    },
+    {
+      "name": "not-json",
+      "why": "claims that are not JSON",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.bm90IGpzb24.VeviVfEC5sTv9yZGtuwY9qf4FZzq8n7CHkk9DnZfelM6i_4CHdSbi9T_Rc5xMcezDzmdC_d1_CuvodiHyWFiDg"
+    },
+    {
+      "name": "missing-exp",
+      "why": "no exp",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJqdGkiOiJqdGlfZzAwMSJ9.JCta8nQdn9u429lcLEcGkzyr9WzMRy4OV1HRIEGubnREYIi6RTAOk6YhL5xxaL5v0_NTMe1HdXsei8p1jNdZCQ"
+    },
+    {
+      "name": "missing-iss",
+      "why": "no iss",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6Imp0aV9nMDAxIn0.sK3lU9os_XNwTd9osWk-xIr4q8Yoi89lCq90pAiXb8XtHsHA1qV0Zypg-guGauPd0T-YBSoAjB7qb0SGObv1Cw"
+    },
+    {
+      "name": "empty-iss",
+      "why": "an empty iss, which names no install",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiIiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6Imp0aV9nMDAxIn0.F3UXjnkpmW6idjJ37mZEBbGf-mlZPYqiaj-Y2fM3IhanIrxymaJgc4WQfYLwR3V3zhyEkfwYXLMkQQlhKsikDw"
+    },
+    {
+      "name": "iss-not-a-string",
+      "why": "an iss that is a number",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOjUsImF1ZCI6Imh0dHBzOi8vY2xvdWQuZXhhbXBsZS9naXQiLCJpYXQiOjE3OTM4Nzk5NDAsImV4cCI6MTc5Mzg4MDU0MCwianRpIjoianRpX2cwMDEifQ.FiQCbX9iC3QVPAj5tL-nuyge5mgUPEwTGjO-dJXP939zNR9FVadndJk02GQIcJifwwRLwZYpiSayUX947rCBCg"
+    },
+    {
+      "name": "empty-aud",
+      "why": "an empty aud",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiIiLCJpYXQiOjE3OTM4Nzk5NDAsImV4cCI6MTc5Mzg4MDU0MCwianRpIjoianRpX2cwMDEifQ.GdYbRT0ilNLRMu7K5zl6xuWxsBOaqmqIcMEPa0baxfIicH0iXviB3rRiupPRptvbpGoBOEIK33vIz1Ra7gbrBQ"
+    },
+    {
+      "name": "empty-jti",
+      "why": "an empty jti",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODc5OTQwLCJleHAiOjE3OTM4ODA1NDAsImp0aSI6IiJ9.HecRpJfe9nDpyUeB7Um6DopNQ-n5I3CHnAH9E_FOH9SEEaGYj9Y4cbYWw-1TgBqlBeTf-ZAkOs60BvriVKu2Dg"
+    },
+    {
+      "name": "exp-before-iat",
+      "why": "an exp before its iat",
+      "refusal": "TOKEN_MALFORMED",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxSkJYM1E1WjgiLCJhdWQiOiJodHRwczovL2Nsb3VkLmV4YW1wbGUvZ2l0IiwiaWF0IjoxNzkzODgwMDAwLCJleHAiOjE3OTM4Nzk5OTksImp0aSI6Imp0aV9nMDAxIn0.Rww7wdkKfy7M8c0uN4NWi-txbo5q4k1toHTPVQZbPKFE9J6coze0AwgWP5ZqGpbHplt7jR2QqH0xbpkBCxWXDg"
+    },
+    {
+      "name": "empty",
+      "why": "an empty token",
+      "refusal": "TOKEN_MALFORMED",
+      "token": ""
+    }
+  ]
+}

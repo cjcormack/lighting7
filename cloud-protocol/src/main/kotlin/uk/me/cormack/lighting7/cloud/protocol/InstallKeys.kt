@@ -14,6 +14,7 @@ import java.security.spec.NamedParameterSpec
 import java.security.spec.PKCS8EncodedKeySpec
 import java.security.spec.X509EncodedKeySpec
 import java.util.Base64
+import java.util.HexFormat
 
 /**
  * The install key: an Ed25519 key pair from the JDK, made by the desk when adoption starts. Its
@@ -131,6 +132,27 @@ data class AdoptionPollPayload(val adoptionId: String, val timestamp: String) : 
 
     companion object {
         const val DOMAIN: String = "lighting7-cloud/adoption-poll/v1"
+    }
+}
+
+/**
+ * What a call to the repo API signs ([SignatureHeaders], [CloudPaths.REPOS]): this install's [method]
+ * of [path] with a body whose SHA-256 is [bodySha256], lowercase hex, now. [path] is the request line's
+ * path exactly as sent, which is [CloudPaths]' string, with no query: the repo API takes none. Binding
+ * the method, path and body keeps a signature from being replayed as another call.
+ */
+data class RepoApiPayload(val installId: String, val method: String, val path: String, val timestamp: String, val bodySha256: String) : SignedPayload {
+    override val domain: String get() = DOMAIN
+    override val fields: List<String> get() = listOf(installId, method, path, timestamp, bodySha256)
+
+    companion object {
+        const val DOMAIN: String = "lighting7-cloud/repo-api/v1"
+
+        /** The payload for a call sending [body], empty for a `GET`. */
+        fun of(installId: String, method: String, path: String, timestamp: String, body: ByteArray): RepoApiPayload {
+            require('?' !in path) { "The repo API takes no query" }
+            return RepoApiPayload(installId, method, path, timestamp, HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body)))
+        }
     }
 }
 

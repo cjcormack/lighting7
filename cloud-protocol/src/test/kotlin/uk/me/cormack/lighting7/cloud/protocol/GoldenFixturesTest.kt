@@ -3,7 +3,9 @@ package uk.me.cormack.lighting7.cloud.protocol
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -111,6 +113,14 @@ class GoldenFixturesTest {
             ),
             replyTo = "c-0012",
         ),
+        "sync.changed" to Envelope(
+            "c-0013",
+            Message.SyncChanged(
+                "repo_01JC2M7Q4R",
+                "https://cloud.example/git/org_3Hc8Wn/repo_01JC2M7Q4R.git",
+                "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+            ),
+        ),
         "unknown" to Envelope(
             "c-0005",
             Message.Unknown(
@@ -146,6 +156,34 @@ class GoldenFixturesTest {
         "api-error" to Dto(ApiError.serializer(), ApiError(ErrorCode.CLOCK_SKEW, "The timestamp is 7 minutes from the cloud's clock")),
     )
 
+    private val showRepo = RepoDto(
+        repoId = "repo_01JC2M7Q4R",
+        url = "https://cloud.example/git/org_3Hc8Wn/repo_01JC2M7Q4R.git",
+        projectUuid = "3f2b8c1d-4e5a-4b6c-8d7e-9f0a1b2c3d4e",
+        kind = RepoKind.SHOW,
+        name = "Winter Gala",
+        headSha = "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+        sizeBytes = 1_843_200,
+        formatVersion = 56,
+        lastPushAt = "2026-11-12T19:04:11.250Z",
+    )
+    private val newVenueRepo = RepoDto(
+        repoId = "repo_01JC2M9V7T",
+        url = "https://cloud.example/git/org_3Hc8Wn/repo_01JC2M9V7T.git",
+        projectUuid = "8a1e0c2b-5d6f-4a7b-9c8d-0e1f2a3b4c5d",
+        kind = RepoKind.VENUE,
+        name = "Corn Exchange",
+        sizeBytes = 0,
+    )
+
+    private val repos: Map<String, Dto<*>> = mapOf(
+        "create-repo-request" to Dto(CreateRepoRequest.serializer(), CreateRepoRequest("3f2b8c1d-4e5a-4b6c-8d7e-9f0a1b2c3d4e", RepoKind.SHOW, "Winter Gala")),
+        "repo" to Dto(RepoDto.serializer(), showRepo),
+        "repo-new" to Dto(RepoDto.serializer(), newVenueRepo),
+        "repo-list" to Dto(RepoList.serializer(), RepoList(listOf(showRepo, newVenueRepo))),
+        "repo-exists" to Dto(RepoExistsError.serializer(), RepoExistsError(ErrorCode.REPO_EXISTS, "Winter Gala already has a repo in this org", showRepo)),
+    )
+
     @Test
     fun `every message fixture decodes to its value and re-encodes as written`() {
         for ((name, expected) in messages) {
@@ -160,6 +198,19 @@ class GoldenFixturesTest {
         for ((name, dto) in adoption) {
             assertRoundTrips("adoption/$name.json", dto)
         }
+    }
+
+    @Test
+    fun `every repo fixture decodes to its value and re-encodes as written`() {
+        for ((name, dto) in repos) {
+            assertRoundTrips("repos/$name.json", dto)
+        }
+    }
+
+    @Test
+    fun `a repo-exists answer reads as an ApiError`() {
+        val error = CloudJson.decodeFromString(ApiError.serializer(), fixture("repos/repo-exists.json"))
+        assertEquals(ApiError(ErrorCode.REPO_EXISTS, "Winter Gala already has a repo in this org"), error)
     }
 
     private fun <T> assertRoundTrips(path: String, dto: Dto<T>) {
@@ -178,11 +229,12 @@ class GoldenFixturesTest {
         assertEquals(KNOWN_MESSAGE_TYPES + "unknown", messages.keys, "a fixture per message type, and one unknown")
         assertEquals(messages.keys, fixtureNames("messages"), "no message fixture goes unchecked")
         assertEquals(adoption.keys, fixtureNames("adoption"), "no adoption fixture goes unchecked")
-        assertEquals(setOf("vectors"), fixtureNames("tokens"), "DeskTokensTest checks tokens/")
+        assertEquals(repos.keys + "push-refusals", fixtureNames("repos"), "no repo fixture goes unchecked")
+        assertEquals(setOf("vectors", "git"), fixtureNames("tokens"), "DeskTokensTest and InstallGitTokensTest check tokens/")
         assertEquals(setOf("framing", "ctl"), fixtureNames("link"), "LinkContractsTest checks link/")
         assertEquals(setOf("messages"), fixtureNames("remote-frame"), "LinkContractsTest checks remote-frame/")
         assertEquals(
-            setOf("messages", "adoption", "signing", "tokens", "link", "remote-frame", "close-codes"),
+            setOf("messages", "adoption", "repos", "signing", "tokens", "link", "remote-frame", "close-codes"),
             requireNotNull(File(resource("protocol")).listFiles()).map { it.nameWithoutExtension }.toSet(),
             "every fixture directory is one a test reads",
         )
@@ -204,6 +256,9 @@ class GoldenFixturesTest {
             put("rtcOfferReplyTimeoutS", RTC_OFFER_REPLY_TIMEOUT.seconds)
             put("deskTokenMaxLifetimeS", DeskTokens.MAX_LIFETIME.seconds)
             put("deskTokenClockSkewS", DeskTokens.CLOCK_SKEW.seconds)
+            put("gitTokenMaxLifetimeS", InstallGitTokens.MAX_LIFETIME.seconds)
+            put("gitTokenClockSkewS", InstallGitTokens.CLOCK_SKEW.seconds)
+            put("pushRefusalCodes", JsonArray(PushRefusals.CODES.map { JsonPrimitive(it) }))
         }
         assertEquals(expected, written)
         val errorCodes = ErrorCode::class.java.declaredFields
@@ -218,6 +273,12 @@ class GoldenFixturesTest {
 
     private fun fixtureNames(dir: String): Set<String> =
         requireNotNull(File(resource("protocol/$dir")).listFiles()).map { it.nameWithoutExtension }.toSet()
+
+    @Test
+    fun `a repo of a kind the reader does not know still decodes, and the list with it`() {
+        val list = CloudJson.encodeToJsonElement(RepoList.serializer(), RepoList(listOf(showRepo, newVenueRepo.copy(kind = "LIBRARY"))))
+        assertEquals(listOf(RepoKind.SHOW, "LIBRARY"), CloudJson.decodeFromJsonElement(RepoList.serializer(), list).repos.map { it.kind })
+    }
 }
 
 internal fun fixture(path: String): String = File(resource("protocol/$path")).readText()
