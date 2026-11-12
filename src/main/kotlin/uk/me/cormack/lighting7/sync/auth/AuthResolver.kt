@@ -9,6 +9,9 @@ import uk.me.cormack.lighting7.sync.auth.oauth.OAuthTokenStore
 /**
  * Picks JGit credentials for [repoUrl] from the available auth sources.
  *
+ * A repo of the configured Lighting7 Cloud is [cloud]'s alone (cloud-p2 plan D3): its install-signed
+ * git token, else the developer token, else [CloudNotAdoptedException]. For any other repo:
+ *
  * Resolution order:
  *  1. **Install-wide GitHub OAuth identity**, if connected. Auto-refreshes the access
  *     token via [OAuthTokenProvider]. The same `x-access-token` username form GitHub
@@ -25,7 +28,14 @@ class AuthResolver(
     /** May be null if `sync.oauth.github.clientId` is unset — then OAuth is not an option. */
     private val tokenStore: OAuthTokenStore?,
     private val tokenProvider: OAuthTokenProvider?,
+    private val cloud: CloudCredentialSource? = null,
 ) {
+    /** Whether [repoUrl] is a repo of the configured cloud. */
+    fun isCloudRepo(repoUrl: String): Boolean = cloud?.handles(repoUrl) == true
+
+    /** Why the cloud's git answered [status] for [repoUrl], in its words; null for a URL that is not the cloud's. */
+    suspend fun cloudRefusal(repoUrl: String, status: Int): CloudRefusal? =
+        cloud?.takeIf { it.handles(repoUrl) }?.refusal(repoUrl, status)
 
     /**
      * Resolve credentials for [repoUrl]. Suspends because the OAuth refresh path may
@@ -37,6 +47,7 @@ class AuthResolver(
      * works, throws [MissingCredentialsException].
      */
     suspend fun resolveFor(repoUrl: String): GitCredentials {
+        cloud?.takeIf { it.handles(repoUrl) }?.let { return it.resolve(repoUrl) }
         when (val attempt = tryOAuth()) {
             is OAuthAttempt.Success -> return GitCredentials.forGitHubToken(attempt.accessToken)
             is OAuthAttempt.NoIdentity -> {
@@ -66,6 +77,7 @@ class AuthResolver(
 
     /** Cheap "do we have any credentials?" probe used by the sync config UI. */
     suspend fun hasAnyCredentialsFor(repoUrl: String): Boolean {
+        cloud?.takeIf { it.handles(repoUrl) }?.let { return it.canResolve() }
         if (tokenStore?.isPresent() == true) return true
         return credentialStore.contains(repoUrl)
     }

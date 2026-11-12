@@ -137,6 +137,8 @@ class SnapshotRestore(private val state: State) {
                 notes += unreachableNote(e.message)
             } catch (e: GitAuthException) {
                 notes += unreachableNote(e.message)
+            } catch (e: GitPushRefusedException) {
+                notes += unreachableNote(e.message)
             } catch (e: ImportError) {
                 throw e.toSyncException(pulled = true)
             } catch (e: SerializationException) {
@@ -852,7 +854,9 @@ class SnapshotRestore(private val state: State) {
         @Suppress("DEPRECATION")
         private val UNREACHABLE = setOf(
             SyncErrorCode.AUTH_FAILED, SyncErrorCode.MISSING_CREDENTIALS, SyncErrorCode.MISSING_PAT,
-            SyncErrorCode.OAUTH_REAUTH_REQUIRED, SyncErrorCode.PUSH_REJECTED,
+            SyncErrorCode.OAUTH_REAUTH_REQUIRED, SyncErrorCode.PUSH_REJECTED, SyncErrorCode.CLOUD_NOT_ADOPTED,
+            SyncErrorCode.SYNC_OFF, SyncErrorCode.REPO_NOT_FOUND, SyncErrorCode.SYNC_QUOTA_EXCEEDED,
+            SyncErrorCode.SYNC_STORAGE_UNAVAILABLE,
         )
 
         private val logger = LoggerFactory.getLogger(SnapshotRestore::class.java)

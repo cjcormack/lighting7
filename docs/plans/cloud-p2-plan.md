@@ -201,8 +201,8 @@ runs the checks §"Pre-commit checks" names for what it touches; a session with 
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The protocol for P2 | in review | `claude/upbeat-babbage-j93q01` | | |
-| 2 | Syncing with a cloud repo | planned | | | |
+| 1 | The protocol for P2 | in review | `claude/upbeat-babbage-j93q01` | [#427](https://github.com/cjcormack/lighting7/pull/427) | b43bb61 |
+| 2 | Syncing with a cloud repo | in review | `claude/bold-johnson-02cpix` | | |
 | 3 | Sync to the cloud, import from the cloud | planned | | | |
 | 4 | Move GitHub-synced projects to the cloud | planned | | | |
 | 5 | Claude Code sessions from the cloud | planned | | | |
@@ -238,6 +238,15 @@ next; whoever merges the last fills its own.
   captured log line.
 - **Operator check** `FU-MANUAL-CLOUD-P2-S2` (needs the cloud's session 1 deployed): a project attached
   to its cloud repo by hand (`PUT /sync/config`) syncs, and a second desk pulls it.
+- **As built.** Where the code needed more than D3–D5 said:
+  - A git 403 or 404 reaches the desk as JGit's words alone, without the cloud's body, so the desk asks
+    `GET /v1/repos/{repoId}` for the code (`SYNC_OFF`, `REPO_NOT_FOUND`); a 404 it cannot explain is
+    `REPO_NOT_FOUND`, a 403 `AUTH_FAILED` in the cloud's words, `SYNC_READ_ONLY` included. JGit reports
+    both as an `InvalidRemoteException`, not a `TransportException`, which `JGitClient` now catches too.
+  - D5's conflated channel is a set of waiting URLs, conflated per URL and bounded at 64, behind a
+    conflated wake-up (`SyncNudges`), so nudges for two repos in quick succession wake both.
+  - `SYNC_FORMAT_INVALID` and `SYNC_REF_PROTECTED`, which a correct desk never earns, are
+    `PUSH_REJECTED` in the cloud's words. A developer token is sent as Basic user `x-dev-token`.
 
 ### Session 3 — Sync to the cloud, import from the cloud
 

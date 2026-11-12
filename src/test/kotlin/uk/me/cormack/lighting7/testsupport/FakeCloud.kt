@@ -83,6 +83,9 @@ import kotlin.time.Duration.Companion.seconds
  *
  * For P1 it holds a token-signing key, sends its `jwks` after every `welcome`, mints desk access
  * tokens with [mint], rotates its key ([rotateKeys]) and sends `revoke` ([revoke]).
+ *
+ * For P2 it hosts the org's repos ([repos]): the repo API and git over smart HTTP, with the protocol's
+ * push rules.
  */
 class FakeCloud : Closeable {
 
@@ -171,6 +174,9 @@ class FakeCloud : Closeable {
     val unadopts = CopyOnWriteArrayList<String>()
     private val ids = AtomicInteger()
 
+    /** The org's repos and their git (cloud-p2 plan §3). */
+    val repos = FakeCloudRepos(this)
+
     private val server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration> =
         embeddedServer(Netty, port = 0, host = "127.0.0.1") {
             install(WebSockets) { maxFrameSize = 64L * 1024 * 1024 }
@@ -187,6 +193,7 @@ class FakeCloud : Closeable {
                 }
             }
             routing {
+                repos.routes(this)
                 webSocket(CloudPaths.DESK_CHANNEL) { channel(this) }
                 post("/v1/adoptions") {
                     if (gate(call)) return@post

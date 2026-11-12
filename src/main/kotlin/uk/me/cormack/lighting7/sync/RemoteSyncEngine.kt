@@ -26,8 +26,6 @@ import uk.me.cormack.lighting7.models.DaoSyncState
 import uk.me.cormack.lighting7.models.DaoSyncStates
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.MissingCredentialsException
-import uk.me.cormack.lighting7.sync.auth.oauth.OAuthReauthRequiredException
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
@@ -63,19 +61,16 @@ class RemoteSyncEngine(
 
     private val projectLocks = ConcurrentHashMap<Int, Mutex>()
 
-    /**
-     * Pull credentials for [repoUrl] via [authResolver], translating its typed errors
-     * into the [SyncException] codes the route layer maps to HTTP statuses.
-     */
-    private suspend fun resolveCredentials(repoUrl: String): GitCredentials {
-        return try {
-            authResolver.resolveFor(repoUrl)
-        } catch (e: MissingCredentialsException) {
-            throw SyncException(SyncErrorCode.MISSING_CREDENTIALS, e.message ?: "No GitHub credentials configured for this repository.")
-        } catch (e: OAuthReauthRequiredException) {
-            throw SyncException(SyncErrorCode.OAUTH_REAUTH_REQUIRED, e.message ?: "GitHub OAuth re-authentication required.")
-        }
-    }
+    private val failures = SyncFailures(authResolver)
+
+    private suspend fun resolveCredentials(repoUrl: String): GitCredentials = failures.credentialsFor(repoUrl)
+
+    private fun authFailed(repoUrl: String?, e: GitAuthException, github: String): SyncException =
+        failures.authFailed(repoUrl, e, github)
+
+    private fun remoteUrlOf(repo: Repository): String? = repo.config.getString("remote", REMOTE_NAME, "url")
+
+    private suspend fun cloudRefusalOf(e: Throwable): SyncException? = failures.cloudRefusalOf(e)
 
     suspend fun runSync(
         projectId: Int,
@@ -224,9 +219,9 @@ class RemoteSyncEngine(
         }
 
     /**
-     * Acquire the per-project mutex and run [block]. If [block] throws [SyncException]
-     * and [failEvent] is non-null, log it as an error before rethrowing — keeps the
-     * `{code}: {message}` formatting in one place.
+     * Acquire the per-project mutex and run [block]. If [block] throws [SyncException], or a cloud
+     * refusal [cloudRefusalOf] reads as one, and [failEvent] is non-null, log it as an error before
+     * rethrowing it as that — keeps the `{code}: {message}` formatting in one place.
      */
     private suspend fun <T> withProjectLock(
         projectId: Int,
@@ -237,14 +232,15 @@ class RemoteSyncEngine(
         return mutex.withLock {
             try {
                 block()
-            } catch (e: SyncException) {
+            } catch (e: Exception) {
+                val failure = e as? SyncException ?: cloudRefusalOf(e) ?: throw e
                 if (failEvent != null) {
                     syncLogger.error(
                         projectId, failEvent,
-                        "${e.code.name}: ${e.message ?: e.code.name}",
+                        "${failure.code.name}: ${failure.message ?: failure.code.name}",
                     )
                 }
-                throw e
+                throw failure
             }
         }
     }
@@ -344,7 +340,7 @@ class RemoteSyncEngine(
         val remoteCommitId = try {
             JGitClient.fetch(repo, REMOTE_NAME, branch, credentials)
         } catch (e: GitAuthException) {
-            throw SyncException(SyncErrorCode.AUTH_FAILED, "GitHub rejected the credentials — check the OAuth identity is connected (or that any PAT has `repo` scope and isn't expired). ${e.message}", e)
+            throw authFailed(repoUrl, e, "GitHub rejected the credentials — check the OAuth identity is connected (or that any PAT has `repo` scope and isn't expired).")
         }
 
         val remoteRef = remoteBranchRef(branch)
@@ -929,7 +925,7 @@ class RemoteSyncEngine(
         try {
             JGitClient.fetch(repo, REMOTE_NAME, branch, credentials)
         } catch (e: GitAuthException) {
-            throw SyncException(SyncErrorCode.AUTH_FAILED, "GitHub rejected the credentials during retry: ${e.message}", e)
+            throw authFailed(remoteUrlOf(repo), e, "GitHub rejected the credentials during retry:")
         }
 
         // After our last autoMerge ran, HEAD is at our merge commit. That commit captures
@@ -1202,7 +1198,7 @@ class RemoteSyncEngine(
         try {
             JGitClient.fetch(repo, REMOTE_NAME, view.branch, credentials)
         } catch (e: GitAuthException) {
-            throw SyncException(SyncErrorCode.AUTH_FAILED, "GitHub rejected the credentials during apply: ${e.message}", e)
+            throw authFailed(view.repoUrl, e, "GitHub rejected the credentials during apply:")
         }
 
         val localSnapshots = RecordHasher.fromRef(repo, view.localSha)
@@ -1517,6 +1513,16 @@ enum class SyncErrorCode {
     RESTORE_TOO_OLD,
     /** The snapshot's tree could not be imported for any other reason. */
     RESTORE_UNREADABLE,
+    /** A cloud repo, and a desk neither adopted nor started with a developer token (cloud-p2 plan D3). */
+    CLOUD_NOT_ADOPTED,
+    /** The cloud's org does not have cloud sync (D4). */
+    SYNC_OFF,
+    /** The cloud has no such repo: it was deleted in the portal, or is another org's (D4). */
+    REPO_NOT_FOUND,
+    /** The push would take the org past its storage (D4). */
+    SYNC_QUOTA_EXCEEDED,
+    /** The cloud cannot store a push now, whatever the org's storage (D4). */
+    SYNC_STORAGE_UNAVAILABLE,
 }
 
 open class SyncException(val code: SyncErrorCode, message: String, cause: Throwable? = null) :
@@ -1541,4 +1547,7 @@ fun SyncErrorCode.toHttpStatus(): HttpStatusCode = when (this) {
     SyncErrorCode.RESTORE_REVIEW_STALE, SyncErrorCode.RESTORE_NO_CHANGES -> HttpStatusCode.Conflict
     SyncErrorCode.RESTORE_INVALID -> HttpStatusCode.BadRequest
     SyncErrorCode.RESTORE_TOO_OLD, SyncErrorCode.RESTORE_UNREADABLE -> HttpStatusCode.UnprocessableEntity
+    SyncErrorCode.CLOUD_NOT_ADOPTED, SyncErrorCode.SYNC_OFF, SyncErrorCode.REPO_NOT_FOUND,
+    SyncErrorCode.SYNC_QUOTA_EXCEEDED -> HttpStatusCode.Conflict
+    SyncErrorCode.SYNC_STORAGE_UNAVAILABLE -> HttpStatusCode.ServiceUnavailable
 }

@@ -3,7 +3,9 @@ package uk.me.cormack.lighting7.sync
 import kotlinx.serialization.Serializable
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.ResetCommand
+import org.eclipse.jgit.api.errors.InvalidRemoteException
 import org.eclipse.jgit.api.errors.TransportException
+import org.eclipse.jgit.errors.NoRemoteRepositoryException
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.revwalk.RevCommit
@@ -17,6 +19,8 @@ import org.eclipse.jgit.treewalk.TreeWalk
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
+import uk.me.cormack.lighting7.cloud.protocol.ErrorCode
+import uk.me.cormack.lighting7.cloud.protocol.PushRefusals
 import uk.me.cormack.lighting7.telemetry.Tracing
 
 /**
@@ -29,10 +33,11 @@ import uk.me.cormack.lighting7.telemetry.Tracing
  */
 object JGitClient {
     /** A fetch, push or clone as an `http.client` span (Sentry plan D6), named without the URL's credentials. */
-    private fun <T> network(verb: String, url: String?, block: () -> T): T {
-        val where = url?.let { runCatching { URIish(it).setUser(null).setPass(null).toString() }.getOrNull() } ?: "remote"
-        return Tracing.span("http.client", "git $verb $where") { block() }
-    }
+    private fun <T> network(verb: String, url: String?, block: () -> T): T =
+        Tracing.span("http.client", "git $verb ${withoutCredentials(url) ?: "remote"}") { block() }
+
+    private fun withoutCredentials(url: String?): String? =
+        url?.let { runCatching { URIish(it).setUser(null).setPass(null).toString() }.getOrNull() }
 
     private fun remoteUrl(repo: Repository, remote: String): String? = repo.config.getString("remote", remote, "url")
 
@@ -249,7 +254,9 @@ object JGitClient {
                     .call()
             }.repository
         } catch (e: TransportException) {
-            throw e.toAuthOrRethrow()
+            throw e.toAuthOrRethrow(repoUrl)
+        } catch (e: InvalidRemoteException) {
+            throw e.unreachableRemote(repoUrl)
         }
     }
 
@@ -303,7 +310,9 @@ object JGitClient {
                 if ("does not have" in msg && "refs/heads/$branch" in msg) {
                     return null
                 }
-                throw e.toAuthOrRethrow()
+                throw e.toAuthOrRethrow(remoteUrl(repo, remote))
+            } catch (e: InvalidRemoteException) {
+                throw e.unreachableRemote(remoteUrl(repo, remote))
             }
         }
     }
@@ -311,7 +320,8 @@ object JGitClient {
     /**
      * Push [branch] to [remote]. If [force] is true, performs a force update — the caller
      * must have decided this is the right call (phase 4 does so on diverged history). Returns
-     * a [PushResult] describing the outcome of the single ref update we sent.
+     * a [PushResult] describing the outcome of the single ref update we sent; a cloud refusal that
+     * no retry can get past throws [GitPushRefusedException] instead (cloud-p2 plan D4).
      */
     fun push(
         repo: Repository,
@@ -335,23 +345,11 @@ object JGitClient {
                 }
                 val update = results.firstOrNull()?.remoteUpdates?.firstOrNull()
                     ?: return PushResult(status = PushStatus.UP_TO_DATE, message = null)
-                return when (update.status) {
-                    RemoteRefUpdate.Status.OK,
-                    RemoteRefUpdate.Status.UP_TO_DATE -> PushResult(PushStatus.OK, update.message)
-                    RemoteRefUpdate.Status.REJECTED_NONFASTFORWARD ->
-                        PushResult(PushStatus.REJECTED_NONFASTFORWARD, update.message)
-                    RemoteRefUpdate.Status.REJECTED_REMOTE_CHANGED ->
-                        PushResult(PushStatus.REJECTED_REMOTE_CHANGED, update.message)
-                    RemoteRefUpdate.Status.REJECTED_NODELETE,
-                    RemoteRefUpdate.Status.REJECTED_OTHER_REASON,
-                    RemoteRefUpdate.Status.NON_EXISTING,
-                    RemoteRefUpdate.Status.AWAITING_REPORT,
-                    RemoteRefUpdate.Status.NOT_ATTEMPTED ->
-                        PushResult(PushStatus.REJECTED_OTHER, update.message ?: update.status.toString())
-                    null -> PushResult(PushStatus.REJECTED_OTHER, "no status")
-                }
+                return update.toPushResult().also(::throwIfRefusedForGood)
             } catch (e: TransportException) {
-                throw e.toAuthOrRethrow()
+                throw e.toAuthOrRethrow(remoteUrl(repo, remote))
+            } catch (e: InvalidRemoteException) {
+                throw e.unreachableRemote(remoteUrl(repo, remote))
             }
         }
     }
@@ -415,7 +413,9 @@ object JGitClient {
                         .call()
                 }
             } catch (e: TransportException) {
-                throw e.toAuthOrRethrow()
+                throw e.toAuthOrRethrow(remoteUrl(repo, remote))
+            } catch (e: InvalidRemoteException) {
+                throw e.unreachableRemote(remoteUrl(repo, remote))
             }
         }
     }
@@ -423,7 +423,8 @@ object JGitClient {
     /**
      * Push [branch] and the tag [tag] together. A tag the remote already holds is refused rather than
      * moved, and so is a branch update that is not a fast-forward. Answers each ref's outcome, by its
-     * remote name (`refs/heads/{branch}`, `refs/tags/{tag}`).
+     * remote name (`refs/heads/{branch}`, `refs/tags/{tag}`), or throws [GitPushRefusedException] as
+     * [push] does.
      */
     fun pushWithTag(
         repo: Repository,
@@ -445,19 +446,13 @@ object JGitClient {
                         .setCredentialsProvider(credentials.toProvider())
                         .call()
                 }
-                return results.flatMap { it.remoteUpdates }.associate { update ->
-                    update.remoteName to when (update.status) {
-                        RemoteRefUpdate.Status.OK,
-                        RemoteRefUpdate.Status.UP_TO_DATE -> PushResult(PushStatus.OK, update.message)
-                        RemoteRefUpdate.Status.REJECTED_NONFASTFORWARD ->
-                            PushResult(PushStatus.REJECTED_NONFASTFORWARD, update.message)
-                        RemoteRefUpdate.Status.REJECTED_REMOTE_CHANGED ->
-                            PushResult(PushStatus.REJECTED_REMOTE_CHANGED, update.message)
-                        else -> PushResult(PushStatus.REJECTED_OTHER, update.message ?: update.status.toString())
-                    }
-                }
+                val answered = results.flatMap { it.remoteUpdates }.associate { it.remoteName to it.toPushResult() }
+                answered.values.forEach(::throwIfRefusedForGood)
+                return answered
             } catch (e: TransportException) {
-                throw e.toAuthOrRethrow()
+                throw e.toAuthOrRethrow(remoteUrl(repo, remote))
+            } catch (e: InvalidRemoteException) {
+                throw e.unreachableRemote(remoteUrl(repo, remote))
             }
         }
     }
@@ -604,16 +599,68 @@ object JGitClient {
         }
     }
 
-    private fun TransportException.toAuthOrRethrow(): RuntimeException {
+    private fun TransportException.toAuthOrRethrow(url: String?): RuntimeException {
         val msg = message ?: ""
-        // JGit doesn't expose a structured error type for auth failures — sniff the message.
-        // GitHub's typical response is "not authorized" / "Authentication is required" / 401.
-        val lower = msg.lowercase()
-        val isAuth = "not authorized" in lower
-            || "authentication" in lower
-            || "401" in msg
-            || "403" in msg
-        return if (isAuth) GitAuthException(msg, this) else GitTransportException(msg, this)
+        if (isAuthFailure(msg, url)) return GitAuthException(msg, this)
+        return GitTransportException(msg, this, httpStatusOf(this), withoutCredentials(url))
+    }
+
+    /**
+     * Whether JGit's [message] for a transport failure says the remote refused the credentials. JGit has
+     * no structured type for it, so the words are read — GitHub's "not authorized", "Authentication is
+     * required", a 401 or 403 — with [url] and every other URL taken out first, since a repo's path may
+     * hold the digits.
+     */
+    internal fun isAuthFailure(message: String, url: String?): Boolean {
+        val words = (url?.let { message.replace(it, " ") } ?: message).replace(URL_IN_MESSAGE, " ")
+        val lower = words.lowercase()
+        return "not authorized" in lower || "authentication" in lower || AUTH_STATUS.containsMatchIn(words)
+    }
+
+    private val URL_IN_MESSAGE = Regex("""[A-Za-z][A-Za-z0-9+.-]*://\S+""")
+    private val AUTH_STATUS = Regex("""\b40[13]\b""")
+
+    /** A remote that answered `info/refs` with 404 or 403, which JGit's commands report as an invalid remote. */
+    private fun InvalidRemoteException.unreachableRemote(url: String?): GitTransportException =
+        GitTransportException(generateSequence(cause) { it.cause }.lastOrNull()?.message ?: message ?: "invalid remote", this, httpStatusOf(this), withoutCredentials(url))
+
+    /** 404 or 403 from JGit's words for them answering `info/refs` (`{url} not found`, `{service} not permitted on '{url}'`), else null. */
+    private fun httpStatusOf(e: Throwable): Int? {
+        val chain = generateSequence(e) { it.cause }.toList()
+        return when {
+            chain.any { " not permitted on " in (it.message ?: "") } -> 403
+            chain.any { it is NoRemoteRepositoryException } -> 404
+            else -> null
+        }
+    }
+
+    /** The codes a cloud push refusal carries that no retry gets past; the rest are answered as statuses. */
+    private val REFUSED_FOR_GOOD = setOf(
+        ErrorCode.SYNC_QUOTA_EXCEEDED,
+        ErrorCode.SYNC_STORAGE_UNAVAILABLE,
+        ErrorCode.SYNC_FORMAT_INVALID,
+        ErrorCode.SYNC_REF_PROTECTED,
+    )
+
+    private fun throwIfRefusedForGood(result: PushResult) {
+        val code = result.cloudCode ?: return
+        if (code in REFUSED_FOR_GOOD) throw GitPushRefusedException(code, result.message ?: code)
+    }
+
+    /** A ref's outcome, reading a cloud refusal's code from its reason; `SYNC_NON_FAST_FORWARD` is JGit's non-fast-forward. */
+    private fun RemoteRefUpdate.toPushResult(): PushResult {
+        val cloudCode = PushRefusals.codeOf(message)
+        val status = when {
+            cloudCode == ErrorCode.SYNC_NON_FAST_FORWARD -> PushStatus.REJECTED_NONFASTFORWARD
+            else -> when (this.status) {
+                RemoteRefUpdate.Status.OK, RemoteRefUpdate.Status.UP_TO_DATE -> PushStatus.OK
+                RemoteRefUpdate.Status.REJECTED_NONFASTFORWARD -> PushStatus.REJECTED_NONFASTFORWARD
+                RemoteRefUpdate.Status.REJECTED_REMOTE_CHANGED -> PushStatus.REJECTED_REMOTE_CHANGED
+                else -> PushStatus.REJECTED_OTHER
+            }
+        }
+        val words = message ?: if (status == PushStatus.REJECTED_OTHER) (this.status?.toString() ?: "no status") else null
+        return PushResult(status, words, cloudCode)
     }
 
     private fun RevCommit.toCommitInfo(): CommitInfo {
@@ -708,7 +755,12 @@ data class GitCredentials(val username: String, val secret: String) {
  * we tried to send (a no-op push). The non-fast-forward statuses can only happen on a
  * regular (non-force) push.
  */
-data class PushResult(val status: PushStatus, val message: String?)
+data class PushResult(
+    val status: PushStatus,
+    val message: String?,
+    /** The cloud's refusal code, read from the ref's reason (`CODE: words`); null for any other remote. */
+    val cloudCode: String? = null,
+)
 
 enum class PushStatus { OK, UP_TO_DATE, REJECTED_NONFASTFORWARD, REJECTED_REMOTE_CHANGED, REJECTED_OTHER }
 
@@ -735,6 +787,18 @@ class GitAuthException(message: String, cause: Throwable? = null) : RuntimeExcep
 /**
  * A fetch, push or clone that failed on the way to the remote for any reason but its credentials: a
  * refused connection, a timeout, a host that does not resolve. A [RuntimeException], as it was before
- * it had a name, so every existing catch still holds.
+ * it had a name, so every existing catch still holds. [status] is 404 or 403 when the remote answered
+ * one, [url] the remote's, without credentials.
  */
-class GitTransportException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
+class GitTransportException(
+    message: String,
+    cause: Throwable? = null,
+    val status: Int? = null,
+    val url: String? = null,
+) : RuntimeException(message, cause)
+
+/**
+ * A push the cloud refused with [code] (`SYNC_QUOTA_EXCEEDED` and the rest of
+ * [JGitClient]'s refusals no retry gets past), in its own words (cloud-p2 plan D4).
+ */
+class GitPushRefusedException(val code: String, message: String) : RuntimeException(message)

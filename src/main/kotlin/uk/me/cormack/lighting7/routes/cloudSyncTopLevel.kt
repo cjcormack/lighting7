@@ -21,9 +21,7 @@ import uk.me.cormack.lighting7.plugins.CloudSyncProjectImportedOutMessage
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.CloudSyncImporter
 import uk.me.cormack.lighting7.sync.CueNumberClash
-import uk.me.cormack.lighting7.sync.GitAuthException
 import uk.me.cormack.lighting7.sync.ImportError
-import uk.me.cormack.lighting7.sync.SyncErrorCode
 import uk.me.cormack.lighting7.sync.SyncException
 import uk.me.cormack.lighting7.models.toIsoUtc
 
@@ -122,12 +120,6 @@ internal fun Route.routeApiRestCloudSync(state: State) {
             )
         } catch (e: SyncException) {
             respondSyncError(e)
-        } catch (e: GitAuthException) {
-            respondSyncError(SyncException(
-                SyncErrorCode.AUTH_FAILED,
-                "GitHub rejected the credentials during clone: ${e.message}",
-                e,
-            ))
         } catch (e: ImportError) {
             call.respond(e.status, ErrorResponse(e.message ?: "Import failed", e.code))
         } catch (e: Exception) {

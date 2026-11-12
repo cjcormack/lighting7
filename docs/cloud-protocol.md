@@ -316,6 +316,13 @@ ref's message: `SYNC_NON_FAST_FORWARD` (`main` would not fast-forward), `SYNC_RE
 back, null for a reason not of that form or a code not in `PushRefusals.CODES`, so a newer refusal reads
 as an unknown one.
 
+**Refused requests.** A git request under no credentials, or ones the cloud refuses, is 401 with
+`WWW-Authenticate: Basic`. An org without cloud sync is 403 and a repo the org lacks is 404 on every
+git route, as on the repo API; JGit's client reports a git 403 or 404 by its status alone, so the desk
+learns which by asking `GET /v1/repos/{repoId}`, whose `ApiError` names `SYNC_OFF` or
+`REPO_NOT_FOUND` (cloud-p2 D4). A developer token is sent as Basic auth too, any user (the desk sends
+`x-dev-token`), the token the password.
+
 ## The link framing
 
 A remote session is a WebRTC peer connection between the browser (the cloud's shell and its service

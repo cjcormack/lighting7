@@ -2327,7 +2327,8 @@ as-is.
 
 ## Auth / credential storage
 
-Two paths:
+`AuthResolver.resolveFor(repoUrl)` answers JGit's credentials per sync run. A repo of the configured
+Lighting7 Cloud has its own source; any other repo has two paths:
 
 1. **GitHub OAuth (primary)** — install-wide identity established via the web
    flow or device flow. Auto-refreshing user-to-server tokens; per-repo
@@ -2335,6 +2336,38 @@ Two paths:
 2. **Personal Access Tokens (Advanced fallback)** — per-repo PATs for headless
    rigs, GitHub Enterprise, or as an explicit override. Existing PAT-only
    configurations from before the OAuth migration keep working unchanged.
+
+### The cloud
+
+A cloud repo's URL is `<cloud.baseUrl origin>/git/<orgId>/<repoId>.git`, by ids (cloud-p2 plan D2):
+`cloud/CloudRepoUrls.kt` decides whether a URL is one — the same scheme, host and port as
+`cloud.baseUrl` and that path, with no credentials, query or fragment — and anything else (a GitHub
+URL, a `file://` remote) resolves as it always has. For a cloud URL, `sync/auth/CloudCredentialSource.kt`
+answers, never falling through to GitHub's paths (D3):
+
+- **An adopted desk** mints a git token per run: `InstallGitTokens.mint` over the install key
+  (`CloudService.installSigner()`, while adopted through the configured, enabled cloud), sent as Basic
+  auth, user `x-install-token`. It lives 10 minutes, and a run longer than that is still one token's:
+  the engine resolves once per run, and a conflict apply is its own run.
+- **An unadopted desk** uses `LIGHTING7_CLOUD_TOKEN`, a developer token from the portal read from the
+  environment once, when `State` is built, and never stored; sent as Basic auth, user `x-dev-token`.
+  This is how a Claude Code cloud session reaches the cloud.
+- **Neither**: `CLOUD_NOT_ADOPTED` (409), naming the Cloud tab.
+
+Neither path needs the control channel, so a desk whose channel is down but whose HTTPS reaches the
+cloud syncs. A 401 from the cloud is `AUTH_FAILED` in the cloud's words, not GitHub's.
+
+**The cloud's refusals** (D4). A pushed ref the cloud refuses carries `CODE: words`
+(`PushRefusals.codeOf`): `JGitClient` reads `SYNC_NON_FAST_FORWARD` as the non-fast-forward the engine
+already pulls, merges and retries; `SYNC_QUOTA_EXCEEDED`, `SYNC_STORAGE_UNAVAILABLE`,
+`SYNC_FORMAT_INVALID` and `SYNC_REF_PROTECTED` throw `GitPushRefusedException`, which no retry gets
+past; `SYNC_TAG_IMMUTABLE` on a venue's publish is `VENUE_VERSION_TAKEN`, as any refused tag is. A
+cloud repo's git answering 404 or 403 (which JGit reports by words alone, so `GitTransportException`
+carries the status it read) is put in the cloud's words by asking the repo API for the repo:
+`REPO_NOT_FOUND` or `SYNC_OFF` with its message, else a 404 is `REPO_NOT_FOUND` and a 403
+`AUTH_FAILED`. `RemoteSyncEngine.withProjectLock` turns both into `SyncException`s
+(`sync/CloudSyncCodes.kt`), each message ending with what to do, so the activity log and auto-sync's
+backoff see them as every other failure.
 
 ### GitHub OAuth
 
@@ -2593,6 +2626,11 @@ person.
 | `OAUTH_REAUTH_REQUIRED` | 401 | OAuth identity present but refresh token rejected — user must re-connect. |
 | `AUTH_FAILED` | 401 | Credentials present but GitHub rejected the push/fetch. |
 | `MISSING_PAT` | 401 | Legacy alias for `MISSING_CREDENTIALS`; retained for one release. |
+| `CLOUD_NOT_ADOPTED` | 409 | A cloud repo, on a desk neither adopted nor started with `LIGHTING7_CLOUD_TOKEN`. |
+| `SYNC_OFF` | 409 | The cloud's org does not have cloud sync. |
+| `REPO_NOT_FOUND` | 409 | The cloud repo was deleted in the portal, or is another org's. |
+| `SYNC_QUOTA_EXCEEDED` | 409 | The cloud refused a push that would take the org past its storage. |
+| `SYNC_STORAGE_UNAVAILABLE` | 503 | The cloud could not store a push just now. |
 | `RESTORE_COMMIT_UNKNOWN` | 404 | The snapshot to restore isn't HEAD or an ancestor of it, or the show has no history. |
 | `RESTORE_REVIEW_STALE` | 409 | The restore would now do something else, or a write landed during it; the body carries `review`. A bring-back's would now bring back something else; its body carries `selection`. |
 | `RESTORE_NO_CHANGES` | 409 | The snapshot is the show as it is. |
@@ -3010,7 +3048,8 @@ Lifecycle:
   pollers don't outlive the DB.
 * Owns one coroutine per project where `sync_configs.autoSyncEnabled = true`. The loop
   delays `autoSyncIntervalMs` (clamped to [`MIN_INTERVAL_MS`](../src/main/kotlin/uk/me/cormack/lighting7/sync/AutoSyncScheduler.kt)
-  = 60s) before its first tick — a freshly-enabled auto-sync doesn't fire mid-form-submit.
+  = 60s) before its first tick — a freshly-enabled auto-sync doesn't fire mid-form-submit. A
+  cloud's nudge (below) may end that first wait, since it is no form.
 * `PUT /sync/config` calls `scheduler.reschedule(projectId)` after committing. That cancels
   any existing loop and (re-)launches one if the new config still has auto-sync enabled,
   so toggling the flag or changing the interval takes effect immediately without a
@@ -3025,6 +3064,18 @@ Lifecycle:
   alive. A single tick failure must never kill the project's auto-sync.
 * Runs go through the engine with `SyncTrigger.AUTO`, which keeps a tick that changed
   nothing [out of the activity log entirely](#activity-log-phase-8).
+* **A cloud's `sync.changed` brings a tick forward** (cloud-p2 plan D5). The control channel's
+  thread offers the message's repo URL to `SyncNudges` (`State.syncNudges`) and returns: a set of
+  waiting URLs, conflated per URL and bounded at 64, behind a conflated wake-up; a URL that is not a
+  repo of `cloud.baseUrl` (`CloudRepoUrls`) is dropped there, and again by the scheduler. The
+  scheduler's own coroutine takes them and wakes the loop of each project whose `repoUrl` names the
+  same cloud org and repo ids, whatever its spelling, and whose auto-sync is on, at most once in 10 s
+  per project (`NUDGE_SPACING_NANOS`); the loop then ticks as it would have at the end of its wait. A
+  loop backing off (below) waits its backoff out, nudged or not, and a nudge that lands during a tick
+  is not spent by it: the wake is drained only at the top of each iteration, so one more tick runs
+  straight after it (the cloud never nudges the install that pushed, so a mid-tick nudge is another
+  desk's push the running tick may have fetched past; still at most once in 10 s per project). Nothing is written and nothing waits on the channel's thread, and with the cloud
+  down the interval is what finds a change, as before.
 
 The scheduler shares the engine's per-project mutex with manual `Sync now` clicks, so a
 human-driven sync and an auto-sync tick can never run concurrently against the same
