@@ -2395,6 +2395,35 @@ names the repo to import first, and a GitHub `owner/repo` hint already in a show
 `SyncConfigDto` and each `LinkedRepoDto` carry `cloud`; GitHub's attach stays under the Sync tab's
 *GitHub (legacy)* until the move.
 
+**Moving a project off GitHub** (D7, `sync/CloudMove.kt`). The Cloud tab's *Move GitHub-synced projects
+to the cloud* reads `GET /cloud-sync/move` — every project whose `repoUrl` is not the cloud's, venues
+first, each with `cloudHasRepo` when another desk moved it already — and runs `POST /cloud-sync/move
+{projectIds}`, one project at a time under the locks its sync takes (`RemoteSyncEngine.withSyncLocks`,
+a venue's lock too). For each: a sync with GitHub first, so the working tree holds the latest — skipped
+when GitHub cannot be reached or refuses the credentials, the move then going on from the working tree
+(`MOVE_FROM_WORKING_TREE` in the activity log), and failing the project on any other refusal (a
+conflict, a format too new); the cloud repo made, or found by `REPO_EXISTS`; then the branch, onto the
+cloud's `main` whatever GitHub's branch was called, and every tag a venue holds — its own and those it
+pulled, which sit in `refs/remotes/origin/tags/` — pushed from the working tree to that URL without
+configuring a remote, never forced, so every SHA and tag object is GitHub's. Tags compare by the commit
+they name. The cloud repo's refs are fetched first into `refs/lighting7-move/`
+(deleted after): where the cloud's branch holds history this desk's does not contain, or a tag of the
+same name names another version, nothing is pushed and the project re-points anyway, its next sync
+merging the two (`MOVED_DIVERGED`); a push refused as a non-fast-forward (another desk pushed between
+the fetch and the push) reads the same. After a push the cloud's branch must be the working tree's head,
+which is GitHub's when the first sync ran, and every tag the desk's (`MOVE_HISTORY_MISMATCH` otherwise).
+Then `repoUrl` is the cloud repo, its name in `repo_name`, `branch` and the working tree's branch
+`main`, the GitHub URL remembered in `sync_linked_repos`, and a verifying sync runs, announced on the
+cloud-sync stream as any sync is, whose result is the row's `verify` (or `verifyError`; the project stays
+moved). A project that fails before the re-point keeps its GitHub URL and nothing else
+changes for it; its row is `FAILED` with the code. Both routes are admin and 403 `CLOUD_MOVE_LOCAL_ONLY`
+on the public listener; the run is 409 `CLOUD_SYNC_PULL_ONLY` on a pull-only desk (the plan's
+`pushEnabled` false, so the tab offers no move), refused as making a repo is (`CLOUD_NOT_ADOPTED`,
+`SYNC_OFF`, `CLOUD_UNREACHABLE`) before anything syncs, and a project not on GitHub is a
+`MOVE_NOT_ON_GITHUB` row. A show whose venue on this desk still syncs with GitHub — not asked for, or its
+move in the same run failed — is a `VENUE_NOT_MOVED` row, nothing synced for it. The move needs GitHub only for its first sync, so it still works
+once GitHub's code is deleted.
+
 ### GitHub OAuth
 
 Architecture lives in

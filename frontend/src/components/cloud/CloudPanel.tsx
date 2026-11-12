@@ -19,6 +19,7 @@ import { formatError } from '@/lib/formatError'
 import { cn } from '@/lib/utils'
 import { errorCode } from '@/lib/venueSyncRefusal'
 import { useAuthStatusQuery } from '@/store/auth'
+import { CloudMoveSection } from './CloudMoveSection'
 import { CloudRemoteAccess } from './CloudRemoteAccess'
 import {
   useCancelCloudAdoptionMutation,
@@ -91,6 +92,7 @@ function CloudBody({ state }: { state: CloudState }) {
       ) : (
         available && <NotAdopted remote={state.remote === true} />
       )}
+      {state.adopted != null && <CloudMoveSection remote={state.remote === true} />}
       <CloudRemoteAccess state={state} />
     </div>
   )

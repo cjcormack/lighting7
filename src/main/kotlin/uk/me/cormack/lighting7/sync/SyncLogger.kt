@@ -163,6 +163,15 @@ object SyncLogEvent {
 
     /** A restore refused or failed, with its code. */
     const val RESTORE_FAILED = "RESTORE_FAILED"
+
+    /** A project moved from GitHub to its cloud repo. */
+    const val MOVED_TO_CLOUD = "MOVED_TO_CLOUD"
+
+    /** A move that could not sync with GitHub first, so moved the working tree as it was. */
+    const val MOVE_FROM_WORKING_TREE = "MOVE_FROM_WORKING_TREE"
+
+    /** A move to the cloud that failed, with its code; the project stays on GitHub. */
+    const val MOVE_FAILED = "MOVE_FAILED"
 }
 
 /** Wire shape for a single [DaoSyncLogEntry] row. */

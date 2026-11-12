@@ -458,6 +458,79 @@ object JGitClient {
     }
 
     /**
+     * Fetch [url]'s branch [branch] and tags into refs under [prefix] (`{prefix}heads/{branch}` and
+     * `{prefix}tags/{tag}`), mirroring deletions, without configuring a remote. Answers the branch's
+     * commit, null when the repo has no such branch.
+     */
+    fun fetchUrlInto(repo: Repository, url: String, branch: String, prefix: String, credentials: GitCredentials): ObjectId? {
+        Git(repo).use { git ->
+            try {
+                val result = network("fetch", url) {
+                    git.fetch()
+                        .setTimeout(TRANSPORT_TIMEOUT_SECONDS)
+                        .setRemote(url)
+                        .setRefSpecs(RefSpec("+refs/heads/$branch:${prefix}heads/$branch"), RefSpec("+refs/tags/*:${prefix}tags/*"))
+                        .setTagOpt(org.eclipse.jgit.transport.TagOpt.NO_TAGS)
+                        .setRemoveDeletedRefs(true)
+                        .setCredentialsProvider(credentials.toProvider())
+                        .call()
+                }
+                return result.advertisedRefs.firstOrNull { it.name == "refs/heads/$branch" }?.objectId
+            } catch (e: TransportException) {
+                val msg = e.message ?: ""
+                if ("does not have" in msg || "nothing to fetch" in msg.lowercase()) return null
+                throw e.toAuthOrRethrow(url)
+            } catch (e: InvalidRemoteException) {
+                throw e.unreachableRemote(url)
+            }
+        }
+    }
+
+    /** The refs under [prefix], name (less [prefix]) → the commit each names, peeled. */
+    fun refsAt(repo: Repository, prefix: String): Map<String, String> = refsUnder(repo, prefix)
+
+    /** Rename the branch HEAD is on to [name], HEAD following it; nothing when it is already [name]. */
+    fun renameHeadBranch(repo: Repository, name: String) {
+        val current = repo.branch ?: return
+        if (current == name) return
+        Git(repo).use { it.branchRename().setOldName(current).setNewName(name).call() }
+    }
+
+    /** Delete every ref under [prefix]. */
+    fun deleteRefsUnder(repo: Repository, prefix: String) {
+        repo.refDatabase.getRefsByPrefix(prefix).forEach { ref ->
+            repo.updateRef(ref.name).apply { isForceUpdate = true }.delete()
+        }
+    }
+
+    /**
+     * Push [refSpecs] (never forced) to [url] without configuring a remote. Answers each ref's outcome
+     * by its remote name, or throws [GitPushRefusedException] as [push] does.
+     */
+    fun pushToUrl(repo: Repository, url: String, refSpecs: List<String>, credentials: GitCredentials): Map<String, PushResult> {
+        if (refSpecs.isEmpty()) return emptyMap()
+        Git(repo).use { git ->
+            try {
+                val results = network("push", url) {
+                    git.push()
+                        .setTimeout(TRANSPORT_TIMEOUT_SECONDS)
+                        .setRemote(url)
+                        .setRefSpecs(refSpecs.map(::RefSpec))
+                        .setCredentialsProvider(credentials.toProvider())
+                        .call()
+                }
+                val answered = results.flatMap { it.remoteUpdates }.associate { it.remoteName to it.toPushResult() }
+                answered.values.forEach(::throwIfRefusedForGood)
+                return answered
+            } catch (e: TransportException) {
+                throw e.toAuthOrRethrow(url)
+            } catch (e: InvalidRemoteException) {
+                throw e.unreachableRemote(url)
+            }
+        }
+    }
+
+    /**
      * Write every file of [ref]'s tree into [target], byte for byte — binaries included, unlike
      * [walkTree] — without touching the working tree. How a venue repo's tag is read back as an
      * archive to import (venue plan §3.4).

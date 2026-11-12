@@ -15,10 +15,12 @@ import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.mcp.isRemote
 import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncLinkedRepos
 import uk.me.cormack.lighting7.plugins.CloudSyncProjectImportedOutMessage
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.CloudMove
 import uk.me.cormack.lighting7.sync.CloudRepoRow
 import uk.me.cormack.lighting7.sync.CloudSyncImporter
 import uk.me.cormack.lighting7.sync.CueNumberClash
@@ -82,6 +84,33 @@ internal fun Route.routeApiRestCloudSync(state: State) {
     get<CloudSyncReposResource> {
         try {
             call.respond(CloudReposResponse(state.cloudRepos.list()))
+        } catch (e: SyncException) {
+            respondSyncError(e)
+        }
+    }
+
+    /**
+     * *Move GitHub-synced projects to the cloud*: the plan, and the run, a row per project. Refused on
+     * the public listener, as adoption is: a move hands a project's whole history to the cloud.
+     */
+    get<CloudSyncMoveResource> {
+        if (call.isRemote) return@get refuseRemoteMove()
+        try {
+            call.respond(CloudMove(state).plan())
+        } catch (e: SyncException) {
+            respondSyncError(e)
+        }
+    }
+
+    post<CloudSyncMoveResource> {
+        if (call.isRemote) return@post refuseRemoteMove()
+        val request = call.receive<CloudMoveRequest>()
+        if (request.projectIds.isEmpty()) {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse("projectIds must name at least one project"))
+            return@post
+        }
+        try {
+            call.respond(CloudMove(state).run(request.projectIds.distinct()))
         } catch (e: SyncException) {
             respondSyncError(e)
         }
@@ -163,6 +192,22 @@ class CloudSyncImportResource
 
 @Resource("/cloud-sync/repos")
 class CloudSyncReposResource
+
+@Resource("/cloud-sync/move")
+class CloudSyncMoveResource
+
+@Serializable
+data class CloudMoveRequest(val projectIds: List<Int>)
+
+/** The REST code a move asked for over remote access answers. */
+const val CLOUD_MOVE_LOCAL_ONLY = "CLOUD_MOVE_LOCAL_ONLY"
+
+private suspend fun io.ktor.server.routing.RoutingContext.refuseRemoteMove() {
+    call.respond(
+        HttpStatusCode.Forbidden,
+        ErrorResponse("Projects can only be moved to the cloud from the desk itself, never over remote access.", CLOUD_MOVE_LOCAL_ONLY),
+    )
+}
 
 @Serializable
 data class CloudReposResponse(val repos: List<CloudRepoRow>)

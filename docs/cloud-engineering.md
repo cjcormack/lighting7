@@ -637,6 +637,9 @@ and auto-sync are unchanged. What the cloud adds, all of it in `docs/sync-engine
   A refused call is `CLOUD_NOT_ADOPTED`, `SYNC_OFF`, `AUTH_FAILED`, `REPO_NOT_FOUND` or 502
   `CLOUD_REFUSED` in the cloud's words; 503 `CLOUD_UNREACHABLE` is only a cloud that did not answer. A
   pull-only desk makes no repo (409 `CLOUD_SYNC_PULL_ONLY`).
+- **Moving off GitHub** (D7): the Cloud tab's *Move GitHub-synced projects to the cloud*
+  (`sync/CloudMove.kt`, `GET`/`POST /cloud-sync/move`, the desk's own listener only) pushes each
+  project's history from its working tree to its cloud repo, SHAs and tags unchanged, and re-points it.
 
 Nothing here is on the channel's thread but the hand-off, and nothing is stored but a repo's name: the
 token is minted for each run, the developer token lives in the environment, and the hand-off holds at

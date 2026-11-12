@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.models
 
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.dao.IntEntity
 import org.jetbrains.exposed.v1.dao.IntEntityClass
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
@@ -31,7 +32,23 @@ object DaoSyncLinkedRepos : IntIdTable("sync_linked_repos") {
 }
 
 class DaoSyncLinkedRepo(id: EntityID<Int>) : IntEntity(id) {
-    companion object : IntEntityClass<DaoSyncLinkedRepo>(DaoSyncLinkedRepos)
+    companion object : IntEntityClass<DaoSyncLinkedRepo>(DaoSyncLinkedRepos) {
+        /** Remember that [project] was linked to [repoUrl], now; inside a transaction. */
+        fun remember(project: DaoProject, repoUrl: String) {
+            val now = nowUtc()
+            val existing = find { DaoSyncLinkedRepos.project eq project.id }.firstOrNull { it.repoUrl == repoUrl }
+            if (existing != null) {
+                existing.lastLinkedAt = now
+            } else {
+                new {
+                    this.project = project
+                    this.repoUrl = repoUrl
+                    firstLinkedAt = now
+                    lastLinkedAt = now
+                }
+            }
+        }
+    }
 
     var project by DaoProject referencedOn DaoSyncLinkedRepos.project
     var repoUrl by DaoSyncLinkedRepos.repoUrl
