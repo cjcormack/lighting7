@@ -40,6 +40,7 @@ import uk.me.cormack.lighting7.sync.SessionState
 import uk.me.cormack.lighting7.sync.SnapshotEngine
 import uk.me.cormack.lighting7.sync.SnapshotResponse
 import uk.me.cormack.lighting7.sync.SyncErrorCode
+import uk.me.cormack.lighting7.sync.SyncErrorResponse
 import uk.me.cormack.lighting7.sync.SyncException
 import uk.me.cormack.lighting7.sync.SyncOutcome
 import uk.me.cormack.lighting7.sync.SyncRunResult
@@ -634,22 +635,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
             val (config, repoUrl) = transaction(state.database) {
                 val cfg = ensureSyncConfig(project)
                 val current = cfg.repoUrl?.takeIf { it.isNotBlank() }
-                if (current != null) {
-                    val now = nowUtc()
-                    val existing = DaoSyncLinkedRepo
-                        .find { DaoSyncLinkedRepos.project eq project.id }
-                        .firstOrNull { it.repoUrl == current }
-                    if (existing != null) {
-                        existing.lastLinkedAt = now
-                    } else {
-                        DaoSyncLinkedRepo.new {
-                            this.project = project
-                            this.repoUrl = current
-                            this.firstLinkedAt = now
-                            this.lastLinkedAt = now
-                        }
-                    }
-                }
+                if (current != null) DaoSyncLinkedRepo.remember(project, current)
                 cfg.repoUrl = null
                 cfg.repoName = null
                 cfg.autoSyncEnabled = false
@@ -854,10 +840,6 @@ private fun restoreDoneMessage(result: RestoreResultDto): String {
     val target = result.commit.restoredFrom?.take(7)?.let { " $it" } ?: ""
     return "Restored$target: ${c.back} back, ${c.gone} gone, ${c.changed} changed"
 }
-
-/** Error response carrying a stable [code] so the frontend can branch on cause. */
-@Serializable
-data class SyncErrorResponse(val error: String, val code: String)
 
 /**
  * Send a [SyncException] as a stable-coded JSON error response. Centralises the four

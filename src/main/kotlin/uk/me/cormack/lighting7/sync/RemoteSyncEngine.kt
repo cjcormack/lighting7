@@ -14,6 +14,7 @@ import uk.me.cormack.lighting7.history.WriteOrigin
 import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.telemetry.TraceSampling
 import uk.me.cormack.lighting7.telemetry.Tracing
+import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.venue.VenuePins
@@ -118,25 +119,69 @@ class RemoteSyncEngine(
      */
     private suspend fun runVenueSync(venueId: Int, trigger: SyncTrigger): SyncRunResult {
         val exchange = state.venueVersions.locked {
-            withProjectLock(venueId, SyncLogEvent.RUN_FAILED) {
-                if (trigger.logsIdleRuns) syncLogger.info(venueId, SyncLogEvent.RUN_STARTED, "Starting sync run")
-                val exchange = venueRepo.exchange(venueId)
-                transaction(state.database) {
-                    DaoSyncConfig.find { DaoSyncConfigs.project eq venueId }.firstOrNull()?.let { cfg ->
-                        exchange.result.headSha.takeIf { it.isNotEmpty() }?.let { cfg.lastSyncedSha = it }
-                        cfg.lastSyncedAt = nowUtc()
-                    }
-                }
-                if (trigger.logsIdleRuns || exchange.result.outcome != SyncOutcome.NO_OP) {
-                    syncLogger.info(venueId, SyncLogEvent.RUN_DONE, "${exchange.result.outcome.name}: ${exchange.result.message}")
-                }
-                exchange
+            withProjectLock(venueId, SyncLogEvent.RUN_FAILED) { venueExchangeLocked(venueId, trigger) }
+        }
+        afterVenueExchange(venueId, exchange.draftReplaced)
+        return exchange.result
+    }
+
+    /** A venue's exchange and its bookkeeping, under the venue and sync locks the caller holds. */
+    private suspend fun venueExchangeLocked(venueId: Int, trigger: SyncTrigger): VenueRepoSync.Exchange {
+        if (trigger.logsIdleRuns) syncLogger.info(venueId, SyncLogEvent.RUN_STARTED, "Starting sync run")
+        val exchange = venueRepo.exchange(venueId)
+        transaction(state.database) {
+            DaoSyncConfig.find { DaoSyncConfigs.project eq venueId }.firstOrNull()?.let { cfg ->
+                exchange.result.headSha.takeIf { it.isNotEmpty() }?.let { cfg.lastSyncedSha = it }
+                cfg.lastSyncedAt = nowUtc()
             }
         }
-        if (exchange.draftReplaced) reloadShowIfActive(venueId)
+        if (trigger.logsIdleRuns || exchange.result.outcome != SyncOutcome.NO_OP) {
+            syncLogger.info(venueId, SyncLogEvent.RUN_DONE, "${exchange.result.outcome.name}: ${exchange.result.message}")
+        }
+        return exchange
+    }
+
+    private suspend fun afterVenueExchange(venueId: Int, draftReplaced: Boolean) {
+        if (draftReplaced) reloadShowIfActive(venueId)
         // A pulled version may be newer than the live show's pin: judge its hold again (venue plan P5).
         withContext(Dispatchers.IO) { state.venueHold.refreshCurrent() }
-        return exchange.result
+    }
+
+    /**
+     * Run [block] under the locks a sync of [projectId] takes, a venue's lock too, so no sync, publish
+     * or conflict apply runs beside it. [block]'s argument is a manual sync run under those locks,
+     * against whatever repo the project is attached to when it runs. Failures are [block]'s to log.
+     */
+    internal suspend fun <T> withSyncLocks(projectId: Int, block: suspend (sync: suspend () -> SyncRunResult) -> T): T {
+        val (kind, uuid) = transaction(state.database) { DaoProject.findById(projectId)?.let { it.kind to it.uuid } }
+            ?: throw SyncException(SyncErrorCode.REPO_URL_MISSING, "No such project.")
+        if (kind == ProjectKind.VENUE) {
+            var replaced = false
+            return try {
+                state.venueVersions.locked {
+                    withProjectLock(projectId, failEvent = null) {
+                        block {
+                            measured { venueExchangeLocked(projectId, SyncTrigger.MANUAL).also { replaced = replaced || it.draftReplaced }.result }
+                        }
+                    }
+                }
+            } finally {
+                afterVenueExchange(projectId, replaced)
+            }
+        }
+        val install = transaction(state.database) { DaoInstall.all().first().let { it.uuid to it.friendlyName } }
+        return withProjectLock(projectId, failEvent = null) {
+            block { measured { doRun(projectId, uuid, install.first, install.second, SyncTrigger.MANUAL) } }
+        }
+    }
+
+    private suspend fun measured(run: suspend () -> SyncRunResult): SyncRunResult = try {
+        run().also { DeskMetrics.global.syncRun(it.outcome, SyncTrigger.MANUAL) }
+    } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        DeskMetrics.global.syncRun(null, SyncTrigger.MANUAL)
+        throw e
     }
 
     /**
@@ -1529,7 +1574,17 @@ enum class SyncErrorCode {
     CLOUD_REFUSED,
     /** A pull-only install (`sync.push = false`) cannot make a cloud repo: it could never push to it. */
     CLOUD_SYNC_PULL_ONLY,
+    /** A project asked to move to the cloud that does not sync with a GitHub repo. */
+    MOVE_NOT_ON_GITHUB,
+    /** A moved project's history on the cloud is not the history it moved from. */
+    MOVE_HISTORY_MISMATCH,
+    /** A show whose venue still syncs with GitHub: the venue moves to the cloud first. */
+    VENUE_NOT_MOVED,
 }
+
+/** Error response carrying a stable [code] so the frontend can branch on cause. */
+@Serializable
+data class SyncErrorResponse(val error: String, val code: String)
 
 open class SyncException(val code: SyncErrorCode, message: String, cause: Throwable? = null) :
     RuntimeException(message, cause)
@@ -1554,7 +1609,9 @@ fun SyncErrorCode.toHttpStatus(): HttpStatusCode = when (this) {
     SyncErrorCode.RESTORE_INVALID -> HttpStatusCode.BadRequest
     SyncErrorCode.RESTORE_TOO_OLD, SyncErrorCode.RESTORE_UNREADABLE -> HttpStatusCode.UnprocessableEntity
     SyncErrorCode.CLOUD_NOT_ADOPTED, SyncErrorCode.SYNC_OFF, SyncErrorCode.REPO_NOT_FOUND,
-    SyncErrorCode.SYNC_QUOTA_EXCEEDED, SyncErrorCode.CLOUD_SYNC_PULL_ONLY -> HttpStatusCode.Conflict
+    SyncErrorCode.SYNC_QUOTA_EXCEEDED, SyncErrorCode.CLOUD_SYNC_PULL_ONLY,
+    SyncErrorCode.MOVE_NOT_ON_GITHUB, SyncErrorCode.MOVE_HISTORY_MISMATCH,
+    SyncErrorCode.VENUE_NOT_MOVED -> HttpStatusCode.Conflict
     SyncErrorCode.SYNC_STORAGE_UNAVAILABLE, SyncErrorCode.CLOUD_UNREACHABLE -> HttpStatusCode.ServiceUnavailable
     SyncErrorCode.CLOUD_REFUSED -> HttpStatusCode.BadGateway
 }

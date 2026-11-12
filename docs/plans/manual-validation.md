@@ -15,6 +15,8 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-CLOUD-P2`](#fu-manual-cloud-p2) | Lighting7 Cloud's P2 exit: every owner project moved with its SHAs, a conflict made on two desks and resolved on the venue desk through the cloud, a Claude Code cloud session importing from the cloud, an upgraded desk's `oauth_identities` gone and a straggler moved from its working tree, and `docs/sync-engineering.md` describing the cloud | Cloud P2 S4, 2026-11-12 |
+| [`FU-MANUAL-CLOUD-P2-MIGRATE`](#fu-manual-cloud-p2-migrate) | every owner desk's GitHub-synced projects moved from the Cloud tab, each moved project's SHAs compared against GitHub, a venue's tags present, and a show pinning it importing on a fresh desk | Cloud P2 S4, 2026-11-12 |
 | [`FU-MANUAL-CLOUD-P2-S3`](#fu-manual-cloud-p2-s3) | *Sync to the cloud* on a new show puts it on the portal's Projects page, a second desk imports it from *Import from the cloud*, and an edit on one reaches the other within seconds by `sync.changed`; onboarding lists the org's projects venues first | Cloud P2 S3, 2026-11-12 |
 | [`FU-MANUAL-CLOUD-P2-S2`](#fu-manual-cloud-p2-s2) | a show attached to its cloud repo by hand syncs from an adopted desk, a second desk pulls it, and an edit reaches the second by `sync.changed` before its auto-sync interval | Cloud P2 S2, 2026-11-12 |
 | [`FU-MANUAL-RIG-SESSION-FIXES`](#fu-manual-rig-session-fixes) | QLab from an address inside a sender range; the OSC tab's address list beside QLab; Safari's Show view not scrolling the page; a blinder stack with follows reading no *too quick*; a Shehds' FX colour offering W; a venue fixture renamed in the show; text anchored in the Prompt Book mid-show | Rig session fixes, 2026-11-10 |
@@ -881,6 +883,54 @@ shows the migration moving nothing on stage.
    rig moves, and the four cells take the teal edge and the palette's pill, and the source chip names
    it. Select two of them: the palette's chip reads *2 of 4*. Delete one head's row from
    the palette: that cell's pill turns dashed (unresolved) and keeps its value.
+
+---
+
+## `FU-MANUAL-CLOUD-P2`
+
+**What it proves**: Lighting7 Cloud's phase P2 is done (cloud-p2 plan §6). **Needs** every session of
+`docs/plans/cloud-p2-plan.md` here and of `docs/plans/p2-plan.md` in `lighting7-cloud` merged and
+deployed, and `FU-MANUAL-CLOUD-P2-MIGRATE` passed.
+
+**Test**:
+
+1. Every project the owner synced with GitHub is on the cloud with its SHAs: `FU-MANUAL-CLOUD-P2-MIGRATE`'s
+   record.
+2. A show synced on two desks: change one cue on each with both off the network, bring both back, and
+   resolve the conflict on the venue desk; the other desk takes the resolution on its next sync (UC-4).
+3. A Claude Code cloud session imports a venue and a show on it from the cloud with
+   `scripts/cloud-session.sh` (session 5's record, UC-10).
+4. A desk upgraded past session 6 has no `oauth_identities` table and its backup beside the database; a
+   straggler still pointing at GitHub reads `GITHUB_RETIRED` and moves from its working tree.
+5. `docs/sync-engineering.md` describes the cloud, not GitHub.
+
+Record the date and anything that read differently here.
+
+---
+
+## `FU-MANUAL-CLOUD-P2-MIGRATE`
+
+**What it proves**: *Move GitHub-synced projects to the cloud* moves the owner's projects with their
+history unchanged (cloud-p2 plan session 4, D7, FR-MIG-1). **Needs** the cloud's P2 sessions 1 and 2
+deployed, `sync.access` on for the org with storage for every project, and every desk the owner runs on a
+build with session 4.
+
+**Test**, on each desk in turn, venue desk first:
+
+1. Before moving, note each GitHub repo's `main` (`git ls-remote https://github.com/<owner>/<repo> main`)
+   and, for a venue, its tags (`git ls-remote --tags`).
+2. On the Cloud tab, *Move GitHub-synced projects to the cloud* lists every GitHub-synced project, venues
+   first; one another desk moved already says so. Press *Move*.
+3. Each row reads *Moved*, or *Moved* with the next sync merging where another desk changed it on the
+   cloud. In the portal each project's repo shows the head SHA noted in step 1 (a later one only where
+   this desk had newer work), and a venue's repo every `vN` tag at the commit GitHub had.
+4. Each moved project's Sync tab names its cloud repo, and its activity log has the *Moved to the cloud
+   repo* row. The GitHub URL is among its remembered repos.
+5. On a fresh desk, *Import from the cloud* the venue, then a show pinning it: both import, the show on
+   its pinned version.
+6. Over remote access, the Cloud tab says moves are the desk's own and moves nothing.
+
+Record the date, each project's SHA comparison, and anything that read differently here.
 
 ---
 

@@ -17,6 +17,7 @@ import uk.me.cormack.lighting7.models.DaoSyncSession
 import uk.me.cormack.lighting7.models.DaoSyncSessionConflict
 import uk.me.cormack.lighting7.sync.ConflictSession
 import uk.me.cormack.lighting7.sync.SessionState
+import uk.me.cormack.lighting7.sync.SyncErrorResponse
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp

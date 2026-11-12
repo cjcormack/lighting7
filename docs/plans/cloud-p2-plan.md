@@ -203,8 +203,8 @@ runs the checks §"Pre-commit checks" names for what it touches; a session with 
 |---|---|---|---|---|---|
 | 1 | The protocol for P2 | merged | `claude/upbeat-babbage-j93q01` | [#427](https://github.com/cjcormack/lighting7/pull/427) | b43bb61 |
 | 2 | Syncing with a cloud repo | merged | `claude/bold-johnson-02cpix` | [#428](https://github.com/cjcormack/lighting7/pull/428) | d672020 |
-| 3 | Sync to the cloud, import from the cloud | in review | `claude/cloud-p2-6vf8vk` | | |
-| 4 | Move GitHub-synced projects to the cloud | planned | | | |
+| 3 | Sync to the cloud, import from the cloud | merged | `claude/cloud-p2-6vf8vk` | [#429](https://github.com/cjcormack/lighting7/pull/429) | 9e4f1f0 |
+| 4 | Move GitHub-synced projects to the cloud | in review | `claude/fervent-dijkstra-2yhatj` | | |
 | 5 | Claude Code sessions from the cloud | planned | | | |
 | 6 | Delete GitHub sync | planned | | | |
 
@@ -298,6 +298,38 @@ next; whoever merges the last fills its own.
   moved with every SHA and tag the same; a second desk moving the same project fast-forward, and one
   diverged re-pointing and merging on its next sync; two desks racing (§4); GitHub unreachable moving
   from the working tree; a failure leaving the project on GitHub untouched; the public listener refused.
+
+- **As built.** Where the code needed more than D7 said:
+  - *A GitHub URL* is any attached `repoUrl` that is not the cloud's: the desk has only ever had GitHub
+    remotes, and the tests stand a `file://` bare repo in for one.
+  - The first sync is skipped, and the working tree moved as it is, only when GitHub cannot be reached
+    or refuses the credentials; any other refusal fails the project, and so does a first sync that opens
+    a conflict session (`SESSION_PENDING`: resolve it, then move).
+  - The cloud repo's refs are fetched into `refs/lighting7-move/` before the push and deleted after. A
+    venue tag the cloud holds at another version counts as diverged, as does a push refused as a
+    non-fast-forward because another desk pushed in between; neither pushes, both re-point.
+  - The SHA check's failure is a new `MOVE_HISTORY_MISMATCH`, and a project asked for that does not sync
+    with GitHub a `MOVE_NOT_ON_GITHUB` row (its message saying so when it is on the cloud already); the
+    run is 409 `CLOUD_SYNC_PULL_ONLY` on a pull-only desk, whose plan says `pushEnabled: false` so the tab
+    offers no move. Before any sync the run asks the cloud's repo list, and needs the install key, so an
+    unadopted desk, an org without sync and an unreachable cloud refuse the whole run with nothing
+    synced; a plan with nothing to move asks the cloud nothing.
+  - A show whose venue on this desk still syncs with GitHub is held back, a `VENUE_NOT_MOVED` row with
+    nothing synced: whether the venue was not asked for or its move in the same run failed. Venues move
+    first, so one run asking for both moves both.
+  - The cloud takes only `main`: the branch is pushed onto it whatever GitHub's was called, and the
+    re-point renames the working tree's branch and sets `branch` to `main`.
+  - A venue's tags are every tag it holds: its own `refs/tags/` and the pulled ones, which a venue's sync
+    keeps in `refs/remotes/origin/tags/`, pushed from there. Tags compare by commit, peeled.
+  - The verifying sync is announced on the cloud-sync stream and counted in the sync metrics; the first
+    sync is counted too.
+  - The verifying sync's failure leaves the project moved, answered as the row's `verifyError`: the
+    history is on the cloud by then, and its next sync retries.
+  - A failed project stays on GitHub and so in the plan; the Cloud tab's re-run moves only the failed
+    ones.
+  - The second desks in the tests run on in-memory credentials beside the desk under test: two `State`s
+    in one JVM share one credential file, encrypted under each install's uuid, so each overwrites the
+    other's.
 
 ### Session 5 — Claude Code sessions from the cloud
 

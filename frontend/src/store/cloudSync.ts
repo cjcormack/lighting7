@@ -65,6 +65,45 @@ export interface SyncToCloudResult {
   syncError?: { error: string; code: string } | null
 }
 
+/** One project `GET /cloud-sync/move` would move: it syncs with GitHub now. */
+export interface CloudMovePlanRow {
+  projectId: number
+  name: string
+  kind: 'SHOW' | 'VENUE'
+  /** The GitHub repository it syncs with now. */
+  repoUrl: string
+  /** The cloud already has a repo for it: another desk moved it. */
+  cloudHasRepo: boolean
+  cloudRepoName?: string | null
+}
+
+/** `GET /cloud-sync/move`: what would move, and whether this desk pushes, without which nothing can. */
+export interface CloudMovePlan {
+  projects: CloudMovePlanRow[]
+  /** Absent reads as true. */
+  pushEnabled?: boolean
+}
+
+export type CloudMoveStatus = 'MOVED' | 'MOVED_DIVERGED' | 'FAILED'
+
+/** One project's row in `POST /cloud-sync/move`'s answer. */
+export interface CloudMoveRow {
+  projectId: number
+  name: string
+  status: CloudMoveStatus
+  code?: string | null
+  message?: string | null
+  repoUrl?: string | null
+  repoName?: string | null
+  existed?: boolean
+  /** GitHub could not be synced first, so the working tree moved as it was. */
+  fromWorkingTree?: boolean
+  headSha?: string | null
+  tags?: number
+  verify?: SyncRunResult | null
+  verifyError?: { code: string; error: string } | null
+}
+
 export interface UpdateSyncConfigRequest {
   /**
    * Attach a repository to a project with no repo yet. Ignored once a repo is attached —
@@ -189,6 +228,12 @@ export type SyncErrorCode =
   | "CLOUD_REFUSED"
   /** A pull-only desk (`sync.push = false`) cannot make a cloud repo. */
   | "CLOUD_SYNC_PULL_ONLY"
+  /** A project asked to move to the cloud that does not sync with a GitHub repo. */
+  | "MOVE_NOT_ON_GITHUB"
+  /** A moved project's history on the cloud is not the history it moved from. */
+  | "MOVE_HISTORY_MISMATCH"
+  /** A show whose venue still syncs with GitHub: the venue moves to the cloud first. */
+  | "VENUE_NOT_MOVED"
 
 export interface CommitInfo {
   sha: string
@@ -694,6 +739,21 @@ export const cloudSyncApi = restApi.injectEndpoints({
       transformResponse: (response: { repos: CloudRepo[] }) => response.repos,
       providesTags: ['CloudRepos'],
     }),
+    /** Every project syncing with GitHub, venues first: what *Move to the cloud* would move. */
+    cloudMovePlan: build.query<CloudMovePlan, void>({
+      query: () => `cloud-sync/move`,
+      providesTags: ['CloudMove'],
+    }),
+    /** Move these projects from GitHub to the cloud, one at a time: a row each. */
+    cloudMove: build.mutation<CloudMoveRow[], number[]>({
+      query: (projectIds) => ({
+        url: `cloud-sync/move`,
+        method: 'POST',
+        body: { projectIds },
+      }),
+      transformResponse: (response: { projects: CloudMoveRow[] }) => response.projects,
+      invalidatesTags: ['CloudMove', 'CloudSyncConfig', 'CloudSyncStatus', 'CloudSyncLog', 'CloudSyncActivity', 'ProjectList', 'CloudRepos'],
+    }),
     /** Make the project's cloud repo (or attach the one it has), then run its first sync. */
     cloudSyncToCloud: build.mutation<SyncToCloudResult, number>({
       query: (projectId) => ({
@@ -731,4 +791,6 @@ export const {
   useCloudSyncImportMutation,
   useCloudReposQuery,
   useCloudSyncToCloudMutation,
+  useCloudMovePlanQuery,
+  useCloudMoveMutation,
 } = cloudSyncApi

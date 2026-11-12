@@ -52,6 +52,9 @@ vi.mock('@/store/auth', () => ({
   useAuthStatusQuery: () => ({ data: { user: { role: mocks.role } } }),
 }))
 
+// The move has tests of its own (CloudMoveSection.test.tsx).
+vi.mock('./CloudMoveSection', () => ({ CloudMoveSection: () => null }))
+
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import { CloudPanel } from './CloudPanel'

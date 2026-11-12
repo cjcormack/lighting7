@@ -39,6 +39,13 @@ class CloudRepos(private val database: Database, private val cloud: CloudCredent
         return answer(api.createRepo(signer, CreateRepoRequest(projectUuid.toString(), repoKind, name)))
     }
 
+    /** [list], refused as [create] would be on a desk that cannot make a repo. */
+    suspend fun listForCreate(): List<CloudRepoRow> {
+        cloud?.installSigner()
+            ?: throw if (cloud == null) notConfigured() else SyncException(SyncErrorCode.CLOUD_NOT_ADOPTED, "Adopt this desk on the Cloud tab to sync it to the cloud.")
+        return list()
+    }
+
     /** The org's repos, each with whether a project here syncs it, in the cloud's order; caches their names. */
     suspend fun list(): List<CloudRepoRow> {
         val source = cloud ?: throw notConfigured()
