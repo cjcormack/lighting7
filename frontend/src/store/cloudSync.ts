@@ -6,6 +6,8 @@ import { restApi, SHOW_RECORD_TAGS } from "./restApi"
 export interface LinkedRepo {
   repoUrl: string
   lastLinkedAt: string
+  /** Whether the repo is one of this desk's Lighting7 Cloud's. */
+  cloud?: boolean
 }
 
 export interface SyncConfig {
@@ -33,6 +35,34 @@ export interface SyncConfig {
    * existing, non-empty repo.
    */
   linkedRepos: LinkedRepo[]
+  /** A cloud repo's name, as the cloud last gave it: what the desk shows, never the URL. */
+  repoName?: string | null
+  /** Whether `repoUrl` is a repo of this desk's Lighting7 Cloud. */
+  cloud?: boolean
+}
+
+/** One of the org's cloud repos (`GET /cloud-sync/repos`), with whether a project here syncs it. */
+export interface CloudRepo {
+  repoId: string
+  url: string
+  name: string
+  kind: "SHOW" | "VENUE"
+  projectUuid: string
+  headSha?: string | null
+  sizeBytes: number
+  formatVersion?: number | null
+  lastPushAt?: string | null
+  syncedHere: boolean
+  projectId?: number | null
+}
+
+/** `POST /projects/{id}/sync/cloud`'s answer: the repo attached, and how its first sync went. */
+export interface SyncToCloudResult {
+  config: SyncConfig
+  /** The cloud already had a repo for this project (another desk made it). */
+  existed: boolean
+  sync?: SyncRunResult | null
+  syncError?: { error: string; code: string } | null
 }
 
 export interface UpdateSyncConfigRequest {
@@ -153,6 +183,12 @@ export type SyncErrorCode =
   | "SYNC_QUOTA_EXCEEDED"
   /** The cloud cannot store the push just now. */
   | "SYNC_STORAGE_UNAVAILABLE"
+  /** The cloud's repo API did not answer. */
+  | "CLOUD_UNREACHABLE"
+  /** The cloud's repo API refused, in its own words. */
+  | "CLOUD_REFUSED"
+  /** A pull-only desk (`sync.push = false`) cannot make a cloud repo. */
+  | "CLOUD_SYNC_PULL_ONLY"
 
 export interface CommitInfo {
   sha: string
@@ -650,7 +686,21 @@ export const cloudSyncApi = restApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      invalidatesTags: ['ProjectList', 'CloudSyncConfig'],
+      invalidatesTags: ['ProjectList', 'CloudSyncConfig', 'CloudRepos'],
+    }),
+    /** The org's cloud repos, each marked when a project here already syncs it. */
+    cloudRepos: build.query<CloudRepo[], void>({
+      query: () => `cloud-sync/repos`,
+      transformResponse: (response: { repos: CloudRepo[] }) => response.repos,
+      providesTags: ['CloudRepos'],
+    }),
+    /** Make the project's cloud repo (or attach the one it has), then run its first sync. */
+    cloudSyncToCloud: build.mutation<SyncToCloudResult, number>({
+      query: (projectId) => ({
+        url: `projects/${projectId}/sync/cloud`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['CloudSyncConfig', 'CloudSyncStatus', 'CloudSyncLog', 'CloudSyncConflicts', 'ProjectList', 'CloudRepos'],
     }),
   }),
   overrideExisting: false,
@@ -679,4 +729,6 @@ export const {
   useCloudSyncApplyMutation,
   useCloudSyncAbortMutation,
   useCloudSyncImportMutation,
+  useCloudReposQuery,
+  useCloudSyncToCloudMutation,
 } = cloudSyncApi

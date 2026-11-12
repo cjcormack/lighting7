@@ -35,6 +35,7 @@ import { useCurrentProjectQuery } from "./store/projects"
 import { ChannelValueDialog } from "./components/ChannelValueDialog"
 import { SyncNotifications } from "./components/cloudSync/SyncNotifications"
 import { SyncReauthBanner } from "./components/cloudSync/SyncReauthBanner"
+import { CloudSyncRefusalBanner } from "./components/cloudSync/CloudSyncRefusalBanner"
 import { ReturnToFullscreenBanner } from "./components/screens/ReturnToFullscreenBanner"
 import { HandChip } from "./components/hand/HandChip"
 import { ArmedChip } from "./components/effects/ArmedChip"
@@ -326,6 +327,7 @@ export default function Layout() {
                 and the viewer is an admin who can act on it. */}
             <main className="flex-1 overflow-auto bg-muted/40 min-w-0">
               <SyncReauthBanner />
+              <CloudSyncRefusalBanner />
               <ReturnToFullscreenBanner />
               {/* Outside the Suspense, so a route chunk that never arrives is caught here rather
                   than unmounting the desk. Keyed by pathname so navigating away from a failed

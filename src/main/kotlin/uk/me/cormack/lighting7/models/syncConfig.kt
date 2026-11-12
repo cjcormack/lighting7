@@ -26,6 +26,9 @@ object DaoSyncConfigs : IntIdTable("sync_configs") {
     val autoSyncInterval = duration("auto_sync_interval").nullable()
     val lastSyncedSha = varchar("last_synced_sha", 64).nullable()
     val lastSyncedAt = utcInstant("last_synced_at").nullable()
+
+    /** A cloud repo's name as the cloud last gave it (cloud-p2 plan D2): what the desk shows, never the URL. */
+    val repoName = varchar("repo_name", 200).nullable()
 }
 
 class DaoSyncConfig(id: EntityID<Int>) : IntEntity(id) {
@@ -38,6 +41,7 @@ class DaoSyncConfig(id: EntityID<Int>) : IntEntity(id) {
     var autoSyncInterval by DaoSyncConfigs.autoSyncInterval
     var lastSyncedSha by DaoSyncConfigs.lastSyncedSha
     var lastSyncedAt by DaoSyncConfigs.lastSyncedAt
+    var repoName by DaoSyncConfigs.repoName
 
     /** A project is synced iff a repository is attached. */
     val synced: Boolean get() = !repoUrl.isNullOrBlank()

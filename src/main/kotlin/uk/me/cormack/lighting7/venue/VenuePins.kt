@@ -71,13 +71,15 @@ object VenuePins {
         missing(project.venueUuid!!, project.venueVersion ?: 0, project.venueRepo, project.name)
 
     /**
-     * Where venue [venueId] syncs, as a show's `venueRepo` hint: `owner/repo` for a GitHub remote,
-     * else the remote's URL, or null when no repo is attached here.
+     * Where venue [venueId] syncs, as a show's `venueRepo` hint: `owner/repo` for a GitHub remote, a cloud
+     * repo's name (cloud-p2 plan D6), else the remote's URL; null when no repo is attached here.
      */
-    fun repoHintOf(venueId: Int): String? =
-        DaoSyncConfig.find { DaoSyncConfigs.project eq venueId }.firstOrNull()?.repoUrl
-            ?.takeIf { it.isNotBlank() }
-            ?.let(::repoHint)
+    fun repoHintOf(venueId: Int): String? {
+        val config = DaoSyncConfig.find { DaoSyncConfigs.project eq venueId }.firstOrNull() ?: return null
+        val url = config.repoUrl?.takeIf { it.isNotBlank() } ?: return null
+        if (GITHUB_URL.matches(url.trim())) return repoHint(url)
+        return config.repoName?.takeIf { it.isNotBlank() } ?: repoHint(url)
+    }
 
     /** `https://github.com/owner/repo(.git)` → `owner/repo`; anything else as it is. */
     fun repoHint(repoUrl: String): String {

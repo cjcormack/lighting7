@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { type SyncConfig } from "@/store/cloudSync"
-import { formatRepoUrl } from "@/lib/formatRepoUrl"
+import { repoLabel as repoLabelOf } from "@/lib/formatRepoUrl"
 
 /** One row of the hub's project table — sync state at a glance, click to open its Sync tab. */
 export function ProjectSyncRow({
@@ -20,7 +20,7 @@ export function ProjectSyncRow({
   config: SyncConfig | undefined
 }) {
   const navigate = useNavigate()
-  const repoLabel = formatRepoUrl(config?.repoUrl ?? null)
+  const repoLabel = config ? repoLabelOf(config) : null
   const onOpen = () => navigate(`/projects/${projectId}/settings/sync`)
 
   return (

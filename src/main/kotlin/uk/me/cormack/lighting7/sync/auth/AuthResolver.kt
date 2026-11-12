@@ -28,7 +28,8 @@ class AuthResolver(
     /** May be null if `sync.oauth.github.clientId` is unset — then OAuth is not an option. */
     private val tokenStore: OAuthTokenStore?,
     private val tokenProvider: OAuthTokenProvider?,
-    private val cloud: CloudCredentialSource? = null,
+    /** The cloud's source, null when the resolver knows no cloud. */
+    val cloud: CloudCredentialSource? = null,
 ) {
     /** Whether [repoUrl] is a repo of the configured cloud. */
     fun isCloudRepo(repoUrl: String): Boolean = cloud?.handles(repoUrl) == true

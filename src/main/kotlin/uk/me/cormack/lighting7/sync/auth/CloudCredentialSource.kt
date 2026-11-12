@@ -33,6 +33,18 @@ class CloudCredentialSource(
     /** Whether [url] is a repo of the configured cloud, whose credentials are this source's. */
     fun handles(url: String): Boolean = CloudRepoUrls.isCloudRepo(url, baseUrl)
 
+    /** [url]'s org and repo ids when it is a repo of the configured cloud. */
+    fun repoOf(url: String): CloudRepoUrls.CloudRepo? = CloudRepoUrls.parse(url, baseUrl)
+
+    /** The adoption's signer, which alone may make a repo; null when not adopted or the cloud is off. */
+    fun installSigner(): InstallSigner? = if (enabled) signer() else null
+
+    /** Who may read the org's repos: the adoption, else the developer token; null when neither. */
+    fun repoReader(): RepoReader? = if (!enabled) null else signer()?.let { RepoReader.Install(it) } ?: devToken?.let { RepoReader.Developer(it) }
+
+    /** The cloud's API, null when no cloud is configured. */
+    fun api(): CloudApi? = if (baseUrl != null) api.invoke() else null
+
     /** Whether [resolve] would answer now. */
     fun canResolve(): Boolean = enabled && (devToken != null || adopted())
 
@@ -50,9 +62,9 @@ class CloudCredentialSource(
      * Without one, a 404 is `REPO_NOT_FOUND` and a 403 has no code.
      */
     suspend fun refusal(url: String, status: Int): CloudRefusal {
-        val repo = CloudRepoUrls.parse(url, baseUrl)
-        val reader = signer()?.let { RepoReader.Install(it) } ?: devToken?.let { RepoReader.Developer(it) }
-        val asked = if (repo != null && reader != null && enabled) api()?.getRepo(reader, repo.repoId) else null
+        val repo = repoOf(url)
+        val reader = repoReader()
+        val asked = if (repo != null && reader != null) api()?.getRepo(reader, repo.repoId) else null
         val error = (asked as? CloudCall.Refused)?.error
         if (error != null && error.code in EXPLAINED) return CloudRefusal(error.code, error.message)
         return when (status) {

@@ -116,6 +116,12 @@ describe('the Sync line', () => {
     expect(syncLineOf(config({ lastSyncedAt: null }), now)).toBe('Synced · cjcormack/lighting7-tch-show · never synced')
   })
 
+  it('names a cloud repo by its name, never its URL', () => {
+    const cloud = { repoUrl: 'https://cloud.example/git/r/7f3a.git', cloud: true }
+    expect(syncLineOf(config({ ...cloud, repoName: 'tch-show' }), now)).toBe('Synced · tch-show · 2 min ago')
+    expect(syncLineOf(config(cloud), now)).toBe('Synced · Cloud repo · 2 min ago')
+  })
+
   it('reads Not synced without a repo', () => {
     expect(syncLineOf(config({ repoUrl: null, synced: false }), now)).toBe('Not synced')
     expect(syncLineOf(undefined, now)).toBe('Not synced')

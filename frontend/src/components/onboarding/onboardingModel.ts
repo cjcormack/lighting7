@@ -1,10 +1,12 @@
 import type { ProjectKind } from "@/api/projectApi"
+import type { CloudRepo } from "@/store/cloudSync"
 import type { GithubRepo } from "@/store/oauthGithub"
 import { createSyncStore, sessionStorageArea } from "@/lib/syncStore"
 
 /**
  * A new desk's onboarding (lighting7 `routes/installOnboarding.kt`): diagnostics, then where the
- * first projects come from — cloud sync, or the blank project the desk booted on.
+ * first projects come from — the org's cloud repos, GitHub's (legacy), or the blank project the desk
+ * booted on.
  */
 export type OnboardingStep = "diagnostics" | "projects"
 
@@ -58,6 +60,41 @@ export function repoProjectName(repo: GithubRepo): string {
   return repo.projectName ?? repo.name
 }
 
+/** One repo the projects step can import, from the cloud's list or GitHub's. */
+export interface ImportCandidate {
+  url: string
+  /** The project name it imports as, before a clash is resolved. */
+  name: string
+  /** The line under the name: a GitHub repo's full name; nothing for a cloud repo, whose name is the project's. */
+  detail: string | null
+  kind: ProjectKind
+  branch: string
+  /** A project on this desk already syncs it. */
+  alreadyHere: boolean
+}
+
+export function cloudCandidate(repo: CloudRepo): ImportCandidate {
+  return {
+    url: repo.url,
+    name: repo.name,
+    detail: null,
+    kind: repo.kind === "VENUE" ? "VENUE" : "SHOW",
+    branch: "main",
+    alreadyHere: repo.syncedHere,
+  }
+}
+
+export function githubCandidate(repo: GithubRepo, linked: ReadonlySet<string>): ImportCandidate {
+  return {
+    url: repo.cloneUrl,
+    name: repoProjectName(repo),
+    detail: repo.fullName,
+    kind: repo.projectKind === "VENUE" ? "VENUE" : "SHOW",
+    branch: repo.defaultBranch,
+    alreadyHere: linked.has(repo.cloneUrl),
+  }
+}
+
 /**
  * [base], or `base (2)`, `base (3)`… — the first not in [taken]. Project names are unique on the
  * desk, compared exactly as the importer does, and a repo named like the project the desk booted on
@@ -75,9 +112,9 @@ export function uniqueProjectName(base: string, taken: ReadonlySet<string>): str
  * The order to import [repos] in: venues first, since a show pinned to a venue is refused
  * (`VENUE_MISSING`) until its venue is on the desk. Otherwise the order they were listed in.
  */
-export function importOrder(repos: readonly GithubRepo[]): GithubRepo[] {
-  const venues = repos.filter((r) => r.projectKind === "VENUE")
-  return [...venues, ...repos.filter((r) => r.projectKind !== "VENUE")]
+export function importOrder(repos: readonly ImportCandidate[]): ImportCandidate[] {
+  const venues = repos.filter((r) => r.kind === "VENUE")
+  return [...venues, ...repos.filter((r) => r.kind !== "VENUE")]
 }
 
 /** The imported projects, shows before venues, each once. */
