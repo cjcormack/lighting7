@@ -18,7 +18,8 @@ repos. So **each phase is two plans**, one per repo, written together:
 | Phase | Desk plan (this repo, public) | Cloud plan (`lighting7-cloud`, private) |
 |---|---|---|
 | P0 | `docs/plans/completed/cloud-p0-plan.md` (done) | `docs/plans/completed/p0-plan.md` (done) |
-| P1 | `docs/plans/completed/cloud-p1-plan.md` (done) | `docs/plans/p1-plan.md` (active) |
+| P1 | `docs/plans/completed/cloud-p1-plan.md` (done) | `docs/plans/p1-plan.md` (done) |
+| P2 | `docs/plans/cloud-p2-plan.md` (planned) | `docs/plans/p2-plan.md` (planned) |
 | … | `cloud-pN-plan.md` | `pN-plan.md` |
 
 Each plan is run by `/next-session` in its own repo, which keeps its own copy of the skill. A session
@@ -89,3 +90,12 @@ Each lands in the PRD's next revision; until then, the plan named is the authori
   answered with the port its socket rides, so nothing is posted before the SPA listens (cloud-p1 D8, D9).
 - **Social sign-in moves out of P0.** FR-ACC-1's Google and Apple sign-in are SHOULD; P0 ships passkeys,
   email verification and recovery codes, and the cloud plan records social sign-in as a follow-up.
+- **Repos are named by id** (P2). §9.8's git path is `/git/<org>/<repo>.git` by name; a desk stores its
+  remote URL, so a rename would break every desk syncing it. P2's URL is `/git/<orgId>/<repoId>.git`
+  (cloud-p2 D2).
+- **The git token lasts 10 minutes and is the desk's own** (P2). §9.6 gives it "minutes"; P2 mints one
+  per sync run, signed by the install key and checked against the install's public key, so syncing needs
+  no round trip through the control channel (cloud-p2 D1, D3).
+- **v1 checks `formatVersion.json`'s form, not a ceiling** (P2). FR-SYNC-3's refusal of a version "newer
+  than the server knows how to index" has nothing to refuse above while v1 indexes nothing; the cloud
+  checks the file is present and well formed and records the version, and P5's indexer adds the ceiling.
