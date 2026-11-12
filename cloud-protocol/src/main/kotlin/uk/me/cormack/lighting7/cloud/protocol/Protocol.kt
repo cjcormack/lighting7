@@ -46,12 +46,24 @@ object CloudPaths {
 
     /** `DELETE`, signed ([UnadoptPayload]): unadopt from the desk. */
     fun install(installId: String): String = "/v1/installs/$installId"
+
+    /** `POST` a [CreateRepoRequest], answered [RepoDto]; `GET`, answered [RepoList]. Signed ([RepoApiPayload]). */
+    const val REPOS: String = "/v1/repos"
+
+    /** `GET`, signed ([RepoApiPayload]); answered [RepoDto]. */
+    fun repo(repoId: String): String = "$REPOS/$repoId"
 }
 
-/** The headers a signed HTTP request carries: the timestamp it signed and the signature. */
+/**
+ * The headers a signed HTTP request carries: the timestamp it signed and the signature, and, where the
+ * path names no install or adoption, the install that signed it.
+ */
 object SignatureHeaders {
     const val TIMESTAMP: String = "Lighting7-Timestamp"
     const val SIGNATURE: String = "Lighting7-Signature"
+
+    /** The signing install's id, on a call to the repo API. */
+    const val INSTALL: String = "Lighting7-Install"
 }
 
 /**

@@ -128,6 +128,36 @@ object ErrorCode {
     /** An `mcp.call` whose `grant.id` is not its token's `gid`. */
     const val MCP_GRANT_MISMATCH: String = "MCP_GRANT_MISMATCH"
 
+    /** The org does not have cloud sync. */
+    const val SYNC_OFF: String = "SYNC_OFF"
+
+    /** A create for a project that already has a repo; answered with it, [RepoExistsError]. */
+    const val REPO_EXISTS: String = "REPO_EXISTS"
+
+    /** The repo is not one the org has: never made, deleted, or another org's. */
+    const val REPO_NOT_FOUND: String = "REPO_NOT_FOUND"
+
+    /** A push under a credential that may only read. */
+    const val SYNC_READ_ONLY: String = "SYNC_READ_ONLY"
+
+    /** A push refusal ([PushRefusals]): `main` would not fast-forward. */
+    const val SYNC_NON_FAST_FORWARD: String = "SYNC_NON_FAST_FORWARD"
+
+    /** A push refusal: a delete of `main`, or a ref other than `main` and a tag. */
+    const val SYNC_REF_PROTECTED: String = "SYNC_REF_PROTECTED"
+
+    /** A push refusal: a tag that exists would move or go. */
+    const val SYNC_TAG_IMMUTABLE: String = "SYNC_TAG_IMMUTABLE"
+
+    /** A push refusal: `main`'s tree has no well-formed `formatVersion.json`. */
+    const val SYNC_FORMAT_INVALID: String = "SYNC_FORMAT_INVALID"
+
+    /** A push refusal: the push would take the org past its storage. */
+    const val SYNC_QUOTA_EXCEEDED: String = "SYNC_QUOTA_EXCEEDED"
+
+    /** A push refusal: the cloud cannot store it now, whatever the org's storage. */
+    const val SYNC_STORAGE_UNAVAILABLE: String = "SYNC_STORAGE_UNAVAILABLE"
+
     const val TOKEN_MALFORMED: String = "TOKEN_MALFORMED"
     const val TOKEN_UNKNOWN_KEY: String = "TOKEN_UNKNOWN_KEY"
     const val TOKEN_BAD_SIGNATURE: String = "TOKEN_BAD_SIGNATURE"
@@ -149,6 +179,9 @@ object Capability {
     /** The desk relays MCP calls (`mcp.*`), whatever its switch says. */
     const val MCP_V1: String = "mcp.v1"
 
+    /** The desk syncs with cloud repos and takes [Message.SyncChanged]. */
+    const val SYNC_V1: String = "sync.v1"
+
     /** The *Remote sessions* switch is off: an offer is refused with [ErrorCode.REMOTE_ACCESS_OFF]. */
     const val REMOTE_OFF: String = "remote.off"
 
@@ -158,5 +191,5 @@ object Capability {
     /** No sidecar is running: an offer is refused with [ErrorCode.SIDECAR_UNAVAILABLE]. */
     const val REMOTE_NO_SIDECAR: String = "remote.no-sidecar"
 
-    val ALL: List<String> = listOf(REMOTE_V1, MCP_V1, REMOTE_OFF, MCP_OFF, REMOTE_NO_SIDECAR)
+    val ALL: List<String> = listOf(REMOTE_V1, MCP_V1, SYNC_V1, REMOTE_OFF, MCP_OFF, REMOTE_NO_SIDECAR)
 }

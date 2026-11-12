@@ -6,6 +6,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.security.Signature
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
@@ -41,7 +42,7 @@ class InstallKeysTest {
     @Test
     fun `every vector's canonical bytes and signature match`() {
         val vectors = fixtureJson("signing/vectors.json").jsonObject.getValue("vectors").jsonArray
-        assertEquals(setOf("auth", "adoptionPoll", "unadopt"), vectors.map { it.jsonObject.getValue("payload").jsonPrimitive.content }.toSet())
+        assertEquals(setOf("auth", "adoptionPoll", "unadopt", "repoApiList", "repoApiCreate"), vectors.map { it.jsonObject.getValue("payload").jsonPrimitive.content }.toSet())
         for (entry in vectors) {
             val vector = entry.jsonObject
             val fields = vector.getValue("fields").jsonObject.mapValues { it.value.jsonPrimitive.content }
@@ -49,6 +50,13 @@ class InstallKeysTest {
                 "auth" -> AuthPayload(fields.getValue("installId"), fields.getValue("nonce"), fields.getValue("timestamp"))
                 "adoptionPoll" -> AdoptionPollPayload(fields.getValue("adoptionId"), fields.getValue("timestamp"))
                 "unadopt" -> UnadoptPayload(fields.getValue("installId"), fields.getValue("timestamp"))
+                "repoApiList", "repoApiCreate" -> RepoApiPayload.of(
+                    fields.getValue("installId"),
+                    fields.getValue("method"),
+                    fields.getValue("path"),
+                    fields.getValue("timestamp"),
+                    vector.getValue("body").jsonPrimitive.content.toByteArray(),
+                ).also { assertEquals(fields.getValue("bodySha256"), it.bodySha256, "$name's body digest") }
                 else -> error("unknown vector $name")
             }
             assertEquals(vector.getValue("domain").jsonPrimitive.content, payload.domain)
@@ -70,6 +78,18 @@ class InstallKeysTest {
             AuthPayload("ab", "c", "d").canonicalBytes().toHexString(),
             AuthPayload("a", "bc", "d").canonicalBytes().toHexString(),
         )
+    }
+
+    @Test
+    fun `a repo API signature covers its method, path and body`() {
+        val list = RepoApiPayload.of("inst_01JBX3Q5Z8", "GET", "/v1/repos", "2026-11-02T22:18:03.000Z", ByteArray(0))
+        val signature = InstallKeys.sign(privateKey, list)
+        assertTrue(InstallKeys.verify(publicKey, list, signature))
+        assertFalse(InstallKeys.verify(publicKey, list.copy(method = "POST"), signature))
+        assertFalse(InstallKeys.verify(publicKey, list.copy(path = "/v1/repos/repo_1"), signature))
+        val body = RepoApiPayload.of("inst_01JBX3Q5Z8", "GET", "/v1/repos", "2026-11-02T22:18:03.000Z", "{}".toByteArray())
+        assertFalse(InstallKeys.verify(publicKey, body, signature))
+        assertFailsWith<IllegalArgumentException> { RepoApiPayload.of("inst_01JBX3Q5Z8", "GET", "/v1/repos?x=1", "2026-11-02T22:18:03.000Z", ByteArray(0)) }
     }
 
     @Test

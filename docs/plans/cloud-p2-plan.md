@@ -56,7 +56,11 @@ describing the cloud.
     what the desk signs. Sent as HTTP Basic, user `x-install-token`.
   - The repo API: `CloudPaths.REPOS` (`/v1/repos`), `CreateRepoRequest {projectUuid, kind, name}`,
     `RepoDto {repoId, url, projectUuid, kind, name, headSha?, sizeBytes, formatVersion?, lastPushAt?}`,
-    `RepoList`. Requests are signed as adoption's are.
+    `RepoList`. Requests are signed as adoption's are. *As built (session 1):* the path names no
+    install, so a call carries `Lighting7-Install` too, and signs a `RepoApiPayload` binding the method,
+    path and body's SHA-256, so a signature cannot be replayed as another call; a 409 `REPO_EXISTS` is a
+    `RepoExistsError {code, message, repo}`, an `ApiError` with the project's repo; a git token's
+    refusals are the desk access token's `TokenRefusal`s, bar `WRONG_SCOPE`.
   - `sync.changed {repoId, url, headSha}` (cloud → desk) and the capability `sync.v1`.
   - Codes: `SYNC_OFF`, `REPO_EXISTS`, `REPO_NOT_FOUND`, `SYNC_READ_ONLY`, and the push refusals, which
     reach the desk as a ref's reason text `CODE: words`: `SYNC_NON_FAST_FORWARD`, `SYNC_REF_PROTECTED`,
@@ -197,7 +201,7 @@ runs the checks §"Pre-commit checks" names for what it touches; a session with 
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The protocol for P2 | planned | | | |
+| 1 | The protocol for P2 | in review | `claude/upbeat-babbage-j93q01` | | |
 | 2 | Syncing with a cloud repo | planned | | | |
 | 3 | Sync to the cloud, import from the cloud | planned | | | |
 | 4 | Move GitHub-synced projects to the cloud | planned | | | |

@@ -219,6 +219,11 @@ sealed interface Message {
     @SerialName("mcp.result")
     data class McpResult(val response: JsonObject? = null) : Message
 
+    /** Cloud → desk: [repoId] at [url] was pushed and `main` is now [headSha]. A nudge to sync, never a reply. */
+    @Serializable
+    @SerialName("sync.changed")
+    data class SyncChanged(val repoId: String, val url: String, val headSha: String) : Message
+
     /** A message of a type this version does not know, or of another protocol version, kept whole so it re-encodes as it came. */
     data class Unknown(override val type: String, val body: JsonObject) : Message
 
@@ -262,6 +267,7 @@ private val decoders: Map<String, DeserializationStrategy<Message>> = listOf<Des
     Message.LinkRemoved.serializer(),
     Message.McpCall.serializer(),
     Message.McpResult.serializer(),
+    Message.SyncChanged.serializer(),
 ).associateBy { it.descriptor.serialName }
 
 /** A known message beside its own serializer, so it encodes without an unchecked cast. */
@@ -295,6 +301,7 @@ private fun Message.typed(): Typed<*> = when (this) {
     is Message.LinkRemoved -> Typed(Message.LinkRemoved.serializer(), this)
     is Message.McpCall -> Typed(Message.McpCall.serializer(), this)
     is Message.McpResult -> Typed(Message.McpResult.serializer(), this)
+    is Message.SyncChanged -> Typed(Message.SyncChanged.serializer(), this)
     is Message.Unknown -> error("An unknown message has no serializer")
 }
 

@@ -1,9 +1,7 @@
 package uk.me.cormack.lighting7.cloud.protocol
 
-import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonObject
 import java.security.PrivateKey
 import java.security.PublicKey
 import java.time.Duration
@@ -53,16 +51,13 @@ data class DeskAccessClaims(
 ) {
     /** Why these claims cannot be a token's whatever the time, or null. */
     fun shapeProblem(): String? = when {
-        iat !in 0..LATEST_TIME || exp !in 0..LATEST_TIME -> "iat and exp are times from 1970 to 9999"
+        iat !in 0..CompactJws.LATEST_TIME || exp !in 0..CompactJws.LATEST_TIME -> "iat and exp are times from 1970 to 9999"
         exp <= iat -> "exp is not after iat"
         scope == TokenScope.REMOTE && (sid == null || gid != null || azp != null) -> "a remote token names a sid and no grant"
         scope == TokenScope.MCP && (gid == null || azp == null || sid != null) -> "an MCP token names a grant and its client, and no sid"
         else -> null
     }
 }
-
-/** 9999-12-31T23:59:59Z, the latest time a token names, so no arithmetic on one can overflow. */
-private const val LATEST_TIME = 253_402_300_799L
 
 /** A JWS header as a desk token writes it. */
 @Serializable
@@ -103,33 +98,33 @@ fun publicKeysOf(keys: List<Jwk>): Map<String, PublicKey> = buildMap {
     }
 }
 
-/** Why a desk refused a token. [code] is the [ErrorCode] a refusal answers with. */
+/** Why a token was refused: a desk access token by the desk, or a git token by the cloud. [code] is the [ErrorCode] a refusal answers with. */
 enum class TokenRefusal(val code: String) {
     /**
      * Not three canonical base64url parts, a header or claims that do not decode, an `alg` other than
-     * EdDSA, a `typ` other than JWT, any `crit` header, or claims of the wrong shape for their scope.
+     * EdDSA, a `typ` other than the token's own, any `crit` header, or claims of the wrong shape.
      */
     MALFORMED(ErrorCode.TOKEN_MALFORMED),
 
-    /** The header's `kid` is not in the JWKS the desk holds. */
+    /** The header's `kid` is not in the JWKS the desk holds, or a git token's `iss` is no install the cloud holds. */
     UNKNOWN_KEY(ErrorCode.TOKEN_UNKNOWN_KEY),
 
     /** The signature does not verify. */
     BAD_SIGNATURE(ErrorCode.TOKEN_BAD_SIGNATURE),
 
-    /** `aud` is not this install. */
+    /** `aud` is not this install, or not the cloud's git. */
     WRONG_AUDIENCE(ErrorCode.TOKEN_WRONG_AUDIENCE),
 
     /** `scope` is not the door's. */
     WRONG_SCOPE(ErrorCode.TOKEN_WRONG_SCOPE),
 
-    /** `exp` is more than [DeskTokens.MAX_LIFETIME] after `iat`. */
+    /** `exp` is more than the token's longest life ([DeskTokens.MAX_LIFETIME], [InstallGitTokens.MAX_LIFETIME]) after `iat`. */
     TOO_LONG_LIVED(ErrorCode.TOKEN_TOO_LONG_LIVED),
 
-    /** `iat` is more than [DeskTokens.CLOCK_SKEW] ahead of the desk's clock. */
+    /** `iat` is more than the token's clock skew ([DeskTokens.CLOCK_SKEW], [InstallGitTokens.CLOCK_SKEW]) ahead of the checker's clock. */
     NOT_YET_VALID(ErrorCode.TOKEN_NOT_YET_VALID),
 
-    /** `exp` is more than [DeskTokens.CLOCK_SKEW] behind the desk's clock. */
+    /** `exp` is more than the token's clock skew behind the checker's clock. */
     EXPIRED(ErrorCode.TOKEN_EXPIRED),
 }
 
@@ -141,7 +136,7 @@ sealed interface TokenCheck {
 }
 
 object DeskTokens {
-    const val ALGORITHM: String = "EdDSA"
+    const val ALGORITHM: String = CompactJws.ALGORITHM
     const val TYPE: String = "JWT"
 
     /** The longest a token may live, `exp` less `iat`. */
@@ -158,9 +153,7 @@ object DeskTokens {
         claims.shapeProblem()?.let { throw IllegalArgumentException(it) }
         require(claims.exp - claims.iat <= MAX_LIFETIME.seconds) { "A desk token lives at most ${MAX_LIFETIME.seconds} s" }
         val header = CloudJson.encodeToString(JwsHeader.serializer(), JwsHeader(alg = ALGORITHM, kid = kid, typ = TYPE))
-        val body = CloudJson.encodeToString(DeskAccessClaims.serializer(), claims)
-        val signingInput = Base64Url.encode(header.toByteArray()) + "." + Base64Url.encode(body.toByteArray())
-        val token = signingInput + "." + Base64Url.encode(InstallKeys.signBytes(key, signingInput.toByteArray(Charsets.US_ASCII)))
+        val token = CompactJws.sign(key, header, CloudJson.encodeToString(DeskAccessClaims.serializer(), claims))
         require(token.length <= MAX_TOKEN_CHARS) { "A desk token is at most $MAX_TOKEN_CHARS characters" }
         return token
     }
@@ -170,23 +163,11 @@ object DeskTokens {
      * signature is checked before any claim is trusted; each refusal names the first problem found.
      */
     fun verify(token: String, keys: Map<String, PublicKey>, audience: String, scope: TokenScope, now: Instant): TokenCheck {
-        if (token.length > MAX_TOKEN_CHARS) return refused(TokenRefusal.MALFORMED)
-        val parts = token.split('.')
-        if (parts.size != 3) return refused(TokenRefusal.MALFORMED)
-        val (headerPart, claimsPart, signaturePart) = parts
-        val headerObject = runCatching { Base64Url.decode(headerPart) }.getOrNull()?.let { decodeJson(it, JsonObject.serializer()) }
-            ?: return refused(TokenRefusal.MALFORMED)
-        if ("crit" in headerObject) return refused(TokenRefusal.MALFORMED)
-        val header = runCatching { CloudJson.decodeFromJsonElement(JwsHeader.serializer(), headerObject) }.getOrNull()
-            ?: return refused(TokenRefusal.MALFORMED)
-        if (header.alg != ALGORITHM || header.typ != TYPE) return refused(TokenRefusal.MALFORMED)
-        val signature = runCatching { Base64Url.decode(signaturePart) }.getOrNull() ?: return refused(TokenRefusal.MALFORMED)
-        val claimsBytes = runCatching { Base64Url.decode(claimsPart) }.getOrNull() ?: return refused(TokenRefusal.MALFORMED)
+        val parts = CompactJws.parse(token, MAX_TOKEN_CHARS, TYPE, JwsHeader.serializer()) ?: return refused(TokenRefusal.MALFORMED)
+        val header = parts.header
         val key = keys[header.kid] ?: return refused(TokenRefusal.UNKNOWN_KEY)
-        if (!InstallKeys.verifyBytes(key, "$headerPart.$claimsPart".toByteArray(Charsets.US_ASCII), signature)) {
-            return refused(TokenRefusal.BAD_SIGNATURE)
-        }
-        val claims = decodeJson(claimsBytes, DeskAccessClaims.serializer()) ?: return refused(TokenRefusal.MALFORMED)
+        if (!parts.signedBy(key)) return refused(TokenRefusal.BAD_SIGNATURE)
+        val claims = CompactJws.decodeJson(parts.claims, DeskAccessClaims.serializer()) ?: return refused(TokenRefusal.MALFORMED)
         if (claims.shapeProblem() != null) return refused(TokenRefusal.MALFORMED)
         if (claims.aud != audience) return refused(TokenRefusal.WRONG_AUDIENCE)
         if (claims.scope != scope) return refused(TokenRefusal.WRONG_SCOPE)
@@ -198,7 +179,4 @@ object DeskTokens {
     }
 
     private fun refused(refusal: TokenRefusal) = TokenCheck.Refused(refusal)
-
-    private fun <T> decodeJson(bytes: ByteArray, serializer: KSerializer<T>): T? =
-        runCatching { CloudJson.decodeFromString(serializer, bytes.toString(Charsets.UTF_8)) }.getOrNull()
 }

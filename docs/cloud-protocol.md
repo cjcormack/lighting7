@@ -2,11 +2,12 @@
 
 `cloud-protocol/` is the wire contract between the desk and Lighting7 Cloud: the control channel's
 envelope and messages, the adoption API's bodies, the close and error codes, the install key's signing,
-the desk access tokens, and the contracts a remote session's browser speaks to the desk's sidecar and to
+the desk access tokens, the git tokens and repo API cloud sync uses, and the contracts a remote session's browser speaks to the desk's sidecar and to
 the desk's SPA. It is MIT like the rest of the desk, and it is the desk's: a protocol change is a desk
 PR first (cloud design record R3). The cloud builds it from a pinned desk commit (R4). P0 is the
 cloud-p0 plan (`docs/plans/completed/cloud-p0-plan.md`), decisions D3 to D10; P1's additions are the
-cloud-p1 plan's (`docs/plans/completed/cloud-p1-plan.md`), D2 to D8.
+cloud-p1 plan's (`docs/plans/completed/cloud-p1-plan.md`), D2 to D8; P2's are the cloud-p2 plan's
+(`docs/plans/cloud-p2-plan.md`), D1 and D2.
 
 Package `uk.me.cormack.lighting7.cloud.protocol`, JVM only, `kotlinx.serialization` and no Ktor: each
 side brings its own HTTP client, server and WebSocket.
@@ -112,6 +113,7 @@ Each has a fixture in `cloud-protocol/src/test/resources/protocol/messages/`, na
 | `link.removed` | desk → cloud | `accountId` | |
 | `mcp.call` | cloud → desk | `token`, `grant: {id, clientName}`, `request` (a JSON-RPC message) | |
 | `mcp.result` | desk → cloud | `response?` (absent for a notification) | `mcp.call` |
+| `sync.changed` | cloud → desk | `repoId`, `url`, `headSha`: a cloud repo was pushed | |
 
 `unknown.json` is a type this version does not know, and must survive a decode and re-encode.
 
@@ -137,6 +139,10 @@ Each has a fixture in `cloud-protocol/src/test/resources/protocol/messages/`, na
   (the desk refuses a call where it is not, `MCP_GRANT_MISMATCH`); `grant.clientName` is the name the
   desk shows for the grant. A call must fit one frame: the cloud refuses a body over
   `MAX_RELAYED_REQUEST_BYTES` (7 MiB) with `REQUEST_TOO_LARGE` before it reaches the desk.
+- **`sync.changed`** tells a desk that announces `sync.v1` a repo it tracks was pushed, by another
+  install: `url` is the repo's (§"Repos") and `headSha` `main`'s new commit. A nudge, never a reply and
+  never kept for a desk that is away, so a desk still finds every change by syncing. The desk matches
+  `url` only against the repo URLs it already stores, and never fetches a URL a message names.
 
 ## Replies
 
@@ -166,6 +172,7 @@ stops it serving it, so the cloud can tell a user why before it asks:
 |---|---|---|
 | `remote.v1` | The desk takes remote sessions | `DESK_REMOTE_UNSUPPORTED` when absent |
 | `mcp.v1` | The desk relays MCP calls | `DESK_MCP_UNSUPPORTED` when absent |
+| `sync.v1` | The desk syncs with cloud repos and takes `sync.changed` | nothing: the cloud sends it no `sync.changed` |
 | `remote.off` | Its *Remote sessions* switch is off | `REMOTE_ACCESS_OFF` |
 | `mcp.off` | Its *Claude (MCP)* switch is off | `MCP_ACCESS_OFF` |
 | `remote.no-sidecar` | No sidecar is running | `SIDECAR_UNAVAILABLE` |
@@ -213,7 +220,12 @@ rather than failing to decode. `close-codes.json` pins every list here and the c
 | `DESK_REMOTE_UNSUPPORTED`, `DESK_MCP_UNSUPPORTED` | The desk does not announce `remote.v1` or `mcp.v1` |
 | `REQUEST_TOO_LARGE` | A body over `MAX_RELAYED_REQUEST_BYTES` |
 | `LINK_EMAIL_MISMATCH`, `LINK_INVITE_NOT_LIVE`, `LINK_TAKEN` | Why a `link.ack` refused |
-| `TOKEN_*` | Why a desk access token was refused (§"Desk access tokens") |
+| `TOKEN_*` | Why a desk access token (§"Desk access tokens") or a git token (§"Git") was refused |
+| `SYNC_OFF` | The org does not have cloud sync |
+| `REPO_EXISTS` | A create for a project that already has a repo, answered with it (§"Repos") |
+| `REPO_NOT_FOUND` | A repo the org does not have: never made, deleted, or another org's |
+| `SYNC_READ_ONLY` | A push under a credential that may only read |
+| `SYNC_NON_FAST_FORWARD`, `SYNC_REF_PROTECTED`, `SYNC_TAG_IMMUTABLE`, `SYNC_FORMAT_INVALID`, `SYNC_QUOTA_EXCEEDED`, `SYNC_STORAGE_UNAVAILABLE` | Why a pushed ref was refused (§"Git") |
 
 ## Desk access tokens
 
@@ -259,6 +271,50 @@ key of another type (RSA's `n` and `e`, no `x`) still decodes. `publicKeysOf` tu
 map `verify` takes, leaving out a key with no `kid`, one that is not Ed25519 and one that is not
 canonical, and keeping the first usable key of a `kid` named twice. There is
 no public JWKS URL: only desks verify, and they hear the keys over the channel.
+
+## Git
+
+The cloud serves each repo as a bare git repository over smart HTTP at its `url` (§"Repos"). An adopted
+desk proves itself with a **git token** it signs (cloud-p2 D1), in `InstallGitTokens.kt`: the same
+compact JWS as a desk access token, but signed by the install key and checked by the cloud against the
+public key of the install it names, so syncing needs no round trip through the control channel.
+
+- **Header**: `{"alg":"EdDSA","typ":"l7git"}`, no `kid`: `iss` names the key. The type keeps a git
+  token and a desk access token from passing for each other.
+- **Claims** (`InstallGitClaims`): `iss` (the install id), `aud`, `iat`, `exp` and `jti`, in that
+  order, encoded as desk access tokens are. `aud` is the cloud's origin in one spelling (scheme and host
+  lowercased, a default port dropped, no path) and `/git`: `https://cloud.example/git`,
+  `http://localhost:5173/git`. Both sides compute it with `InstallGitTokens.audience`, which refuses
+  anything but an http(s) URL.
+- **Sent** as HTTP Basic auth, user `x-install-token` (`InstallGitTokens.BASIC_USER`), the token the
+  password. `InstallGitTokens.mint` makes one living `MAX_LIFETIME` (10 minutes) with a random `jti`,
+  which the desk does per sync run.
+
+`InstallGitTokens.verify(token, audience, now, keyOf)` answers `GitTokenCheck.Valid` with the claims or
+`GitTokenCheck.Refused` with the first `TokenRefusal` found. It reads `iss` from the unverified claims
+only to find the key (`keyOf`, null for an install the cloud does not hold or has removed, and never
+asked for an empty `iss`), checks the signature before trusting anything else, and refuses claims whose
+`iss` is not the one it looked up:
+
+| Refusal | When |
+|---|---|
+| `MALFORMED` | As a desk access token's, a `typ` other than `l7git`, no `iss` or an empty one, or an empty `aud` or `jti` |
+| `UNKNOWN_KEY` | `keyOf(iss)` is null |
+| `BAD_SIGNATURE` | The signature does not verify under that install's key |
+| `WRONG_AUDIENCE` | `aud` is not the cloud's git |
+| `TOO_LONG_LIVED` | `exp` is more than 10 minutes after `iat` (`InstallGitTokens.MAX_LIFETIME`) |
+| `NOT_YET_VALID`, `EXPIRED` | `iat` ahead of, or `exp` behind, the cloud's clock by more than 60 s (`InstallGitTokens.CLOCK_SKEW`) |
+
+`WRONG_SCOPE` never applies: a git token has no scope. What the cloud answers a refused token is its
+own (a 401 with `WWW-Authenticate: Basic`).
+
+**Push refusals.** The cloud refuses a pushed ref with a reason `CODE: words`, which JGit reports as the
+ref's message: `SYNC_NON_FAST_FORWARD` (`main` would not fast-forward), `SYNC_REF_PROTECTED` (a delete of
+`main`, or a ref other than `main` and a tag), `SYNC_TAG_IMMUTABLE` (a tag that exists would move or go),
+`SYNC_FORMAT_INVALID` (`main`'s tree has no well-formed `formatVersion.json`), `SYNC_QUOTA_EXCEEDED` and
+`SYNC_STORAGE_UNAVAILABLE`. `PushRefusals.reason` writes one and `PushRefusals.codeOf` reads its code
+back, null for a reason not of that form or a code not in `PushRefusals.CODES`, so a newer refusal reads
+as an unknown one.
 
 ## The link framing
 
@@ -364,6 +420,30 @@ A **signed request** carries `Lighting7-Timestamp` (a `Timestamps` string) and `
 `UnadoptPayload(installId, timestamp)`. The cloud verifies against the key the adoption was started
 with, so a leaked adoption id is useless to anyone without the install key.
 
+## Repos
+
+The repos an org's desks sync with (cloud-p2 D2), one per project uuid. Fixtures in `protocol/repos/`.
+
+| Call | Request | Answer |
+|---|---|---|
+| `POST /v1/repos`, signed | `CreateRepoRequest {projectUuid, kind, name}` | 201 `RepoDto`, or 409 `RepoExistsError {code: REPO_EXISTS, message, repo}` with the project's repo |
+| `GET /v1/repos`, signed | no body | `RepoList {repos}`, newest push first |
+| `GET /v1/repos/{repoId}`, signed | no body | `RepoDto`, or 404 `REPO_NOT_FOUND` |
+
+`RepoDto` is `{repoId, url, projectUuid, kind, name, headSha?, sizeBytes, formatVersion?, lastPushAt?}`:
+`url` is `<cloud origin>/git/<orgId>/<repoId>.git`, by ids, so a rename in the portal moves nothing on
+a desk; `kind` is `SHOW` or `VENUE` (`RepoKind`), or a newer kind, a string the reader skips; `headSha` is `main`'s commit, absent before the first
+push; `formatVersion` is the last push's; `lastPushAt` a `Timestamps` string. Every call is refused
+403 `SYNC_OFF` for an org without cloud sync. A `RepoExistsError` read as an `ApiError` is one, so a
+reader that only wants the code needs nothing more.
+
+A call to the repo API names no install in its path, so it carries a third header, `Lighting7-Install`
+(`SignatureHeaders.INSTALL`), and signs a `RepoApiPayload`: the install, the method, the path exactly as
+sent on the request line, which is `CloudPaths`' string (`/v1/repos`, `/v1/repos/{repoId}`) with no query,
+since the repo API takes none, the timestamp, and the lowercase hex SHA-256 of the body (an empty body's for a `GET`),
+built by `RepoApiPayload.of`. Binding the method, path and body keeps a signature from being replayed as
+another call within the timestamp's tolerance.
+
 ## Signing
 
 `InstallKeys` is the install key (D4): Ed25519 from the JDK, no dependency.
@@ -388,10 +468,11 @@ next.
 | `AuthPayload` | `lighting7-cloud/auth/v1` | `installId`, `nonce`, `timestamp` |
 | `AdoptionPollPayload` | `lighting7-cloud/adoption-poll/v1` | `adoptionId`, `timestamp` |
 | `UnadoptPayload` | `lighting7-cloud/unadopt/v1` | `installId`, `timestamp` |
+| `RepoApiPayload` | `lighting7-cloud/repo-api/v1` | `installId`, `method`, `path`, `timestamp`, `bodySha256` |
 
-A later phase that signs something new (P2's git token, P3's backups) adds a payload with its own
-domain. A desk access token is not a `SignedPayload`: it is a JWS, its bytes JOSE's (§"Desk access
-tokens").
+A later phase that signs something new (P3's backups) adds a payload with its own domain. A desk access
+token and a git token are not `SignedPayload`s: each is a JWS, its bytes JOSE's (§"Desk access tokens",
+§"Git").
 
 ## Golden fixtures
 
@@ -399,12 +480,15 @@ tokens").
 
 - `messages/*.json`: one envelope per message type, named by its type, and `unknown.json`.
 - `adoption/*.json`: every adoption body and `api-error.json`.
+- `repos/*.json`: every repo API body, and `push-refusals.json`, reasons and the code each parses to.
 - `close-codes.json`: the close codes, auth failures, error codes, token refusals, capabilities and the
   constants.
 - `tokens/vectors.json`: the test key's JWK under `kid` `test-1`, a clock (`now`), and desk access
   tokens: five that verify, each with its claims and scope, and one per way a token is refused, each
   with the refusal it gets. Signed with the test key, bar `wrong-key`'s, which RFC 8032's TEST 2 key
   signs.
+- `tokens/git.json`: git tokens for the test key's install, at the same clock: four that verify, each
+  with its claims, and one or more per way a git token is refused. `wrong-key`'s is signed with TEST 2.
 - `link/framing.json` and `link/ctl.json`: the sidecar's framing and `ctl` (§"The link framing").
 - `remote-frame/messages.json`: the remote-frame messages (§"The remote frame").
 - `signing/test-key.json`: RFC 8032 §7.1's TEST 1 key, its encodings and fingerprint, and the RFC's
@@ -414,8 +498,9 @@ tokens").
 
 `GoldenFixturesTest` decodes each fixture to the value it names and re-encodes it to the same JSON, and
 fails on a message type with no fixture or a fixture nothing checks. `InstallKeysTest` checks every
-signing vector, `DeskTokensTest` every token vector (the valid ones sign to their tokens, the refused
-ones are refused for their reason), and `LinkContractsTest` the framing, `ctl` and remote-frame
+signing vector, `DeskTokensTest` every desk access token vector and `InstallGitTokensTest` every git
+token vector (the valid ones sign to their tokens, the refused ones are refused for their reason),
+`PushRefusalsTest` every push-refusal reason, and `LinkContractsTest` the framing, `ctl` and remote-frame
 fixtures, which describe contracts the desk's JVM never speaks: each frame's bytes are its kind and
 payload, within the limits, in an order its label allows. The signing and token vectors were computed
 with Python's `cryptography` package, outside this code, so passing them says the desk signs and checks
