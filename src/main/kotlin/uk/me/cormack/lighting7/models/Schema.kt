@@ -42,7 +42,6 @@ val ALL_TABLES: List<Table> = listOf(
     DaoSyncConfigs, DaoSyncLinkedRepos,
     DaoSyncStates, DaoSyncSessions, DaoSyncSessionConflicts,
     DaoSyncLogEntries,
-    DaoOAuthIdentities,
     DaoUsers, DaoUserSessions, DaoPasswordResetTokens,
     DaoRemoteAccessSettingsTable,
     // Machine-local: this desk's OSC listener and its allowlist (OSC plan D5).

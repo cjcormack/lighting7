@@ -53,10 +53,13 @@ abstract class RouteIntegrationTest {
     /** Config the test's [State] is built with, beyond [testAppConfig]'s. */
     protected open val extraConfig: List<Pair<String, String>> = emptyList()
 
+    /** Whether the test's [State] syncs with `file:` remotes, which stand in for a remote. */
+    protected open val localSyncRepos: Boolean = false
+
     @Before
     fun setUpIntegrationTest() {
         IntegrationTestDb.reset()
-        state = State(testAppConfig(*extraConfig.toTypedArray()))
+        state = State(testAppConfig(*extraConfig.toTypedArray()), localSyncRepos = localSyncRepos)
         projectId = seedMinimalProject(state)
         state.initializeShow()
         state.show.start()

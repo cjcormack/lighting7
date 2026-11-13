@@ -1,7 +1,6 @@
-import type { ReactNode } from "react"
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react"
+import { useMemo, useState, useSyncExternalStore } from "react"
 import { useDispatch } from "react-redux"
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Loader2, Search } from "lucide-react"
+import { AlertTriangle, Check, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -15,20 +14,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { IdentityRow } from "@/components/cloudSync/IdentityRow"
 import { formatError } from "@/lib/formatError"
 import { errorCode, venueSyncRefusal } from "@/lib/venueSyncRefusal"
 import { restApi } from "@/store/restApi"
-import { useCloudReposQuery, useCloudSyncConfigsQuery, useCloudSyncImportMutation } from "@/store/cloudSync"
+import { useCloudReposQuery, useCloudSyncImportMutation } from "@/store/cloudSync"
 import { useCloudAdopted } from "@/components/cloudSync/useCloudAdopted"
 import { CloudAdoptionFlow } from "@/components/cloud/CloudPanel"
 import { useCloudStateQuery } from "@/store/cloud"
 import { useFinishOnboardingMutation } from "@/store/installs"
-import { useListGithubReposQuery, useOauthGithubIdentityQuery } from "@/store/oauthGithub"
 import { useCurrentProjectQuery, useProjectListQuery, useUpdateProjectMutation } from "@/store/projects"
 import {
   cloudCandidate,
-  githubCandidate,
   importedProjects,
   importOrder,
   onboardingImportsStore,
@@ -42,15 +38,13 @@ import {
 /**
  * Where a new desk's first projects come from. On an adopted desk the org's cloud repos are listed
  * (lighting7 cloud-p2 plan D6) — an unadopted one adopts here, since the Cloud tab is behind
- * onboarding — and under *GitHub (legacy)* the lighting repos a connected GitHub
- * can see; the chosen ones import as continuously synced projects (`POST /cloud-sync/import`,
+ * onboarding — and the chosen ones import as continuously synced projects (`POST /cloud-sync/import`,
  * venues first). Finishing opens one of them, and the desk removes the empty project it booted on.
  * Without, or by choice, the desk keeps that project — named here — as a blank one.
  */
 export function OnboardingProjectsStep({ onBack }: { onBack: () => void }) {
   const { adopted } = useCloudAdopted()
   const { data: cloud } = useCloudStateQuery()
-  const [githubOpen, setGithubOpen] = useState(false)
 
   const results = useSyncExternalStore(
     onboardingImportsStore.subscribe,
@@ -118,16 +112,6 @@ export function OnboardingProjectsStep({ onBack }: { onBack: () => void }) {
             No Lighting7 Cloud is configured on this desk, so projects can&apos;t be fetched from it.
           </p>
         )}
-        <button
-          type="button"
-          onClick={() => setGithubOpen((o) => !o)}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          aria-expanded={githubOpen}
-        >
-          {githubOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-          GitHub (legacy)
-        </button>
-        {githubOpen && <GithubSection results={results} disabled={busy} />}
       </section>
 
       {finishError != null && !alreadyDone && (
@@ -190,33 +174,6 @@ export function OnboardingProjectsStep({ onBack }: { onBack: () => void }) {
   )
 }
 
-/** GitHub's lighting repos, for projects still synced there: its identity row, then its checklist. */
-function GithubSection({ results, disabled }: { results: ImportResults; disabled: boolean }) {
-  const { data: identity, isLoading } = useOauthGithubIdentityQuery()
-  const usable = identity?.connected === true && identity.reauthRequired !== true
-  if (isLoading || identity == null) {
-    return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Loader2 className="size-3.5 animate-spin" />
-        Checking GitHub connection…
-      </div>
-    )
-  }
-  if (!identity.oauthConfigured) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        GitHub sign-in isn&apos;t configured on this desk, so projects can&apos;t be fetched from it.
-      </p>
-    )
-  }
-  return (
-    <>
-      <IdentityRow projectId={null} />
-      {usable && <GithubChecklist results={results} disabled={disabled} />}
-    </>
-  )
-}
-
 function CloudChecklist({ results, disabled }: { results: ImportResults; disabled: boolean }) {
   const { data: repos, error } = useCloudReposQuery()
   const candidates = useMemo(() => repos?.map(cloudCandidate), [repos])
@@ -232,59 +189,6 @@ function CloudChecklist({ results, disabled }: { results: ImportResults; disable
   )
 }
 
-function GithubChecklist({ results, disabled }: { results: ImportResults; disabled: boolean }) {
-  const [search, setSearch] = useState("")
-  const [query, setQuery] = useState("")
-  useEffect(() => {
-    const t = window.setTimeout(() => setQuery(search.trim()), 200)
-    return () => window.clearTimeout(t)
-  }, [search])
-  const { data: repos, isFetching, error } = useListGithubReposQuery({
-    query: query || null,
-    perPage: 100,
-    lightingOnly: true,
-  })
-  const { data: syncConfigs } = useCloudSyncConfigsQuery()
-  // Clone URLs already attached to a project here — a repo cannot be imported twice.
-  const linked = useMemo(
-    () =>
-      new Set(
-        Object.values(syncConfigs ?? {})
-          .map((c) => c.repoUrl)
-          .filter((u): u is string => !!u),
-      ),
-    [syncConfigs],
-  )
-  const candidates = useMemo(() => repos?.map((r) => githubCandidate(r, linked)), [repos, linked])
-  return (
-    <RepoChecklist
-      candidates={candidates}
-      error={error}
-      results={results}
-      disabled={disabled}
-      refreshing={isFetching && repos != null}
-      empty={
-        query
-          ? "No lighting projects match that search."
-          : "No lighting projects in the repositories GitHub lets this desk see."
-      }
-      loading="Looking for lighting projects…"
-      search={
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            aria-label="Search repositories"
-            placeholder="Search repositories…"
-            className="pl-8"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-      }
-    />
-  )
-}
-
 /**
  * Repos to import, each a checkbox, and an Import that brings the chosen ones in one at a time —
  * venues first — drawing each repo's outcome on its own row.
@@ -294,19 +198,15 @@ function RepoChecklist({
   error,
   results,
   disabled,
-  refreshing = false,
   empty,
   loading,
-  search,
 }: {
   candidates: ImportCandidate[] | undefined
   error: unknown
   results: ImportResults
   disabled: boolean
-  refreshing?: boolean
   empty: string
   loading: string
-  search?: ReactNode
 }) {
   const { data: projects } = useProjectListQuery()
   const [importRepo] = useCloudSyncImportMutation()
@@ -354,7 +254,6 @@ function RepoChecklist({
 
   return (
     <div className="space-y-2">
-      {search}
       <div className="max-h-72 overflow-y-auto rounded-md border">
         {error != null ? (
           <p className="p-3 text-sm text-destructive">{formatError(error)}</p>
@@ -382,7 +281,7 @@ function RepoChecklist({
       </div>
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">
-          {refreshing ? "Refreshing…" : "Venues import before the shows built on them."}
+          Venues import before the shows built on them.
         </span>
         <Button size="sm" onClick={() => void runImport()} disabled={locked || selected.size === 0}>
           {importing && <Loader2 className="size-4 animate-spin" />}
@@ -427,9 +326,6 @@ function RepoRow({
             </Badge>
           )}
         </span>
-        {repo.detail && (
-          <span className="block truncate font-mono text-xs text-muted-foreground">{repo.detail}</span>
-        )}
         {result?.status === "failed" && (
           <span className="block text-xs text-destructive">{result.error}</span>
         )}

@@ -22,10 +22,13 @@ import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
 
 /**
- * *Move GitHub-synced projects to the cloud*: each project syncing with a repo that is not the cloud's
- * moves, history and all, onto its cloud repo, one at a time under its sync's locks.
+ * *Move GitHub-synced projects to the cloud*: each project attached to a GitHub repo
+ * ([AuthResolver.isGitHubRepo]) moves, history and all, onto its cloud repo, one at a time under its
+ * sync's locks.
  *
- * A sync with the old remote comes first; one that cannot reach it moves the working tree as it is.
+ * A sync with the old remote comes first. When it is refused — the remote cannot be reached, or is a
+ * GitHub repo the resolver gives no credentials for — a show is snapshotted and its working tree moves
+ * as it is.
  * The branch (onto the cloud's `main`) and a venue's every version tag are pushed, never forced, so
  * every sha is the old remote's. A cloud repo whose history this desk's does not contain is not pushed
  * to: the project re-points and its next sync merges. Only once the cloud holds what was pushed does
@@ -40,7 +43,7 @@ class CloudMove(
 
     private val failures = SyncFailures(authResolver)
 
-    /** Every project syncing with a repo that is not the cloud's, venues first, each with the cloud's repo for it if any. */
+    /** Every project attached to a GitHub repo, venues first, each with the cloud's repo for it if any. */
     suspend fun plan(): CloudMovePlan {
         val candidates = candidates()
         if (candidates.isEmpty()) return CloudMovePlan(emptyList(), state.syncPushEnabled)
@@ -86,7 +89,7 @@ class CloudMove(
         return CloudMoveRow(id, name, CloudMoveStatus.FAILED, code = SyncErrorCode.MOVE_NOT_ON_GITHUB.name, message = message)
     }
 
-    /** A show whose venue on this desk still syncs with a repo that is not the cloud's stays where it is. */
+    /** A show whose venue on this desk is still attached to a GitHub repo stays where it is. */
     private fun heldBack(c: Candidate): CloudMoveRow? {
         if (c.kind != ProjectKind.SHOW) return null
         val venue = transaction(state.database) {
@@ -94,7 +97,7 @@ class CloudMove(
             val venue = DaoProject.find { (DaoProjects.uuid eq venueUuid) and (DaoProjects.kind eq ProjectKind.VENUE) }.firstOrNull()
                 ?: return@transaction null
             val url = DaoSyncConfig.find { DaoSyncConfigs.project eq venue.id }.firstOrNull()?.repoUrl?.takeIf { it.isNotBlank() }
-            venue.name.takeIf { url != null && !authResolver.isCloudRepo(url) }
+            venue.name.takeIf { url != null && authResolver.isGitHubRepo(url) }
         } ?: return null
         val message = "Its venue $venue still syncs with GitHub: move the venue first, then this show."
         state.syncLogger.error(c.projectId, SyncLogEvent.MOVE_FAILED, "${SyncErrorCode.VENUE_NOT_MOVED.name}: $message")
@@ -106,7 +109,7 @@ class CloudMove(
     private fun candidates(): List<Candidate> = transaction(state.database) {
         DaoSyncConfig.all().mapNotNull { cfg ->
             val url = cfg.repoUrl?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            if (authResolver.isCloudRepo(url)) return@mapNotNull null
+            if (!authResolver.isGitHubRepo(url)) return@mapNotNull null
             val project = cfg.project
             if (project.kind == ProjectKind.VENUE_VERSION) return@mapNotNull null
             Candidate(project.id.value, project.uuid.toString(), project.name, project.kind, url)
@@ -144,13 +147,16 @@ class CloudMove(
         } catch (e: Exception) {
             val unreachable = e is GitTransportException || e is GitAuthException || (e is SyncException && e.code in UNREACHABLE)
             if (!unreachable) throw e
-            log.info("Project {}: GitHub could not be synced first ({}); moving from the working tree", c.projectId, e.message)
-            state.syncLogger.warn(
-                c.projectId, SyncLogEvent.MOVE_FROM_WORKING_TREE,
-                "GitHub could not be synced first (${e.message ?: e::class.simpleName}): moving what this desk holds.",
-            )
+            val why = if (e is SyncException && e.code == SyncErrorCode.GITHUB_RETIRED) {
+                "This desk does not sync with GitHub"
+            } else {
+                "GitHub could not be synced first (${e.message ?: e::class.simpleName})"
+            }
+            log.info("Project {}: {}; moving from the working tree", c.projectId, why)
+            state.syncLogger.warn(c.projectId, SyncLogEvent.MOVE_FROM_WORKING_TREE, "$why: moving what this desk holds.")
             null
         }
+        if (first == null && c.kind == ProjectKind.SHOW) engine.snapshotHeld(c.projectId)
 
         val created = cloudRepos.create(java.util.UUID.fromString(c.uuid), c.kind, c.name)
         val repo = created.repo
@@ -177,7 +183,7 @@ class CloudMove(
             buildString {
                 append("Moved to the cloud repo ${repo.name}")
                 append(if (push.diverged) ": its history differs from this desk's, so the next sync merges the two." else ".")
-                if (first == null) append(" Moved from this desk's working tree: GitHub could not be synced first.")
+                if (first == null) append(" Moved from this desk's working tree.")
             },
         )
 
@@ -217,14 +223,14 @@ class CloudMove(
 
     private fun workingTree(c: Candidate): Repository =
         JGitClient.open(SyncWorkingTree(state).pathFor(java.util.UUID.fromString(c.uuid)))
-            ?: throw SyncException(SyncErrorCode.NO_REPO, "This desk holds no history for the project to move: sync it with GitHub first.")
+            ?: throw SyncException(SyncErrorCode.NO_REPO, NO_HISTORY)
 
     private data class Pushed(val headSha: String, val diverged: Boolean, val tags: Int)
 
     private fun pushHistory(c: Candidate, url: String, credentials: GitCredentials, remoteHead: String?): Pushed =
         workingTree(c).use {
             val head = JGitClient.head(it)?.sha
-                ?: throw SyncException(SyncErrorCode.NO_REPO, "This desk holds no history for the project to move: sync it with GitHub first.")
+                ?: throw SyncException(SyncErrorCode.NO_REPO, NO_HISTORY)
             if (remoteHead != null && remoteHead != head) {
                 throw SyncException(
                     SyncErrorCode.MOVE_HISTORY_MISMATCH,
@@ -253,7 +259,7 @@ class CloudMove(
         val main = JGitClient.DEFAULT_BRANCH
         val target = "refs/heads/$main"
         val source = repo.fullBranch?.takeIf { it.startsWith("refs/heads/") }
-            ?: throw SyncException(SyncErrorCode.NO_REPO, "This desk's working tree for the project is on no branch: sync it with GitHub first.")
+            ?: throw SyncException(SyncErrorCode.NO_REPO, "This desk's working tree for the project is on no branch, so there is nothing to move.")
         val cloudRef = "${CLOUD_PREFIX}heads/$main"
         JGitClient.fetchUrlInto(repo, url, main, CLOUD_PREFIX, credentials)
         val relation = JGitClient.classify(repo, "HEAD", cloudRef)
@@ -303,12 +309,12 @@ class CloudMove(
         /** Where the cloud repo's refs are read into while a project moves; deleted after. */
         const val CLOUD_PREFIX = "refs/lighting7-move/"
 
-        /** An old remote that cannot be reached, or refuses this desk: the move goes on from the working tree. */
-        @Suppress("DEPRECATION")
-        val UNREACHABLE = setOf(
-            SyncErrorCode.MISSING_CREDENTIALS, SyncErrorCode.MISSING_PAT,
-            SyncErrorCode.OAUTH_REAUTH_REQUIRED, SyncErrorCode.AUTH_FAILED,
-        )
+        /** A working tree with no commit: a venue that never synced, whose versions start afresh on the cloud. */
+        const val NO_HISTORY =
+            "This desk holds no history for the project to move: disconnect it and sync it to the cloud from its Sync tab instead."
+
+        /** A first sync refused for credentials, or for GitHub's: the move goes on from the working tree. */
+        val UNREACHABLE = setOf(SyncErrorCode.AUTH_FAILED, SyncErrorCode.GITHUB_RETIRED)
 
         val log = LoggerFactory.getLogger(CloudMove::class.java)
     }

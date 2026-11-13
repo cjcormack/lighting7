@@ -14,7 +14,7 @@ const STEPS: Record<OnboardingStep, { index: number; title: string; description:
     index: 2,
     title: "Your projects",
     description:
-      "Bring your shows and venues in from GitHub with cloud sync, or start with a blank project.",
+      "Bring your shows and venues in from Lighting7 Cloud, or start with a blank project.",
   },
 }
 

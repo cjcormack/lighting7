@@ -119,8 +119,8 @@ browser's scrubber (`frontend/src/lib/sentryScrub.ts`) compiles the same file. I
 - `Bearer …` credentials, keeping the scheme.
 - The one-time token in `/auth/reset/{token}` and `/auth/device/{token}`, and in the pages' own
   `/reset/{token}` and `/device/{token}` at the start of a path or right after a host — never a
-  route that only has a `device` segment, such as `/oauth/github/device/start`, whose transaction
-  `beforeSendTransaction` would otherwise drop.
+  path that merely has a `device` segment further in (the fixture's negative cases use
+  `/api/rest/surfaces/device/start`), whose transaction `beforeSendTransaction` would otherwise drop.
 - OAuth `code=`, `state=` and `token=` query parameters, and `access_token` / `refresh_token` /
   `id_token` values.
 - The `lighting7_session` cookie.
@@ -215,8 +215,8 @@ one-minute interval that would be about 43,000 a month for one project.
   `META-INF/services/org.jetbrains.exposed.v1.core.statements.GlobalStatementInterceptor`, adds a
   `db.sql.query` span per statement: the SQL with `?` for each parameter, and `db.rows_affected` for
   a write. A query's rows are read after its span ends, so they are not counted.
-- **Outbound HTTP**. `installSentry()` puts `sentry-ktor-client` on every Ktor `HttpClient` (GitHub
-  releases, GitHub OAuth; the Hue controller makes no HTTP calls today). No trace headers go out:
+- **Outbound HTTP**. `installSentry()` puts `sentry-ktor-client` on the GitHub releases check's Ktor
+  `HttpClient`, the one that installs it (the Hue controller makes no HTTP calls today). No trace headers go out:
   `tracePropagationTargets` is empty, since no host the desk calls is ours. A failed response is
   the caller's to judge, not an issue.
 - **Git**. `JGitClient` wraps clone, fetch and push as `http.client` spans named
@@ -419,7 +419,7 @@ and the QR codes are drawn as placeholders; no canvas integration. Three regions
 canvas and its label layer (`Stage3D`), the channel grid (`routes/Channels.tsx`) and each Prompt Book
 page (`ScriptViewer`'s `PdfPage`). With text unmasked, what shows a credential is masked or blocked
 where it is drawn: the reset and device-login links and their QR codes (`ResetQrSheet`,
-`DeviceLoginSection`) and the GitHub device code (`DeviceFlowModal`).
+`DeviceLoginSection`).
 
 URLs are scrubbed in three places. `beforeAddRecordingEvent` runs `scrubRecordingEvent` over the
 replay's own events (its breadcrumbs, navigation and network spans); `Lighting7Scrub` takes the

@@ -34,7 +34,6 @@ import type { PressPair } from "./hooks/usePress"
 import { useCurrentProjectQuery } from "./store/projects"
 import { ChannelValueDialog } from "./components/ChannelValueDialog"
 import { SyncNotifications } from "./components/cloudSync/SyncNotifications"
-import { SyncReauthBanner } from "./components/cloudSync/SyncReauthBanner"
 import { CloudSyncRefusalBanner } from "./components/cloudSync/CloudSyncRefusalBanner"
 import { ReturnToFullscreenBanner } from "./components/screens/ReturnToFullscreenBanner"
 import { HandChip } from "./components/hand/HandChip"
@@ -321,12 +320,9 @@ export default function Layout() {
                 blackout that is not ready — on every window, in the band's slot, for its reason. */}
             {!immersive && <RigSafetyBanner />}
 
-            {/* Page Content. The re-auth banner sits inside the scroll container's flex
-                column rather than above it so it doesn't shift the ShowBar or the panels;
-                it renders nothing at all unless the desk's GitHub connection is rejected
-                and the viewer is an admin who can act on it. */}
+            {/* Page Content. The banners sit inside the scroll container's flex column rather
+                than above it so they don't shift the ShowBar or the panels. */}
             <main className="flex-1 overflow-auto bg-muted/40 min-w-0">
-              <SyncReauthBanner />
               <CloudSyncRefusalBanner />
               <ReturnToFullscreenBanner />
               {/* Outside the Suspense, so a route chunk that never arrives is caught here rather

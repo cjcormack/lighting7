@@ -6,9 +6,12 @@ import {
   useCloudSyncConflictsQuery,
   useCloudSyncRunMutation,
 } from "@/store/cloudSync"
-import { useOauthGithubIdentityQuery } from "@/store/oauthGithub"
 import { formatError } from "@/lib/formatError"
-import { venueSyncRefusal } from "@/lib/venueSyncRefusal"
+import { errorCode, venueSyncRefusal } from "@/lib/venueSyncRefusal"
+
+const GITHUB_RETIRED_TITLE = "This project still syncs with GitHub"
+const GITHUB_RETIRED_HINT = "The desk does not sync with GitHub — move it to the cloud from its Sync tab"
+const NOT_A_CLOUD_REPO_HINT = "Its repository is not one of this desk's cloud's, so the desk cannot sync with it"
 
 /**
  * *Sync now* for one project: the run, what it toasts, and why it cannot run — the Sync tab's
@@ -28,7 +31,6 @@ export function useSyncNow(projectId: number, { isVenue = false, skip = false }:
     return () => sub.unsubscribe()
   }, [skip, projectId, refetchConfig])
   const { data: conflictsData } = useCloudSyncConflictsQuery(projectId, { skip })
-  const { data: identity } = useOauthGithubIdentityQuery(undefined, { skip })
   const [runSync, { isLoading: isSyncing }] = useCloudSyncRunMutation()
 
   // The global toaster says the same run's `cloudSyncDone` under this id; sharing it makes one toast.
@@ -72,23 +74,17 @@ export function useSyncNow(projectId: number, { isVenue = false, skip = false }:
       // (two desks published one number) say what to do; anything else is the desk's sentence.
       const refusal = venueSyncRefusal(err)
       if (refusal) toast.error(refusal.title, { id, description: refusal.message })
+      else if (errorCode(err) === "GITHUB_RETIRED") toast.error(GITHUB_RETIRED_TITLE, { id, description: GITHUB_RETIRED_HINT })
       else toast.error(`Sync failed: ${formatError(err)}`, { id })
     }
   }
 
-  // Sync-now needs all three prerequisites; the first failing one is the reason. Also blocked
-  // while a conflict session is open, which the run would refuse with SESSION_PENDING.
+  // The first failing prerequisite is the reason. An open conflict session would refuse the run
+  // with SESSION_PENDING.
   const sessionPending = conflictsData?.activeSession === true
-  // A rejected OAuth identity is not a credential: `connected` alone would enable a "Sync now"
-  // that can only fail. The PAT half still stands on its own.
-  const oauthUsable = identity?.connected === true && identity.reauthRequired !== true
-  const hasCredentials = oauthUsable || config?.tokenPresent === true
   const disabledReason = (() => {
     if (!config?.repoUrl) return "No repository attached — enable cloud sync first"
-    if (identity?.reauthRequired === true && config?.tokenPresent !== true) {
-      return "GitHub rejected this desk's authorisation — reconnect GitHub in Install Settings › Sync"
-    }
-    if (!hasCredentials) return "Connect GitHub or store a Personal Access Token"
+    if (config.cloud !== true) return config.github === true ? GITHUB_RETIRED_HINT : NOT_A_CLOUD_REPO_HINT
     if (sessionPending) return "Resolve or abort the open conflict session first"
     return null
   })()

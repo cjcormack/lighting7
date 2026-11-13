@@ -17,15 +17,13 @@ import java.time.Instant
  * otherwise [CloudNotAdoptedException]. Neither needs the control channel.
  *
  * [baseUrl] is `cloud.baseUrl`, null when no cloud is configured; [enabled] is `cloud.enabled`.
- * [signer] is the adoption's install id and key, null unless adopted through that cloud, and [adopted]
- * whether it would answer, without loading the key; [api] answers
+ * [signer] is the adoption's install id and key, null unless adopted through that cloud; [api] answers
  * the repo API, asked only to put a git refusal in the cloud's words ([refusal]).
  */
 class CloudCredentialSource(
-    private val baseUrl: String?,
+    val baseUrl: String?,
     private val enabled: Boolean,
     private val signer: () -> InstallSigner?,
-    private val adopted: () -> Boolean,
     private val devToken: String?,
     private val api: () -> CloudApi?,
     private val clock: () -> Instant = Instant::now,
@@ -44,9 +42,6 @@ class CloudCredentialSource(
 
     /** The cloud's API, null when no cloud is configured. */
     fun api(): CloudApi? = if (baseUrl != null) api.invoke() else null
-
-    /** Whether [resolve] would answer now. */
-    fun canResolve(): Boolean = enabled && (devToken != null || adopted())
 
     fun resolve(url: String): GitCredentials {
         check(handles(url)) { "Not a repo of this desk's cloud" }

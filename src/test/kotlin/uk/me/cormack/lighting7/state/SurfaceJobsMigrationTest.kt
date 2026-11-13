@@ -96,7 +96,7 @@ class SurfaceJobsMigrationTest {
         val (_, logs) = captureLogs("SurfaceJobsMigration") { startDesk() }
         stopDesk()
 
-        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
+        assertEquals(GITHUB_RETIREMENT_USER_VERSION, userVersion())
         assertEquals(
             listOf(
                 Job(1, "master", null, JobKind.GROUPS.id, listOf(JobItem.Group("front"))),
@@ -148,7 +148,7 @@ class SurfaceJobsMigrationTest {
         sql { s -> s.executeUpdate("DELETE FROM control_surface_bindings WHERE control_id LIKE 'strip-%'") }
         val (_, logs) = captureLogs("SurfaceJobsMigration") { startDesk() }
         stopDesk()
-        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
+        assertEquals(GITHUB_RETIREMENT_USER_VERSION, userVersion())
         assertTrue(backups().isEmpty())
         assertTrue(jobs().isEmpty())
         assertTrue(logs.none { "job(s) made" in it }, logs.joinToString("\n"))

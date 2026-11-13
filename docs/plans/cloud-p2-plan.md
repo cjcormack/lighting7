@@ -205,8 +205,8 @@ runs the checks §"Pre-commit checks" names for what it touches; a session with 
 | 2 | Syncing with a cloud repo | merged | `claude/bold-johnson-02cpix` | [#428](https://github.com/cjcormack/lighting7/pull/428) | d672020 |
 | 3 | Sync to the cloud, import from the cloud | merged | `claude/cloud-p2-6vf8vk` | [#429](https://github.com/cjcormack/lighting7/pull/429) | 9e4f1f0 |
 | 4 | Move GitHub-synced projects to the cloud | merged | `claude/fervent-dijkstra-2yhatj` | [#430](https://github.com/cjcormack/lighting7/pull/430) | 64a16d0 |
-| 5 | Claude Code sessions from the cloud | in review | `claude/cloud-p2-aqq3oc` | | |
-| 6 | Delete GitHub sync | planned | | | |
+| 5 | Claude Code sessions from the cloud | in review | `claude/cloud-p2-aqq3oc` | [#431](https://github.com/cjcormack/lighting7/pull/431) | 79c1e2f |
+| 6 | Delete GitHub sync | in review | `claude/cloud-p2-pjlf5a` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session` fills
 *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts the
@@ -371,6 +371,8 @@ session 4 is deployed, a read developer token is saved as the Claude Code enviro
 **Needs:** operator: `FU-MANUAL-CLOUD-P2-MIGRATE` passed, every desk the owner runs on a build with
 session 4 and every one of its projects moved
 
+*Met 2026-11-13: the operator confirmed it when the session started (`manual-validation.md`, Validated).*
+
 - D8: the deletions, step 18 and its frozen database, `GITHUB_RETIRED` and the Sync tab's *Move to the
   cloud* for a straggler, the licence and notices entries of anything only GitHub used, `SyncDispositions`;
   the script's GitHub path (D9).
@@ -381,6 +383,33 @@ session 4 and every one of its projects moved
   database, with and without an identity, the backup written only with one; a GitHub `repoUrl` answering
   `GITHUB_RETIRED` and moving from its working tree; nothing under `src/` or `frontend/src/` naming
   `oauth/github` (a test, as P1's deletion had for ngrok).
+
+- **As built.** Where the code needed more than D8 said:
+  - `AuthResolver` takes the cloud's source alone. A GitHub repo — told by its host, `github.com`
+    (`isGitHubRepo`) — is `GitHubRetiredException`, `GITHUB_RETIRED` from every door (`SyncFailures`); any
+    other repo that is not the configured cloud's (another cloud's, or one under a mistyped
+    `cloud.baseUrl`) is the new `NOT_A_CLOUD_REPO` (409), naming `cloud.baseUrl` and offering no move, and
+    only a GitHub repo is a move candidate or holds a show back. The tests' `file:` bare repos, which stood
+    in for GitHub, need a remote that resolves, so `AuthResolver(…, localRepos = true)` lets a `file:` repo
+    through with no credentials and counts it as GitHub's for the move; `State`'s constructor takes
+    `localSyncRepos` for the route tests that sync through the desk's own resolver. The desk never sets
+    either.
+  - `SyncErrorCode` loses `MISSING_CREDENTIALS`, `MISSING_PAT` and `OAUTH_REAUTH_REQUIRED`, which nothing
+    can raise now, and `SyncConfigDto` loses `tokenPresent` and gains `github`, which shows *Move to the
+    cloud* only for a GitHub repo. `PUT /sync/config` attaching, and `POST /sync/reconnect` to, a repo the
+    desk cannot sync with (`AuthResolver.canSyncWith`) are `GITHUB_RETIRED` or `NOT_A_CLOUD_REPO` too.
+  - `CredentialStore` loses its PAT methods, keeping only the blob API. The store cannot list its keys,
+    so step 18 finds each PAT by the repos `sync_configs` and `sync_linked_repos` name, every one a
+    project here synced or once synced with; its credential half runs whenever the step met the table.
+  - The move keeps its first sync with the old remote, which a GitHub repo now answers `GITHUB_RETIRED`,
+    one of the failures that already sent the move on from the working tree. That refusal comes before the
+    run's snapshot, so a show moving from its working tree is snapshotted first, under the same locks: a
+    show that never synced still moves, with what the desk holds. The Sync tab's *Move to the cloud* is the
+    same `POST /cloud-sync/move` for the one project.
+  - D8's step 18 drops `oauth_identities` whenever the table exists, not only when it holds an identity:
+    only the backup waits on one. A database without the table (one created since) is only marked.
+  - No dependency was GitHub's alone (Ktor's client serves the cloud and the update check), so the licence
+    data is unchanged.
 
 ## 6. The gate and the operator checks
 

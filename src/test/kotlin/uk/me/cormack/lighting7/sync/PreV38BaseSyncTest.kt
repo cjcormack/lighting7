@@ -17,7 +17,6 @@ import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.models.DaoPalettes
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.nio.file.Files
@@ -36,7 +35,6 @@ class PreV38BaseSyncTest {
     private lateinit var state: State
     private lateinit var root: Path
     private lateinit var bareRepo: Path
-    private lateinit var credentialStore: InMemoryCredentialStore
 
     private val frozen: Path = Path.of("src/test/resources/sync/legacy-v37")
     private val repoUrl: String get() = bareRepo.toUri().toString()
@@ -50,7 +48,6 @@ class PreV38BaseSyncTest {
         bareRepo = root.resolve("remote.git")
         Git.init().setBare(true).setDirectory(bareRepo.toFile()).setInitialBranch("main").call().close()
         state = State(testAppConfig("sync.workingTreeRoot" to root.resolve("trees").toString()))
-        credentialStore = InMemoryCredentialStore().also { it.set(repoUrl, "test-pat") }
     }
 
     @After
@@ -92,7 +89,7 @@ class PreV38BaseSyncTest {
         }
     }
 
-    private fun auth() = AuthResolver(credentialStore, tokenStore = null, tokenProvider = null)
+    private fun auth() = AuthResolver(cloud = null, localRepos = true)
 
     private fun sync(projectId: Int): SyncRunResult {
         val (projectUuid, installUuid, installName) = transaction(state.database) {

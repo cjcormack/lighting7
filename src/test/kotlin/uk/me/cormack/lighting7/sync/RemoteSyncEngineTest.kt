@@ -15,7 +15,6 @@ import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
 import uk.me.cormack.lighting7.testsupport.testAppConfig
@@ -41,7 +40,6 @@ class RemoteSyncEngineTest {
     private lateinit var workingRoot: Path
     private lateinit var bareRepo: Path
     private lateinit var state: State
-    private lateinit var credentialStore: InMemoryCredentialStore
     private lateinit var engine: RemoteSyncEngine
 
     @Before
@@ -52,8 +50,7 @@ class RemoteSyncEngineTest {
         Git.init().setBare(true).setDirectory(bareRepo.toFile()).setInitialBranch("main").call().close()
 
         state = State(testAppConfig("sync.workingTreeRoot" to workingRoot.toString()))
-        credentialStore = InMemoryCredentialStore()
-        engine = RemoteSyncEngine(state, AuthResolver(credentialStore, tokenStore = null, tokenProvider = null))
+        engine = RemoteSyncEngine(state, AuthResolver(cloud = null, localRepos = true))
     }
 
     @After
@@ -63,14 +60,13 @@ class RemoteSyncEngineTest {
         runCatching { bareRepo.toFile().deleteRecursively() }
     }
 
-    private fun configureSync(projectId: Int, repoUrl: String, pat: String? = "test-pat") {
+    private fun configureSync(projectId: Int, repoUrl: String) {
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.firstOrNull()
                 ?: DaoSyncConfig.new { this.project = project }
             cfg.repoUrl = repoUrl
         }
-        if (pat != null) credentialStore.set(repoUrl, pat)
     }
 
     private fun runSync(projectId: Int): SyncRunResult {
@@ -134,14 +130,14 @@ class RemoteSyncEngineTest {
     }
 
     @Test
-    fun `missing credentials yields MISSING_CREDENTIALS error`() {
+    fun `a GitHub repo yields GITHUB_RETIRED`() {
         val projectId = seedMinimalProject(state)
-        configureSync(projectId, bareRepo.toUri().toString(), pat = null)
+        configureSync(projectId, "https://github.com/me/show.git")
         try {
             runSync(projectId)
             fail("expected SyncException")
         } catch (e: SyncException) {
-            assertEquals(SyncErrorCode.MISSING_CREDENTIALS, e.code)
+            assertEquals(SyncErrorCode.GITHUB_RETIRED, e.code)
         }
     }
 

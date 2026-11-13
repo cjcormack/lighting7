@@ -63,18 +63,7 @@ internal fun Route.routeApiRestCloudSync(state: State) {
                 )
             }
         }
-        // The file-backed credential store would re-read + decode its JSON file once per
-        // key under the naive `rows.map { contains(it) }` shape; `containsAll` collapses
-        // that to a single read. The keychain backend's default override falls back to
-        // sequential `contains` calls — fine, the JNA path is single-flight anyway.
-        val resolved = withContext(Dispatchers.IO) {
-            val urls = rows.mapNotNull { it.repoUrl?.takeIf(String::isNotBlank) }.toSet()
-            val present = if (urls.isNotEmpty()) state.credentialStore.containsAll(urls) else emptySet()
-            rows.map { entry -> entry to (entry.repoUrl?.let { it in present } ?: false) }
-        }.associate { (entry, tokenPresent) ->
-            entry.projectId.toString() to decorateSyncConfig(state, entry.dto, entry.repoUrl, tokenPresent)
-        }
-        call.respond(resolved)
+        call.respond(rows.associate { entry -> entry.projectId.toString() to decorateSyncConfig(state, entry.dto, entry.repoUrl) })
     }
 
     /**
@@ -119,9 +108,7 @@ internal fun Route.routeApiRestCloudSync(state: State) {
     /**
      * Import a remote repository as a brand-new local project. The flow:
      *
-     *  1. Resolve auth via [State.authResolver] — same install-wide OAuth-or-PAT path as
-     *     `/sync/run`, so once the user has connected GitHub once (visible from the hub)
-     *     this works without per-import setup.
+     *  1. Resolve auth via [State.authResolver], as `/sync/run` does: a cloud repo's token.
      *  2. JGit-clone into a pending sibling directory under `syncWorkingTreeRoot`.
      *  3. Hand the clone to [ProjectImporter.import] which validates `formatVersion.json`
      *     + `project.json` and creates DB rows — refusing with 409 on UUID or name

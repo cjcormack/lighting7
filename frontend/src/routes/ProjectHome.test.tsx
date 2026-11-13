@@ -57,7 +57,6 @@ vi.mock('@/store/auth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/auth')>()),
   useAuthStatusQuery: () => ({ data: { user: { role: isAdmin ? 'ADMIN' : 'OPERATOR' } } }),
 }))
-vi.mock('@/store/oauthGithub', () => ({ useOAuthReauthState: () => ({ reauthRequired: false }) }))
 vi.mock('@/store/venues', () => {
   // History is an admin's (the route answers an operator 403), as the band's hook says.
   const admin = () => isAdmin

@@ -21,7 +21,6 @@ import uk.me.cormack.lighting7.models.facetElement
 import uk.me.cormack.lighting7.sync.dto.ShowOverrideJson
 import uk.me.cormack.lighting7.routes.deleteProjectRows
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import uk.me.cormack.lighting7.sync.dto.ShowHideJson
@@ -1975,9 +1974,8 @@ class ProjectRoundTripTest {
             assertTrue(venueUuid.toString() in missing.message!!, missing.message)
             assertTrue(url in missing.message!!, "names the venue's repo: ${missing.message}")
 
-            val creds = InMemoryCredentialStore().also { it.set(url, "test-pat") }
             val venue = runBlocking {
-                CloudSyncImporter(state, AuthResolver(creds, tokenStore = null, tokenProvider = null)).import(url, null, null)
+                CloudSyncImporter(state, AuthResolver(cloud = null, localRepos = true)).import(url, null, null)
             }
             transaction(state.database) {
                 val project = DaoProject[venue.projectId]
@@ -2132,8 +2130,7 @@ class ProjectRoundTripTest {
 
     /** A sync run of venue [venueId] with an in-memory PAT for [url], so the suite never touches a credential file. */
     private fun runVenueSync(state: State, venueId: Int, url: String): SyncRunResult {
-        val creds = InMemoryCredentialStore().also { it.set(url, "test-pat") }
-        val engine = RemoteSyncEngine(state, AuthResolver(creds, tokenStore = null, tokenProvider = null))
+        val engine = RemoteSyncEngine(state, AuthResolver(cloud = null, localRepos = true))
         val (uuid, install) = transaction(state.database) { DaoProject[venueId].uuid to DaoInstall.all().first() }
         return runBlocking { engine.runSync(venueId, uuid, install.uuid, install.friendlyName) }
     }

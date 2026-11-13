@@ -25,7 +25,6 @@ import uk.me.cormack.lighting7.models.writeEntryOrder
 import uk.me.cormack.lighting7.routes.renumberAutoEntries
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.CueStackEntryJson
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
@@ -58,7 +57,6 @@ class CueStackEntrySyncTest {
     private lateinit var workingRoot: Path
     private lateinit var bareRepo: Path
     private lateinit var scratchRoot: Path
-    private lateinit var credentialStore: InMemoryCredentialStore
     private lateinit var engine: RemoteSyncEngine
 
     @Before
@@ -69,8 +67,7 @@ class CueStackEntrySyncTest {
         scratchRoot = Files.createTempDirectory("lighting7-entries-scratch-")
         Git.init().setBare(true).setDirectory(bareRepo.toFile()).setInitialBranch("main").call().close()
         state = State(testAppConfig("sync.workingTreeRoot" to workingRoot.toString()))
-        credentialStore = InMemoryCredentialStore()
-        engine = RemoteSyncEngine(state, AuthResolver(credentialStore, tokenStore = null, tokenProvider = null))
+        engine = RemoteSyncEngine(state, AuthResolver(cloud = null, localRepos = true))
     }
 
     @After
@@ -455,7 +452,6 @@ class CueStackEntrySyncTest {
                 ?: DaoSyncConfig.new { this.project = project }
             cfg.repoUrl = url
         }
-        credentialStore.set(url, "test-pat")
     }
 
     private fun runSync(projectId: Int): SyncRunResult {

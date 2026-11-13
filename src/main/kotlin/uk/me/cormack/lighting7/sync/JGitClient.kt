@@ -680,7 +680,7 @@ object JGitClient {
 
     /**
      * Whether JGit's [message] for a transport failure says the remote refused the credentials. JGit has
-     * no structured type for it, so the words are read — GitHub's "not authorized", "Authentication is
+     * no structured type for it, so the words are read — "not authorized", "Authentication is
      * required", a 401 or 403 — with [url] and every other URL taken out first, since a repo's path may
      * hold the digits.
      */
@@ -800,26 +800,10 @@ fun CommitInfo.withAttribution(installs: Map<String, String>): CommitInfo {
     return copy(installShortUuid = short, installFriendlyName = friendly)
 }
 
-/**
- * Authentication for JGit transport. GitHub Personal Access Tokens **and** OAuth
- * user-to-server tokens are both sent as the password with the literal username
- * `x-access-token` (GitHub's documented placeholder for token-based HTTPS auth).
- */
+/** Authentication for JGit transport, sent as HTTP Basic: a cloud repo's token as [secret] (cloud-p2 plan D3). */
 data class GitCredentials(val username: String, val secret: String) {
     fun toProvider(): UsernamePasswordCredentialsProvider =
         UsernamePasswordCredentialsProvider(username, secret)
-
-    companion object {
-        /**
-         * Build credentials for a GitHub token (PAT or OAuth user-to-server token).
-         * GitHub treats both identically over HTTPS — the username is a literal
-         * placeholder. */
-        fun forGitHubToken(token: String): GitCredentials = GitCredentials("x-access-token", token)
-
-        /** Deprecated alias kept for one release while callers migrate. */
-        @Deprecated("Use forGitHubToken — works for both PAT and OAuth tokens.", ReplaceWith("forGitHubToken(pat)"))
-        fun forGitHubPat(pat: String): GitCredentials = forGitHubToken(pat)
-    }
 }
 
 /**
@@ -853,7 +837,7 @@ sealed class HistoryRelation {
 /**
  * Thrown by [JGitClient.fetch] / [JGitClient.push] when the remote rejected the
  * connection on auth grounds. Callers (the REST layer) translate this to a 401 with
- * `AUTH_FAILED` so the UI can prompt the user to re-enter the PAT.
+ * `AUTH_FAILED`.
  */
 class GitAuthException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
 

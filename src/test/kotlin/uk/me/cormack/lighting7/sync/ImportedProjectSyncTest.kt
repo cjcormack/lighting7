@@ -17,7 +17,6 @@ import uk.me.cormack.lighting7.models.DaoSyncState
 import uk.me.cormack.lighting7.models.DaoSyncStates
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
 import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.nio.file.Files
@@ -58,7 +57,7 @@ class ImportedProjectSyncTest {
         runCatching { root.toFile().deleteRecursively() }
     }
 
-    private class Desk(val state: State, val engine: RemoteSyncEngine, val creds: InMemoryCredentialStore)
+    private class Desk(val state: State, val engine: RemoteSyncEngine)
 
     private fun desk(name: String, push: Boolean = true): Desk {
         val state = State(
@@ -68,8 +67,7 @@ class ImportedProjectSyncTest {
                 "sync.push" to push.toString(),
             ),
         ).also { states += it }
-        val creds = InMemoryCredentialStore().also { it.set(repoUrl, "test-pat") }
-        return Desk(state, RemoteSyncEngine(state, AuthResolver(creds, tokenStore = null, tokenProvider = null)), creds)
+        return Desk(state, RemoteSyncEngine(state, AuthResolver(cloud = null, localRepos = true)))
     }
 
     private fun Desk.sync(projectId: Int): SyncRunResult {
@@ -81,7 +79,7 @@ class ImportedProjectSyncTest {
     }
 
     private fun Desk.import(): Int = runBlocking {
-        CloudSyncImporter(state, AuthResolver(creds, tokenStore = null, tokenProvider = null))
+        CloudSyncImporter(state, AuthResolver(cloud = null, localRepos = true))
             .import(repoUrl = repoUrl, branch = "main", projectName = null)
             .projectId
     }

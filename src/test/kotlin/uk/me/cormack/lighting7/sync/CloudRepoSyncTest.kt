@@ -29,8 +29,7 @@ import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.CloudCredentialSource
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
-import uk.me.cormack.lighting7.sync.auth.MissingCredentialsException
+import uk.me.cormack.lighting7.sync.auth.GitHubRetiredException
 import uk.me.cormack.lighting7.telemetry.TokenScrubber
 import uk.me.cormack.lighting7.testsupport.FakeCloud
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
@@ -98,9 +97,8 @@ class CloudRepoSyncTest {
             null
         }
         val api = CloudApi(fake.baseUrl, Duration.ofSeconds(5)).also { apis += it }
-        val source = CloudCredentialSource(fake.baseUrl, enabled = true, signer = { signer }, adopted = { signer != null }, devToken = devToken, api = { api })
-        val credentials = InMemoryCredentialStore()
-        val auth = AuthResolver(credentials, tokenStore = null, tokenProvider = null, cloud = source)
+        val source = CloudCredentialSource(fake.baseUrl, enabled = true, signer = { signer }, devToken = devToken, api = { api })
+        val auth = AuthResolver(cloud = source, localRepos = true)
         val engine = RemoteSyncEngine(state, auth)
 
         fun attach(projectId: Int, url: String, autoSync: Boolean = false) = transaction(state.database) {
@@ -412,12 +410,10 @@ class CloudRepoSyncTest {
     }
 
     @Test
-    fun `a GitHub repo still resolves through its own credentials beside the cloud`() {
+    fun `a GitHub repo resolves no credentials beside the cloud`() {
         val a = Desk("a")
         val github = "https://github.com/owner/show.git"
         assertFalse(a.auth.isCloudRepo(github))
-        assertFailsWith<MissingCredentialsException> { runBlocking { a.auth.resolveFor(github) } }
-        a.credentials.set(github, "a-pat")
-        assertEquals(GitCredentials("x-access-token", "a-pat"), runBlocking { a.auth.resolveFor(github) })
+        assertFailsWith<GitHubRetiredException> { a.auth.resolveFor(github) }
     }
 }

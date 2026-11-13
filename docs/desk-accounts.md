@@ -18,7 +18,7 @@ rationale — and the decisions not to re-litigate — is in
 | --- | --- | --- |
 | All lighting control, all project content | yes | yes |
 | User accounts, password resets | yes | no |
-| Install settings (`PUT /api/rest/install`), cloud sync, GitHub OAuth | yes | no |
+| Install settings (`PUT /api/rest/install`), cloud sync | yes | no |
 | A venue: editing it, its History, diff, publish and discard | yes | no — it may open one, read-only |
 | Extracting a venue from a show | yes | no |
 | Updating a show to a newer venue version, and running it against an older one | yes | yes |

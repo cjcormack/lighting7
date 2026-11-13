@@ -16,7 +16,6 @@ import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
@@ -38,7 +37,6 @@ class FxLibraryMergeTest {
     private lateinit var workingRoot: Path
     private lateinit var bareRepo: Path
     private lateinit var scratchRoot: Path
-    private lateinit var credentialStore: InMemoryCredentialStore
     private lateinit var engine: RemoteSyncEngine
 
     @Before
@@ -49,8 +47,7 @@ class FxLibraryMergeTest {
         scratchRoot = Files.createTempDirectory("lighting7-fxlib-scratch-")
         Git.init().setBare(true).setDirectory(bareRepo.toFile()).setInitialBranch("main").call().close()
         state = State(testAppConfig("sync.workingTreeRoot" to workingRoot.toString()))
-        credentialStore = InMemoryCredentialStore()
-        engine = RemoteSyncEngine(state, AuthResolver(credentialStore, tokenStore = null, tokenProvider = null))
+        engine = RemoteSyncEngine(state, AuthResolver(cloud = null, localRepos = true))
     }
 
     @After
@@ -121,7 +118,6 @@ class FxLibraryMergeTest {
                 ?: DaoSyncConfig.new { this.project = project }
             cfg.repoUrl = url
         }
-        credentialStore.set(url, "test-pat")
     }
 
     private fun runSync(projectId: Int): SyncRunResult {

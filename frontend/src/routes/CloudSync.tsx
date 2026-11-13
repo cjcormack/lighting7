@@ -3,6 +3,7 @@ import { Navigate } from "react-router"
 import { useDispatch } from "react-redux"
 import { Loader2 } from "lucide-react"
 import { lightingApi } from "@/api/lightingApi"
+import type { CloudSyncFailedEvent } from "@/api/cloudSyncWsApi"
 import { restApi } from "@/store/restApi"
 import { Card } from "@/components/ui/card"
 import {
@@ -18,9 +19,7 @@ import {
   useCloudSyncConfigQuery,
   useCloudSyncConfigsQuery,
 } from "@/store/cloudSync"
-import { useOauthGithubIdentityQuery } from "@/store/oauthGithub"
 import { ConflictPanel } from "@/components/cloudSync/ConflictPanel"
-import { IdentityRow } from "@/components/cloudSync/IdentityRow"
 import { AddRemoteProjectDialog } from "@/components/cloudSync/ImportFromRemoteDialog"
 import { AddRemoteProjectButton } from "@/components/cloudSync/AddRemoteProjectButton"
 import { ProjectSyncRow } from "@/components/cloudSync/ProjectSyncRow"
@@ -34,21 +33,13 @@ import { HistoryPanel } from "@/components/cloudSync/HistoryPanel"
 export function CloudSyncHubBody() {
   const { data: projects, isLoading: projectsLoading } = useProjectListQuery()
   const { data: configs, isLoading: configsLoading } = useCloudSyncConfigsQuery()
-  const { data: identity } = useOauthGithubIdentityQuery()
   const [importOpen, setImportOpen] = useState(false)
   const dispatch = useDispatch()
   const isLoading = projectsLoading || configsLoading
-  // Usable, not merely present: a rejected identity can only 401 the repo-listing call
-  // this button leads to, so it stays disabled until the user reconnects.
-  const oauthConnected = identity?.connected === true && identity.reauthRequired !== true
 
   // Pick up imports done from another tab — the importing tab itself relies on the
   // mutation's invalidatesTags to refresh, but a WS-only listener catches the cross-tab
   // case without polling.
-  //
-  // No identity listener here: the module-scope bridge in `store/oauthGithub` keeps that cache
-  // live for the whole app, which it has to now that the sidebar badge and the global banner
-  // depend on it too.
   useEffect(() => {
     const subImported = lightingApi.cloudSync.subscribeProjectImported(() => {
       dispatch(restApi.util.invalidateTags(['ProjectList', 'CloudSyncConfig']))
@@ -60,17 +51,6 @@ export function CloudSyncHubBody() {
 
   return (
     <div className="space-y-4 max-w-5xl">
-      <Card className="p-4 space-y-3">
-        <div>
-          <h2 className="text-sm font-semibold">GitHub (legacy)</h2>
-          <p className="text-xs text-muted-foreground">
-            For projects still synced to GitHub until they move to the cloud. Connect once — the
-            same identity is used by every one.
-          </p>
-        </div>
-        <IdentityRow projectId={null} />
-      </Card>
-
       <Card className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -118,7 +98,6 @@ export function CloudSyncHubBody() {
       <AddRemoteProjectDialog
         open={importOpen}
         onOpenChange={setImportOpen}
-        oauthConnected={oauthConnected}
       />
     </div>
   )
@@ -210,10 +189,11 @@ function ProjectSyncPanels({
     const onDone = () => {
       dispatch(restApi.util.invalidateTags(['CloudSyncStatus', 'CloudSyncLog', 'CloudSyncConfig']))
     }
-    const onFailed = () => {
+    const onFailed = (event: CloudSyncFailedEvent) => {
       // Refresh status/log on failure too — the snapshot step inside the pipeline may
       // have committed before the network step failed.
       dispatch(restApi.util.invalidateTags(['CloudSyncStatus', 'CloudSyncLog']))
+      if (event.errorCode === 'GITHUB_RETIRED' || event.errorCode === 'NOT_A_CLOUD_REPO') dispatch(restApi.util.invalidateTags(['CloudSyncConfig']))
     }
     const subDone = lightingApi.cloudSync.subscribeDone(onDone)
     const subFailed = lightingApi.cloudSync.subscribeFailed(onFailed)
@@ -237,7 +217,7 @@ function ProjectSyncPanels({
     <div className="p-4 space-y-4 max-w-4xl">
       {note}
       <ConfigPanel projectId={projectId} isVenue={isVenue} />
-      {config?.synced && (
+      {config?.synced && config.cloud === true && (
         <>
           <StatusPanel projectId={projectId} isVenue={isVenue} />
           <ConflictPanel projectId={projectId} />

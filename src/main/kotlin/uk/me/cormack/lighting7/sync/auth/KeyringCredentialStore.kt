@@ -15,10 +15,7 @@ import org.slf4j.LoggerFactory
  *  * Windows — Credential Manager.
  *
  * Service name is fixed to [SERVICE_NAME] across all entries. The account is the
- * caller-supplied [key] (e.g. `pat:https://github.com/user/repo.git` for a PAT, or
- * `oauth:github:default` for the install-wide OAuth blob); using the URL as the account
- * means two projects pointing at different remotes can hold different PATs without
- * leaking either to the other.
+ * caller-supplied [key] (e.g. `cloud:install-key:<install uuid>`).
  *
  * If the platform has no supported backend, [create] throws so the factory can fall back
  * to a file-based store.

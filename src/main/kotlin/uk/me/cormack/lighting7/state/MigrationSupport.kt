@@ -86,6 +86,14 @@ internal fun JdbcTransaction.tableExists(table: String): Boolean {
     return exists
 }
 
+/** [table]'s row count; 0 when there is no such table. */
+internal fun JdbcTransaction.rowCount(table: String): Int {
+    if (!tableExists(table)) return 0
+    var count = 0
+    exec("SELECT COUNT(*) FROM $table") { rs -> if (rs.next()) count = rs.getInt(1) }
+    return count
+}
+
 internal fun JdbcTransaction.columnsOf(table: String): Set<String> {
     val columns = mutableSetOf<String>()
     exec("PRAGMA table_info($table)") { rs -> while (rs.next()) columns += rs.getString("name") }

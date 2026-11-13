@@ -246,7 +246,7 @@ still has no guaranteed order (§"Connection lifecycle"). `SocketScopeSubscribeT
 | Broadcast | `BroadcastSocket.kt` | — | 18 | — | `setupBroadcastSubscriptions` |
 | Busk page | `BuskSocket.kt` | 1 | 1 | `handleBusk` | `setupBuskSubscriptions` |
 | Channel | `ChannelSocket.kt` | 4 | 3 | `handleChannel` | via Broadcast's listener |
-| Cloud sync | `CloudSyncSocket.kt` | — | 7 | — | `setupCloudSyncSubscriptions` |
+| Cloud sync | `CloudSyncSocket.kt` | — | 6 | — | `setupCloudSyncSubscriptions` |
 | Effects | `EffectsSocket.kt` | — | 3 | — | `setupEffectsSubscriptions` |
 | FX | `FxSocket.kt` | 6 | 3 | `handleFx` | `setupFxSubscriptions` |
 | Grand master | `GrandMasterSocket.kt` | 1 | 1 | `handleGrandMaster` | `setupGrandMasterSubscriptions` |
@@ -1202,10 +1202,8 @@ Emitted from REST handlers via `State.cloudSyncEventsFlow`; outbound-only, trans
 | `cloudSyncConflictsPending` | `projectId`, `sessionId`, `conflictCount` |
 | `cloudSyncLogAppended` | `projectId`, `entry: SyncLogEntryDto` |
 | `cloudSyncProjectImported` | `projectId`, `projectUuid`, `name` |
-| `oauthIdentityChanged` | `provider`, `connected`, `login?`, `accessExpiresAt?`, `refreshExpiresAt?`, `reauthRequired` |
 
-`oauthIdentityChanged` is a nudge, not the detail: clients invalidate their identity cache and
-re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineering.md).
+See [`sync-engineering.md`](sync-engineering.md).
 
 ### Programmer — `ProgrammerSocket.kt`
 
@@ -1524,7 +1522,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/BootSocket.kt` | `bootProgressState` |
 | `plugins/BroadcastSocket.kt` | `FixturesChangeListener` wiring and the 15 broadcast frames |
 | `plugins/ChannelSocket.kt` | DMX channel state, mapping, `updateChannel` programmer shim |
-| `plugins/CloudSyncSocket.kt` | Sync lifecycle and OAuth identity frames |
+| `plugins/CloudSyncSocket.kt` | Sync lifecycle frames |
 | `plugins/FxSocket.kt` | Active-FX state, the six FX writes and their `fxError` refusal |
 | `plugins/GrandMasterSocket.kt` | The grand master's level: `grandMaster.state` and `grandMaster.set` |
 | `plugins/HistorySocket.kt` | What the key takes, per socket: `history.state` |

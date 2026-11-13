@@ -39,10 +39,8 @@ const POLL_INTERVAL_MS = 2000
  * The device-login sheet made the opposite call for the opposite risk profile — it *does*
  * cancel on close — so resist factoring the two into one component.
  *
- * Polling uses RTK Query's own `pollingInterval` rather than the hand-rolled
- * `setInterval` in `cloudSync/DeviceFlowModal` — that flow polls with a *mutation* (the
- * device-code grant is a POST) and had to schedule it itself; this one is a plain GET, so
- * the query can own its own cadence and stop when the sheet unmounts.
+ * Polling uses RTK Query's own `pollingInterval`: a plain GET, so the query owns its own
+ * cadence and stops when the sheet unmounts.
  */
 export function ResetQrSheet({
   user,

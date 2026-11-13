@@ -47,9 +47,10 @@ import uk.me.cormack.lighting7.cloud.protocol.InstallKeys
 import uk.me.cormack.lighting7.sync.CloudMove
 import uk.me.cormack.lighting7.sync.CloudRepos
 import uk.me.cormack.lighting7.sync.RemoteSyncEngine
+import uk.me.cormack.lighting7.sync.SyncErrorCode
+import uk.me.cormack.lighting7.sync.SyncException
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.CloudCredentialSource
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.sync.CloudMovePlan
 import uk.me.cormack.lighting7.sync.CloudMoveResult
 import uk.me.cormack.lighting7.sync.CloudMoveStatus
@@ -71,6 +72,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -89,6 +91,7 @@ class CloudMoveRoutesTest : RouteIntegrationTest() {
     private val others = mutableListOf<SecondDesk>()
 
     override val extraConfig: List<Pair<String, String>> = listOf("cloud.baseUrl" to fake.baseUrl)
+    override val localSyncRepos: Boolean = true
 
     @After
     fun closeFake() {
@@ -114,7 +117,7 @@ class CloudMoveRoutesTest : RouteIntegrationTest() {
     }
 
     /**
-     * Another adopted desk, beside the one under test, with its own install key and credentials in
+     * Another adopted desk, beside the one under test, with its own install key held in
      * memory: two [State]s in one JVM would share, and clobber, one credential file.
      */
     private inner class SecondDesk(name: String) {
@@ -129,9 +132,8 @@ class CloudMoveRoutesTest : RouteIntegrationTest() {
             fake.installs["inst-$name"] = FakeCloud.Install("inst-$name", "adp-$name", pair.public)
             InstallSigner("inst-$name", pair.private)
         }
-        private val credentials = InMemoryCredentialStore()
-        private val source = CloudCredentialSource(fake.baseUrl, enabled = true, signer = { signer }, adopted = { true }, devToken = null, api = { api })
-        private val auth = AuthResolver(credentials, tokenStore = null, tokenProvider = null, cloud = source)
+        private val source = CloudCredentialSource(fake.baseUrl, enabled = true, signer = { signer }, devToken = null, api = { api })
+        private val auth = AuthResolver(cloud = source, localRepos = true)
         private val engine = RemoteSyncEngine(state, auth)
         private val mover = CloudMove(state, engine, auth, CloudRepos(state.database, source))
 
@@ -140,7 +142,6 @@ class CloudMoveRoutesTest : RouteIntegrationTest() {
         }
 
         fun importFrom(url: String, branch: String? = null): Int {
-            credentials.set(url, "pat")
             return runBlocking { CloudSyncImporter(state, auth).import(url, branch, null) }.projectId
         }
 
@@ -166,7 +167,6 @@ class CloudMoveRoutesTest : RouteIntegrationTest() {
                 ?: DaoSyncConfig.new { project = DaoProject[projectId] }
             cfg.repoUrl = url
         }
-        on.credentialStore.set(url, "pat")
     }
 
     private fun syncOn(on: State, projectId: Int): SyncOutcome {
@@ -480,6 +480,58 @@ class CloudMoveRoutesTest : RouteIntegrationTest() {
         val other = SecondDesk("reader")
         val there = other.importFrom(moved.repoUrl)
         assertTrue("never-on-github" in stacks(other.state, there))
+    }
+
+    @Test
+    fun `a straggler still on GitHub answers GITHUB_RETIRED, and moves from its working tree`() {
+        val oldGithub = "https://github.com/old-desk-owner/show.git"
+        attach(state, projectId, github("straggler"))
+        assertEquals(SyncOutcome.PUSHED, syncOn(state, projectId))
+        addStack(state, projectId, "after-the-last-github-sync")
+        transaction(state.database) { DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.first().repoUrl = oldGithub }
+        remote.adopt(seedUser(state, "admin").userId)
+        val desk = AuthResolver(state.authResolver.cloud)
+        val engine = RemoteSyncEngine(state, desk)
+
+        val (uuid, install) = transaction(state.database) { DaoProject[projectId].uuid to DaoInstall.all().first() }
+        val refused = assertFailsWith<SyncException> {
+            runBlocking { engine.runSync(projectId, uuid, install.uuid, install.friendlyName) }
+        }
+        assertEquals(SyncErrorCode.GITHUB_RETIRED, refused.code)
+
+        val moved = runBlocking { CloudMove(state, engine, desk, state.cloudRepos).run(listOf(projectId)) }.projects.single()
+        assertEquals(CloudMoveStatus.MOVED, moved.status, "${moved.code}: ${moved.message}")
+        assertTrue(moved.fromWorkingTree)
+        assertEquals(moved.repoUrl, repoUrlOf(state, projectId))
+        assertEquals(SyncOutcome.NO_OP, moved.verify?.outcome, moved.verifyError?.error)
+        assertTrue(transaction(state.database) {
+            DaoSyncLinkedRepo.find { DaoSyncLinkedRepos.project eq projectId }.any { it.repoUrl == oldGithub }
+        })
+        assertEquals(1, events(state, projectId, SyncLogEvent.MOVE_FROM_WORKING_TREE))
+
+        val other = SecondDesk("reader")
+        val there = other.importFrom(moved.repoUrl!!)
+        assertTrue("after-the-last-github-sync" in stacks(other.state, there))
+    }
+
+    @Test
+    fun `a project attached to GitHub that never synced moves, its content snapshotted first`() {
+        val github = "https://github.com/old-desk-owner/never-synced.git"
+        attach(state, projectId, github)
+        addStack(state, projectId, "never-synced")
+        remote.adopt(seedUser(state, "admin").userId)
+        val desk = AuthResolver(state.authResolver.cloud)
+        val engine = RemoteSyncEngine(state, desk)
+
+        val moved = runBlocking { CloudMove(state, engine, desk, state.cloudRepos).run(listOf(projectId)) }.projects.single()
+        assertEquals(CloudMoveStatus.MOVED, moved.status, "${moved.code}: ${moved.message}")
+        assertTrue(moved.fromWorkingTree)
+        assertEquals(moved.headSha, fake.repos.head(repoIdOf(moved.repoUrl!!)))
+        assertEquals(SyncOutcome.NO_OP, moved.verify?.outcome, moved.verifyError?.error)
+
+        val other = SecondDesk("never-synced-reader")
+        val there = other.importFrom(moved.repoUrl)
+        assertTrue("never-synced" in stacks(other.state, there))
     }
 
     @Test

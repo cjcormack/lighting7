@@ -25,8 +25,7 @@ import type {
  * slice is imported from the earliest render path (the nav registry, and pickers that mount all
  * over), so touching `lightingApi` in the module body would be a runtime import cycle. It throws a
  * TDZ `ReferenceError` that takes every export with it, and `tsc`, `vite build` and the unit tests
- * (which mock the module) all pass anyway — it shows up solely as a broken app in the browser. See
- * `startOAuthIdentityBridge` for the same trap.
+ * (which mock the module) all pass anyway — it shows up solely as a broken app in the browser.
  */
 export function startLooksBridge() {
   lightingApi.looks.subscribe(function () {

@@ -44,7 +44,7 @@ fun Application.configureRouting(state: State) {
                 // Show-object existence — closes the window where routes served an empty rig mid-init,
                 // and still keeps route tests (which call `initializeShow()` + `start()` directly)
                 // working, since `start()` sets the readiness flag. Show-independent, time-sensitive
-                // routes are exempt so e.g. an in-flight GitHub OAuth callback isn't rejected mid-boot.
+                // routes are exempt so e.g. signing in works mid-boot.
                 intercept(ApplicationCallPipeline.Plugins) {
                     if (!state.isShowReady && !isWarmupExempt(call.request.path())) {
                         call.respond(HttpStatusCode.ServiceUnavailable, state.bootProgress.current)
@@ -87,15 +87,13 @@ fun Application.configureRouting(state: State) {
                     routeApiRestStageRenders(state)
 
                     // Admin territory: user management and password resets (Session 3), the
-                    // install-level cloud-sync batch endpoints, and the GitHub OAuth flows —
-                    // they carry the desk's git identity and remotes. The per-project sync and
+                    // install-level cloud-sync batch endpoints, which carry the desk's remotes. The per-project sync and
                     // project import/export subtrees declare it at their own mount points.
                     adminOnly {
                         // A venue's history, diff, publish and discard (venue plan session 2, D3).
                         routeApiRestVenues(state)
                         routeApiRestUsers(state)
                         routeApiRestCloudSync(state)
-                        routeApiOAuthGitHub(state)
                         // This desk's adoption by Lighting7 Cloud (cloud-p0 plan D14).
                         routeApiRestInstallCloud(state)
                     }
@@ -125,9 +123,8 @@ fun Application.configureRouting(state: State) {
 
 /**
  * Routes exempt from the server-first readiness gate: the boot-status endpoint (clients poll it
- * to drive the loading bar) and routes that don't touch the show but are time-sensitive — the
- * GitHub OAuth callback (an external redirect that can't wait), install, cloud-sync, and the
- * auth routes (logging in must work while the show is still booting; the user lands on the
+ * to drive the loading bar) and routes that don't touch the show but are time-sensitive — install,
+ * cloud-sync, and the auth routes (logging in must work while the show is still booting; the user lands on the
  * boot overlay afterwards, which is the right sequence).
  */
 private fun isWarmupExempt(path: String): Boolean =
@@ -142,7 +139,6 @@ private fun isWarmupExempt(path: String): Boolean =
         path == "/api/rest/cloud/session/token" ||
         // Linking reads nothing off the show either, and an unlinked session has nothing else to do.
         path == "/api/rest/cloud/link/prove" ||
-        path.startsWith("/api/rest/oauth/") ||
         path.startsWith("/api/rest/cloud-sync/") ||
         // Nothing under /update touches the show — and a desk whose show *failed* to boot is
         // precisely when you most want to be able to install the fix.

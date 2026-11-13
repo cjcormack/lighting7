@@ -851,11 +851,9 @@ class SnapshotRestore(private val state: State) {
         private val WHEN_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneOffset.UTC)
 
         /** A first sync that fails on the way to the remote: the restore goes ahead on this desk (D5). */
-        @Suppress("DEPRECATION")
         private val UNREACHABLE = setOf(
-            SyncErrorCode.AUTH_FAILED, SyncErrorCode.MISSING_CREDENTIALS, SyncErrorCode.MISSING_PAT,
-            SyncErrorCode.OAUTH_REAUTH_REQUIRED, SyncErrorCode.PUSH_REJECTED, SyncErrorCode.CLOUD_NOT_ADOPTED,
-            SyncErrorCode.SYNC_OFF, SyncErrorCode.REPO_NOT_FOUND, SyncErrorCode.SYNC_QUOTA_EXCEEDED,
+            SyncErrorCode.AUTH_FAILED, SyncErrorCode.GITHUB_RETIRED, SyncErrorCode.NOT_A_CLOUD_REPO, SyncErrorCode.PUSH_REJECTED,
+            SyncErrorCode.CLOUD_NOT_ADOPTED, SyncErrorCode.SYNC_OFF, SyncErrorCode.REPO_NOT_FOUND, SyncErrorCode.SYNC_QUOTA_EXCEEDED,
             SyncErrorCode.SYNC_STORAGE_UNAVAILABLE,
         )
 

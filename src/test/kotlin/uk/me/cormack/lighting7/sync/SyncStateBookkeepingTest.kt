@@ -16,7 +16,6 @@ import uk.me.cormack.lighting7.models.DaoSyncState
 import uk.me.cormack.lighting7.models.DaoSyncStates
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
 import uk.me.cormack.lighting7.testsupport.testAppConfig
@@ -36,7 +35,6 @@ class SyncStateBookkeepingTest {
     private lateinit var workingRoot: Path
     private lateinit var bareRepo: Path
     private lateinit var state: State
-    private lateinit var credentialStore: InMemoryCredentialStore
     private lateinit var engine: RemoteSyncEngine
 
     @Before
@@ -47,8 +45,7 @@ class SyncStateBookkeepingTest {
         Git.init().setBare(true).setDirectory(bareRepo.toFile()).setInitialBranch("main").call().close()
 
         state = State(testAppConfig("sync.workingTreeRoot" to workingRoot.toString()))
-        credentialStore = InMemoryCredentialStore()
-        engine = RemoteSyncEngine(state, AuthResolver(credentialStore, tokenStore = null, tokenProvider = null))
+        engine = RemoteSyncEngine(state, AuthResolver(cloud = null, localRepos = true))
     }
 
     @After
@@ -70,7 +67,6 @@ class SyncStateBookkeepingTest {
                     this.repoUrl = bareRepo.toUri().toString()
                 }
         }
-        credentialStore.set(bareRepo.toUri().toString(), "test-pat")
     }
 
     private fun runSync(projectId: Int): SyncRunResult {

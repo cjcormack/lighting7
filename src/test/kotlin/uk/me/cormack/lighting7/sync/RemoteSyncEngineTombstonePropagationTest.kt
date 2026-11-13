@@ -17,7 +17,6 @@ import uk.me.cormack.lighting7.models.DaoSyncState
 import uk.me.cormack.lighting7.models.DaoSyncStates
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.nio.file.Files
 import java.nio.file.Path
@@ -44,8 +43,6 @@ class RemoteSyncEngineTombstonePropagationTest {
     private lateinit var workingRootC: Path
     private lateinit var stateA: State
     private lateinit var stateC: State
-    private lateinit var credsA: InMemoryCredentialStore
-    private lateinit var credsC: InMemoryCredentialStore
     private lateinit var engineA: RemoteSyncEngine
     private lateinit var engineC: RemoteSyncEngine
 
@@ -66,8 +63,7 @@ class RemoteSyncEngineTombstonePropagationTest {
                 "sync.workingTreeRoot" to workingRootA.toString(),
             ),
         )
-        credsA = InMemoryCredentialStore()
-        engineA = RemoteSyncEngine(stateA, AuthResolver(credsA, tokenStore = null, tokenProvider = null))
+        engineA = RemoteSyncEngine(stateA, AuthResolver(cloud = null, localRepos = true))
 
         stateC = State(
             testAppConfig(
@@ -75,8 +71,7 @@ class RemoteSyncEngineTombstonePropagationTest {
                 "sync.workingTreeRoot" to workingRootC.toString(),
             ),
         )
-        credsC = InMemoryCredentialStore()
-        engineC = RemoteSyncEngine(stateC, AuthResolver(credsC, tokenStore = null, tokenProvider = null))
+        engineC = RemoteSyncEngine(stateC, AuthResolver(cloud = null, localRepos = true))
     }
 
     @After
@@ -88,14 +83,13 @@ class RemoteSyncEngineTombstonePropagationTest {
         runCatching { bareRepo.toFile().deleteRecursively() }
     }
 
-    private fun configureSync(state: State, projectId: Int, creds: InMemoryCredentialStore) {
+    private fun configureSync(state: State, projectId: Int) {
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.firstOrNull()
                 ?: DaoSyncConfig.new { this.project = project }
             cfg.repoUrl = repoUrl
         }
-        creds.set(repoUrl, "test-pat")
     }
 
     private fun runSync(state: State, engine: RemoteSyncEngine, projectId: Int): SyncRunResult {
@@ -111,7 +105,7 @@ class RemoteSyncEngineTombstonePropagationTest {
     fun `tombstone propagates A to C and survives C's next push (no resurrection)`() {
         // ─── Phase 1: A creates a record, syncs ──────────────────────────────
         val projectIdA = uk.me.cormack.lighting7.testsupport.seedMinimalProject(stateA)
-        configureSync(stateA, projectIdA, credsA)
+        configureSync(stateA, projectIdA)
         val recordUuid = transaction(stateA.database) {
             val project = DaoProject.findById(projectIdA)!!
             DaoCueStack.new { this.project = project; this.name = "to-be-deleted" }.uuid
@@ -135,7 +129,7 @@ class RemoteSyncEngineTombstonePropagationTest {
                 uuid = projectUuid
             }.id.value
         }
-        configureSync(stateC, projectIdC, credsC)
+        configureSync(stateC, projectIdC)
         val pullToC = runSync(stateC, engineC, projectIdC)
         assertTrue(
             pullToC.outcome == SyncOutcome.MERGED || pullToC.outcome == SyncOutcome.FAST_FORWARDED,
@@ -200,7 +194,7 @@ class RemoteSyncEngineTombstonePropagationTest {
         // the tombstone. Each cycle re-derives tombstones, re-snapshots, re-pushes — the
         // tombstone must persist in `sync_state` and on disk throughout.
         val projectIdA = uk.me.cormack.lighting7.testsupport.seedMinimalProject(stateA)
-        configureSync(stateA, projectIdA, credsA)
+        configureSync(stateA, projectIdA)
         val recordUuid = transaction(stateA.database) {
             val project = DaoProject.findById(projectIdA)!!
             DaoCueStack.new { this.project = project; this.name = "doomed" }.uuid
@@ -218,7 +212,7 @@ class RemoteSyncEngineTombstonePropagationTest {
                 name = "C-placeholder"; description = ""; isCurrent = true; uuid = projectUuid
             }.id.value
         }
-        configureSync(stateC, projectIdC, credsC)
+        configureSync(stateC, projectIdC)
         runSync(stateC, engineC, projectIdC)
 
         // Three cycles of "C makes an unrelated edit + sync."

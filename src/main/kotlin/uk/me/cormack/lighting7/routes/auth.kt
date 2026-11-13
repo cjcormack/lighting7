@@ -548,8 +548,8 @@ private suspend fun ApplicationCall.respondAuthenticated(user: AuthenticatedUser
 }
 
 /**
- * Cookie shape per the oauth.kt precedent. Not `Secure`: the LAN is plain HTTP, where a Secure cookie
- * would never be sent back. The public listener sets none and reads none (`auth/AuthGate.kt`).
+ * Sets the session cookie, not `Secure`: the LAN is plain HTTP, where a Secure cookie would never be
+ * sent back. The public listener sets none and reads none (`auth/AuthGate.kt`).
  */
 private fun ApplicationCall.setSessionCookie(rawToken: String) {
     response.cookies.append(

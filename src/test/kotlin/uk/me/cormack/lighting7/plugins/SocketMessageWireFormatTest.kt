@@ -835,18 +835,4 @@ class SocketMessageWireFormatTest {
         assertTrue(encoded.contains(""""type":"cloudSyncDone""""))
         assertEquals(out, assertIs<CloudSyncDoneOutMessage>(json.decodeFromString<OutMessage>(encoded)))
     }
-
-    @Test
-    fun `cloudSync domain — OAuthIdentityChangedOutMessage round-trips with optional fields`() {
-        val out = OAuthIdentityChangedOutMessage(
-            provider = "github",
-            connected = true,
-            login = "octocat",
-            accessExpiresAt = "1970-01-01T00:00:01.000Z",
-            refreshExpiresAt = null,
-        )
-        val encoded = json.encodeToString<OutMessage>(out)
-        assertTrue(encoded.contains(""""type":"oauthIdentityChanged""""))
-        assertEquals(out, assertIs<OAuthIdentityChangedOutMessage>(json.decodeFromString<OutMessage>(encoded)))
-    }
 }

@@ -160,7 +160,7 @@ class VenueRepoSync(
             JGitClient.fetch(repo, RemoteSyncEngine.REMOTE_NAME, branch, credentials)
                 ?.also { JGitClient.fetchTags(repo, RemoteSyncEngine.REMOTE_NAME, credentials) }
         } catch (e: GitAuthException) {
-            throw failures.authFailed(repoUrl, e, "GitHub rejected the credentials for this venue's repo.")
+            throw failures.authFailed(e)
         }
         val remoteRef = "refs/remotes/${RemoteSyncEngine.REMOTE_NAME}/$branch"
         if (remoteHead != null) checkRemoteIsThisVenue(repo, remoteRef, venue)
@@ -445,7 +445,7 @@ class VenueRepoSync(
         }
     }
 
-    private suspend fun resolveCredentials(repoUrl: String): GitCredentials = failures.credentialsFor(repoUrl)
+    private fun resolveCredentials(repoUrl: String): GitCredentials = failures.credentialsFor(repoUrl)
 
     private fun readVersionJson(repo: Repository, ref: String): VenueVersionJson? =
         JGitClient.readBlob(repo, ref, VERSION_FILE)

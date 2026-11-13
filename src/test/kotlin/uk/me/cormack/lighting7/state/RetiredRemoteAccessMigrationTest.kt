@@ -94,7 +94,7 @@ class RetiredRemoteAccessMigrationTest {
 
         val (desk, logs) = captureLogs("RetiredRemoteAccessMigration") { startDesk() }
 
-        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
+        assertEquals(GITHUB_RETIREMENT_USER_VERSION, userVersion())
         assertFalse("mcp_oauth_clients" in tables())
         assertFalse("mcp_oauth_grants" in tables())
         assertEquals(setOf("id", "allow_scripts", "allow_effects", "allow_commands", "updated_at"), columns("remote_access_settings"))
@@ -122,7 +122,7 @@ class RetiredRemoteAccessMigrationTest {
 
         val desk = startDesk()
 
-        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
+        assertEquals(GITHUB_RETIREMENT_USER_VERSION, userVersion())
         assertFalse("mcp_oauth_grants" in tables())
         assertFalse("domain" in columns("remote_access_settings"))
         assertTrue(backups().isEmpty())
@@ -170,7 +170,7 @@ class RetiredRemoteAccessMigrationTest {
     fun `a fresh database is only marked, and the step never runs twice`() {
         startDesk().shutdown()
         state = null
-        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
+        assertEquals(GITHUB_RETIREMENT_USER_VERSION, userVersion())
         assertFalse("mcp_oauth_grants" in tables())
         assertFalse("enabled" in columns("remote_access_settings"))
 

@@ -106,7 +106,6 @@ describe('the Sync line', () => {
     autoSyncIntervalMs: null,
     lastSyncedSha: 'abc',
     lastSyncedAt: '2026-10-16T11:58:00Z',
-    tokenPresent: false,
     linkedRepos: [],
     ...over,
   })

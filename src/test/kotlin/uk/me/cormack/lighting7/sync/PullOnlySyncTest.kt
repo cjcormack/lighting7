@@ -15,7 +15,6 @@ import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
 import uk.me.cormack.lighting7.testsupport.testAppConfig
@@ -42,7 +41,6 @@ class PullOnlySyncTest {
     private lateinit var bareRepo: Path
     private lateinit var tmpDir: Path
     private lateinit var stateA: State
-    private lateinit var credsA: InMemoryCredentialStore
     private lateinit var engineA: RemoteSyncEngine
     private var stateB: State? = null
 
@@ -55,8 +53,7 @@ class PullOnlySyncTest {
         tmpDir = Files.createTempDirectory("lighting7-pullonly-")
 
         stateA = newState("a", push = true)
-        credsA = InMemoryCredentialStore()
-        engineA = RemoteSyncEngine(stateA, AuthResolver(credsA, tokenStore = null, tokenProvider = null))
+        engineA = RemoteSyncEngine(stateA, AuthResolver(cloud = null, localRepos = true))
     }
 
     @After
@@ -75,14 +72,13 @@ class PullOnlySyncTest {
         ),
     )
 
-    private fun configureSync(state: State, projectId: Int, creds: InMemoryCredentialStore) {
+    private fun configureSync(state: State, projectId: Int) {
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.firstOrNull()
                 ?: DaoSyncConfig.new { this.project = project }
             cfg.repoUrl = repoUrl
         }
-        creds.set(repoUrl, "test-pat")
     }
 
     private fun runSync(state: State, engine: RemoteSyncEngine, projectId: Int): SyncRunResult {
@@ -121,7 +117,7 @@ class PullOnlySyncTest {
     /** A pushes a project with one stack; returns its id. */
     private fun seedA(): Int {
         val projectId = seedMinimalProject(stateA)
-        configureSync(stateA, projectId, credsA)
+        configureSync(stateA, projectId)
         addStack(stateA, projectId, "shared")
         assertEquals(SyncOutcome.PUSHED, runSync(stateA, engineA, projectId).outcome)
         return projectId
@@ -130,13 +126,12 @@ class PullOnlySyncTest {
     /** Stand up B with A's project uuid and pull A's state into it. */
     private fun seedB(push: Boolean, projectIdA: Int): Triple<State, RemoteSyncEngine, Int> {
         val state = newState("b", push).also { stateB = it }
-        val creds = InMemoryCredentialStore()
-        val engine = RemoteSyncEngine(state, AuthResolver(creds, tokenStore = null, tokenProvider = null))
+        val engine = RemoteSyncEngine(state, AuthResolver(cloud = null, localRepos = true))
         val uuidA = transaction(stateA.database) { DaoProject.findById(projectIdA)!!.uuid }
         val projectId = transaction(state.database) {
             DaoProject.new { name = "B-placeholder"; description = ""; isCurrent = true; uuid = uuidA }.id.value
         }
-        configureSync(state, projectId, creds)
+        configureSync(state, projectId)
         runSync(state, engine, projectId)
         assertEquals(setOf("shared"), stackNames(state, projectId))
         return Triple(state, engine, projectId)

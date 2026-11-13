@@ -32,16 +32,10 @@ sealed interface ReleaseCheckResult {
 }
 
 /**
- * Reads `/releases/latest` and downloads release assets.
+ * Reads `/releases/latest` and downloads release assets, on its own [HttpClient] (CIO,
+ * `expectSuccess = false`, the API-version header).
  *
- * Deliberately its own [HttpClient] rather than reusing
- * [uk.me.cormack.lighting7.sync.auth.oauth.OAuthGitHubClient]: that one is constructed only when
- * `sync.oauth.github.clientId`/`clientSecret` are configured, so on a desk that never connected
- * to GitHub it is null — and the update check must work regardless of whether cloud sync was
- * ever set up. The *style* is borrowed (CIO, `expectSuccess = false`, the API-version header);
- * the instance is not.
- *
- * Unauthenticated throughout. No token is sent even if one exists: `releases/latest` on a public
+ * Unauthenticated throughout: `releases/latest` on a public
  * repo needs none, and attaching a user's credential to a redirect that leaves api.github.com
  * for objects.githubusercontent.com would leak it.
  */

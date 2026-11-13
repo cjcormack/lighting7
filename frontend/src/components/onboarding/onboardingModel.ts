@@ -1,19 +1,14 @@
 import type { ProjectKind } from "@/api/projectApi"
 import type { CloudRepo } from "@/store/cloudSync"
-import type { GithubRepo } from "@/store/oauthGithub"
 import { createSyncStore, sessionStorageArea } from "@/lib/syncStore"
 
 /**
  * A new desk's onboarding (lighting7 `routes/installOnboarding.kt`): diagnostics, then where the
- * first projects come from — the org's cloud repos, GitHub's (legacy), or the blank project the desk
- * booted on.
+ * first projects come from — the org's cloud repos, or the blank project the desk booted on.
  */
 export type OnboardingStep = "diagnostics" | "projects"
 
-/**
- * Per tab, so the GitHub web flow — which leaves the page and comes back to `/` — lands on the
- * step it left from.
- */
+/** Per tab, so a reload lands on the step it left from. */
 export const onboardingStepStore = createSyncStore<OnboardingStep>({
   key: "onboarding.step",
   fallback: "diagnostics",
@@ -55,18 +50,11 @@ export const onboardingImportsStore = createSyncStore<ImportResults>({
   storage: sessionStorageArea,
 })
 
-/** A repo's project name, as `ImportFromRemoteDialog` pre-fills it. */
-export function repoProjectName(repo: GithubRepo): string {
-  return repo.projectName ?? repo.name
-}
-
-/** One repo the projects step can import, from the cloud's list or GitHub's. */
+/** One of the org's cloud repos the projects step can import. */
 export interface ImportCandidate {
   url: string
   /** The project name it imports as, before a clash is resolved. */
   name: string
-  /** The line under the name: a GitHub repo's full name; nothing for a cloud repo, whose name is the project's. */
-  detail: string | null
   kind: ProjectKind
   branch: string
   /** A project on this desk already syncs it. */
@@ -77,21 +65,9 @@ export function cloudCandidate(repo: CloudRepo): ImportCandidate {
   return {
     url: repo.url,
     name: repo.name,
-    detail: null,
     kind: repo.kind === "VENUE" ? "VENUE" : "SHOW",
     branch: "main",
     alreadyHere: repo.syncedHere,
-  }
-}
-
-export function githubCandidate(repo: GithubRepo, linked: ReadonlySet<string>): ImportCandidate {
-  return {
-    url: repo.cloneUrl,
-    name: repoProjectName(repo),
-    detail: repo.fullName,
-    kind: repo.projectKind === "VENUE" ? "VENUE" : "SHOW",
-    branch: repo.defaultBranch,
-    alreadyHere: linked.has(repo.cloneUrl),
   }
 }
 

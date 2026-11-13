@@ -171,8 +171,8 @@ export function RigGate({ navId, to, children }: { navId: string; to?: RigPath; 
 }
 
 /**
- * D4's mark on a row, a tab or a card whose view needs the rig: a 6px hollow dot, where the Sync
- * row's attention dot sits, so it reads as "not here" rather than "needs you".
+ * D4's mark on a row, a tab or a card whose view needs the rig: a 6px hollow dot, so it reads as
+ * "not here" rather than "needs you".
  */
 export function OffRigDot({ className }: { className?: string }) {
   return (

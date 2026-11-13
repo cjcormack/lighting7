@@ -24,32 +24,6 @@ const OPERATOR: AuthStatus = {
   user: { uuid: "u-2", username: "op", displayName: "Op", role: "OPERATOR" },
 }
 
-const SHOW_REPO = {
-  fullName: "me/panto",
-  name: "panto",
-  owner: "me",
-  private: true,
-  defaultBranch: "main",
-  htmlUrl: "https://github.com/me/panto",
-  cloneUrl: "https://github.com/me/panto.git",
-  description: null,
-  pushPermission: true,
-  lightingProject: true,
-  projectName: "Panto",
-  projectDescription: null,
-  projectUuid: "p-1",
-  projectKind: "SHOW",
-}
-const VENUE_REPO = {
-  ...SHOW_REPO,
-  fullName: "me/hall",
-  name: "hall",
-  htmlUrl: "https://github.com/me/hall",
-  cloneUrl: "https://github.com/me/hall.git",
-  projectName: "Village Hall",
-  projectUuid: "v-1",
-  projectKind: "VENUE",
-}
 const CLOUD_SHOW = {
   repoId: "r-show",
   url: "https://cloud.example/git/org/r-show.git",
@@ -68,8 +42,6 @@ const CLOUD_VENUE = {
   projectUuid: "v-1",
 }
 const IMPORTED: Record<string, { projectId: number; name: string }> = {
-  [SHOW_REPO.cloneUrl]: { projectId: 7, name: "Panto" },
-  [VENUE_REPO.cloneUrl]: { projectId: 8, name: "Village Hall" },
   [CLOUD_SHOW.url]: { projectId: 7, name: "Panto" },
   [CLOUD_VENUE.url]: { projectId: 8, name: "Village Hall" },
 }
@@ -146,8 +118,6 @@ function backend(
       adopted: adopted ? { installId: "inst", orgName: "Org", adoptedAt: "", fingerprint: "f" } : null,
     }),
     install: () => ({ uuid: "i-1", friendlyName: "Desk", createdAt: "2026-10-14 00:00:00.000Z", onboardingPending }),
-    "oauth/github/identity": () => ({ connected: true, oauthConfigured: true, login: "me" }),
-    "oauth/github/repositories": () => [SHOW_REPO, VENUE_REPO],
     "cloud-sync/configs": () => ({}),
     "cloud-sync/repos": () => ({ repos: [CLOUD_SHOW, CLOUD_VENUE] }),
     "cloud-sync/import": (body) => {
@@ -256,7 +226,7 @@ describe("OnboardingGate", () => {
     )
   })
 
-  it("offers an unadopted desk its adoption, and imports from GitHub (legacy) too", async () => {
+  it("offers an unadopted desk its adoption", async () => {
     onboardingStepStore.set("projects")
     const calls = backend(ADMIN, true, { adopted: false })
     renderGate()
@@ -264,12 +234,6 @@ describe("OnboardingGate", () => {
     await screen.findByText(/Adopt this desk into the org/)
     expect(screen.getByRole("button", { name: "Adopt this desk" })).toBeTruthy()
     expect(calls.some((c) => c.url.includes("cloud-sync/repos"))).toBe(false)
-    fireEvent.click(screen.getByRole("button", { name: "GitHub (legacy)" }))
-    fireEvent.click(await screen.findByLabelText(/Village Hall/))
-    fireEvent.click(screen.getByRole("button", { name: "Import 1" }))
-    await screen.findByText("Imported")
-    const imported = calls.find((c) => c.url.includes("cloud-sync/import"))
-    expect((imported?.body as { repoUrl: string }).repoUrl).toBe(VENUE_REPO.cloneUrl)
   })
 
   it("names the blank project the desk booted on and keeps it", async () => {

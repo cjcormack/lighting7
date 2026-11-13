@@ -67,7 +67,6 @@ vi.mock('@/store/venues', () => ({
   useDiscardVenueDraftMutation: () => [vi.fn(), { isLoading: false }],
 }))
 vi.mock('@/store/cloudSync', () => ({ useCloudSyncConfigsQuery: () => ({ data: {} }) }))
-vi.mock('@/store/oauthGithub', () => ({ useOauthGithubIdentityQuery: () => ({ data: undefined }) }))
 vi.mock('@/store/venueHold', () => ({ useVenueHold: () => hold, useRunVenueAgainstMutation: () => [vi.fn(), { isLoading: false }] }))
 vi.mock('@/store/rigSafety', async () => {
   const { NOTHING_SAFE } = await import('@/api/rigSafetyApi')

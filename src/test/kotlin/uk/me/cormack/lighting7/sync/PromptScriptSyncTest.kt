@@ -15,7 +15,6 @@ import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
 import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.nio.file.Files
@@ -44,8 +43,6 @@ class PromptScriptSyncTest {
     private lateinit var storeRootC: Path
     private lateinit var stateA: State
     private lateinit var stateC: State
-    private lateinit var credsA: InMemoryCredentialStore
-    private lateinit var credsC: InMemoryCredentialStore
     private lateinit var engineA: RemoteSyncEngine
     private lateinit var engineC: RemoteSyncEngine
 
@@ -73,8 +70,7 @@ class PromptScriptSyncTest {
                 "promptBooks.scriptStoreRoot" to storeRootA.toString(),
             ),
         )
-        credsA = InMemoryCredentialStore()
-        engineA = RemoteSyncEngine(stateA, AuthResolver(credsA, tokenStore = null, tokenProvider = null))
+        engineA = RemoteSyncEngine(stateA, AuthResolver(cloud = null, localRepos = true))
 
         stateC = State(
             testAppConfig(
@@ -83,8 +79,7 @@ class PromptScriptSyncTest {
                 "promptBooks.scriptStoreRoot" to storeRootC.toString(),
             ),
         )
-        credsC = InMemoryCredentialStore()
-        engineC = RemoteSyncEngine(stateC, AuthResolver(credsC, tokenStore = null, tokenProvider = null))
+        engineC = RemoteSyncEngine(stateC, AuthResolver(cloud = null, localRepos = true))
     }
 
     @After
@@ -98,14 +93,13 @@ class PromptScriptSyncTest {
 
     // ─── helpers ─────────────────────────────────────────────────────────
 
-    private fun configureSync(state: State, projectId: Int, creds: InMemoryCredentialStore) {
+    private fun configureSync(state: State, projectId: Int) {
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.firstOrNull()
                 ?: DaoSyncConfig.new { this.project = project }
             cfg.repoUrl = repoUrl
         }
-        creds.set(repoUrl, "test-pat")
     }
 
     private fun runSync(state: State, engine: RemoteSyncEngine, projectId: Int): SyncRunResult {
@@ -151,7 +145,7 @@ class PromptScriptSyncTest {
     @Test
     fun `PDF propagates A to C byte-identically and lands in C's store`() {
         val projectIdA = seedMinimalProject(stateA)
-        configureSync(stateA, projectIdA, credsA)
+        configureSync(stateA, projectIdA)
         val projectUuid = transaction(stateA.database) { DaoProject.findById(projectIdA)!!.uuid }
 
         val hash = putPdfInStore(stateA, projectUuid, pdfV1)
@@ -178,7 +172,7 @@ class PromptScriptSyncTest {
         val projectIdC = transaction(stateC.database) {
             DaoProject.new { name = "C-placeholder"; description = ""; isCurrent = true; uuid = projectUuid }.id.value
         }
-        configureSync(stateC, projectIdC, credsC)
+        configureSync(stateC, projectIdC)
         val pull = runSync(stateC, engineC, projectIdC)
         assertTrue(
             pull.outcome == SyncOutcome.FAST_FORWARDED || pull.outcome == SyncOutcome.MERGED,
@@ -196,7 +190,7 @@ class PromptScriptSyncTest {
     @Test
     fun `changing scriptHash swaps the PDF and GCs the orphan`() {
         val projectIdA = seedMinimalProject(stateA)
-        configureSync(stateA, projectIdA, credsA)
+        configureSync(stateA, projectIdA)
         val projectUuid = transaction(stateA.database) { DaoProject.findById(projectIdA)!!.uuid }
 
         val hash1 = putPdfInStore(stateA, projectUuid, pdfV1)
@@ -220,7 +214,7 @@ class PromptScriptSyncTest {
     fun `store-less install does not drop the repo's PDF`() {
         // A publishes a book + PDF.
         val projectIdA = seedMinimalProject(stateA)
-        configureSync(stateA, projectIdA, credsA)
+        configureSync(stateA, projectIdA)
         val projectUuid = transaction(stateA.database) { DaoProject.findById(projectIdA)!!.uuid }
         val hash = putPdfInStore(stateA, projectUuid, pdfV1)
         attachBook(stateA, projectIdA, hash, "act-one.pdf")
@@ -231,7 +225,7 @@ class PromptScriptSyncTest {
         val projectIdC = transaction(stateC.database) {
             DaoProject.new { name = "C-placeholder"; description = ""; isCurrent = true; uuid = projectUuid }.id.value
         }
-        configureSync(stateC, projectIdC, credsC)
+        configureSync(stateC, projectIdC)
         runSync(stateC, engineC, projectIdC)
         storeRootC.toFile().deleteRecursively()
 
@@ -260,7 +254,7 @@ class PromptScriptSyncTest {
     fun `divergent merge carries the local winner's PDF into the merge commit`() {
         // A publishes a book + baseline PDF; C pulls it so both share a base.
         val projectIdA = seedMinimalProject(stateA)
-        configureSync(stateA, projectIdA, credsA)
+        configureSync(stateA, projectIdA)
         val projectUuid = transaction(stateA.database) { DaoProject.findById(projectIdA)!!.uuid }
         val baseHash = putPdfInStore(stateA, projectUuid, pdfV1)
         attachBook(stateA, projectIdA, baseHash, "act-one.pdf")
@@ -269,7 +263,7 @@ class PromptScriptSyncTest {
         val projectIdC = transaction(stateC.database) {
             DaoProject.new { name = "C-placeholder"; description = ""; isCurrent = true; uuid = projectUuid }.id.value
         }
-        configureSync(stateC, projectIdC, credsC)
+        configureSync(stateC, projectIdC)
         runSync(stateC, engineC, projectIdC)
         assertTrue(Files.exists(pdfInTree(workingRootC, projectUuid, baseHash)), "C should have pulled the baseline PDF")
 

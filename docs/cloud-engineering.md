@@ -612,15 +612,17 @@ where it was met.
 
 ## Cloud sync
 
-The cloud hosts each synced project as a git repo (cloud-p2 plan), and the sync engine syncs with one
-as it does with any remote: snapshots, the three-way diff, conflict sessions, a venue's tagged versions
+The cloud hosts each synced project as a git repo (cloud-p2 plan), and its repos are the only remotes
+the desk syncs with; the sync engine syncs with one as it did with GitHub's: snapshots, the three-way diff, conflict sessions, a venue's tagged versions
 and auto-sync are unchanged. What the cloud adds, all of it in `docs/sync-engineering.md`
 §"Auth / credential storage":
 
 - **Which URLs are the cloud's**: `CloudRepoUrls`, `<cloud origin>/git/<orgId>/<repoId>.git`.
-- **Credentials**: `CloudCredentialSource` in `AuthResolver`, a git token per run signed with the install
-  key (`CloudService.installSigner()`), else `LIGHTING7_CLOUD_TOKEN`, else `CLOUD_NOT_ADOPTED`. No
-  control-channel round trip.
+- **Credentials**: `CloudCredentialSource`, `AuthResolver`'s one source, a git token per run signed with
+  the install key (`CloudService.installSigner()`), else `LIGHTING7_CLOUD_TOKEN`, else
+  `CLOUD_NOT_ADOPTED`. No control-channel round trip. A GitHub repo (`github.com`) is
+  `GITHUB_RETIRED` (D8) and moves to the cloud; any other remote is `NOT_A_CLOUD_REPO`, naming
+  `cloud.baseUrl`.
 - **The repo API**: `CloudApi.createRepo`, `listRepos` and `getRepo`, signed over a `RepoApiPayload`
   with `Lighting7-Install`, or a read under a developer token as a bearer. A create for a project that
   has a repo answers that repo (`RepoCreated.existed`). The engine asks `getRepo` only to put a git 403
@@ -641,6 +643,9 @@ and auto-sync are unchanged. What the cloud adds, all of it in `docs/sync-engine
 - **Moving off GitHub** (D7): the Cloud tab's *Move GitHub-synced projects to the cloud*
   (`sync/CloudMove.kt`, `GET`/`POST /cloud-sync/move`, the desk's own listener only) pushes each
   project's history from its working tree to its cloud repo, SHAs and tags unchanged, and re-points it.
+  A straggler — a project a desk updated past session 6 still attached to a GitHub repo — is answered
+  `GITHUB_RETIRED` and moves from its Sync tab, the same run for that one project. The GitHub OAuth
+  identity's table and the GitHub credentials went with database step 18 (D8).
 
 Nothing here is on the channel's thread but the hand-off, and nothing is stored but a repo's name: the
 token is minted for each run, the developer token lives in the environment, and the hand-off holds at

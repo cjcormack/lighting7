@@ -23,7 +23,6 @@ import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.state.SceneImageFormat
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_SCENE_IMAGES
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_SCRIPT_HASH
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
@@ -66,8 +65,7 @@ class SnapshotRestoreTest {
                 "sync.push" to push.toString(),
             ),
         )
-        val creds = InMemoryCredentialStore()
-        val engine = RemoteSyncEngine(state, AuthResolver(creds, tokenStore = null, tokenProvider = null))
+        val engine = RemoteSyncEngine(state, AuthResolver(cloud = null, localRepos = true))
 
         init {
             desks.add(this)
@@ -106,7 +104,6 @@ class SnapshotRestoreTest {
                     ?: DaoSyncConfig.new { this.project = project }
                 cfg.repoUrl = url
             }
-            creds.set(url, "test-pat")
         }
 
         fun repo(projectId: Int) = JGitClient.open(SyncWorkingTree(state).pathFor(uuidOf(projectId)))!!
@@ -761,7 +758,7 @@ class SnapshotRestoreTest {
                 SyncWorkingTree(desk.state).pathFor(desk.uuidOf(id))
             })!!.use { repo ->
                 JGitClient.setRemote(repo, "origin", "http://127.0.0.1:1/nowhere.git")
-                JGitClient.fetch(repo, "origin", "main", GitCredentials.forGitHubToken("t"))
+                JGitClient.fetch(repo, "origin", "main", GitCredentials("local", "t"))
             }
         }
         assertIs<GitTransportException>(e)

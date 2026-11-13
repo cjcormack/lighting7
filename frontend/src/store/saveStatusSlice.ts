@@ -86,8 +86,6 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   'cloudSyncAbort',
   'cloudSyncReconnect',
   'cloudSyncDisconnect',
-  'startGithubDeviceFlow',
-  'pollGithubDeviceFlow',
 ])
 
 export interface CueSaveStatus {
