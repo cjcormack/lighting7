@@ -9,6 +9,7 @@ import org.junit.After
 import org.junit.Assume.assumeFalse
 import org.junit.Test
 import uk.me.cormack.lighting7.process.PidFile
+import uk.me.cormack.lighting7.testsupport.StandInProcess
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CopyOnWriteArrayList
@@ -171,26 +172,22 @@ class LinkProcessTest {
         assertEquals(LinkStatus.OFF, p.status, "an end after the stop changes nothing")
     }
 
-    private fun sleepBinary(dir: Path): Path {
-        val sleep = listOf("/bin/sleep", "/usr/bin/sleep").map(Path::of).firstOrNull { Files.isExecutable(it) }
-        assumeFalse(sleep == null)
-        // A copy of `sleep` standing in for the sidecar, so a process's command is it.
-        return dir.resolve("lighting7-link").also {
-            Files.copy(sleep!!, it)
-            it.toFile().setExecutable(true)
-        }
+    private fun sidecarBinary(dir: Path): Path {
+        val binary = StandInProcess.install(dir.resolve("lighting7-link"))
+        assumeFalse(binary == null)
+        return binary!!
     }
 
     @Test
     fun `a launch records its PID, and its exit deletes the file only while it names that launch`() = runTest {
         val dir = Files.createTempDirectory("link-process")
-        val binary = sleepBinary(dir)
+        val binary = sidecarBinary(dir)
         val pidFile = PidFile(dir.resolve("link/lighting7-link.pid"), "a test sidecar")
         fun supervised() = LinkProcess(scope = backgroundScope, onStatus = {}, pidFile = pidFile) { supervisor ->
             object : SidecarLaunches {
                 override val running = false
                 override fun start(): Boolean {
-                    launched += supervisor.launch(listOf(binary.toString(), "60"))
+                    launched += supervisor.launch(StandInProcess.command(binary))
                     return true
                 }
                 override fun stop() {}
@@ -218,8 +215,8 @@ class LinkProcessTest {
     @Test
     fun `a sweep stops a sidecar left running, and records nothing more`() {
         val dir = Files.createTempDirectory("link-process")
-        val binary = sleepBinary(dir)
-        val orphan = ProcessBuilder(binary.toString(), "60").start().also { launched += it }
+        val binary = sidecarBinary(dir)
+        val orphan = ProcessBuilder(StandInProcess.command(binary)).start().also { launched += it }
         val pidFile = PidFile(dir.resolve("lighting7-link.pid"), "a test sidecar")
         pidFile.write(orphan, binary)
         pidFile.sweepOrphan(binary)
@@ -230,7 +227,7 @@ class LinkProcessTest {
     @Test
     fun `a PID that is no longer the sidecar's is left alone`() {
         val dir = Files.createTempDirectory("link-process")
-        val binary = sleepBinary(dir)
+        val binary = sidecarBinary(dir)
         val sleep = listOf("/bin/sleep", "/usr/bin/sleep").first { Files.isExecutable(Path.of(it)) }
         val stranger = ProcessBuilder(sleep, "60").start().also { launched += it }
         val pidFile = PidFile(dir.resolve("lighting7-link.pid"), "a test sidecar")
@@ -240,7 +237,7 @@ class LinkProcessTest {
         assertTrue(stranger.isAlive, "another binary's process")
 
         // The sidecar's binary, but started at another time: the PID was reused.
-        val reused = ProcessBuilder(binary.toString(), "60").start().also { launched += it }
+        val reused = ProcessBuilder(StandInProcess.command(binary)).start().also { launched += it }
         pidFile.path.writeText("${reused.pid()}\n$binary\n2001-01-01T00:00:00Z\n")
         pidFile.sweepOrphan(binary)
         assertTrue(reused.isAlive, "a process the file did not record")
