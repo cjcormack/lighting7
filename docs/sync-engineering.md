@@ -2354,7 +2354,9 @@ answers, never falling through to GitHub's paths (D3):
   the engine resolves once per run, and a conflict apply is its own run.
 - **An unadopted desk** uses `LIGHTING7_CLOUD_TOKEN`, a developer token from the portal read from the
   environment once, when `State` is built, and never stored; sent as Basic auth, user `x-dev-token`.
-  This is how a Claude Code cloud session reaches the cloud.
+  This is how a Claude Code cloud session reaches the cloud; where the session's proxy injects the
+  token for the cloud's host, `scripts/cloud-session.sh` starts the desk with a placeholder the proxy
+  replaces.
 - **Neither**: `CLOUD_NOT_ADOPTED` (409), naming the Cloud tab.
 
 Neither path needs the control channel, so a desk whose channel is down but whose HTTPS reaches the
@@ -3406,8 +3408,8 @@ versions (a folder holds one version).
 
 **The import order a fresh desk needs:** the venue's repo first, then each show on it — a show's
 import (and its sync) is refused with `VENUE_MISSING` until its pinned version is here, naming the
-venue and the repo it syncs from. `scripts/cloud-session.sh` reads each repo's `project.json` kind
-and imports venues first.
+venue and the repo it syncs from. `scripts/cloud-session.sh` reads each repo's kind — from the
+cloud's repo list, or a GitHub repo's `project.json` — and imports venues first.
 
 `JGitClient` gained `tag` / `deleteTag` / `listTags`, `fetchTags` / `listRemoteTags`,
 `pushWithTag`, `extractTree` and `hasPath` for it. `VenueRepoSyncTest` runs two desks on one bare

@@ -204,8 +204,8 @@ runs the checks §"Pre-commit checks" names for what it touches; a session with 
 | 1 | The protocol for P2 | merged | `claude/upbeat-babbage-j93q01` | [#427](https://github.com/cjcormack/lighting7/pull/427) | b43bb61 |
 | 2 | Syncing with a cloud repo | merged | `claude/bold-johnson-02cpix` | [#428](https://github.com/cjcormack/lighting7/pull/428) | d672020 |
 | 3 | Sync to the cloud, import from the cloud | merged | `claude/cloud-p2-6vf8vk` | [#429](https://github.com/cjcormack/lighting7/pull/429) | 9e4f1f0 |
-| 4 | Move GitHub-synced projects to the cloud | in review | `claude/fervent-dijkstra-2yhatj` | | |
-| 5 | Claude Code sessions from the cloud | planned | | | |
+| 4 | Move GitHub-synced projects to the cloud | merged | `claude/fervent-dijkstra-2yhatj` | [#430](https://github.com/cjcormack/lighting7/pull/430) | 64a16d0 |
+| 5 | Claude Code sessions from the cloud | in review | `claude/cloud-p2-aqq3oc` | | |
 | 6 | Delete GitHub sync | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session` fills
@@ -341,6 +341,31 @@ session 4 is deployed, a read developer token is saved as the Claude Code enviro
 - **Tests:** `shellcheck`; the script run in this session against the deployed cloud, importing a venue
   and a show that pins it — the session's own proof of UC-10, recorded in §6.
 
+- **As built.** Where the session's environment needed more than D9 said:
+  - The operator saved the developer token as the environment's **network secret** for `*.lighting7.net`,
+    which the session's proxy injects into every request to that host, not as `LIGHTING7_CLOUD_TOKEN`.
+    The script takes either: the variable when set, else the placeholder `proxy-injected`, which it sends
+    as the bearer to `GET /v1/repos` and starts the desk with as `LIGHTING7_CLOUD_TOKEN`; the proxy
+    replaces it on the repo API and on git's Basic auth alike, so the desk needs nothing new.
+  - The reachability check tells the two failures apart: a host the session cannot reach (curl fails;
+    the proxy refuses a host off the allowlist at `CONNECT`) names the host and the environment's network
+    access, and a 401 or 403 from the cloud, `SYNC_OFF` among them, names the token and the cloud's
+    `code: message`.
+  - An argument shaped `owner/name`, or an https URL off the cloud's origin, imports through git as
+    before (a `github.com` one through the GitHub proxy); a URL on the cloud's origin — scheme and host
+    in any case, a default port spelled or not, as `CloudRepoUrls` reads it — or anything else is a
+    cloud repo, by its URL or its name (exact, else the one name matching ignoring case), so a run that
+    names only GitHub repos asks the cloud nothing, and a cloud repo named like `owner/name` is given by
+    URL. Which path a repo imports by is decided once, when it is resolved. The placeholder PAT and the GitHub proxy paragraph
+    stay with the GitHub path until session 6 (D9's own *until session 6*); a cloud repo stores no
+    credential. A repo's kind comes from the cloud's list rather than a shallow clone; a listed repo with
+    no `VENUE` or `SHOW` kind, or a list the cloud does not answer, fails naming it.
+  - `cloud.baseUrl` is the cloud's when a cloud repo is named; a run naming none keeps the data dir's
+    earlier one, so projects already imported from the cloud keep it across a restart, and a fresh
+    GitHub-only run has no cloud. A `local.conf` in the repo, which wins over the data dir's, must name
+    the same cloud. `LIGHTING7_CLOUD_URL` points the script at another cloud. The token reaches curl on
+    stdin, never in its arguments.
+
 ### Session 6 — Delete GitHub sync
 
 **Needs:** operator: `FU-MANUAL-CLOUD-P2-MIGRATE` passed, every desk the owner runs on a build with
@@ -364,6 +389,13 @@ There is no spike. The phase's exit is `FU-MANUAL-CLOUD-P2`: every owner project
 cloud (UC-4), session 5's import from a Claude Code session (UC-10), an upgraded desk's
 `oauth_identities` gone and a straggler moved from its working tree, and the docs. Each session's own
 check is recorded in `manual-validation.md`.
+
+**Session 5's record (UC-10), 2026-11-13.** In a Claude Code cloud session whose environment injects a
+read developer token for `*.lighting7.net`, with `LIGHTING7_CLOUD_TOKEN` unset,
+`scripts/cloud-session.sh "TCH venue" "Sleeping Beauty"` resolved both names through the deployed cloud's
+`GET /v1/repos`, imported the venue (`repo_01M7ANVTHKBPGZ62KAVMX4WHHD`, `main` at `ea1583b`, its 15 tags,
+installed v15) and then the show (`repo_01M7ANW09FZ77JBYY35FXHYBZX`, `main` at `244e527`), which opened
+pinned to TCH venue v15, not behind, and was made current.
 
 ## 7. Explicitly out of scope
 
