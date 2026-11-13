@@ -18,10 +18,9 @@ fun testAppConfig(vararg extra: Pair<String, String>): MapApplicationConfig {
     pairs.add("auth.bcryptCost" to "4")
     // Keep the suite out of the developer's real OS keychain. The production default is
     // `keychain`, whose service name ("lighting7") is shared with the running desk, so a test
-    // that reached `State.credentialStore` would read and write the operator's actual GitHub
-    // tokens. Nothing does today — the sync tests all inject an `InMemoryCredentialStore` — but
-    // that is a property of the current tests rather than a guarantee, and the file backend is
-    // equivalent for anything a test could assert.
+    // that reached `State.credentialStore` would read and write the operator's actual secrets,
+    // its cloud install key among them. The file backend is equivalent for anything a test could
+    // assert.
     pairs.add("sync.credentialStore" to "file")
     // No cloud, so nothing in the suite can reach the production one.
     pairs.add("cloud.baseUrl" to "")

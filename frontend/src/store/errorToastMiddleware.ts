@@ -197,16 +197,11 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'cloudSyncSnapshot',
   'cloudSyncImport', // ImportFromRemoteDialog toasts it; onboarding draws it on the repo's row
   'cloudSyncToCloud', // ConfigPanel toasts it
+  'cloudMove', // CloudMoveSection and ConfigPanel draw it
   'cloudSyncResolve',
   'cloudSyncApply',
   'cloudSyncAbort',
   'cloudSyncRestore', // RestoreReviewDialog draws the refusal, and puts a stale answer's review in place
-  'setCloudSyncCredentials',
-  'clearCloudSyncCredentials',
-  'createGithubRepo',
-  'startGithubDeviceFlow',
-  'pollGithubDeviceFlow',
-  'disconnectOAuthGithub',
 
   // Auth forms. Every failure here is something the operator typed — a wrong
   // password, a name already taken, a password the policy rejects — so it belongs

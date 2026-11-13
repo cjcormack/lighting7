@@ -20,7 +20,6 @@ vi.mock('./store/auth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./store/auth')>()),
   useAuthStatusQuery: () => ({ data: { user: { role: 'ADMIN' } } }),
 }))
-vi.mock('./store/oauthGithub', () => ({ useOAuthReauthState: () => ({ reauthRequired: false }) }))
 
 const { default: ProjectSwitcher } = await import('./ProjectSwitcher')
 

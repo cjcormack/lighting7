@@ -22,7 +22,6 @@ import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.seedShowOnVenue
 import uk.me.cormack.lighting7.testsupport.seedVenueReadyShow
 import uk.me.cormack.lighting7.venue.VenueDiff
@@ -81,11 +80,7 @@ class VenueRepoSyncTest {
                 "sync.push" to push.toString(),
             ),
         ).also { states += it }
-        val creds = InMemoryCredentialStore().also {
-            it.set(venueUrl, "test-pat")
-            it.set(showUrl, "test-pat")
-        }
-        val auth = AuthResolver(creds, tokenStore = null, tokenProvider = null)
+        val auth = AuthResolver(cloud = null, localRepos = true)
         val engine = RemoteSyncEngine(state, auth)
 
         fun attach(projectId: Int, url: String) = transaction(state.database) {

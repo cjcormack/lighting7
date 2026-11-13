@@ -361,13 +361,6 @@ class CloudService(
         return InstallSigner(installId, key)
     }
 
-    /** Whether [installSigner] would answer, without loading the key. */
-    fun canSign(): Boolean {
-        val row = adoption.row() ?: return false
-        return config.enabled && row.state == CloudConnectionState.ADOPTED && row.baseUrl == config.baseUrl &&
-            row.installId != null && keys.exists()
-    }
-
     /** The cloud's HTTP API, or null when no cloud is configured. */
     fun api(): CloudApi? = if (config.configured) apiDelegate.value else null
 

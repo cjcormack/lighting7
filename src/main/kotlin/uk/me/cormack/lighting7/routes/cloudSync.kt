@@ -74,7 +74,7 @@ import uk.me.cormack.lighting7.models.toIsoUtc
 /**
  * Cloud-sync REST endpoints.
  *
- * Phase 4 shipped configuration, snapshots, status, log, credentials, and a single-shot
+ * Phase 4 shipped configuration, snapshots, status, log, and a single-shot
  * `/sync/run` endpoint. Phase 5 layers on the conflict-session lifecycle:
  * `/sync/conflicts` (read), `/sync/resolve` (mark each conflict LOCAL/REMOTE),
  * `/sync/apply` (commit + push the resolved tree), `/sync/abort` (drop the session).
@@ -128,6 +128,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                         // Attach: the only transition this endpoint performs. Auto-sync
                         // defaults on for a freshly-attached repo.
                         current == null -> {
+                            if (!state.authResolver.canSyncWith(incoming)) throw notSyncable(state, incoming)
                             cfg.repoUrl = incoming
                             cfg.repoName = null
                             cfg.autoSyncEnabled = true
@@ -251,37 +252,6 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                 syncLogger.list(project.id.value, limit, resource.beforeId)
             }
             call.respond(entries)
-        }
-    }
-
-    put<ProjectSyncCredentialsResource> { resource ->
-        val request = call.receive<SetCredentialsRequest>()
-        if (request.pat.isBlank()) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse("PAT must not be blank"))
-            return@put
-        }
-        withProject(state, resource.parent.projectId) { project ->
-            val repoUrl = transaction(state.database) { ensureSyncConfig(project).repoUrl }
-            if (repoUrl.isNullOrBlank()) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Repository URL must be set before storing a PAT"))
-                return@withProject
-            }
-            withContext(Dispatchers.IO) { state.credentialStore.set(repoUrl, request.pat) }
-            // Storing a PAT is a credential fix, so re-arm auto-sync rather than leaving a
-            // backed-off loop waiting out its interval after the user has visibly resolved
-            // the thing that was failing.
-            state.autoSyncScheduler.reschedule(project.id.value)
-            call.respond(HttpStatusCode.NoContent)
-        }
-    }
-
-    delete<ProjectSyncCredentialsResource> { resource ->
-        withProject(state, resource.parent.projectId) { project ->
-            val repoUrl = transaction(state.database) { ensureSyncConfig(project).repoUrl }
-            if (!repoUrl.isNullOrBlank()) {
-                withContext(Dispatchers.IO) { state.credentialStore.delete(repoUrl) }
-            }
-            call.respond(HttpStatusCode.NoContent)
         }
     }
 
@@ -678,6 +648,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                         notRemembered = true
                         return@transaction null
                     }
+                    if (!state.authResolver.canSyncWith(target)) throw notSyncable(state, target)
                     cfg.repoUrl = target
                     cfg.repoName = null
                     cfg.autoSyncEnabled = true
@@ -737,9 +708,6 @@ data class ProjectSyncActivityResource(
     val beforeId: Int? = null,
 )
 
-@Resource("/credentials")
-data class ProjectSyncCredentialsResource(val parent: ProjectSyncResource)
-
 @Resource("/run")
 data class ProjectSyncRunResource(val parent: ProjectSyncResource)
 
@@ -795,12 +763,6 @@ data class SyncConfigDto(
     /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
     val lastSyncedAt: String?,
     /**
-     * True if a PAT for the configured `repoUrl` is stored in the credential store. The
-     * actual token is never returned to the client; this flag is just so the UI can
-     * show "✓ token stored" without round-tripping the secret.
-     */
-    val tokenPresent: Boolean,
-    /**
      * Repositories this project has previously been linked to (most-recently-linked
      * first). The UI offers these for one-click reconnect after a disconnect — the only
      * sanctioned way to re-attach an existing, non-empty repo.
@@ -810,6 +772,8 @@ data class SyncConfigDto(
     val repoName: String? = null,
     /** Whether [repoUrl] is a repo of this desk's Lighting7 Cloud. */
     val cloud: Boolean = false,
+    /** Whether [repoUrl] is a GitHub repo, which the desk does not sync with but moves to the cloud. */
+    val github: Boolean = false,
 )
 
 @Serializable
@@ -820,9 +784,6 @@ data class LinkedRepoDto(
     /** Whether [repoUrl] is a repo of this desk's Lighting7 Cloud. */
     val cloud: Boolean = false,
 )
-
-@Serializable
-data class SetCredentialsRequest(val pat: String)
 
 @Serializable
 data class ReconnectRequest(val repoUrl: String)
@@ -998,28 +959,22 @@ private suspend fun runSyncAndAnnounce(state: State, project: DaoProject): SyncR
     return result
 }
 
-/**
- * [dto] with what only [state] knows: whether a PAT is stored for [repoUrl], and which repos are the
- * cloud's. A cloud repo never has a PAT, so its lookup is skipped.
- */
-internal suspend fun decorateSyncConfig(state: State, dto: SyncConfigDto, repoUrl: String?, tokenPresent: Boolean? = null): SyncConfigDto {
+/** [dto] with which repos are the cloud's, which only [state] knows. */
+internal fun decorateSyncConfig(state: State, dto: SyncConfigDto, repoUrl: String?): SyncConfigDto {
     val isCloud = { url: String -> state.authResolver.isCloudRepo(url) }
-    val cloud = repoUrl?.takeIf { it.isNotBlank() }?.let(isCloud) ?: false
+    val attached = repoUrl?.takeIf { it.isNotBlank() }
     return dto.copy(
-        tokenPresent = tokenPresent ?: (!cloud && resolveTokenPresent(state, repoUrl)),
-        cloud = cloud,
+        cloud = attached?.let(isCloud) ?: false,
+        github = attached?.let { state.authResolver.isGitHubRepo(it) } ?: false,
         linkedRepos = dto.linkedRepos.map { it.copy(cloud = isCloud(it.repoUrl)) },
     )
 }
 
-/**
- * Look up [repoUrl] in the credential store on the IO dispatcher. The keychain backend
- * is a JNA round-trip; we use [CredentialStore.contains] rather than `get` so the PAT
- * itself never leaves the store just to compute a UI flag.
- */
-private suspend fun resolveTokenPresent(state: State, repoUrl: String?): Boolean {
-    val url = repoUrl?.takeIf { it.isNotBlank() } ?: return false
-    return withContext(Dispatchers.IO) { state.credentialStore.contains(url) }
+/** A repo attached or reconnected that the desk does not sync with: GitHub's (cloud-p2 plan D8), or another. */
+private fun notSyncable(state: State, url: String) = if (state.authResolver.isGitHubRepo(url)) {
+    SyncException(SyncErrorCode.GITHUB_RETIRED, "This desk does not sync with GitHub: sync the project to the cloud instead.")
+} else {
+    SyncException(SyncErrorCode.NOT_A_CLOUD_REPO, state.authResolver.notACloudRepoMessage())
 }
 
 /**
@@ -1033,9 +988,7 @@ internal fun loadLinkedRepos(project: DaoProject): List<LinkedRepoDto> =
         .map { LinkedRepoDto(repoUrl = it.repoUrl, lastLinkedAt = it.lastLinkedAt.toIsoUtc()) }
 
 /**
- * Build a [SyncConfigDto] from the DAO without consulting the credential store. Callers
- * post-process the DTO with the real `tokenPresent` value because the credential lookup
- * is blocking I/O that we don't want to do inside a DB transaction.
+ * Build a [SyncConfigDto] from the DAO; callers decorate it with [decorateSyncConfig].
  *
  * Must run inside a transaction. Single-project callers can rely on the default, which
  * loads the remembered-repo set; the batch endpoint pre-loads all projects' sets in one
@@ -1051,7 +1004,6 @@ internal fun DaoSyncConfig.toBareDto(
     autoSyncIntervalMs = autoSyncInterval?.toMillis(),
     lastSyncedSha = lastSyncedSha,
     lastSyncedAt = lastSyncedAt?.toIsoUtc(),
-    tokenPresent = false,
     linkedRepos = linkedRepos,
     repoName = repoName,
 )

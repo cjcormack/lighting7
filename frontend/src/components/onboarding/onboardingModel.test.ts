@@ -1,48 +1,16 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest"
-import type { GithubRepo } from "@/store/oauthGithub"
 import {
   cloudCandidate,
-  githubCandidate,
   importedProjects,
   importOrder,
   onboardingImportsStore,
-  repoProjectName,
   uniqueProjectName,
   type ImportResults,
 } from "./onboardingModel"
 
-function repo(name: string, projectKind: GithubRepo["projectKind"], projectName: string | null = name): GithubRepo {
-  return {
-    fullName: `me/${name}`,
-    name,
-    owner: "me",
-    private: true,
-    defaultBranch: "main",
-    htmlUrl: `https://github.com/me/${name}`,
-    cloneUrl: `https://github.com/me/${name}.git`,
-    description: null,
-    pushPermission: true,
-    lightingProject: true,
-    projectName,
-    projectDescription: null,
-    projectUuid: null,
-    projectKind,
-  }
-}
-
 describe("importOrder", () => {
   it("puts venues first and keeps the rest in their listed order", () => {
-    const none = new Set<string>()
-    const order = importOrder(
-      [repo("panto", "SHOW"), repo("hall", "VENUE"), repo("gala", null), repo("barn", "VENUE")].map((r) =>
-        githubCandidate(r, none),
-      ),
-    )
-    expect(order.map((r) => r.name)).toEqual(["hall", "barn", "panto", "gala"])
-  })
-
-  it("orders the cloud's repos the same way, by their kind", () => {
     const cloud = (name: string, kind: "SHOW" | "VENUE", syncedHere = false) =>
       cloudCandidate({
         repoId: name,
@@ -53,16 +21,9 @@ describe("importOrder", () => {
         sizeBytes: 0,
         syncedHere,
       })
-    const order = importOrder([cloud("Panto", "SHOW"), cloud("Hall", "VENUE", true), cloud("Gala", "SHOW")])
-    expect(order.map((r) => r.name)).toEqual(["Hall", "Panto", "Gala"])
-    expect(order[0]).toMatchObject({ kind: "VENUE", alreadyHere: true, detail: null, branch: "main" })
-  })
-})
-
-describe("repoProjectName", () => {
-  it("prefers project.json's name over the repo's", () => {
-    expect(repoProjectName(repo("panto-2026", "SHOW", "Panto"))).toBe("Panto")
-    expect(repoProjectName(repo("panto-2026", "SHOW", null))).toBe("panto-2026")
+    const order = importOrder([cloud("Panto", "SHOW"), cloud("Hall", "VENUE", true), cloud("Gala", "SHOW"), cloud("Barn", "VENUE")])
+    expect(order.map((r) => r.name)).toEqual(["Hall", "Barn", "Panto", "Gala"])
+    expect(order[0]).toMatchObject({ kind: "VENUE", alreadyHere: true, branch: "main" })
   })
 })
 

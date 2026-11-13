@@ -17,7 +17,6 @@ import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
 import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.nio.file.Files
@@ -44,8 +43,6 @@ class RemoteSyncEnginePushRetryTest {
     private lateinit var workingRootB: Path
     private lateinit var stateA: State
     private lateinit var stateB: State
-    private lateinit var credsA: InMemoryCredentialStore
-    private lateinit var credsB: InMemoryCredentialStore
     private lateinit var engineA: RemoteSyncEngine
     private lateinit var engineB: RemoteSyncEngine
     private val repoUrl: String get() = bareRepo.toUri().toString()
@@ -62,15 +59,13 @@ class RemoteSyncEnginePushRetryTest {
             "database.path" to tmpDir.resolve("a.db").toString(),
             "sync.workingTreeRoot" to workingRootA.toString(),
         ))
-        credsA = InMemoryCredentialStore()
-        engineA = RemoteSyncEngine(stateA, AuthResolver(credsA, tokenStore = null, tokenProvider = null))
+        engineA = RemoteSyncEngine(stateA, AuthResolver(cloud = null, localRepos = true))
 
         stateB = State(testAppConfig(
             "database.path" to tmpDir.resolve("b.db").toString(),
             "sync.workingTreeRoot" to workingRootB.toString(),
         ))
-        credsB = InMemoryCredentialStore()
-        engineB = RemoteSyncEngine(stateB, AuthResolver(credsB, tokenStore = null, tokenProvider = null))
+        engineB = RemoteSyncEngine(stateB, AuthResolver(cloud = null, localRepos = true))
     }
 
     @After
@@ -87,14 +82,13 @@ class RemoteSyncEnginePushRetryTest {
         assertEquals(3, RemoteSyncEngine.MAX_PUSH_RETRIES)
     }
 
-    private fun configureSync(state: State, projectId: Int, creds: InMemoryCredentialStore) {
+    private fun configureSync(state: State, projectId: Int) {
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.firstOrNull()
                 ?: DaoSyncConfig.new { this.project = project }
             cfg.repoUrl = repoUrl
         }
-        creds.set(repoUrl, "test-pat")
     }
 
     private fun runSync(state: State, engine: RemoteSyncEngine, projectId: Int): SyncRunResult {
@@ -115,7 +109,7 @@ class RemoteSyncEnginePushRetryTest {
         // `pushWithRetry` / `retryAfterPushReject` is exercised. Either way the engine must
         // not surface PUSH_REJECTED to the caller for these clean edits.
         val projectIdA = seedMinimalProject(stateA)
-        configureSync(stateA, projectIdA, credsA)
+        configureSync(stateA, projectIdA)
         runSync(stateA, engineA, projectIdA)
 
         val projectAUuid = transaction(stateA.database) { DaoProject.all().first().uuid }
@@ -124,7 +118,7 @@ class RemoteSyncEnginePushRetryTest {
                 name = "B-placeholder"; description = ""; isCurrent = true; uuid = projectAUuid
             }.id.value
         }
-        configureSync(stateB, projectIdB, credsB)
+        configureSync(stateB, projectIdB)
         runSync(stateB, engineB, projectIdB)
 
         // Each side adds a unique cue stack — disjoint records, so any race resolves

@@ -14,7 +14,6 @@ import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.models.DaoSyncSession
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
 import uk.me.cormack.lighting7.testsupport.testAppConfig
@@ -28,7 +27,7 @@ import uk.me.cormack.lighting7.models.nowUtc
 import uk.me.cormack.lighting7.models.asDuration
 
 /**
- * Behavioural tests for [AutoSyncScheduler]. Uses the same bare-repo + InMemoryCredentialStore
+ * Behavioural tests for [AutoSyncScheduler]. Uses the same bare-repo
  * scaffolding as [RemoteSyncEngineTest], but doesn't wait on the per-tick wall clock —
  * tests drive the scheduler's tick logic directly via the engine, then assert log entries.
  *
@@ -40,7 +39,6 @@ class AutoSyncSchedulerTest {
     private lateinit var workingRoot: Path
     private lateinit var bareRepo: Path
     private lateinit var state: State
-    private lateinit var credentialStore: InMemoryCredentialStore
     private lateinit var engine: RemoteSyncEngine
     private lateinit var scheduler: AutoSyncScheduler
     private lateinit var syncLogger: SyncLogger
@@ -53,8 +51,7 @@ class AutoSyncSchedulerTest {
         Git.init().setBare(true).setDirectory(bareRepo.toFile()).setInitialBranch("main").call().close()
 
         state = State(testAppConfig("sync.workingTreeRoot" to workingRoot.toString()))
-        credentialStore = InMemoryCredentialStore()
-        engine = RemoteSyncEngine(state, AuthResolver(credentialStore, tokenStore = null, tokenProvider = null))
+        engine = RemoteSyncEngine(state, AuthResolver(cloud = null, localRepos = true))
         scheduler = AutoSyncScheduler(state, engine)
         syncLogger = SyncLogger(state)
     }
@@ -67,6 +64,11 @@ class AutoSyncSchedulerTest {
         runCatching { bareRepo.toFile().deleteRecursively() }
     }
 
+    /** Point [projectId] at [url]; a GitHub URL fails every run with `GITHUB_RETIRED`. */
+    private fun pointAt(projectId: Int, url: String) = transaction(state.database) {
+        DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.first().repoUrl = url
+    }
+
     private fun configureSync(projectId: Int, autoSyncEnabled: Boolean = true, intervalMs: Long? = null) {
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
@@ -76,7 +78,6 @@ class AutoSyncSchedulerTest {
             cfg.autoSyncEnabled = autoSyncEnabled
             cfg.autoSyncInterval = intervalMs.asDuration()
         }
-        credentialStore.set(bareRepo.toUri().toString(), "test-pat")
     }
 
     @Test
@@ -121,8 +122,7 @@ class AutoSyncSchedulerTest {
     fun `failed sync logs RUN_FAILED with error code`() = runBlocking {
         val projectId = seedMinimalProject(state)
         configureSync(projectId, autoSyncEnabled = true, intervalMs = 60_000)
-        // Drop credentials so the run fails with MISSING_CREDENTIALS.
-        credentialStore.delete(bareRepo.toUri().toString())
+        pointAt(projectId, GITHUB_URL)
 
         val (projectUuid, installUuid, installFriendly) = runArgs(projectId)
         try {
@@ -134,7 +134,7 @@ class AutoSyncSchedulerTest {
         val failed = entries.firstOrNull { it.event == SyncLogEvent.RUN_FAILED }
         assertNotNull(failed)
         assertEquals("ERROR", failed.level)
-        assertTrue(failed.message.contains("MISSING_CREDENTIALS"))
+        assertTrue(failed.message.contains("GITHUB_RETIRED"))
     }
 
     // ─── Quiet auto ticks ───────────────────────────────────────────────
@@ -182,7 +182,7 @@ class AutoSyncSchedulerTest {
     fun `a failed auto tick still logs RUN_FAILED`() = runBlocking {
         val projectId = seedMinimalProject(state)
         configureSync(projectId, autoSyncEnabled = true, intervalMs = 60_000)
-        credentialStore.delete(bareRepo.toUri().toString())
+        pointAt(projectId, GITHUB_URL)
         val (projectUuid, installUuid, installFriendly) = runArgs(projectId)
 
         try {
@@ -222,28 +222,28 @@ class AutoSyncSchedulerTest {
     fun `a tick that cannot authenticate is blocked`() = runBlocking {
         val projectId = seedMinimalProject(state)
         configureSync(projectId, autoSyncEnabled = true, intervalMs = 60_000)
-        credentialStore.delete(bareRepo.toUri().toString())
+        pointAt(projectId, GITHUB_URL)
 
         val result = scheduler.runOneTick(projectId)
         assertTrue(result is AutoSyncScheduler.TickResult.Blocked, "expected Blocked, got $result")
-        assertTrue(result.reason.contains("MISSING_CREDENTIALS"), "reason was: ${result.reason}")
+        assertTrue(result.reason.contains("GITHUB_RETIRED"), "reason was: ${result.reason}")
         // The engine's row is the record; the scheduler adds none of its own for this case.
         assertTrue(syncLogger.list(projectId).any { it.event == SyncLogEvent.RUN_FAILED })
     }
 
     @Test
-    fun `recovery is announced even though reconnecting relaunches the loop`() = runBlocking {
-        // Reconnecting GitHub calls reschedule, so the tick that recovers is the first one a
+    fun `recovery is announced even though a config change relaunches the loop`() = runBlocking {
+        // A config change calls reschedule, so the tick that recovers is the first one a
         // brand-new coroutine runs. When the "was blocked" memory lived in the loop, that tick
         // had no idea it was recovering and the feed was left ending on the failures — the exact
         // thing AUTO_SYNC_RECOVERED exists to prevent, missing from the commonest recovery.
         val projectId = seedMinimalProject(state)
         configureSync(projectId, autoSyncEnabled = true, intervalMs = 60_000)
-        credentialStore.delete(bareRepo.toUri().toString())
+        pointAt(projectId, GITHUB_URL)
         assertTrue(scheduler.runOneTick(projectId) is AutoSyncScheduler.TickResult.Blocked)
 
-        // Credentials restored, loop relaunched from scratch: no in-coroutine state survives.
-        credentialStore.set(bareRepo.toUri().toString(), "test-pat")
+        // Repo restored, loop relaunched from scratch: no in-coroutine state survives.
+        pointAt(projectId, bareRepo.toUri().toString())
         scheduler.reschedule(projectId)
         assertEquals(AutoSyncScheduler.TickResult.Ran, scheduler.runOneTick(projectId))
 
@@ -258,9 +258,9 @@ class AutoSyncSchedulerTest {
     fun `a recovery is announced once, not on every later tick`() = runBlocking {
         val projectId = seedMinimalProject(state)
         configureSync(projectId, autoSyncEnabled = true, intervalMs = 60_000)
-        credentialStore.delete(bareRepo.toUri().toString())
+        pointAt(projectId, GITHUB_URL)
         scheduler.runOneTick(projectId)
-        credentialStore.set(bareRepo.toUri().toString(), "test-pat")
+        pointAt(projectId, bareRepo.toUri().toString())
 
         scheduler.runOneTick(projectId)
         scheduler.runOneTick(projectId)
@@ -342,4 +342,7 @@ class AutoSyncSchedulerTest {
         assertTrue(sixHourly > AutoSyncScheduler.BACKOFF_CEILING_MS, "premise of this test")
     }
 
+    private companion object {
+        const val GITHUB_URL = "https://github.com/me/show.git"
+    }
 }

@@ -23,13 +23,6 @@ export interface SyncConfig {
   lastSyncedSha: string | null
   lastSyncedAt: string | null
   /**
-   * True if a PAT for the configured `repoUrl` is stored in the OS keychain (or the
-   * encrypted-file fallback). The actual token is never sent to the client; this flag
-   * is just so the UI can render a "✓ token stored" indicator next to the Set-token
-   * input without needing a separate request.
-   */
-  tokenPresent: boolean
-  /**
    * Repositories this project has previously been linked to, most-recently-linked first.
    * The UI offers these for one-click reconnect — the only sanctioned way to re-attach an
    * existing, non-empty repo.
@@ -39,6 +32,8 @@ export interface SyncConfig {
   repoName?: string | null
   /** Whether `repoUrl` is a repo of this desk's Lighting7 Cloud. */
   cloud?: boolean
+  /** Whether `repoUrl` is a GitHub repo, which the desk does not sync with but moves to the cloud. */
+  github?: boolean
 }
 
 /** One of the org's cloud repos (`GET /cloud-sync/repos`), with whether a project here syncs it. */
@@ -174,12 +169,10 @@ export interface CueNumberClash {
 export type SyncErrorCode =
   | "REPO_URL_MISSING"
   | "SYNC_DISABLED"
-  /** No GitHub credentials of any kind (OAuth or PAT) configured for this repo. */
-  | "MISSING_CREDENTIALS"
-  /** Legacy alias retained for one release. */
-  | "MISSING_PAT"
-  /** OAuth identity present but refresh token rejected — user must re-connect. */
-  | "OAUTH_REAUTH_REQUIRED"
+  /** The project's repo is a GitHub one, which the desk does not sync with: it moves to the cloud. */
+  | "GITHUB_RETIRED"
+  /** The project's repo is neither GitHub's nor one of this desk's cloud's (`cloud.baseUrl`). */
+  | "NOT_A_CLOUD_REPO"
   | "AUTH_FAILED"
   | "FORMAT_TOO_NEW"
   | "PUSH_REJECTED"
@@ -606,22 +599,6 @@ export const cloudSyncApi = restApi.injectEndpoints({
       // A snapshot changes HEAD + the log; refresh both. Config is unaffected.
       invalidatesTags: ['CloudSyncStatus', 'CloudSyncLog'],
     }),
-    setCloudSyncCredentials: build.mutation<void, { projectId: number; pat: string }>({
-      query: ({ projectId, pat }) => ({
-        url: `projects/${projectId}/sync/credentials`,
-        method: 'PUT',
-        body: { pat },
-      }),
-      // tokenPresent flips → refresh config so the UI badge updates.
-      invalidatesTags: ['CloudSyncConfig'],
-    }),
-    clearCloudSyncCredentials: build.mutation<void, number>({
-      query: (projectId) => ({
-        url: `projects/${projectId}/sync/credentials`,
-        method: 'DELETE',
-      }),
-      invalidatesTags: ['CloudSyncConfig'],
-    }),
     cloudSyncRun: build.mutation<SyncRunResult, number>({
       query: (projectId) => ({
         url: `projects/${projectId}/sync/run`,
@@ -777,8 +754,6 @@ export const {
   useLazyCloudSyncActivityQuery,
   useLazyCloudSyncLogQuery,
   useCloudSyncSnapshotMutation,
-  useSetCloudSyncCredentialsMutation,
-  useClearCloudSyncCredentialsMutation,
   useCloudSyncRunMutation,
   useCloudSyncRestoreReviewQuery,
   useCloudSyncRestoreMutation,

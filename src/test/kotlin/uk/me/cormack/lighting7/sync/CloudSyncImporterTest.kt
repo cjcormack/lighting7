@@ -15,7 +15,6 @@ import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
 import uk.me.cormack.lighting7.testsupport.testAppConfig
@@ -31,9 +30,8 @@ import kotlin.test.fail
  *
  * Strategy: build a "remote" by exporting + committing a seeded project in **state A**,
  * then tear that down (`IntegrationTestDb.reset()`) and run the importer in a fresh
- * **state B** against the bare repo on disk. file:// remotes don't actually exercise
- * credentials in JGit, but we still seed an [InMemoryCredentialStore] PAT so the
- * happy-path doesn't short-circuit on `MISSING_CREDENTIALS`.
+ * **state B** against the bare repo on disk, which a resolver allowing local repos reaches with no
+ * credentials.
  *
  * `ProjectImporter`-level concerns (UUID collision, name collision, format-too-new) have
  * direct coverage in [ProjectRoundTripTest]; this file focuses on what's new in the
@@ -45,7 +43,6 @@ class CloudSyncImporterTest {
     private lateinit var workingTreeRoot: Path
     private lateinit var perTestRoot: Path
     private lateinit var state: State
-    private lateinit var credentialStore: InMemoryCredentialStore
 
     @Before
     fun setUp() {
@@ -53,7 +50,6 @@ class CloudSyncImporterTest {
         workingTreeRoot = perTestRoot.resolve("working-tree-root")
         IntegrationTestDb.reset()
         state = State(testAppConfig("sync.workingTreeRoot" to workingTreeRoot.toString()))
-        credentialStore = InMemoryCredentialStore()
     }
 
     @After
@@ -112,13 +108,12 @@ class CloudSyncImporterTest {
     }
 
     private fun importer(): CloudSyncImporter =
-        CloudSyncImporter(state, AuthResolver(credentialStore, tokenStore = null, tokenProvider = null))
+        CloudSyncImporter(state, AuthResolver(cloud = null, localRepos = true))
 
     private fun bareUrl(): String = bareRepo.toUri().toString()
 
     @Test
     fun `happy path imports a remote project and persists sync_config`() = runBlocking {
-        credentialStore.set(bareUrl(), "test-pat")
 
         val result = importer().import(repoUrl = bareUrl(), branch = "main", projectName = "Imported")
 
@@ -150,19 +145,17 @@ class CloudSyncImporterTest {
     }
 
     @Test
-    fun `missing credentials short-circuits with MISSING_CREDENTIALS`() = runBlocking {
-        // No PAT, no OAuth identity — AuthResolver throws MissingCredentialsException, which
-        // CloudSyncImporter remaps to a SyncException with the right code.
+    fun `a GitHub repo short-circuits with GITHUB_RETIRED`() = runBlocking {
         try {
-            importer().import(repoUrl = bareUrl(), branch = "main", projectName = "Imported")
+            importer().import(repoUrl = "https://github.com/me/show.git", branch = "main", projectName = "Imported")
             fail("expected SyncException")
         } catch (e: SyncException) {
-            assertEquals(SyncErrorCode.MISSING_CREDENTIALS, e.code)
+            assertEquals(SyncErrorCode.GITHUB_RETIRED, e.code)
         }
         // No partial state on disk or in DB.
         assertTrue(
             !Files.exists(workingTreeRoot) || Files.list(workingTreeRoot).use { it.toList() }.isEmpty(),
-            "no working trees should be created when credentials are missing",
+            "no working trees should be created for a GitHub repo",
         )
         transaction(state.database) {
             assertEquals(0, DaoProject.all().count(), "no project should be created")
@@ -171,7 +164,6 @@ class CloudSyncImporterTest {
 
     @Test
     fun `second import of the same repo collides on UUID`() = runBlocking {
-        credentialStore.set(bareUrl(), "test-pat")
         importer().import(repoUrl = bareUrl(), branch = "main", projectName = "Imported")
 
         // Second import with a different name — UUID collides because it's the same source.
@@ -195,7 +187,6 @@ class CloudSyncImporterTest {
 
     @Test
     fun `clone of a non-existent branch fails and leaves no working tree behind`() = runBlocking {
-        credentialStore.set(bareUrl(), "test-pat")
 
         try {
             importer().import(repoUrl = bareUrl(), branch = "nonexistent", projectName = "X")

@@ -2,7 +2,6 @@ package uk.me.cormack.lighting7.state
 
 import org.jetbrains.exposed.v1.core.statements.StatementType
 import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.vendors.currentDialectMetadata
 import org.slf4j.LoggerFactory
@@ -120,11 +119,4 @@ internal object RetiredRemoteAccessMigration {
     private const val NGROK_PID_FILE = "ngrok.pid"
 
     private data class Found(val tables: List<String>, val columns: List<String>, val clients: Int, val grants: Int)
-
-    private fun JdbcTransaction.rowCount(table: String): Int {
-        if (!tableExists(table)) return 0
-        var count = 0
-        exec("SELECT COUNT(*) FROM $table") { rs -> if (rs.next()) count = rs.getInt(1) }
-        return count
-    }
 }

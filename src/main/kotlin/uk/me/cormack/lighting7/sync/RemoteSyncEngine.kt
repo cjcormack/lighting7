@@ -64,10 +64,9 @@ class RemoteSyncEngine(
 
     private val failures = SyncFailures(authResolver)
 
-    private suspend fun resolveCredentials(repoUrl: String): GitCredentials = failures.credentialsFor(repoUrl)
+    private fun resolveCredentials(repoUrl: String): GitCredentials = failures.credentialsFor(repoUrl)
 
-    private fun authFailed(repoUrl: String?, e: GitAuthException, github: String): SyncException =
-        failures.authFailed(repoUrl, e, github)
+    private fun authFailed(e: GitAuthException): SyncException = failures.authFailed(e)
 
     private fun remoteUrlOf(repo: Repository): String? = repo.config.getString("remote", REMOTE_NAME, "url")
 
@@ -173,6 +172,14 @@ class RemoteSyncEngine(
         return withProjectLock(projectId, failEvent = null) {
             block { measured { doRun(projectId, uuid, install.first, install.second, SyncTrigger.MANUAL) } }
         }
+    }
+
+    /** Commit a show's current state to its working tree, as a sync run first does; the caller holds [withSyncLocks]. */
+    internal suspend fun snapshotHeld(projectId: Int) {
+        val (uuid, install) = transaction(state.database) {
+            DaoProject[projectId].uuid to DaoInstall.all().first().let { it.uuid to it.friendlyName }
+        }
+        snapshotEngine.snapshot(projectId, uuid, install.first, install.second, message = null)
     }
 
     private suspend fun measured(run: suspend () -> SyncRunResult): SyncRunResult = try {
@@ -385,7 +392,7 @@ class RemoteSyncEngine(
         val remoteCommitId = try {
             JGitClient.fetch(repo, REMOTE_NAME, branch, credentials)
         } catch (e: GitAuthException) {
-            throw authFailed(repoUrl, e, "GitHub rejected the credentials — check the OAuth identity is connected (or that any PAT has `repo` scope and isn't expired).")
+            throw authFailed(e)
         }
 
         val remoteRef = remoteBranchRef(branch)
@@ -970,7 +977,7 @@ class RemoteSyncEngine(
         try {
             JGitClient.fetch(repo, REMOTE_NAME, branch, credentials)
         } catch (e: GitAuthException) {
-            throw authFailed(remoteUrlOf(repo), e, "GitHub rejected the credentials during retry:")
+            throw authFailed(e)
         }
 
         // After our last autoMerge ran, HEAD is at our merge commit. That commit captures
@@ -1243,7 +1250,7 @@ class RemoteSyncEngine(
         try {
             JGitClient.fetch(repo, REMOTE_NAME, view.branch, credentials)
         } catch (e: GitAuthException) {
-            throw authFailed(view.repoUrl, e, "GitHub rejected the credentials during apply:")
+            throw authFailed(e)
         }
 
         val localSnapshots = RecordHasher.fromRef(repo, view.localSha)
@@ -1518,17 +1525,6 @@ data class AbortResult(val sessionId: Int)
  */
 enum class SyncErrorCode {
     REPO_URL_MISSING, SYNC_DISABLED,
-    /** No GitHub credentials of any kind (OAuth or PAT) configured for this repo. */
-    MISSING_CREDENTIALS,
-    /**
-     * Legacy alias for [MISSING_CREDENTIALS]; retained for one release so existing UIs
-     * that branch on this code keep working. New code should branch on
-     * [MISSING_CREDENTIALS] / [OAUTH_REAUTH_REQUIRED].
-     */
-    @Deprecated("Use MISSING_CREDENTIALS or OAUTH_REAUTH_REQUIRED.")
-    MISSING_PAT,
-    /** OAuth identity present but the refresh token is rejected — user must re-connect. */
-    OAUTH_REAUTH_REQUIRED,
     AUTH_FAILED,
     FORMAT_TOO_NEW, PUSH_REJECTED, NO_REPO,
     SESSION_PENDING, SESSION_NOT_FOUND, SESSION_STALE, UNRESOLVED_CONFLICTS,
@@ -1580,6 +1576,10 @@ enum class SyncErrorCode {
     MOVE_HISTORY_MISMATCH,
     /** A show whose venue still syncs with GitHub: the venue moves to the cloud first. */
     VENUE_NOT_MOVED,
+    /** A project attached to a GitHub repo, which the desk does not sync with: it moves to the cloud (cloud-p2 plan D8). */
+    GITHUB_RETIRED,
+    /** A repo neither of this desk's cloud (`cloud.baseUrl`) nor GitHub's, which the desk does not sync with. */
+    NOT_A_CLOUD_REPO,
 }
 
 /** Error response carrying a stable [code] so the frontend can branch on cause. */
@@ -1589,13 +1589,10 @@ data class SyncErrorResponse(val error: String, val code: String)
 open class SyncException(val code: SyncErrorCode, message: String, cause: Throwable? = null) :
     RuntimeException(message, cause)
 
-@Suppress("DEPRECATION")
 fun SyncErrorCode.toHttpStatus(): HttpStatusCode = when (this) {
     SyncErrorCode.REPO_URL_MISSING, SyncErrorCode.SYNC_DISABLED, SyncErrorCode.NO_REPO ->
         HttpStatusCode.BadRequest
-    SyncErrorCode.MISSING_CREDENTIALS, SyncErrorCode.MISSING_PAT,
-    SyncErrorCode.OAUTH_REAUTH_REQUIRED, SyncErrorCode.AUTH_FAILED ->
-        HttpStatusCode.Unauthorized
+    SyncErrorCode.AUTH_FAILED -> HttpStatusCode.Unauthorized
     SyncErrorCode.FORMAT_TOO_NEW -> HttpStatusCode.UnprocessableEntity
     SyncErrorCode.UNRESOLVED_CONFLICTS -> HttpStatusCode.UnprocessableEntity
     SyncErrorCode.PUSH_REJECTED, SyncErrorCode.SESSION_PENDING, SyncErrorCode.SESSION_STALE,
@@ -1611,7 +1608,7 @@ fun SyncErrorCode.toHttpStatus(): HttpStatusCode = when (this) {
     SyncErrorCode.CLOUD_NOT_ADOPTED, SyncErrorCode.SYNC_OFF, SyncErrorCode.REPO_NOT_FOUND,
     SyncErrorCode.SYNC_QUOTA_EXCEEDED, SyncErrorCode.CLOUD_SYNC_PULL_ONLY,
     SyncErrorCode.MOVE_NOT_ON_GITHUB, SyncErrorCode.MOVE_HISTORY_MISMATCH,
-    SyncErrorCode.VENUE_NOT_MOVED -> HttpStatusCode.Conflict
+    SyncErrorCode.VENUE_NOT_MOVED, SyncErrorCode.GITHUB_RETIRED, SyncErrorCode.NOT_A_CLOUD_REPO -> HttpStatusCode.Conflict
     SyncErrorCode.SYNC_STORAGE_UNAVAILABLE, SyncErrorCode.CLOUD_UNREACHABLE -> HttpStatusCode.ServiceUnavailable
     SyncErrorCode.CLOUD_REFUSED -> HttpStatusCode.BadGateway
 }

@@ -38,36 +38,36 @@ class FileCredentialStoreTest {
         FileCredentialStore(dir.resolve(filename), installUuid, machineSalt)
 
     @Test
-    fun `set then get round trips a token`() {
+    fun `set then get round trips a value`() {
         val s = store()
-        s.set("https://github.com/me/repo.git", "ghp_abc123")
-        assertEquals("ghp_abc123", s.get("https://github.com/me/repo.git"))
+        s.setBlob("cloud:install-key:a", "abc123")
+        assertEquals("abc123", s.getBlob("cloud:install-key:a"))
     }
 
     @Test
     fun `get returns null when no entry has been written`() {
-        assertNull(store().get("https://github.com/me/repo.git"))
+        assertNull(store().getBlob("cloud:install-key:a"))
     }
 
     @Test
     fun `delete removes the entry but leaves others intact`() {
         val s = store()
-        s.set("https://github.com/me/a.git", "tokenA")
-        s.set("https://github.com/me/b.git", "tokenB")
-        s.delete("https://github.com/me/a.git")
-        assertNull(s.get("https://github.com/me/a.git"))
-        assertEquals("tokenB", s.get("https://github.com/me/b.git"))
+        s.setBlob("a", "tokenA")
+        s.setBlob("b", "tokenB")
+        s.deleteBlob("a")
+        assertNull(s.getBlob("a"))
+        assertEquals("tokenB", s.getBlob("b"))
     }
 
     @Test
     fun `deleting a missing entry is a no-op`() {
-        store().delete("https://github.com/me/nope.git")
+        store().deleteBlob("nope")
     }
 
     @Test
-    fun `blank PAT is rejected`() {
+    fun `blank value is rejected`() {
         try {
-            store().set("https://github.com/me/repo.git", "")
+            store().setBlob("cloud:install-key:a", "")
             error("expected IllegalArgumentException")
         } catch (_: IllegalArgumentException) { /* expected */ }
     }
@@ -75,26 +75,26 @@ class FileCredentialStoreTest {
     @Test
     fun `file content is non-plaintext`() {
         val path = dir.resolve("credentials.enc")
-        store().set("https://github.com/me/repo.git", "ghp_secretsecret")
+        store().setBlob("cloud:install-key:a", "secretsecret")
         val raw = Files.readString(path)
-        assertFalse(raw.contains("ghp_secretsecret"), "PAT must not appear cleartext on disk")
-        assertTrue(raw.contains("github"), "URL keys are stored cleartext (expected)")
+        assertFalse(raw.contains("secretsecret"), "a value must not appear cleartext on disk")
+        assertTrue(raw.contains("install-key"), "keys are stored cleartext (expected)")
     }
 
     @Test
     fun `decryption fails silently for a wrong key`() {
         // Same path, different installUuid → wrong key → cannot decrypt.
-        store().set("https://github.com/me/repo.git", "tokenX")
+        store().setBlob("cloud:install-key:a", "tokenX")
         val attacker = FileCredentialStore(dir.resolve("credentials.enc"), "ZZZZZZZZ-2222-3333-4444-555555555555", machineSalt)
-        assertNull(attacker.get("https://github.com/me/repo.git"))
+        assertNull(attacker.getBlob("cloud:install-key:a"))
     }
 
     @Test
     fun `re-encryption uses a fresh IV so duplicate writes don't produce identical ciphertext`() {
         val s = store()
-        s.set("https://github.com/me/repo.git", "same-token")
+        s.setBlob("cloud:install-key:a", "same-token")
         val first = Files.readString(dir.resolve("credentials.enc"))
-        s.set("https://github.com/me/repo.git", "same-token")
+        s.setBlob("cloud:install-key:a", "same-token")
         val second = Files.readString(dir.resolve("credentials.enc"))
         assertNotEquals(first, second, "fresh IV should produce a different ciphertext for the same plaintext")
     }
@@ -103,24 +103,16 @@ class FileCredentialStoreTest {
     fun `factory in file mode never returns null and survives keychain failure`() {
         val cs = CredentialStoreFactory.create("file", dir.resolve("credentials.enc"), installUuid)
         assertNotNull(cs)
-        cs.set("https://github.com/me/repo.git", "ghp_x")
-        assertEquals("ghp_x", cs.get("https://github.com/me/repo.git"))
+        cs.setBlob("cloud:install-key:a", "x")
+        assertEquals("x", cs.getBlob("cloud:install-key:a"))
     }
 
     @Test
     fun `blob api round trips arbitrary keys`() {
         val s = store()
-        s.setBlob("oauth:github:default", "{\"accessToken\":\"abc\"}")
-        assertEquals("{\"accessToken\":\"abc\"}", s.getBlob("oauth:github:default"))
-        assertTrue(s.containsBlob("oauth:github:default"))
-    }
-
-    @Test
-    fun `pat api and blob api share the same backing store`() {
-        val s = store()
-        s.set("https://github.com/me/repo.git", "ghp_pat")
-        // PAT entries are accessible via the blob API under the well-known prefix.
-        assertEquals("ghp_pat", s.getBlob(CredentialStore.patKey("https://github.com/me/repo.git")))
+        s.setBlob("some:key", "{\"accessToken\":\"abc\"}")
+        assertEquals("{\"accessToken\":\"abc\"}", s.getBlob("some:key"))
+        assertTrue(s.containsBlob("some:key"))
     }
 
     @Test

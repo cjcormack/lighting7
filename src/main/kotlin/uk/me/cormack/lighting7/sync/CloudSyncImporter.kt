@@ -68,7 +68,7 @@ class CloudSyncImporter(
                     }
                 }
             } catch (e: GitAuthException) {
-                throw failures.authFailed(repoUrl, e, "GitHub rejected the credentials during clone:")
+                throw failures.authFailed(e)
             } catch (e: GitTransportException) {
                 throw failures.cloudRefusalOf(e) ?: e
             }

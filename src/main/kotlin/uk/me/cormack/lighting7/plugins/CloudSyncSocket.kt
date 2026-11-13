@@ -78,29 +78,6 @@ data class CloudSyncProjectImportedOutMessage(
     val name: String,
 ) : CloudSyncOutMessage()
 
-/**
- * Broadcast when the install-wide GitHub OAuth identity changes — the user connects,
- * refreshes (login unchanged but expiry shifts), disconnects, or a background refresh
- * discovers the authorisation is dead. The sync config UI uses this to live-update the
- * "Connected as @login" row without polling.
- *
- * The payload is only a nudge: clients invalidate their identity cache and re-read
- * `GET /oauth/github/identity`, which carries the detail (including why re-auth is needed).
- */
-@Serializable
-@SerialName("oauthIdentityChanged")
-data class OAuthIdentityChangedOutMessage(
-    val provider: String,
-    val connected: Boolean,
-    val login: String? = null,
-    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
-    val accessExpiresAt: String? = null,
-    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
-    val refreshExpiresAt: String? = null,
-    /** True when the identity is present but GitHub has rejected it — only a re-connect fixes it. */
-    val reauthRequired: Boolean = false,
-) : CloudSyncOutMessage()
-
 // ─── Subscriptions ──────────────────────────────────────────────────────
 
 fun setupCloudSyncSubscriptions(scope: SocketScope) {

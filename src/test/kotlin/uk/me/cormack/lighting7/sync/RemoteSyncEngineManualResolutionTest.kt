@@ -17,7 +17,6 @@ import uk.me.cormack.lighting7.models.DaoSyncSession
 import uk.me.cormack.lighting7.models.DaoSyncSessions
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.sync.dto.CueStackJson
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
 import uk.me.cormack.lighting7.testsupport.testAppConfig
@@ -46,8 +45,6 @@ class RemoteSyncEngineManualResolutionTest {
     private lateinit var workingRootB: Path
     private lateinit var stateA: State
     private lateinit var stateB: State
-    private lateinit var credsA: InMemoryCredentialStore
-    private lateinit var credsB: InMemoryCredentialStore
     private lateinit var engineA: RemoteSyncEngine
     private lateinit var engineB: RemoteSyncEngine
     private lateinit var dbA: Path
@@ -69,16 +66,14 @@ class RemoteSyncEngineManualResolutionTest {
             "database.path" to dbA.toString(),
             "sync.workingTreeRoot" to workingRootA.toString(),
         ))
-        credsA = InMemoryCredentialStore()
-        engineA = RemoteSyncEngine(stateA, AuthResolver(credsA, tokenStore = null, tokenProvider = null))
+        engineA = RemoteSyncEngine(stateA, AuthResolver(cloud = null, localRepos = true))
 
         workingRootB = Files.createTempDirectory("lighting7-manual-b-")
         stateB = State(testAppConfig(
             "database.path" to dbB.toString(),
             "sync.workingTreeRoot" to workingRootB.toString(),
         ))
-        credsB = InMemoryCredentialStore()
-        engineB = RemoteSyncEngine(stateB, AuthResolver(credsB, tokenStore = null, tokenProvider = null))
+        engineB = RemoteSyncEngine(stateB, AuthResolver(cloud = null, localRepos = true))
     }
 
     @After
@@ -90,14 +85,13 @@ class RemoteSyncEngineManualResolutionTest {
         runCatching { bareRepo.toFile().deleteRecursively() }
     }
 
-    private fun configureSync(state: State, projectId: Int, creds: InMemoryCredentialStore) {
+    private fun configureSync(state: State, projectId: Int) {
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.firstOrNull()
                 ?: DaoSyncConfig.new { this.project = project }
             cfg.repoUrl = repoUrl
         }
-        creds.set(repoUrl, "test-pat")
     }
 
     private fun runSync(state: State, engine: RemoteSyncEngine, projectId: Int): SyncRunResult {
@@ -133,14 +127,14 @@ class RemoteSyncEngineManualResolutionTest {
             }
             project.id.value
         }
-        configureSync(stateB, projectBId, credsB)
+        configureSync(stateB, projectBId)
         runSync(stateB, engineB, projectBId)
         return projectBId
     }
 
     private fun setUpSharedStackOnBothSides(): Triple<Int, Int, UUID> {
         val projectIdA = seedMinimalProject(stateA)
-        configureSync(stateA, projectIdA, credsA)
+        configureSync(stateA, projectIdA)
         val sharedUuid = transaction(stateA.database) {
             val project = DaoProject.findById(projectIdA)!!
             val stack = DaoCueStack.new {

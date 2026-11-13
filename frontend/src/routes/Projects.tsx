@@ -13,7 +13,6 @@ import { Cloud, CloudDownload, Landmark, PackageOpen, PlusCircle, Upload, XCircl
 import { cn } from "@/lib/utils"
 import { useProjectListQuery } from "../store/projects"
 import { useCloudSyncConfigsQuery, type SyncConfig } from "../store/cloudSync"
-import { useOauthGithubIdentityQuery } from "../store/oauthGithub"
 import { useIsNavAdmin } from "../navigation"
 import { repoLabel } from "@/lib/formatRepoUrl"
 import { ProjectSummary } from "../api/projectApi"
@@ -31,12 +30,8 @@ export default function Projects() {
   const [addVenueOpen, setAddVenueOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [addRemoteOpen, setAddRemoteOpen] = useState(false)
-  // Skipped for operators: `/api/rest/oauth/` and `/install/cloud` are admin-gated, so their
-  // refetch can only 403 — and importing a project is an admin's.
+  // Importing a project is an admin's, and `/install/cloud` is admin-gated.
   const isAdmin = useIsNavAdmin()
-  const { data: identity } = useOauthGithubIdentityQuery(undefined, { skip: !isAdmin })
-  // Usable, not merely present — the GitHub (legacy) picker needs a working token.
-  const oauthConnected = identity?.connected === true && identity.reauthRequired !== true
 
   return (
     <>
@@ -59,7 +54,6 @@ export default function Projects() {
         <AddRemoteProjectDialog
           open={addRemoteOpen}
           onOpenChange={setAddRemoteOpen}
-          oauthConnected={oauthConnected}
         />
       )}
       <Card className="m-4 p-4">

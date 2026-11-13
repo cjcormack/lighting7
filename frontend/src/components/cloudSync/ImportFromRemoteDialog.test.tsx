@@ -8,7 +8,6 @@ const importRepo = vi.fn()
 
 vi.mock('@/store/cloudSync', () => ({
   useCloudSyncImportMutation: () => [importRepo, { isLoading: false }],
-  useCloudSyncConfigsQuery: () => ({ data: {} }),
   useCloudReposQuery: () => ({
     data: [
       { repoId: 'v', url: 'https://cloud.example/git/o/v.git', name: 'Commemoration Hall', kind: 'VENUE', projectUuid: 'v', sizeBytes: 0, syncedHere: false },
@@ -18,7 +17,6 @@ vi.mock('@/store/cloudSync', () => ({
 }))
 vi.mock('@/store/cloud', () => ({ useCloudStateQuery: () => cloudState }))
 vi.mock('@/store/projects', () => ({ useProjectListQuery: () => ({ data: [] }) }))
-vi.mock('./RepoPicker', () => ({ RepoPicker: () => <div>github picker</div> }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import { AddRemoteProjectDialog } from './ImportFromRemoteDialog'
@@ -26,7 +24,7 @@ import { AddRemoteProjectDialog } from './ImportFromRemoteDialog'
 function renderDialog() {
   return render(
     <MemoryRouter>
-      <AddRemoteProjectDialog open onOpenChange={() => {}} oauthConnected={false} />
+      <AddRemoteProjectDialog open onOpenChange={() => {}} />
     </MemoryRouter>,
   )
 }
@@ -59,13 +57,11 @@ describe('Import from the cloud', () => {
     )
   })
 
-  it('asks an unadopted desk to adopt, with GitHub (legacy) still beside it', () => {
+  it('asks an unadopted desk to adopt', () => {
     cloudState = { data: { configured: true, enabled: true, adopted: null } }
     renderDialog()
 
     expect(screen.getByText(/adopt this desk to import/i)).toBeTruthy()
     expect(screen.queryByRole('option')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /github \(legacy\)/i }))
-    expect(screen.getByText('github picker')).toBeTruthy()
   })
 })

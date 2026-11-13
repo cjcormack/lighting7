@@ -78,7 +78,7 @@ class PaletteLayerMigrationTest {
 
         val (desk, logs) = captureLogs("PaletteLayerMigration") { startDesk() }
 
-        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
+        assertEquals(GITHUB_RETIREMENT_USER_VERSION, userVersion())
         assertEquals(1, backups().size, "the database is backed up before anything moves")
         val log = logs.joinToString("\n")
         for ((cue, reason) in mapOf(
@@ -163,7 +163,7 @@ class PaletteLayerMigrationTest {
 
         val (_, logs) = captureLogs("PaletteLayerMigration") { startDesk() }
 
-        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
+        assertEquals(GITHUB_RETIREMENT_USER_VERSION, userVersion())
         assertEquals(emptyList(), backups())
         assertTrue(logs.count { "it is disabled" in it } == 11, logs.joinToString("\n"))
     }
@@ -171,12 +171,12 @@ class PaletteLayerMigrationTest {
     @Test
     fun `a fresh database is born at step 10`() {
         startDesk()
-        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion())
+        assertEquals(GITHUB_RETIREMENT_USER_VERSION, userVersion())
         assertEquals(emptyList(), backups())
         stopDesk()
         setUserVersion(MOVE_IN_DARK_ROW_FLAG_USER_VERSION)
         startDesk()
-        assertEquals(SURFACE_JOBS_USER_VERSION, userVersion(), "a database holding no palette layer is only marked")
+        assertEquals(GITHUB_RETIREMENT_USER_VERSION, userVersion(), "a database holding no palette layer is only marked")
         assertEquals(emptyList(), backups())
     }
 }

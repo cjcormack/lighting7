@@ -96,8 +96,7 @@ class CloudSyncCloudRoutesTest : RouteIntegrationTest() {
             InstallSigner("inst-$name", pair.private)
         }
         private val auth = AuthResolver(
-            InMemoryCredentialStore(), tokenStore = null, tokenProvider = null,
-            cloud = CloudCredentialSource(fake.baseUrl, enabled = true, signer = { signer }, adopted = { true }, devToken = null, api = { api }),
+            cloud = CloudCredentialSource(fake.baseUrl, enabled = true, signer = { signer }, devToken = null, api = { api }),
         )
         private val engine = RemoteSyncEngine(state, auth)
 

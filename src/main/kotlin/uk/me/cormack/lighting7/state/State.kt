@@ -68,10 +68,6 @@ import uk.me.cormack.lighting7.sync.SyncLogger
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.CredentialStore
 import uk.me.cormack.lighting7.sync.auth.CredentialStoreFactory
-import uk.me.cormack.lighting7.sync.auth.oauth.BundledOAuthCredentials
-import uk.me.cormack.lighting7.sync.auth.oauth.OAuthGitHubClient
-import uk.me.cormack.lighting7.sync.auth.oauth.OAuthTokenProvider
-import uk.me.cormack.lighting7.sync.auth.oauth.OAuthTokenStore
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -83,7 +79,6 @@ import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.routes.buskPadsInOrder
 import uk.co.xfactorylibrarians.coremidi4j.CoreMidiDeviceProvider
 import uk.co.xfactorylibrarians.coremidi4j.CoreMidiNotification
-import uk.me.cormack.lighting7.models.asInstant
 import uk.me.cormack.lighting7.models.toIsoUtc
 import uk.me.cormack.lighting7.telemetry.DbTracing
 
@@ -92,7 +87,8 @@ private val logger = LoggerFactory.getLogger("State")
 /** How long *Quit desk* waits for its answer to reach the browser before the process goes. */
 private const val QUIT_GRACE_MS = 500L
 
-class State(val config: ApplicationConfig) {
+/** [localSyncRepos]: a `file:` remote syncs with no credentials, as tests stand bare repos in for remotes; the desk never sets it. */
+class State(val config: ApplicationConfig, private val localSyncRepos: Boolean = false) {
     // Exposed's `Database.connect()` doesn't surface the underlying datasource, so the
     // reference is kept here for [shutdown] to drain the pool.
     private var dataSource: HikariDataSource? = null
@@ -103,6 +99,9 @@ class State(val config: ApplicationConfig) {
 
     /** Set when database step 13 met the tunnel's schema this start: its credential and files go once [credentialStore] exists. */
     private var retiredRemoteAccess = false
+
+    /** Set when database step 18 met GitHub sync's table this start: the repos whose credentials go once [credentialStore] exists. */
+    private var retiredGitHub: List<String>? = null
     val database = initDatabase()
     val projectManager = ProjectManager(database) { this }
 
@@ -377,9 +376,7 @@ class State(val config: ApplicationConfig) {
     }.getOrNull()
 
     /**
-     * GitHub credential store for cloud sync. Holds Personal Access Tokens (per repo
-     * URL) and the install-wide OAuth identity blob (under
-     * [CredentialStore.OAUTH_GITHUB_DEFAULT_KEY]). Backend selected by
+     * The desk's secret store, holding its Lighting7 Cloud install key. Backend selected by
      * `sync.credentialStore` (default `keychain`) — see [CredentialStoreFactory] for the
      * fallback rules. Built lazily after the install row exists so the file fallback can
      * derive its encryption key from the install UUID.
@@ -396,114 +393,20 @@ class State(val config: ApplicationConfig) {
 
     init {
         if (retiredRemoteAccess) RetiredRemoteAccessMigration.retireLeftovers({ credentialStore }, appDataDir().resolve("ngrok"))
-    }
-
-    /**
-     * GitHub OAuth HTTP client. Null when neither `local.conf` nor the build-time
-     * bundled credentials supply a complete `(clientId, clientSecret)` pair — the UI
-     * then offers PAT-only auth. Owns a Ktor CIO engine; closed in [shutdown].
-     *
-     * Resolution order (treated as atomic pairs — we never mix clientId from one
-     * source with clientSecret from another, since they belong to different GitHub
-     * Apps):
-     *  1. `sync.oauth.github.{clientId, clientSecret}` from `local.conf`.
-     *  2. [BundledOAuthCredentials], baked in at build time by GitHub Actions for
-     *     installer distributions (see `-PghOauthClientId` / `-PghOauthClientSecret`
-     *     in `build.gradle.kts`).
-     */
-    val oauthGitHubClient: OAuthGitHubClient? by lazy {
-        val pair = resolveOAuthCredentialPair() ?: return@lazy null
-        OAuthGitHubClient(clientId = pair.first, clientSecret = pair.second)
-    }
-
-    private fun resolveOAuthCredentialPair(): Pair<String, String>? {
-        val configId = config.optionalString("sync.oauth.github.clientId")
-        val configSecret = config.optionalString("sync.oauth.github.clientSecret")
-        if (!configId.isNullOrBlank() && !configSecret.isNullOrBlank()) {
-            return configId to configSecret
-        }
-        if (!configId.isNullOrBlank() && configSecret.isNullOrBlank()) {
-            logger.warn(
-                "sync.oauth.github.clientId is set in local.conf but clientSecret is blank — " +
-                    "ignoring local.conf and falling back to bundled credentials if present.",
-            )
-        }
-        val bundledId = BundledOAuthCredentials.GITHUB_CLIENT_ID
-        val bundledSecret = BundledOAuthCredentials.GITHUB_CLIENT_SECRET
-        if (bundledId.isNotBlank() && bundledSecret.isNotBlank()) {
-            return bundledId to bundledSecret
-        }
-        return null
-    }
-
-    /** Public base URL the user's browser hits to reach this install (for OAuth callbacks). */
-    val oauthPublicBaseUrl: String
-        get() = config.optionalString("sync.oauth.github.publicBaseUrl")
-            ?.trimEnd('/')
-            ?: "http://localhost:8413"
-
-    /** OAuth identity blob persistence; null when [oauthGitHubClient] is null. */
-    val oauthTokenStore: OAuthTokenStore? by lazy {
-        oauthGitHubClient?.let { OAuthTokenStore(credentialStore) }
-    }
-
-    /**
-     * Refresh-on-demand wrapper used by [AuthResolver]. The `onIdentityUpdated` callback
-     * mirrors the new expiry into the [DaoOAuthIdentities][uk.me.cormack.lighting7.models.DaoOAuthIdentities]
-     * row so the UI's "expires in" badge stays accurate without polling the credential
-     * store — and mirrors the re-auth marking, which is the only way a client learns that
-     * a background refresh found the authorisation dead.
-     *
-     * It broadcasts too: refreshes happen off-request (an auto-sync tick, a repo listing),
-     * so without a frame here an open sync page would keep rendering a stale identity until
-     * something else invalidated the cache.
-     */
-    val oauthTokenProvider: OAuthTokenProvider? by lazy {
-        val client = oauthGitHubClient ?: return@lazy null
-        val store = oauthTokenStore ?: return@lazy null
-        OAuthTokenProvider(
-            tokenStore = store,
-            client = client,
-            onIdentityUpdated = { identity ->
-                // Converted once, then read by both the row and the broadcast frame.
-                val accessExpiresAt = identity.accessExpiresAtMs.asInstant()
-                val refreshExpiresAt = identity.refreshExpiresAtMs.asInstant()
-                transaction(database) {
-                    DaoOAuthIdentity.findGithubDefault()?.let {
-                        it.accessExpiresAt = accessExpiresAt
-                        it.refreshExpiresAt = refreshExpiresAt
-                        it.reauthRequiredAt = identity.reauthRequiredAtMs.asInstant()
-                        it.reauthReason = identity.reauthReason
-                    }
-                }
-                emitCloudSyncEvent(
-                    uk.me.cormack.lighting7.plugins.OAuthIdentityChangedOutMessage(
-                        provider = DaoOAuthIdentities.PROVIDER_GITHUB,
-                        connected = true,
-                        login = identity.githubLogin,
-                        accessExpiresAt = accessExpiresAt?.toIsoUtc(),
-                        refreshExpiresAt = refreshExpiresAt?.toIsoUtc(),
-                        reauthRequired = identity.reauthRequiredAtMs != null,
-                    ),
-                )
-            },
-        )
+        retiredGitHub?.let { GitHubRetirementMigration.retireCredentials({ credentialStore }, it) }
     }
 
     /** Single resolver instance shared by the sync engine and route handlers. */
     val authResolver: AuthResolver by lazy {
         AuthResolver(
-            credentialStore,
-            oauthTokenStore,
-            oauthTokenProvider,
             uk.me.cormack.lighting7.sync.auth.CloudCredentialSource(
                 baseUrl = cloudConfig.baseUrl,
                 enabled = cloudConfig.enabled,
                 signer = { cloud.installSigner() },
-                adopted = { cloud.canSign() },
                 devToken = cloudDevToken,
                 api = { cloud.api() },
             ),
+            localRepos = localSyncRepos,
         )
     }
 
@@ -1321,7 +1224,6 @@ class State(val config: ApplicationConfig) {
         runCatching { mdnsRegistration?.close() }
         mdnsRegistration = null
 
-        runCatching { oauthGitHubClient?.close() }
         // Via the delegate, not the property: reading `updateService` here would construct the
         // service purely to close it, on every test that builds a State and shuts it down.
         if (updateServiceDelegate.isInitialized()) runCatching { updateService.close() }
@@ -1670,6 +1572,10 @@ class State(val config: ApplicationConfig) {
         // surface-setup plan step 17: every project's channel strips turned into jobs, backed up first
         // when it holds a strip. After step 16. `SurfaceJobsMigration.kt`.
         SurfaceJobsMigration.runIfNeeded(ds, database, dbPath)
+
+        // cloud-p2 plan step 18: GitHub sync's identity table dropped, backed up first when it holds
+        // the identity; its credentials go once the store exists. After step 17. `GitHubRetirementMigration.kt`.
+        retiredGitHub = GitHubRetirementMigration.runIfNeeded(ds, database, dbPath)?.takeIf { it.legacy }?.repoUrls
 
         databaseInitWindow = startedAt to java.time.Instant.now()
         return database

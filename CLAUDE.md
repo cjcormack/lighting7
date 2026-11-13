@@ -70,9 +70,7 @@ background with the developer token, creates an `admin` / `lighting7-dev` accoun
 show or venue repo — venue repos first, since a show's import needs its pinned venue version
 (`VENUE_MISSING` otherwise). The session's environment must allow the cloud's host and carry a read
 developer token from the portal, as `LIGHTING7_CLOUD_TOKEN` or as a network secret its proxy
-injects for that host; the script fails naming the host when it cannot reach it. An `owner/repo`
-argument imports from GitHub through the session's git proxy (attach the repo first) until the
-cloud-p2 plan's session 6 removes it. The script's header has the details; `sync.push = false` is in
+injects for that host; the script fails naming the host when it cannot reach it. The script's header has the details; `sync.push = false` is in
 `docs/sync-engineering.md` §"Pull-only installs".
 
 Run Gradle there under `LC_ALL=C.UTF-8`: the image's locale is POSIX, and `compileTestKotlin`
@@ -998,6 +996,13 @@ controls' own bindings where they have none, and every strip row is deleted. A d
 marked; one with some is backed up first to `<db>.pre-surface-jobs-<utc>.db`. `SurfaceJobsMigrationTest` runs it over
 `src/test/resources/db/pre-surface-jobs.sql`, a database at 16; never regenerate it.
 
+**Step 18 follows it**: `state/GitHubRetirementMigration.kt` (cloud-p2 plan D8) drops `oauth_identities`, the
+GitHub sync identity's mirror, and — once the credential store is open — deletes the OAuth tokens and the PAT
+of every repo a project synced or once synced with. A database without the table is only marked; one with it
+loses it — unbacked when it holds no identity, else after a backup to `<db>.pre-github-retirement-<utc>.db` — and
+has its credentials deleted. `GitHubRetirementMigrationTest` runs it over
+`src/test/resources/db/pre-github-retirement.sql`, a database at 17; never regenerate it.
+
 Otherwise the bet stands on there being exactly one database (the dev desk), and it
 expires the moment a second install exists — the Windows MSI ships an upgrade path.
 Before making a non-additive schema change once anything is deployed, write a
@@ -1017,13 +1022,12 @@ Every elapsed interval is `duration("…")` — `java.time.Duration`, stored as 
 unit while the code reads the other: never give a `duration()` column an `_ms` name.
 `TimeColumnsTest` asserts both rules.
 
-Three helpers, and each exists to close a hole:
+Two helpers, and each exists to close a hole:
 
 - `nowUtc()` — the clock for anything stored. Truncated to milliseconds, so an in-memory stamp
   and the row it was written to can never disagree.
 - `Instant.toIsoUtc()` — the only way an instant reaches the wire. Fixed three-digit fraction, so
   the string is **sortable**; `Instant.toString()` is not, dropping the fraction on an exact second.
-- `Long?.asInstant()` — for the one boundary that is still millis, the OAuth credential blob.
 
 On the wire, instants are ISO-8601 `String` and durations stay `…Ms: Long`. Sync JSON carries
 neither an instant nor a `Duration`: `ProjectExporter` / `ProjectImporter` convert durations to
@@ -1040,12 +1044,10 @@ serialises most of the project graph as canonical JSON. Adding or modifying
 tables/columns has implications for sync correctness — read
 `docs/sync-engineering.md` before changing the schema.
 
-Auth has two paths: **GitHub OAuth** (primary, install-wide identity via
-web flow / device flow, auto-refreshing tokens) and **Personal Access
-Tokens** (Advanced fallback, per-repo). Both flow through `AuthResolver`
-and use the same `CredentialStore` backend (OS keychain by default, with an
-encrypted-file fallback). OAuth requires `sync.oauth.github.clientId` /
-`clientSecret` in `local.conf`; absent that, only the PAT path is offered.
+Sync's remotes are Lighting7 Cloud's repos (cloud-p2 plan), and `AuthResolver` has one source:
+an adopted desk signs a short-lived git token with its install key, and an unadopted one uses the
+developer token it was started with (`LIGHTING7_CLOUD_TOKEN`). A project still attached to a GitHub
+repo syncs no more (`GITHUB_RETIRED`) and moves to the cloud from its working tree.
 
 **Decision tree for any DB change:**
 
@@ -1261,7 +1263,7 @@ For deeper technical details, see the docs in `docs/`:
 - [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, Orders, multi-element fixtures
 - [OSC](docs/osc-engineering.md) - OSC in from QLab: the fixed address set and its slugs, the explicit forms that land the same state however often they arrive, the `osc-1` receive thread, SLIP-framed TCP and their hand-off channel, replies, the allowlist, `/install/osc`, `osc.state` and the log
 - [MCP Server](docs/mcp-engineering.md) - MCP through Lighting7 Cloud's relay, adding a connector, the public listener that carries remote sessions, the remote hardening applied by port and the three policy switches, the protocol and its tools, and why the script tool is left out
-- [Cloud Sync](docs/sync-engineering.md) - Canonical JSON, UUID identity, machine-local overrides, per-project JGit working tree + snapshot flow, three-way diff + conflict sessions, GitHub OAuth + PAT auth (Phases 1–5 of the cloud-sync plan)
+- [Cloud Sync](docs/sync-engineering.md) - Canonical JSON, UUID identity, machine-local overrides, per-project JGit working tree + snapshot flow, three-way diff + conflict sessions, Lighting7 Cloud's repos and their git tokens (Phases 1–5 of the cloud-sync plan, cloud-p2)
 - [Composition Model](docs/lighting-composition-model.md) - The five tiers, and §"Looks, palettes and layers" for the cook step: a cue's ordered layers plus its local rows flatten to one contributor per (fixture, attribute) before the resolver, which is what makes within-cue precedence one rule for every attribute. Its §"A palette holds a value *or* an FX" is the D7 reversal and the three rules that keep it narrow
 - [Desk Screens](docs/desk-screens.md) - The two desk screens: the launcher's tray items, the `?window=` naming contract, why a desk screen must be opened at `http://localhost:8413/` (installation, Keyboard Lock and Window Management are all secure-context), and kiosk mode as a note
 - [Desk Accounts](docs/desk-accounts.md) - Desk-local users, the two roles and where they're enforced, cookie sessions + live 4401 revocation, the QR password reset, and the `RESET-ADMIN` break-glass recovery

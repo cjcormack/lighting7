@@ -3,8 +3,8 @@ package uk.me.cormack.lighting7.sync
 import uk.me.cormack.lighting7.cloud.protocol.ErrorCode
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.CloudNotAdoptedException
-import uk.me.cormack.lighting7.sync.auth.MissingCredentialsException
-import uk.me.cormack.lighting7.sync.auth.oauth.OAuthReauthRequiredException
+import uk.me.cormack.lighting7.sync.auth.GitHubRetiredException
+import uk.me.cormack.lighting7.sync.auth.NotACloudRepoException
 
 /**
  * The cloud's sync refusals as [SyncErrorCode]s (cloud-p2 plan D4). `SYNC_NON_FAST_FORWARD` never
@@ -45,27 +45,23 @@ internal object CloudSyncCodes {
  */
 internal class SyncFailures(private val authResolver: AuthResolver) {
     /** [repoUrl]'s credentials, a missing or unusable one as its [SyncErrorCode]. */
-    suspend fun credentialsFor(repoUrl: String): GitCredentials = try {
+    fun credentialsFor(repoUrl: String): GitCredentials = try {
         authResolver.resolveFor(repoUrl)
-    } catch (e: MissingCredentialsException) {
-        throw SyncException(SyncErrorCode.MISSING_CREDENTIALS, e.message ?: "No GitHub credentials configured for this repository.")
-    } catch (e: OAuthReauthRequiredException) {
-        throw SyncException(SyncErrorCode.OAUTH_REAUTH_REQUIRED, e.message ?: "GitHub OAuth re-authentication required.")
+    } catch (e: GitHubRetiredException) {
+        throw SyncException(SyncErrorCode.GITHUB_RETIRED, e.message ?: "This desk does not sync with GitHub.")
+    } catch (e: NotACloudRepoException) {
+        throw SyncException(SyncErrorCode.NOT_A_CLOUD_REPO, e.message ?: authResolver.notACloudRepoMessage())
     } catch (e: CloudNotAdoptedException) {
         throw SyncException(SyncErrorCode.CLOUD_NOT_ADOPTED, e.message ?: "This desk is not adopted by Lighting7 Cloud.")
     }
 
-    /** A remote's refusal of [repoUrl]'s credentials, in GitHub's words ([github]) or the cloud's. */
-    fun authFailed(repoUrl: String?, e: GitAuthException, github: String): SyncException =
-        if (repoUrl != null && authResolver.isCloudRepo(repoUrl)) {
-            SyncException(
-                SyncErrorCode.AUTH_FAILED,
-                "The cloud refused this desk's credentials (${e.message}). Check the desk is still adopted on the Cloud tab.",
-                e,
-            )
-        } else {
-            SyncException(SyncErrorCode.AUTH_FAILED, "$github ${e.message}", e)
-        }
+    /** The cloud's refusal of this desk's credentials. */
+    fun authFailed(e: GitAuthException): SyncException =
+        SyncException(
+            SyncErrorCode.AUTH_FAILED,
+            "The cloud refused this desk's credentials (${e.message}). Check the desk is still adopted on the Cloud tab.",
+            e,
+        )
 
     /**
      * [e] as the [SyncException] it means, when it is a cloud refusal (cloud-p2 plan D4): a push refused

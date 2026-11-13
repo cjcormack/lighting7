@@ -8,7 +8,7 @@ relies on so that future contributors don't reinvent them.
 The subsystem ships in eight phases (see the design doc). **Today, Phases 1
 through 8 are in-tree** — UUID columns, canonical JSON, manual export/import,
 the install-identity / `machine_override` tables, a per-project local git
-working tree, remote push/pull with PAT credentials, the multi-master
+working tree, remote push/pull, the multi-master
 three-way diff with a flat conflict-resolution flow, Phase 6's polished
 conflict UX (MANUAL resolution + crash recovery for sessions caught mid-apply),
 Phase 7's correctness-corner work (tombstones for deletion propagation,
@@ -19,11 +19,11 @@ pagination.
 
 ## Architecture overview
 
-The eventual delivery mechanism is a per-project GitHub repo — each install
-keeps a working tree under `appDataDir()/sync/{projectUuid}/repo/`, pushes and
-pulls via JGit, and resolves conflicts in the UI. Phase 1 defined the file
-format. Phase 3 puts a real on-disk JGit-backed working tree behind it so
-every change can be captured as a local commit; phase 4 adds the remote.
+Each synced project is a git repository Lighting7 Cloud hosts (cloud-p2 plan): each install keeps a
+working tree under `appDataDir()/sync/{projectUuid}/repo/`, pushes and pulls via JGit over the cloud's
+smart HTTP, and resolves conflicts in the UI. Phase 1 defined the file format. Phase 3 puts a real
+on-disk JGit-backed working tree behind it so every change can be captured as a local commit; phase 4
+adds the remote, which was a GitHub repo until the cloud-p2 plan moved every project to the cloud.
 
 The repo split is:
 
@@ -2054,20 +2054,10 @@ All endpoints live under `/api/rest/projects/{projectId}/sync/...`:
 
 | Method | Path | What it does |
 |---|---|---|
-| GET | `/config` | `sync_configs` row + `tokenPresent` |
-| PUT | `/config` | Update `repo_url` / `branch` / `enabled` |
-| PUT | `/credentials` | Store a PAT against the configured `repo_url` (Advanced fallback). |
-| DELETE | `/credentials` | Clear the stored PAT |
+| GET | `/config` | `sync_configs` row, with `cloud` |
+| PUT | `/config` | Update `repo_url` (a cloud repo's only, else `GITHUB_RETIRED` or `NOT_A_CLOUD_REPO`) / `branch` / auto-sync |
 | POST | `/cloud` | *Sync to the cloud*: make the project's cloud repo (or attach the one it has), then its first sync (§"The cloud") |
 | GET | `/api/rest/cloud-sync/repos` | The org's cloud repos, each with `syncedHere`, `projectId` and `kind` |
-| GET | `/api/rest/oauth/github/identity` | Connected GitHub user (or 404-shape "not connected") |
-| DELETE | `/api/rest/oauth/github/identity` | Clear the install-wide OAuth identity |
-| GET | `/api/rest/oauth/github/start?projectId=…` | Kick off the OAuth web flow |
-| GET | `/api/rest/oauth/github/callback` | OAuth web-flow return path |
-| POST | `/api/rest/oauth/github/device/start` | Begin device flow |
-| POST | `/api/rest/oauth/github/device/poll` | Poll until user authorises |
-| GET | `/api/rest/oauth/github/repositories?query=` | List repos accessible to the App |
-| POST | `/api/rest/oauth/github/repositories` | Create a new repo under the user |
 | GET | `/status` | `{ workingTreePath, hasRepo, head, dirty }` |
 | GET | `/log?limit=50` | Recent `CommitInfo[]` |
 | POST | `/snapshot` | Take a snapshot commit (refused while session active) |
@@ -2119,7 +2109,7 @@ restored universe left with no address on this desk — its rows went in an Atta
 1. **Sync first**, with a repo attached, through the engine's own run under the lock it holds. A
    conflict session, from before or opened now, refuses `SESSION_PENDING`; a remote that can't be reached
    — a `GitTransportException` (JGit's transport failure under a name of its own, a 30-second idle
-   timeout among them), `AUTH_FAILED`, `MISSING_CREDENTIALS`, `OAUTH_REAUTH_REQUIRED`, `PUSH_REJECTED` —
+   timeout among them), `AUTH_FAILED`, `GITHUB_RETIRED`, `NOT_A_CLOUD_REPO`, `PUSH_REJECTED`, `CLOUD_NOT_ADOPTED`, or a cloud refusal —
    restores on this desk only, said in `notes` (a push's refused credentials arrive as a
    `GitAuthException` and count the same); any other failure refuses with its code, a failed import of
    the pulled tree as `RESTORE_UNREADABLE` (or its own `VENUE_MISSING` / `PROJECT_MISMATCH`). A bad
@@ -2196,7 +2186,7 @@ records and asks *Bring back n…*, lists the selection with what is also needed
 ## Remote sync (Phase 4)
 
 Phase 4 turns the local-only working tree into a sharing surface: one project,
-one GitHub repo, push and pull via [JGit][jgit]. The user clicks **Sync now**
+one cloud repo, push and pull via [JGit][jgit]. The user clicks **Sync now**
 on `/projects/{id}/sync` and a single REST endpoint —
 `POST /api/rest/projects/{id}/sync/run` — owns the entire pipeline.
 
@@ -2209,10 +2199,9 @@ serialise:
 
 1. **Validate config**: `sync_configs.repoUrl` non-blank, `enabled = true`. Else
    400 with `REPO_URL_MISSING` / `SYNC_DISABLED`.
-2. **Resolve credentials** via [`AuthResolver`](#github-oauth) — OAuth first,
-   PAT fallback. Else 401 with `MISSING_CREDENTIALS` (or
-   `OAUTH_REAUTH_REQUIRED` if an OAuth identity exists but its refresh token
-   has expired).
+2. **Resolve credentials** via [`AuthResolver`](#auth--credential-storage) — the cloud's token. Else
+   409 `CLOUD_NOT_ADOPTED`, `GITHUB_RETIRED` for a GitHub repo, or `NOT_A_CLOUD_REPO` for any other repo
+   that is not the cloud's.
 3. **Snapshot** local DB → working tree → commit (reuses the phase 3
    `SnapshotEngine` verbatim — every sync starts by capturing whatever changes
    the user has made since the last snapshot).
@@ -2330,23 +2319,26 @@ as-is.
 
 ## Auth / credential storage
 
-`AuthResolver.resolveFor(repoUrl)` answers JGit's credentials per sync run. A repo of the configured
-Lighting7 Cloud has its own source; any other repo has two paths:
-
-1. **GitHub OAuth (primary)** — install-wide identity established via the web
-   flow or device flow. Auto-refreshing user-to-server tokens; per-repo
-   permission grants chosen by the user when they install the GitHub App.
-2. **Personal Access Tokens (Advanced fallback)** — per-repo PATs for headless
-   rigs, GitHub Enterprise, or as an explicit override. Existing PAT-only
-   configurations from before the OAuth migration keep working unchanged.
+`AuthResolver.resolveFor(repoUrl)` answers JGit's credentials per sync run, and has one source: a repo
+of the configured Lighting7 Cloud is `CloudCredentialSource`'s (§"The cloud"). A GitHub repo — one on
+`github.com`, told by its host (`AuthResolver.isGitHubRepo`) — is one the desk does not sync with
+(cloud-p2 plan D8): `GITHUB_RETIRED` (409), on a sync run, an import, a restore's first sync, a venue's
+repo, and on attaching or reconnecting one through `PUT /sync/config` or `POST /sync/reconnect`
+(`AuthResolver.canSyncWith`). Such a project keeps its `repoUrl` and its working tree, and its Sync tab
+(`SyncConfigDto.github`) offers *Move to the cloud*, which is §"Moving a project off GitHub" run for that
+one project from its working tree. Any other repo that is not the cloud's — another cloud's, or this
+cloud's under a mistyped `cloud.baseUrl` — is `NOT_A_CLOUD_REPO` (409) from the same doors, naming
+`cloud.baseUrl`; it is never a move candidate, and its Sync tab says only that. Before session 6 a GitHub repo resolved through an install-wide GitHub OAuth
+identity or a per-repo Personal Access Token; database step 18 dropped the identity's table and the
+credentials (`state/GitHubRetirementMigration.kt`). The tests stand a `file:` bare repo in for a
+remote, which a resolver built with `localRepos` reaches with no credentials; the desk's own never is.
 
 ### The cloud
 
 A cloud repo's URL is `<cloud.baseUrl origin>/git/<orgId>/<repoId>.git`, by ids (cloud-p2 plan D2):
 `cloud/CloudRepoUrls.kt` decides whether a URL is one — the same scheme, host and port as
-`cloud.baseUrl` and that path, with no credentials, query or fragment — and anything else (a GitHub
-URL, a `file://` remote) resolves as it always has. For a cloud URL, `sync/auth/CloudCredentialSource.kt`
-answers, never falling through to GitHub's paths (D3):
+`cloud.baseUrl` and that path, with no credentials, query or fragment. For a cloud URL,
+`sync/auth/CloudCredentialSource.kt` answers (D3):
 
 - **An adopted desk** mints a git token per run: `InstallGitTokens.mint` over the install key
   (`CloudService.installSigner()`, while adopted through the configured, enabled cloud), sent as Basic
@@ -2360,7 +2352,7 @@ answers, never falling through to GitHub's paths (D3):
 - **Neither**: `CLOUD_NOT_ADOPTED` (409), naming the Cloud tab.
 
 Neither path needs the control channel, so a desk whose channel is down but whose HTTPS reaches the
-cloud syncs. A 401 from the cloud is `AUTH_FAILED` in the cloud's words, not GitHub's.
+cloud syncs. A 401 from the cloud is `AUTH_FAILED` in the cloud's words.
 
 **The cloud's refusals** (D4). A pushed ref the cloud refuses carries `CODE: words`
 (`PushRefusals.codeOf`): `JGitClient` reads `SYNC_NON_FAST_FORWARD` as the non-fast-forward the engine
@@ -2373,7 +2365,7 @@ carries the status it read) is put in the cloud's words by asking the repo API f
 `AUTH_FAILED`. `RemoteSyncEngine.withProjectLock` turns both into `SyncException`s
 (`sync/CloudSyncCodes.kt`), each message ending with what to do, so the activity log and auto-sync's
 backoff see them as every other failure. The Sync tab and the app header's refusal banner
-(`CloudSyncRefusalBanner`, beside the GitHub re-auth banner) read the code back from the failure or the
+(`CloudSyncRefusalBanner`) read the code back from the failure or the
 activity log's `CODE: words` line and say what to do.
 
 **Where a repo comes from** (D6, `sync/CloudRepos.kt`). *Sync to the cloud* (`POST
@@ -2394,17 +2386,18 @@ cleared or set to another repo, and a name lookup after an import or a reconnect
 fails the write. Every place the desk names a cloud repo shows its name, never its URL; a show's
 `venueRepo` hint for a venue on a cloud repo is that name (`VenuePins.repoHintOf`), so `VENUE_MISSING`
 names the repo to import first, and a GitHub `owner/repo` hint already in a show is read as it is.
-`SyncConfigDto` and each `LinkedRepoDto` carry `cloud`; GitHub's attach stays under the Sync tab's
-*GitHub (legacy)* until the move.
+`SyncConfigDto` and each `LinkedRepoDto` carry `cloud`, and only a cloud repo is offered to reconnect.
 
 **Moving a project off GitHub** (D7, `sync/CloudMove.kt`). The Cloud tab's *Move GitHub-synced projects
-to the cloud* reads `GET /cloud-sync/move` — every project whose `repoUrl` is not the cloud's, venues
+to the cloud* reads `GET /cloud-sync/move` — every project whose `repoUrl` is a GitHub repo, venues
 first, each with `cloudHasRepo` when another desk moved it already — and runs `POST /cloud-sync/move
 {projectIds}`, one project at a time under the locks its sync takes (`RemoteSyncEngine.withSyncLocks`,
-a venue's lock too). For each: a sync with GitHub first, so the working tree holds the latest — skipped
-when GitHub cannot be reached or refuses the credentials, the move then going on from the working tree
-(`MOVE_FROM_WORKING_TREE` in the activity log), and failing the project on any other refusal (a
-conflict, a format too new); the cloud repo made, or found by `REPO_EXISTS`; then the branch, onto the
+a venue's lock too). For each: a sync with its old remote first, so the working tree holds the latest —
+which since session 6 is `GITHUB_RETIRED` for every GitHub repo, so the move goes on from the working
+tree (`MOVE_FROM_WORKING_TREE` in the activity log), a show snapshotted first under the same locks (the
+refusal comes before the run's own snapshot, so a show that never synced still moves), as it does when the remote cannot be reached or
+refuses the credentials, and fails the project on any other refusal (a conflict, a format too new); the
+cloud repo made, or found by `REPO_EXISTS`; then the branch, onto the
 cloud's `main` whatever GitHub's branch was called, and every tag a venue holds — its own and those it
 pulled, which sit in `refs/remotes/origin/tags/` — pushed from the working tree to that URL without
 configuring a remote, never forced, so every SHA and tag object is GitHub's. Tags compare by the commit
@@ -2413,7 +2406,7 @@ they name. The cloud repo's refs are fetched first into `refs/lighting7-move/`
 same name names another version, nothing is pushed and the project re-points anyway, its next sync
 merging the two (`MOVED_DIVERGED`); a push refused as a non-fast-forward (another desk pushed between
 the fetch and the push) reads the same. After a push the cloud's branch must be the working tree's head,
-which is GitHub's when the first sync ran, and every tag the desk's (`MOVE_HISTORY_MISMATCH` otherwise).
+which is the old remote's when the first sync ran, and every tag the desk's (`MOVE_HISTORY_MISMATCH` otherwise).
 Then `repoUrl` is the cloud repo, its name in `repo_name`, `branch` and the working tree's branch
 `main`, the GitHub URL remembered in `sync_linked_repos`, and a verifying sync runs, announced on the
 cloud-sync stream as any sync is, whose result is the row's `verify` (or `verifyError`; the project stays
@@ -2423,208 +2416,18 @@ on the public listener; the run is 409 `CLOUD_SYNC_PULL_ONLY` on a pull-only des
 `pushEnabled` false, so the tab offers no move), refused as making a repo is (`CLOUD_NOT_ADOPTED`,
 `SYNC_OFF`, `CLOUD_UNREACHABLE`) before anything syncs, and a project not on GitHub is a
 `MOVE_NOT_ON_GITHUB` row. A show whose venue on this desk still syncs with GitHub — not asked for, or its
-move in the same run failed — is a `VENUE_NOT_MOVED` row, nothing synced for it. The move needs GitHub only for its first sync, so it still works
-once GitHub's code is deleted.
-
-### GitHub OAuth
-
-Architecture lives in
-[`sync/auth/oauth/`](../src/main/kotlin/uk/me/cormack/lighting7/sync/auth/oauth/):
-
-| Class | Role |
-|---|---|
-| `OAuthGitHubClient` | Ktor HTTP client for `github.com/login/...` and `api.github.com/user/...`. Methods: `exchangeCode`, `refresh`, `startDeviceFlow`, `pollDeviceFlow`, `getAuthenticatedUser`, `listInstallationRepositories`, `createUserRepo`. |
-| `OAuthTokenStore` | Persists the install-wide identity as a JSON blob in [`CredentialStore`](#credential-store) under `oauth:github:default`. Refresh always overwrites the whole blob so a partial write can't leave a fresh access token paired with a stale refresh token. |
-| `OAuthTokenProvider` | Refresh-on-demand wrapper. A `Mutex` guards the read-refresh-write so concurrent git ops don't race-burn the (single-use) refresh token. Throws `OAuthReauthRequiredException` when the refresh token is expired or rejected, and [records that on the identity](#re-auth-marking). |
-| `AuthResolver` | The single throat callers use to get JGit credentials. Prefers OAuth, falls back to the per-repo PAT if OAuth is missing or its refresh token has expired. |
-
-Identity metadata mirror table:
-
-```
-oauth_identities      (machine-local; never synced)
-  id PK
-  provider VARCHAR    -- "github"
-  scope VARCHAR       -- "default"
-  github_login VARCHAR
-  github_user_id BIGINT
-  access_expires_at TEXT?         -- UTC instant
-  refresh_expires_at TEXT?        -- UTC instant
-  connected_at TEXT               -- UTC instant
-  reauth_required_at TEXT?        -- UTC instant; see "Re-auth marking"
-  reauth_reason VARCHAR?
-  UNIQUE(provider, scope)
-```
-
-The row carries only non-secret display metadata so the UI can render
-"Connected as @login" without round-tripping the credential store. Tokens
-themselves never go in this table — only `CredentialStore`.
-
-#### Web flow vs. device flow
-
-* **Web flow** (primary): the user clicks "Connect GitHub" in the sync UI,
-  which hits `GET /api/rest/oauth/github/start`. The backend mints a CSRF
-  cookie carrying the originating `projectId`/`returnTo`, redirects the
-  browser to `github.com/login/oauth/authorize`, and waits for the callback at
-  `/api/rest/oauth/github/callback`. The exchange happens server-side and
-  the user is bounced back to `/projects/{id}/sync` with the identity stored.
-* **Device flow** (fallback): for rigs accessed from a host that doesn't match
-  the GitHub App's registered Callback URL (e.g. iPad on the LAN browsing
-  the studio rig). The UI shows a short user code and a verification URI;
-  the backend polls until GitHub observes the user's authorisation.
-
-Both paths yield the same `StoredOAuthIdentity` blob and the same DB mirror
-row.
-
-#### Refresh
-
-Access tokens last 8 hours; refresh tokens last 6 months and are *single-use*
-(each refresh issues a new pair). The provider refreshes proactively when an
-access token has less than 60 s of remaining lifetime, and is single-flight
-under a Mutex so two concurrent git ops don't race the same refresh.
-
-The `onIdentityUpdated` hook (wired up in `State`) writes the new expiries into
-the `oauth_identities` row so the UI's "expires in" badge stays accurate without
-polling, and broadcasts `oauthIdentityChanged`. The broadcast matters because
-refreshes happen off-request — an auto-sync tick, a repo listing — so without it
-an open sync page keeps rendering a stale identity.
-
-#### Re-auth marking
-
-A refresh token can stop working long before its nominal 6-month expiry: the
-authorisation gets revoked, the App is reinstalled, the client secret rotates, or
-the token is rotated out from under this install. GitHub answers
-`bad_refresh_token` / `invalid_grant`, and **only the user can fix it**.
-
-When that happens `OAuthTokenProvider` stamps `reauthRequiredAt` +
-`reauthReason` onto the stored blob (and, via the mirror hook, the DB row and a
-WS frame). `GET /oauth/github/identity` exposes them as `reauthRequired` /
-`reauthReason` / `reauthRequiredAt`.
-
-The frontend surfaces that in three places, because the original failure was one
-of *visibility* rather than detection — the desk knew nothing was syncing, and
-said so nowhere anyone looked:
-
-* `IdentityRow` leads with a "Reconnect GitHub" alert instead of "Connected as
-  @login", on both sync pages.
-* A destructive dot on the **Sync** nav entries (`ProjectSwitcher`).
-* An app-wide dismissible banner (`SyncReauthBanner`), dismissed against *this*
-  rejection's timestamp so a later one is never pre-dismissed.
-
-All three are admin-only, which is not a policy choice so much as a consequence:
-the `/api/rest/oauth/` routes are mounted inside `adminOnly {}`, so an operator's
-client can only 403 — and per the rule the update panel follows, whoever is
-running a show does not get nagged about something they cannot fix.
-
-Cleared by any success: `applyRefresh` nulls both fields explicitly (it's a
-`copy`, so a stale flag would otherwise survive the very refresh that proved the
-identity healthy), and `persistIdentity` clears the mirror row on re-connect.
-
-Three deliberate choices:
-
-* **Only `OAuthReauthRequiredException` marks.** A network error, a 5xx or a rate
-  limit leaves the identity unmarked so it keeps retrying — marking those would
-  strand a working desk over a blip.
-* **The marking is a record, not a gate.** `accessToken()` does *not* fast-fail on
-  it; a spurious rejection would then wedge the identity until someone
-  re-connected by hand, and the manual-retry path would need a `force` flag
-  threaded through `AuthResolver`. Every wasted request came from a background
-  loop, so [that loop](#auto-sync-phase-8) is where the retry storm is fixed.
-* **`AuthResolver` still prefers a PAT over nothing.** A desk with a stored PAT
-  keeps syncing while its OAuth identity is marked; that path is unchanged.
-
-Re-marking an already-marked identity is a no-op, so a backed-off retry neither
-rewrites the blob nor re-broadcasts, and `reauthRequiredAt` keeps meaning
-*first* seen — which is what the UI shows as "since".
-
-**`failReauth` re-reads the store before marking, and marks the copy it just
-read.** `refresh()` is a network round-trip and `persistIdentity` writes the blob
-directly — outside `refreshMutex`, which only serialises `OAuthTokenProvider`. So
-a user can finish re-connecting while GitHub is still deciding about the *old*
-token. Writing the captured snapshot back would overwrite the fresh identity with
-the dead one and broadcast `reauthRequired`, silently undoing a re-connect seconds
-after it succeeded. A changed refresh token means "re-connected under us" and the
-rejection is discarded. There is no CAS on the credential store, so a sliver of a
-window survives between that read and the write — microseconds rather than a
-round-trip, and no stale token material is ever written back.
-
-> **Why this exists.** A desk ran for 25 days with a rejected refresh token,
-> POSTing to GitHub's token endpoint once a minute per project (~70k rejected
-> requests) while the UI showed "Connected as @user" and a permanent "refreshing
-> soon" badge, because nothing persisted the rejection and nothing backed off.
-
-#### Configuration
-
-```hocon
-sync.oauth.github {
-    clientId      = ""    # blank → fall back to bundled credentials (see below)
-    clientSecret  = ""    # sensitive; treat local.conf as a secret file
-    publicBaseUrl = ""    # default "http://localhost:8413"; appended with
-                          # /api/rest/oauth/github/callback
-}
-```
-
-`clientId` and `clientSecret` resolve as an atomic pair through
-[`State.resolveOAuthCredentialPair`](../src/main/kotlin/uk/me/cormack/lighting7/state/State.kt):
-
-1. If `local.conf` provides both, use that pair.
-2. Otherwise, if `BundledOAuthCredentials` (generated at build time) provides
-   both, use that pair.
-3. Otherwise OAuth is disabled and the UI offers PAT-only auth.
-
-We never mix `clientId` from one source with `clientSecret` from another —
-they belong to different GitHub Apps and pairing them across sources would
-produce an invalid client.
-
-##### Build-time bundled credentials
-
-Installer distributions (the Windows .msi built by `.github/workflows/windows-build.yml`)
-can't ship a `local.conf` with secrets, so the workflow injects credentials
-from repository secrets via Gradle properties:
-
-```bash
-./gradlew packageWindows \
-  -PghOauthClientId=$GH_OAUTH_CLIENT_ID \
-  -PghOauthClientSecret=$GH_OAUTH_CLIENT_SECRET
-```
-
-The `generateBundledOAuthCredentials` task writes
-`build/generated/source/oauth/main/kotlin/.../BundledOAuthCredentials.kt`
-with the values as `const val` strings; that file is on the main source set's
-classpath, so the values end up in `lighting7.jar` and the resulting .msi.
-Local builds leave the props empty (the file generates with empty strings)
-and rely on `local.conf` as before.
-
-The repository secrets are `LIGHTING7_GH_OAUTH_CLIENT_ID` and
-`LIGHTING7_GH_OAUTH_CLIENT_SECRET`. The credentials end up in the binary;
-that's the standard "public client" trade-off for OAuth desktop apps where
-PKCE isn't available (GitHub doesn't support PKCE on OAuth/GitHub Apps).
-Mitigations: a GitHub App is scoped per-install (a leaked secret can't
-pivot beyond what each user explicitly authorised), permissions are kept
-minimal, and rotation is fast (regenerate the App's client_secret →
-re-run the workflow → ship a new installer).
-
-GitHub App registration steps (one-time, by the install operator):
-
-* Repository permissions: `Contents: Read & write`, `Metadata: Read-only`,
-  `Administration: Read & write` (the last is needed for the inline
-  "Create new private repo" affordance — drop it if you only ever pick
-  existing repos).
-* Enable "Request user authorization (OAuth) during installation".
-* Enable "Device Flow" so the device-flow fallback works.
-* Set Callback URL to `${publicBaseUrl}/api/rest/oauth/github/callback`.
-* Webhooks: off.
-
-No private key (`.pem`) is needed — that's only required for server-to-server
-operations (acting as the App without a logged-in user), which lighting7
-doesn't do.
+move in the same run failed — is a `VENUE_NOT_MOVED` row, nothing synced for it. The move needed GitHub
+only for its first sync, so it works from the working tree now that GitHub's code is deleted: what a desk
+loses is only the GitHub commits it never pulled, and those reached the cloud from the desk that made
+them.
 
 ### Credential store
 
 The
 [`CredentialStore`](../src/main/kotlin/uk/me/cormack/lighting7/sync/auth/CredentialStore.kt)
-interface holds both PATs (under `pat:<repoUrl>`) and the OAuth blob (under
-`oauth:github:default`). The PAT-keyed methods are convenience wrappers over
-the more general `getBlob`/`setBlob`/`deleteBlob`/`containsBlob` API.
+interface holds the desk's secrets, each a string under a key: the cloud install key
+(`cloud:install-key:<install uuid>`, `cloud/InstallKeyStore.kt`). It held GitHub's OAuth tokens and
+PATs until database step 18 deleted them.
 
 | Backend | Used when | Notes |
 |---|---|---|
@@ -2635,32 +2438,10 @@ The factory ([`CredentialStoreFactory`](../src/main/kotlin/uk/me/cormack/lightin
 falls back from keychain to file silently if the native backend isn't
 available (typical on a headless Linux box). The fallback is logged at WARN.
 
-### PAT (Advanced fallback)
-
-PATs are keyed per-`repoUrl` so two projects pointing at different remotes
-can hold different credentials. Changing a project's `repoUrl` invalidates
-the old PAT lookup; the user has to re-enter the token under the new URL.
-
-REST surface:
-
-* `PUT /api/rest/projects/{id}/sync/credentials` — body `{ pat }`. The repo
-  URL must be set first; the PAT is keyed against it.
-* `DELETE /api/rest/projects/{id}/sync/credentials` — clears the entry.
-  No-op if none exists.
-* `GET /api/rest/projects/{id}/sync/config` returns `tokenPresent: Boolean`
-  so the UI can render "✓ stored" without round-tripping the secret.
-
-The PAT itself is **never** sent to the client. Rotation = clear + re-enter.
-
-GitHub PAT scope: `repo` is required for private repos. JGit surfaces a 401
-on push/fetch if the scope is missing.
-
 ### JGit transport
 
-Both PAT and OAuth user-to-server tokens authenticate identically over
-HTTPS — the username is the literal placeholder `x-access-token`, the
-password is the token. `GitCredentials.forGitHubToken(...)` (formerly
-`forGitHubPat`) builds the JGit credentials provider for either source.
+A cloud repo's token is sent as HTTP Basic: the user `x-install-token` for an install-signed git token,
+`x-dev-token` for a developer token, the password the token (`GitCredentials`).
 
 **Fetch and push give up after 30 seconds without a byte** (`JGitClient.TRANSPORT_TIMEOUT_SECONDS`,
 JGit's `setTimeout`), so a hung remote never holds a project's sync lock indefinitely. A transport
@@ -2679,10 +2460,9 @@ person.
 
 | Code | Mapped HTTP | Cause |
 |---|---|---|
-| `MISSING_CREDENTIALS` | 401 | No OAuth identity AND no PAT for this repo. |
-| `OAUTH_REAUTH_REQUIRED` | 401 | OAuth identity present but refresh token rejected — user must re-connect. |
-| `AUTH_FAILED` | 401 | Credentials present but GitHub rejected the push/fetch. |
-| `MISSING_PAT` | 401 | Legacy alias for `MISSING_CREDENTIALS`; retained for one release. |
+| `AUTH_FAILED` | 401 | The cloud refused this desk's credentials on a push or fetch. |
+| `GITHUB_RETIRED` | 409 | The project's repo is a GitHub repo, which the desk does not sync with: the project moves to the cloud. |
+| `NOT_A_CLOUD_REPO` | 409 | The project's repo is neither GitHub's nor one of this desk's cloud (`cloud.baseUrl`): the desk does not sync with it. |
 | `CLOUD_NOT_ADOPTED` | 409 | A cloud repo, on a desk neither adopted nor started with `LIGHTING7_CLOUD_TOKEN`. |
 | `SYNC_OFF` | 409 | The cloud's org does not have cloud sync. |
 | `REPO_NOT_FOUND` | 409 | The cloud repo was deleted in the portal, or is another org's. |
@@ -3143,7 +2923,7 @@ project.
 
 ### Backoff
 
-Any failing tick — a rejected OAuth token, a missing credential, an offline network, a
+Any failing tick — refused credentials, a project still on GitHub, an offline network, a
 pending conflict session — puts the project's loop into
 [`nextDelayMs`](../src/main/kotlin/uk/me/cormack/lighting7/sync/AutoSyncScheduler.kt)
 backoff: the base interval doubled per consecutive failure, capped at
@@ -3163,16 +2943,16 @@ Two properties worth preserving:
   backoff is what makes its volume reasonable (~24/day rather than ~1,440).
 
 Counted per loop, in coroutine-local state, so `reschedule(projectId)` resets it for free.
-That is why re-connecting GitHub (`persistIdentity`) and storing a PAT
-(`PUT /sync/credentials`) both call `reschedule` — the backoff self-heals regardless, but
-without them the reward for fixing credentials could be up to an hour of apparent silence.
+That is why a config change (`PUT /sync/config`) and a move to the cloud both call `reschedule` — the
+backoff self-heals regardless, but without them the reward for fixing the cause could be up to an hour
+of apparent silence.
 A successful manual `Sync now` deliberately does *not* reset it: cancelling and relaunching
 the loop on every manual sync would shift its phase for no real gain, and the next backed-off
 tick recovers on its own.
 
 > **Why this exists.** With a dead credential and the 60s floor, two projects generated
 > ~2,880 failed runs and ~8,600 log rows a day, indefinitely — which also meant the 500-row
-> activity log held nothing but that one failure. Note the flood was never OAuth-specific: a
+> activity log held nothing but that one failure. Note the flood was never credential-specific: a
 > network failure reaches the scheduler as a bare `RuntimeException` (only 401/403 become
 > `GitAuthException` in `JGitClient`), so an offline desk produced the same storm by a
 > different route. That is why backoff covers *every* failure rather than the auth codes.
@@ -3288,8 +3068,8 @@ same `CommitInfo[]` shape as before, with the added attribution fields described
   no separate JNA dep is declared. Used by the cloud-sync phase 4
   credential store.
 * **Credential file path**: when `sync.credentialStore = "file"` (or the
-  keychain backend isn't available), PATs are stored at
-  `<appDataDir>/credentials.enc`. The file is created with permissions
+  keychain backend isn't available), the desk's secrets (the cloud install
+  key) are stored at `<appDataDir>/credentials.enc`. The file is created with permissions
   `0600` on POSIX filesystems.
 * **DB**: SQLite on the lighting7 install path.
 * **Sync-cycle memory**: peak heap during `runSync` is roughly bounded by
@@ -3408,8 +3188,8 @@ versions (a folder holds one version).
 
 **The import order a fresh desk needs:** the venue's repo first, then each show on it — a show's
 import (and its sync) is refused with `VENUE_MISSING` until its pinned version is here, naming the
-venue and the repo it syncs from. `scripts/cloud-session.sh` reads each repo's kind — from the
-cloud's repo list, or a GitHub repo's `project.json` — and imports venues first.
+venue and the repo it syncs from. `scripts/cloud-session.sh` reads each repo's kind from the cloud's
+repo list and imports venues first.
 
 `JGitClient` gained `tag` / `deleteTag` / `listTags`, `fetchTags` / `listRemoteTags`,
 `pushWithTag`, `extractTree` and `hasPath` for it. `VenueRepoSyncTest` runs two desks on one bare

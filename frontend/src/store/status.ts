@@ -36,7 +36,7 @@ export const RECONNECT_RESYNC_TAGS: readonly RestTagType[] = REST_TAG_TYPES.filt
  * distinction that keeps this from rotting the way its predecessor did: anything omitted here
  * still resyncs, just a wave later. These are the caches whose staleness the operator sees
  * immediately (a greyed-out transport, a stale patch list on the fixtures table and all three
- * stage views), so they should not queue behind the Cloud Sync and OAuth families.
+ * stage views), so they should not queue behind the Cloud Sync family.
  */
 const RESYNC_PRIORITY_TAGS: readonly RestTagType[] = [
   'ProgramState',

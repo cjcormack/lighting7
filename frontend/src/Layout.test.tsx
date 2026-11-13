@@ -53,8 +53,7 @@ vi.mock('./components/CommandPalette', () => ({
 vi.mock('./components/press/ApplyPicker', () => ({ ApplyPicker: () => null }))
 vi.mock('./components/ChannelValueDialog', () => ({ ChannelValueDialog: () => null }))
 vi.mock('./components/cloudSync/SyncNotifications', () => ({ SyncNotifications: () => null }))
-vi.mock('./components/cloudSync/SyncReauthBanner', () => ({ SyncReauthBanner: () => <div data-testid="banner-reauth" /> }))
-vi.mock('./components/cloudSync/CloudSyncRefusalBanner', () => ({ CloudSyncRefusalBanner: () => null }))
+vi.mock('./components/cloudSync/CloudSyncRefusalBanner', () => ({ CloudSyncRefusalBanner: () => <div data-testid="banner-refusal" /> }))
 vi.mock('./components/screens/ReturnToFullscreenBanner', () => ({ ReturnToFullscreenBanner: () => null }))
 vi.mock('./components/hand/HandChip', () => ({ HandChip: () => <div data-testid="hand-chip" /> }))
 vi.mock('./components/effects/ArmedChip', () => ({ ArmedChip: () => null }))
@@ -144,7 +143,7 @@ describe('the app around a live view', () => {
       }
       expect(content(container).style.marginLeft).toBe('0px')
       // What is untouched (D7): the banners and the hand.
-      expect(screen.getByTestId('banner-reauth')).toBeInTheDocument()
+      expect(screen.getByTestId('banner-refusal')).toBeInTheDocument()
       expect(screen.getByTestId('hand-chip')).toBeInTheDocument()
       unmount()
     }

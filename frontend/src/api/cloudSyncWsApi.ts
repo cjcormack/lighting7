@@ -26,12 +26,6 @@ export interface CloudSyncWsApi {
    */
   subscribeConflictsPending(fn: (event: CloudSyncConflictsPendingEvent) => void): Subscription
   /**
-   * GitHub OAuth identity changed (connected, disconnected, or refreshed). The sync
-   * configuration page invalidates the identity cache so the "Connected as @login"
-   * row updates without polling.
-   */
-  subscribeOAuthIdentityChanged(fn: (event: OAuthIdentityChangedEvent) => void): Subscription
-  /**
    * Phase 8: a single activity-log row was just persisted. The activity feed appends
    * the entry without round-tripping `/sync/activity`.
    */
@@ -77,27 +71,12 @@ export interface CloudSyncProjectImportedEvent {
   name: string
 }
 
-export interface OAuthIdentityChangedEvent {
-  provider: string
-  connected: boolean
-  login?: string | null
-  accessExpiresAt?: string | null
-  refreshExpiresAt?: string | null
-  /**
-   * GitHub has rejected the identity. Carried so a listener can react to *becoming* broken,
-   * but the frame is only a nudge — the detail (reason, since when) comes from re-reading
-   * the identity endpoint.
-   */
-  reauthRequired?: boolean
-}
-
 type CloudSyncInMessage =
   | { type: 'cloudSyncDone' } & CloudSyncDoneEvent
   | { type: 'cloudSyncFailed' } & CloudSyncFailedEvent
   | { type: 'cloudSyncConflictsPending' } & CloudSyncConflictsPendingEvent
   | { type: 'cloudSyncLogAppended' } & CloudSyncLogAppendedEvent
   | { type: 'cloudSyncProjectImported' } & CloudSyncProjectImportedEvent
-  | { type: 'oauthIdentityChanged' } & OAuthIdentityChangedEvent
 
 export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsApi {
   const done = createWsSubscribable<CloudSyncDoneEvent>()
@@ -105,7 +84,6 @@ export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsAp
   const conflictsPending = createWsSubscribable<CloudSyncConflictsPendingEvent>()
   const logAppended = createWsSubscribable<CloudSyncLogAppendedEvent>()
   const projectImported = createWsSubscribable<CloudSyncProjectImportedEvent>()
-  const oauthIdentityChanged = createWsSubscribable<OAuthIdentityChangedEvent>()
 
   conn.subscribe((evType, _ev, frame) => {
     if (evType !== 'message') return
@@ -127,9 +105,6 @@ export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsAp
       case 'cloudSyncProjectImported':
         projectImported.notify(message)
         break
-      case 'oauthIdentityChanged':
-        oauthIdentityChanged.notify(message)
-        break
     }
   })
 
@@ -139,6 +114,5 @@ export function createCloudSyncWsApi(conn: InternalApiConnection): CloudSyncWsAp
     subscribeConflictsPending: conflictsPending.api.subscribe,
     subscribeLogAppended: logAppended.api.subscribe,
     subscribeProjectImported: projectImported.api.subscribe,
-    subscribeOAuthIdentityChanged: oauthIdentityChanged.api.subscribe,
   }
 }

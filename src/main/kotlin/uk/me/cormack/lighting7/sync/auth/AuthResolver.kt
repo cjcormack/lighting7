@@ -1,112 +1,76 @@
 package uk.me.cormack.lighting7.sync.auth
 
-import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.sync.GitCredentials
-import uk.me.cormack.lighting7.sync.auth.oauth.OAuthReauthRequiredException
-import uk.me.cormack.lighting7.sync.auth.oauth.OAuthTokenProvider
-import uk.me.cormack.lighting7.sync.auth.oauth.OAuthTokenStore
+import java.net.URI
 
 /**
- * Picks JGit credentials for [repoUrl] from the available auth sources.
+ * Picks JGit credentials for a repo. A repo of the configured Lighting7 Cloud is [cloud]'s alone
+ * (cloud-p2 plan D3): its install-signed git token, else the developer token, else
+ * [CloudNotAdoptedException]. A GitHub repo is refused with [GitHubRetiredException] (D8), and any
+ * other repo with [NotACloudRepoException].
  *
- * A repo of the configured Lighting7 Cloud is [cloud]'s alone (cloud-p2 plan D3): its install-signed
- * git token, else the developer token, else [CloudNotAdoptedException]. For any other repo:
- *
- * Resolution order:
- *  1. **Install-wide GitHub OAuth identity**, if connected. Auto-refreshes the access
- *     token via [OAuthTokenProvider]. The same `x-access-token` username form GitHub
- *     uses for PATs works for user-to-server tokens too, so JGit transport is identical.
- *  2. **Per-repo PAT**, if the user has stored one via the Advanced/PAT path.
- *  3. Otherwise throws [MissingCredentialsException]. The route layer maps this to a
- *     401 with a stable code so the UI can prompt connect-or-PAT.
- *
- * The OAuth path is preferred when present even if a PAT also exists — the PAT then
- * serves only as a manual override the user can clear once OAuth is working.
+ * [localRepos] lets a `file:` repo through with no credentials, which is how the tests stand a bare
+ * repo in for a remote, and counts it as a GitHub repo for the move; the desk itself never sets it.
  */
 class AuthResolver(
-    private val credentialStore: CredentialStore,
-    /** May be null if `sync.oauth.github.clientId` is unset — then OAuth is not an option. */
-    private val tokenStore: OAuthTokenStore?,
-    private val tokenProvider: OAuthTokenProvider?,
     /** The cloud's source, null when the resolver knows no cloud. */
-    val cloud: CloudCredentialSource? = null,
+    val cloud: CloudCredentialSource?,
+    private val localRepos: Boolean = false,
 ) {
     /** Whether [repoUrl] is a repo of the configured cloud. */
     fun isCloudRepo(repoUrl: String): Boolean = cloud?.handles(repoUrl) == true
+
+    /** Whether the desk syncs with [repoUrl]: a repo of the configured cloud, or a local one where those are allowed. */
+    fun canSyncWith(repoUrl: String): Boolean = isCloudRepo(repoUrl) || isLocal(repoUrl)
+
+    /** Whether [repoUrl] is a GitHub repo, which moves to the cloud: one on `github.com`, or a local one where those are allowed. */
+    fun isGitHubRepo(repoUrl: String): Boolean = !isCloudRepo(repoUrl) && (isLocal(repoUrl) || hostOf(repoUrl) in GITHUB_HOSTS)
 
     /** Why the cloud's git answered [status] for [repoUrl], in its words; null for a URL that is not the cloud's. */
     suspend fun cloudRefusal(repoUrl: String, status: Int): CloudRefusal? =
         cloud?.takeIf { it.handles(repoUrl) }?.refusal(repoUrl, status)
 
-    /**
-     * Resolve credentials for [repoUrl]. Suspends because the OAuth refresh path may
-     * make a network call.
-     *
-     * If OAuth is present but the refresh token has expired
-     * ([OAuthReauthRequiredException]), we fall through to the PAT path so a user with
-     * a stored PAT can keep syncing while they sort out OAuth re-connection. If neither
-     * works, throws [MissingCredentialsException].
-     */
-    suspend fun resolveFor(repoUrl: String): GitCredentials {
+    fun resolveFor(repoUrl: String): GitCredentials {
         cloud?.takeIf { it.handles(repoUrl) }?.let { return it.resolve(repoUrl) }
-        when (val attempt = tryOAuth()) {
-            is OAuthAttempt.Success -> return GitCredentials.forGitHubToken(attempt.accessToken)
-            is OAuthAttempt.NoIdentity -> {
-                val pat = credentialStore.get(repoUrl)
-                    ?: throw MissingCredentialsException(
-                        "No GitHub credentials configured for this repository — connect via 'Connect GitHub' " +
-                            "or store a Personal Access Token under the Advanced section.",
-                    )
-                return GitCredentials.forGitHubToken(pat)
-            }
-            is OAuthAttempt.Failed -> {
-                val pat = credentialStore.get(repoUrl)
-                if (pat != null) {
-                    logger.info(
-                        "OAuth identity present but unusable ({}); falling back to PAT for {}",
-                        attempt.message,
-                        repoUrl,
-                    )
-                    return GitCredentials.forGitHubToken(pat)
-                }
-                // OAuth was the more specific failure (token rejected); surface it so the
-                // UI's error code is more useful than a generic missing-credentials.
-                throw OAuthReauthRequiredException(attempt.message ?: "OAuth refresh failed")
-            }
+        if (isLocal(repoUrl)) return GitCredentials(LOCAL_USER, LOCAL_USER)
+        if (isGitHubRepo(repoUrl)) {
+            throw GitHubRetiredException(
+                "This project still syncs with GitHub, which this desk does not: move it to the cloud from its Sync tab.",
+            )
+        }
+        throw NotACloudRepoException(notACloudRepoMessage())
+    }
+
+    /** What the desk answers a repo that is neither its cloud's nor GitHub's. */
+    fun notACloudRepoMessage(): String {
+        val base = cloud?.baseUrl
+        return if (base != null) {
+            "This repository is not one of this desk's cloud ($base), so the desk cannot sync with it."
+        } else {
+            "This desk has no cloud configured (cloud.baseUrl in local.conf), so it cannot sync with this repository."
         }
     }
 
-    /** Cheap "do we have any credentials?" probe used by the sync config UI. */
-    suspend fun hasAnyCredentialsFor(repoUrl: String): Boolean {
-        cloud?.takeIf { it.handles(repoUrl) }?.let { return it.canResolve() }
-        if (tokenStore?.isPresent() == true) return true
-        return credentialStore.contains(repoUrl)
-    }
+    private fun isLocal(repoUrl: String): Boolean = localRepos && repoUrl.startsWith("file:")
 
-    private suspend fun tryOAuth(): OAuthAttempt {
-        val store = tokenStore ?: return OAuthAttempt.NoIdentity("OAuth not configured")
-        val provider = tokenProvider ?: return OAuthAttempt.NoIdentity("OAuth not configured")
-        if (!store.isPresent()) return OAuthAttempt.NoIdentity("No OAuth identity stored")
-        return try {
-            OAuthAttempt.Success(provider.accessToken())
-        } catch (e: OAuthReauthRequiredException) {
-            OAuthAttempt.Failed(e.message)
-        } catch (e: Exception) {
-            // Don't let an unexpected OAuth failure (network, parse) prevent PAT fallback.
-            OAuthAttempt.Failed("OAuth refresh failed: ${e.message}")
+    private companion object {
+        const val LOCAL_USER = "local"
+        val GITHUB_HOSTS = setOf("github.com", "www.github.com")
+
+        /** [url]'s host, lower-cased: an https or ssh URL's, or an scp-style `git@host:path`'s. */
+        fun hostOf(url: String): String? {
+            val trimmed = url.trim()
+            if ("://" in trimmed) {
+                return runCatching { URI(trimmed).host }.getOrNull()?.lowercase()
+            }
+            val scp = Regex("^[^@/]+@([^:/]+):").find(trimmed) ?: return null
+            return scp.groupValues[1].lowercase()
         }
-    }
-
-    private sealed class OAuthAttempt {
-        data class Success(val accessToken: String) : OAuthAttempt()
-        data class NoIdentity(val message: String) : OAuthAttempt()
-        data class Failed(val message: String?) : OAuthAttempt()
-    }
-
-    companion object {
-        private val logger = LoggerFactory.getLogger(AuthResolver::class.java)
     }
 }
 
-/** No usable credentials found for the requested repo. Mapped to HTTP 401 by route layer. */
-class MissingCredentialsException(message: String) : RuntimeException(message)
+/** A GitHub repo, which the desk does not sync with: answered `GITHUB_RETIRED`. */
+class GitHubRetiredException(message: String) : RuntimeException(message)
+
+/** A repo neither of this desk's cloud nor GitHub's: answered `NOT_A_CLOUD_REPO`. */
+class NotACloudRepoException(message: String) : RuntimeException(message)

@@ -6,43 +6,38 @@ import {
   CloudUpload,
   ChevronDown,
   ChevronRight,
+  TriangleAlert,
   Unlink,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { GithubIcon } from "@/components/GithubIcon"
-import { IdentityRow } from "@/components/cloudSync/IdentityRow"
-import { CreateRepoDialog } from "@/components/cloudSync/CreateRepoDialog"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AutoSyncForm } from "@/components/cloudSync/AutoSyncForm"
-import { PatPanel } from "@/components/cloudSync/PatPanel"
 import { DisconnectConfirmDialog } from "@/components/cloudSync/DisconnectConfirmDialog"
 import { AdoptToSync } from "@/components/cloudSync/AdoptToSync"
 import { useCloudAdopted } from "@/components/cloudSync/useCloudAdopted"
 import {
   useCloudReposQuery,
   useCloudSyncConfigQuery,
+  useCloudMoveMutation,
   useCloudSyncToCloudMutation,
-  useUpdateCloudSyncConfigMutation,
   useCloudSyncReconnectMutation,
   useCloudSyncRunMutation,
+  type CloudMoveRow,
   type LinkedRepo,
   type SyncConfig,
 } from "@/store/cloudSync"
-import { useOauthGithubIdentityQuery, type GithubRepo } from "@/store/oauthGithub"
 import { formatError } from "@/lib/formatError"
 import { formatRepoUrl, repoLabel as repoLabelOf } from "@/lib/formatRepoUrl"
 
 /**
  * Cloud-sync configuration. A project is synced iff a repository is attached, so this
  * panel has two shapes: an attach call-to-action when not synced, and a read-only
- * summary + disconnect when synced.
+ * summary + disconnect when synced. A project attached to a GitHub repo, which the desk
+ * does not sync with, is offered *Move to the cloud* instead; one attached to any other repo
+ * that is not this desk's cloud's is told so.
  */
 /** [isVenue]: the venue's repo of published versions (venue plan session 4) — only the copy differs. */
 export function ConfigPanel({ projectId, isVenue = false }: { projectId: number; isVenue?: boolean }) {
@@ -56,15 +51,15 @@ export function ConfigPanel({ projectId, isVenue = false }: { projectId: number;
     )
   }
 
-  return config.synced
-    ? <SyncedConfigPanel projectId={projectId} config={config} isVenue={isVenue} />
-    : <AttachConfigPanel projectId={projectId} config={config} />
+  if (!config.synced) return <AttachConfigPanel projectId={projectId} config={config} />
+  if (config.github === true) return <MoveToCloudPanel projectId={projectId} config={config} />
+  if (config.cloud !== true) return <NotACloudRepoPanel projectId={projectId} config={config} />
+  return <SyncedConfigPanel projectId={projectId} config={config} isVenue={isVenue} />
 }
 
 /**
  * Not-synced state (lighting7 cloud-p2 plan D6): *Sync to the cloud* and the cloud repos this project
- * synced before, or, unadopted, a way to the Cloud tab. GitHub's attach stays under *GitHub (legacy)*
- * for projects already there.
+ * synced before, or, unadopted, a way to the Cloud tab.
  */
 function AttachConfigPanel({ projectId, config }: { projectId: number; config: SyncConfig }) {
   const { adopted } = useCloudAdopted()
@@ -72,7 +67,6 @@ function AttachConfigPanel({ projectId, config }: { projectId: number; config: S
   const [reconnect, { isLoading: isReconnecting }] = useCloudSyncReconnectMutation()
   const [runSync] = useCloudSyncRunMutation()
   const cloudLinked = config.linkedRepos.filter((r) => r.cloud)
-  const githubLinked = config.linkedRepos.filter((r) => !r.cloud)
   const { data: cloudRepos } = useCloudReposQuery(undefined, {
     skip: adopted !== true || cloudLinked.length === 0,
   })
@@ -137,13 +131,6 @@ function AttachConfigPanel({ projectId, config }: { projectId: number; config: S
       ) : (
         <AdoptToSync />
       )}
-
-      <GitHubLegacyAttach
-        projectId={projectId}
-        linked={githubLinked}
-        onReconnect={handleReconnect}
-        reconnecting={isReconnecting}
-      />
     </Card>
   )
 }
@@ -177,100 +164,7 @@ function RememberedRepos({
   )
 }
 
-/** GitHub's attach, for projects still synced there until they move to the cloud. */
-function GitHubLegacyAttach({
-  projectId,
-  linked,
-  onReconnect,
-  reconnecting,
-}: {
-  projectId: number
-  linked: LinkedRepo[]
-  onReconnect: (repoUrl: string) => void
-  reconnecting: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  const { data: identity } = useOauthGithubIdentityQuery(undefined, { skip: !open })
-  const [updateConfig, { isLoading: isAttaching }] = useUpdateCloudSyncConfigMutation()
-  const [runSync] = useCloudSyncRunMutation()
-  const [createOpen, setCreateOpen] = useState(false)
-  // A never-synced project cannot attach a GitHub repo while the identity is rejected: there is no
-  // manual URL entry here.
-  const oauthConnected = identity?.connected === true && identity.reauthRequired !== true
-
-  const handleAttach = async (repo: GithubRepo) => {
-    try {
-      await updateConfig({
-        projectId,
-        body: { repoUrl: repo.cloneUrl, branch: repo.defaultBranch || "main" },
-      }).unwrap()
-      toast.success(`Cloud sync enabled — ${repo.fullName}`)
-      try {
-        await runSync(projectId).unwrap()
-      } catch (err) {
-        toast.error(`Initial sync didn't complete: ${formatError(err)}`)
-      }
-    } catch (err) {
-      toast.error(`Failed to enable cloud sync: ${formatError(err)}`)
-    }
-  }
-
-  const enableButton = (
-    <Button variant="outline" onClick={() => setCreateOpen(true)} disabled={!oauthConnected || isAttaching}>
-      <GithubIcon className="size-4 mr-1.5" />
-      Create a GitHub repository
-    </Button>
-  )
-
-  return (
-    <div className="border-t pt-3">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        aria-expanded={open}
-      >
-        {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-        GitHub (legacy)
-      </button>
-      {open && (
-        <div className="mt-3 space-y-3">
-          <div className="border rounded-md p-3 bg-muted/20">
-            <IdentityRow projectId={projectId} />
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {oauthConnected ? (
-              enableButton
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span tabIndex={0}>{enableButton}</span>
-                </TooltipTrigger>
-                <TooltipContent>Connect GitHub above to create a repository.</TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-          <RememberedRepos
-            repos={linked}
-            labelOf={(url) => formatRepoUrl(url) ?? url}
-            onReconnect={onReconnect}
-            disabled={reconnecting}
-          />
-          <CreateRepoDialog
-            open={createOpen}
-            onOpenChange={setCreateOpen}
-            onCreated={(repo) => {
-              setCreateOpen(false)
-              void handleAttach(repo)
-            }}
-          />
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** Synced state: read-only repo summary, Advanced (auto-sync + PAT), and Disconnect. */
+/** Synced state: read-only repo summary, Advanced (auto-sync), and Disconnect. */
 function SyncedConfigPanel({
   projectId,
   config,
@@ -282,9 +176,7 @@ function SyncedConfigPanel({
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [disconnectOpen, setDisconnectOpen] = useState(false)
-  const cloud = config.cloud === true
   const repoLabel = repoLabelOf(config) ?? config.repoUrl ?? "—"
-  const where = cloud ? "a Lighting7 Cloud repo" : "a GitHub repository"
 
   return (
     <Card className="p-4 space-y-4">
@@ -293,42 +185,26 @@ function SyncedConfigPanel({
           <h2 className="text-sm font-semibold">Cloud sync</h2>
           <p className="text-xs text-muted-foreground">
             {isVenue
-              ? `Synced to ${where}. Published versions push and pull; the draft stays here.`
-              : `Synced to ${where}. Changes push and pull automatically.`}
+              ? "Synced to a Lighting7 Cloud repo. Published versions push and pull; the draft stays here."
+              : "Synced to a Lighting7 Cloud repo. Changes push and pull automatically."}
           </p>
         </div>
         <Badge variant="secondary" className="text-[10px] shrink-0">synced</Badge>
       </div>
 
-      {/* Identity row — surfaces re-auth if the GitHub connection lapses. */}
-      {!cloud && (
-        <div className="border rounded-md p-3 bg-muted/20">
-          <IdentityRow projectId={projectId} />
-        </div>
-      )}
-
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">Repository</Label>
         <div className="flex items-center gap-2 min-w-0">
-          {cloud ? (
-            <Cloud className="size-4 shrink-0 opacity-70" />
-          ) : (
-            <GithubIcon className="size-4 shrink-0 opacity-70" />
-          )}
+          <Cloud className="size-4 shrink-0 opacity-70" />
           <span className="text-sm font-medium truncate">{repoLabel}</span>
           <Badge variant="outline" className="text-[10px] shrink-0">{config.branch}</Badge>
         </div>
-        {config.repoUrl && !cloud && (
-          <p className="text-[10px] text-muted-foreground font-mono break-all">
-            {config.repoUrl}
-          </p>
-        )}
         <p className="text-[10px] text-muted-foreground">
           The repository can&rsquo;t be changed — disconnect to link a different one.
         </p>
       </div>
 
-      {/* Advanced — auto-sync cadence + access token, collapsed by default. */}
+      {/* Advanced — auto-sync cadence, collapsed by default. */}
       <div className="border-t pt-3">
         <button
           type="button"
@@ -336,19 +212,11 @@ function SyncedConfigPanel({
           className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
           {advancedOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-          {cloud ? "Advanced — auto-sync" : <>Advanced — auto-sync &amp; access token</>}
-          {config.tokenPresent && (
-            <Badge variant="secondary" className="ml-2 text-[10px]">PAT stored</Badge>
-          )}
+          Advanced — auto-sync
         </button>
         {advancedOpen && (
-          <div className="mt-3 space-y-4">
+          <div className="mt-3">
             <AutoSyncForm projectId={projectId} config={config} />
-            {!cloud && (
-              <div className="border-t pt-4">
-                <PatPanel projectId={projectId} config={config} />
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -366,6 +234,113 @@ function SyncedConfigPanel({
         projectId={projectId}
         repoLabel={repoLabel}
       />
+    </Card>
+  )
+}
+
+/**
+ * A project attached to a repo neither GitHub's nor this desk's cloud's: another cloud's, or this
+ * cloud's under a mistyped `cloud.baseUrl`. Nothing here can move it; disconnecting frees the project
+ * to sync to this desk's cloud.
+ */
+function NotACloudRepoPanel({ projectId, config }: { projectId: number; config: SyncConfig }) {
+  const [disconnectOpen, setDisconnectOpen] = useState(false)
+  return (
+    <Card className="p-4 space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold">Cloud sync</h2>
+        <p className="text-xs text-muted-foreground">
+          This project&rsquo;s repository is not one of this desk&rsquo;s cloud&rsquo;s, so the desk
+          cannot sync with it. Check the desk&rsquo;s cloud address, or disconnect it and sync it to
+          the cloud.
+        </p>
+        {config.repoUrl && (
+          <p className="text-[10px] text-muted-foreground font-mono break-all mt-1">
+            {formatRepoUrl(config.repoUrl)}
+          </p>
+        )}
+      </div>
+      <Button variant="outline" onClick={() => setDisconnectOpen(true)}>
+        <Unlink className="size-3.5 mr-1.5" />
+        Disconnect repository
+      </Button>
+      <DisconnectConfirmDialog
+        open={disconnectOpen}
+        onOpenChange={setDisconnectOpen}
+        projectId={projectId}
+        repoLabel={repoLabelOf(config) ?? config.repoUrl ?? "—"}
+      />
+    </Card>
+  )
+}
+
+/**
+ * A project attached to a GitHub repo (cloud-p2 plan D8): the desk does not sync with it, so the one
+ * thing to do is move it, history and all, to a cloud repo. A move that lands refetches the config,
+ * which draws the synced panel in this one's place, so its outcome is a toast; a failure stays here.
+ */
+function MoveToCloudPanel({ projectId, config }: { projectId: number; config: SyncConfig }) {
+  const { adopted, remote } = useCloudAdopted()
+  const [move, { isLoading: moving, error, reset }] = useCloudMoveMutation()
+  const [failed, setFailed] = useState<CloudMoveRow | null>(null)
+
+  const handleMove = async () => {
+    reset()
+    setFailed(null)
+    try {
+      const row = (await move([projectId]).unwrap()).find((r) => r.projectId === projectId)
+      if (row == null) {
+        setFailed({ projectId, name: "", status: "FAILED", message: "The desk did not say how the move went: reload and look again." })
+        return
+      }
+      const name = row.repoName ?? "its cloud repo"
+      if (row.status === "FAILED") setFailed(row)
+      else if (row.status === "MOVED_DIVERGED") {
+        toast.success(`Moved to ${name}`, { description: "Another desk changed it there too: its next sync merges the two." })
+      } else toast.success(`Moved to ${name}`)
+    } catch {
+      // Shown below.
+    }
+  }
+
+  return (
+    <Card className="p-4 space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold">Cloud sync</h2>
+        <p className="text-xs text-muted-foreground">
+          This project is attached to GitHub, which the desk does not sync with. Moving it pushes its whole
+          history to a cloud repo, every commit unchanged, then syncs it there.
+        </p>
+        {config.repoUrl && (
+          <p className="text-[10px] text-muted-foreground font-mono break-all mt-1">
+            {formatRepoUrl(config.repoUrl)}
+          </p>
+        )}
+      </div>
+
+      {adopted == null ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : !adopted ? (
+        <AdoptToSync what="move it to the cloud" />
+      ) : remote ? (
+        <p className="text-sm text-muted-foreground">
+          A project can only be moved to the cloud from the desk itself, never over remote access.
+        </p>
+      ) : (
+        <Button onClick={() => void handleMove()} disabled={moving}>
+          {moving ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <CloudUpload className="size-4 mr-1.5" />}
+          {failed ? "Try it again" : "Move to the cloud"}
+        </Button>
+      )}
+
+      {(failed != null || error != null) && (
+        <Alert variant="destructive">
+          <TriangleAlert className="size-4" />
+          <AlertDescription>
+            Not moved: {failed ? (failed.message ?? failed.code ?? "the move failed") : formatError(error)}
+          </AlertDescription>
+        </Alert>
+      )}
     </Card>
   )
 }

@@ -8,7 +8,7 @@ import { useIsNavAdmin } from "@/navigation"
 import { cloudRefusalOf, type CloudRefusal } from "@/lib/cloudSyncRefusal"
 
 /**
- * App-wide warning, beside [SyncReauthBanner], that the cloud refused a project's sync for a reason
+ * App-wide warning that the cloud refused a project's sync for a reason
  * a retry will not fix (lighting7 cloud-p2 plan D4): out of storage, sync off, the repo gone. Read
  * from the activity log's failures, which auto-sync writes too, and cleared by the project's next
  * good run. Dismissing hides that project's refusal, across reloads, until a different one or a good

@@ -8,7 +8,7 @@ import { dismissReturnToFullscreen, enterFullscreen, useFullscreenState } from '
  * `sessionStorage` flag), and a `windows.fullscreen {on:true}` from another screen. Both arrive
  * with no user activation to spend, and `requestFullscreen` needs one, so the page asks for it.
  *
- * At the top of `<main>`, in the scroll column beside `SyncReauthBanner`, so it shifts neither the
+ * At the top of `<main>`, in the scroll column beside `CloudSyncRefusalBanner`, so it shifts neither the
  * ShowBar nor the panels; nothing at all unless asked. A banner and not a toast, because a toast
  * times out and this is a state the window is in until the operator answers it.
  */

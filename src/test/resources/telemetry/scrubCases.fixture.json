@@ -114,10 +114,10 @@
       "input": "/projects/:projectId/busk"
     },
     {
-      "input": "POST /api/rest/oauth/github/device/start"
+      "input": "POST /api/rest/surfaces/device/start"
     },
     {
-      "input": "POST /api/rest/oauth/github/device/poll"
+      "input": "POST /api/rest/surfaces/device/poll"
     },
     {
       "input": "POST https://github.com/login/device/code"

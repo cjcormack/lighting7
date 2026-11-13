@@ -37,7 +37,6 @@ import uk.me.cormack.lighting7.models.DaoLookRows
 import uk.me.cormack.lighting7.models.DaoLookScenery
 import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoMachineOverrides
-import uk.me.cormack.lighting7.models.DaoOAuthIdentities
 import uk.me.cormack.lighting7.models.DaoPaletteFx
 import uk.me.cormack.lighting7.models.DaoPaletteRows
 import uk.me.cormack.lighting7.models.DaoPalettes
@@ -174,7 +173,6 @@ object SyncDispositions {
         DaoCloudRemoteSessions to SyncDisposition.MachineLocal("the audit of remote sessions through the cloud"),
         DaoCloudLinkInvites to SyncDisposition.MachineLocal("invites to link a cloud account to a desk account"),
         DaoCloudLinkEvents to SyncDisposition.MachineLocal("the audit of cloud account links"),
-        DaoOAuthIdentities to SyncDisposition.MachineLocal("this install's git credentials"),
         DaoSyncConfigs to SyncDisposition.MachineLocal("per-project sync settings for this install"),
         DaoSyncLinkedRepos to SyncDisposition.MachineLocal("which remote this install is attached to"),
         DaoSyncStates to SyncDisposition.MachineLocal("last-synced record hashes for this install"),

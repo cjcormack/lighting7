@@ -6256,7 +6256,7 @@ reaches the sheet's clear-selection rather than the browser, and on Safari it qu
 `fullscreenchange` listener is the truth (Esc, a tab switch and another app all leave without
 telling the requester), and it keeps a `sessionStorage` flag so a window that was full screen and is
 not now — a reload, a crash, a `{on:true}` from another screen — draws the one-tap banner at the top
-of `<main>` (`ReturnToFullscreenBanner`, beside `SyncReauthBanner`). In full screen the app draws a
+of `<main>` (`ReturnToFullscreenBanner`). In full screen the app draws a
 small exit glyph on the user menu's label line and nowhere else — never a floating button on a live
 view. **Safari on the Mac is a first-class desk browser (D13)**: every Chrome-only piece — Keyboard
 Lock, `getScreenDetails`, the *Open a window on… Display N* row and the *Open <view> on another
@@ -6409,9 +6409,9 @@ recovery. Frontend shape:
   code **4401** does the same, because the backend revokes live sockets.
 - **`OnboardingGate`** (`components/onboarding/`, between `BootGate` and the router) shows a new
   desk's first admin two steps before the app while `GET /install` says `onboardingPending`:
-  diagnostics (the telemetry switch, nothing picked until the admin picks) and projects — GitHub
-  through `IdentityRow` (whose web flow returns to `/`; the step and the imports so far survive that
-  in `sessionStorage`) and a checklist of lighting repos imported through `/cloud-sync/import`,
+  diagnostics (the telemetry switch, nothing picked until the admin picks) and projects — an
+  unadopted desk adopts here (`CloudAdoptionFlow`), and an adopted one gets a checklist of the org's
+  cloud repos imported through `/cloud-sync/import`,
   **venues first**, a taken name numbered (`Default (2)`), or the boot-time `Default` kept and named
   as a blank project. Finishing with an import opens it and the
   desk deletes the empty `Default`. An operator never sees it; the screen itself is a lazy chunk.
@@ -7475,33 +7475,14 @@ and each cancels a follow still waiting, so the book stays where the operator to
 
 FX definitions have a `timingSource` field (`BEAT` or `WALL_CLOCK`) controlling whether FX sync to BPM or run on a fixed 50Hz wall-clock timer.
 
-### Cloud sync — the GitHub identity
+### Cloud sync — a project on GitHub
 
-Backend contract in `../docs/sync-engineering.md`. Three traps on this side:
-
-- **`identity.connected === true` does not mean OAuth works.** A rejected identity keeps
-  `connected: true` and gains `reauthRequired` — that conflation is why the desk showed
-  "Connected as @user" plus a permanent "refreshing soon" badge for 25 days while every
-  sync failed. Every gate must read `connected === true && reauthRequired !== true`; the
-  five that do are in `IdentityRow`, `routes/CloudSync.tsx` (the hub's "Add remote
-  project"), `components/cloudSync/ConfigPanel.tsx`, `components/cloudSync/StatusPanel.tsx`
-  and `Projects.tsx`.
-- **`/api/rest/oauth/` is admin-gated**, so every caller of `useOauthGithubIdentityQuery`
-  passes `skip: !isAdmin` — the same reliance `store/users.ts` documents for
-  `useUsersQuery`, and now load-bearing in a new way, because the sidebar badge and the
-  global banner mount the query on *every* page rather than only on the sync pages.
-  `useOAuthReauthState` bakes the guard in; prefer it to the raw query.
-- **`startOAuthIdentityBridge()` is called from `main.tsx`, not on import.** Unlike
-  `store/users.ts`, this slice is imported from the earliest render path (the sidebar), so
-  touching `lightingApi` in its module body throws a TDZ `ReferenceError` and takes every
-  export with it — the sidebar and banner render as "not defined". `tsc`, `vite build` and
-  the unit tests all pass anyway, because the cycle exists only at runtime and the tests
-  mock the module: it shows up **solely** as a broken app in the browser.
-
-The banner is dismissible against the rejection's timestamp (localStorage), so dismissing
-survives reloads but a genuinely new outage still gets seen. It is a banner and not a toast
-or modal for the same reason the update panel never nags: an operator mid-show must not be
-interrupted — and here they are not shown it at all, since they cannot fix it.
+Backend contract in `../docs/sync-engineering.md`. The desk syncs only with its cloud's repos, and
+`SyncConfig` says which kind a project's repo is: `cloud`, or `github` for a GitHub repo, which the
+desk does not sync with. The Sync tab's `ConfigPanel` draws *Move to the cloud* (`MoveToCloudPanel`,
+`POST /cloud-sync/move` for the one project) only for `github`; a repo that is neither (another
+cloud's, or this one's under a mistyped `cloud.baseUrl`, `NOT_A_CLOUD_REPO`) gets a notice and
+*Disconnect repository*, never a move. `useSyncNow` gives *Sync now* the same reason.
 
 ### In-app updates
 
@@ -7642,7 +7623,7 @@ not stylistic:
    closure reaches back to the slice, the slice's body can run while `lightingApi` is still
    mid-initialisation, and touching it there throws a TDZ `ReferenceError` that takes *every export
    of the slice* with it. `tsc`, `vite build` and the unit tests all pass anyway — the symptom is a
-   blank-looking app in the browser. `store/oauthGithub.ts`'s doc comment is the long version.
+   blank-looking app in the browser. `store/looks.ts`'s doc comment is the long version.
 3. **Per cache entry, inside `onCacheEntryAdded`** — not a bridge at all, but the right answer for
    a *stream* rather than a notification: the value itself arrives over WS and there is nothing to
    refetch. Subscribe when the entry is created, `updateCachedData` on each frame, unsubscribe on
@@ -7657,9 +7638,9 @@ not stylistic:
    neighbours in `hooks/useAttributeValues.ts`.
 
 The census as of this writing, so a new slice can see which company it is in: **33 module-scope
-sites across 23 slices** (`grep -n '^lightingApi\.' src/store/*.ts`), and **four deferred**, all
-started from `main.tsx` — `oauthGithub`, `looks`, `palettes`, `programmerErrors`. The imbalance is
-the rule working, not drift: form 1 is the default and form 2 is the exception, and the four are
+sites across 23 slices** (`grep -n '^lightingApi\.' src/store/*.ts`), and **three deferred**, all
+started from `main.tsx` — `looks`, `palettes`, `programmerErrors`. The imbalance is
+the rule working, not drift: form 1 is the default and form 2 is the exception, and the three are
 exactly the slices the sidebar and the first paint reach. `store/windows.ts` is on the sidebar's
 path too (`UserMenu` reads the window count) and is **neither**: its only subscription is form 3, a
 `queryFn` that closes over `lightingApi` and touches it when the first reader mounts, so it needs no

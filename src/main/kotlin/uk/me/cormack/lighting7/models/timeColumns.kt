@@ -102,18 +102,9 @@ private val ISO_UTC_MILLIS: DateTimeFormatter =
 fun Instant.toIsoUtc(): String = ISO_UTC_MILLIS.format(this)
 
 /**
- * Reads a millisecond epoch that is **not** a column into an [Instant].
- *
- * The one caller group is the OAuth mirror: `StoredOAuthIdentity` is a `@Serializable` blob in the
- * credential store rather than a DB row, so it keeps its `Long` millis, and its expiry fields are
- * converted only where they are copied into `DaoOAuthIdentity`.
- */
-fun Long?.asInstant(): Instant? = this?.let(Instant::ofEpochMilli)
-
-/**
  * Reads a millisecond interval that is **not** a column into a [Duration].
  *
- * The counterpart to [asInstant], and the one place the millis→`Duration` direction lives. The
+ * The one place the millis→`Duration` direction lives. The
  * callers are the boundaries where a `Duration` column meets a surface that still counts in
  * milliseconds — the REST and WebSocket DTOs, and the sync JSON, both of which keep their
  * `…Ms: Long` fields by design. The other direction is just `Duration.toMillis()`, which needs

@@ -15,7 +15,6 @@ import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
-import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
 import uk.me.cormack.lighting7.testsupport.testAppConfig
@@ -47,8 +46,6 @@ class RemoteSyncEngineConflictsTest {
 
     private lateinit var stateA: State
     private lateinit var stateB: State
-    private lateinit var credsA: InMemoryCredentialStore
-    private lateinit var credsB: InMemoryCredentialStore
     private lateinit var engineA: RemoteSyncEngine
     private lateinit var engineB: RemoteSyncEngine
 
@@ -78,8 +75,7 @@ class RemoteSyncEngineConflictsTest {
                 "sync.workingTreeRoot" to workingRootA.toString(),
             ),
         )
-        credsA = InMemoryCredentialStore()
-        engineA = RemoteSyncEngine(stateA, AuthResolver(credsA, tokenStore = null, tokenProvider = null))
+        engineA = RemoteSyncEngine(stateA, AuthResolver(cloud = null, localRepos = true))
 
         workingRootB = Files.createTempDirectory("lighting7-conflicts-b-")
         stateB = State(
@@ -88,8 +84,7 @@ class RemoteSyncEngineConflictsTest {
                 "sync.workingTreeRoot" to workingRootB.toString(),
             ),
         )
-        credsB = InMemoryCredentialStore()
-        engineB = RemoteSyncEngine(stateB, AuthResolver(credsB, tokenStore = null, tokenProvider = null))
+        engineB = RemoteSyncEngine(stateB, AuthResolver(cloud = null, localRepos = true))
     }
 
     @After
@@ -101,14 +96,13 @@ class RemoteSyncEngineConflictsTest {
         runCatching { bareRepo.toFile().deleteRecursively() }
     }
 
-    private fun configureSync(state: State, projectId: Int, creds: InMemoryCredentialStore, pat: String = "test-pat") {
+    private fun configureSync(state: State, projectId: Int) {
         transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq project.id }.firstOrNull()
                 ?: DaoSyncConfig.new { this.project = project }
             cfg.repoUrl = repoUrl
         }
-        creds.set(repoUrl, pat)
     }
 
     private fun runSync(state: State, engine: RemoteSyncEngine, projectId: Int): SyncRunResult {
@@ -152,7 +146,7 @@ class RemoteSyncEngineConflictsTest {
             }
             project.id.value
         }
-        configureSync(stateB, projectBId, credsB)
+        configureSync(stateB, projectBId)
         val result = runSync(stateB, engineB, projectBId)
         // FAST_FORWARDED would be the ideal classification but B's bootstrap snapshot
         // diverges from A's history (different root commits), so we hit the auto-merge
@@ -169,7 +163,7 @@ class RemoteSyncEngineConflictsTest {
     fun `disjoint edits across two installs auto-merge`() {
         // A: create + push initial state with one cue stack.
         val projectIdA = seedMinimalProject(stateA)
-        configureSync(stateA, projectIdA, credsA)
+        configureSync(stateA, projectIdA)
         transaction(stateA.database) {
             val project = DaoProject.findById(projectIdA)!!
             DaoCueStack.new { this.project = project; this.name = "shared" }
@@ -364,7 +358,7 @@ class RemoteSyncEngineConflictsTest {
      */
     private fun setUpSharedStackOnBothSides(): Triple<Int, Int, UUID> {
         val projectIdA = seedMinimalProject(stateA)
-        configureSync(stateA, projectIdA, credsA)
+        configureSync(stateA, projectIdA)
         val sharedUuid = transaction(stateA.database) {
             val project = DaoProject.findById(projectIdA)!!
             val stack = DaoCueStack.new { this.project = project; this.name = "shared" }
@@ -555,7 +549,7 @@ class RemoteSyncEngineConflictsTest {
         // one install — the test asserts that the snapshot pipeline picks up the deletion
         // from `sync_state` even though the wipe-then-export step nuked the record path.
         val projectIdA = seedMinimalProject(stateA)
-        configureSync(stateA, projectIdA, credsA)
+        configureSync(stateA, projectIdA)
         val stackUuid = transaction(stateA.database) {
             val project = DaoProject.findById(projectIdA)!!
             DaoCueStack.new { this.project = project; this.name = "ephemeral" }.uuid

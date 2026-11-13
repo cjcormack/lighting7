@@ -33,11 +33,11 @@ import java.util.concurrent.ConcurrentHashMap
  * resolves the session via the UI, logging `AUTO_SYNC_SKIPPED` once rather than spamming
  * `runSync` against an active session.
  *
- * Anything that needs a human — a conflict session, a rejected OAuth token, a missing
- * credential — puts the project's loop into [nextDelayMs] backoff instead of retrying at the
+ * Anything that needs a human — a conflict session, refused credentials, a project still on
+ * GitHub — puts the project's loop into [nextDelayMs] backoff instead of retrying at the
  * configured interval forever. Runs are made with [SyncTrigger.AUTO], which keeps a tick that
  * changed nothing out of the activity log entirely; both exist because at the 60s floor a
- * single stuck project otherwise generated thousands of GitHub requests and log rows a day,
+ * single stuck project otherwise generated thousands of remote requests and log rows a day,
  * evicting every event anyone might have wanted to read.
  *
  * "Transition-only" applies to *this class's* logging — the WARN naming the reason, and the
@@ -80,8 +80,8 @@ class AutoSyncScheduler(
      * Projects whose auto-sync has failed at least once since it last succeeded, so the recovery
      * can still be announced afterwards.
      *
-     * Deliberately *not* loop-local, unlike the backoff delay. Reconnecting GitHub calls
-     * [reschedule], which relaunches the loop from scratch — and a re-connect is the most common
+     * Deliberately *not* loop-local, unlike the backoff delay. A config change calls
+     * [reschedule], which relaunches the loop from scratch — and fixing the config is a common
      * way out of a blocked spell. With the memory in the coroutine, the recovering tick had no
      * idea it was recovering, so `AUTO_SYNC_RECOVERED` could only ever fire for the rare
      * fixed-itself case, and the feed was left ending on an ERROR exactly when someone had just
@@ -174,8 +174,7 @@ class AutoSyncScheduler(
             // doesn't fire mid-form-submission. A cloud's nudge is no form, so it may end the wait.
             pause(effective)
             // Consecutive blocked ticks, kept in loop-local scope on purpose: `reschedule`
-            // cancels and relaunches this coroutine, so a config change (or a fresh OAuth
-            // connect, which calls it) resets the backoff for free.
+            // cancels and relaunches this coroutine, so a config change resets the backoff for free.
             var consecutiveBlocked = 0
             while (isActive) {
                 wake.tryReceive()
@@ -388,10 +387,8 @@ class AutoSyncScheduler(
          * floor the waits run 2m, 4m, 8m, 16m, 32m, then hourly — about an hour of
          * failures before it settles at the ceiling.
          *
-         * A dead GitHub authorisation used to mean 1,440 rejected token requests a day per
-         * project; this makes it ~24, while still recovering within an hour of the user
-         * fixing it (sooner, since re-connecting or storing a PAT reschedules the loop
-         * outright).
+         * A project whose credentials are refused makes ~24 rejected requests a day rather than
+         * 1,440, and still recovers within an hour of the cause being fixed.
          *
          * The cap is never allowed below [baseMs]: someone who asked for a 6-hourly sync
          * must not find that failures *shorten* it to hourly.

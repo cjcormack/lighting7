@@ -83,8 +83,8 @@ export default [
     // Cycle detection only — not `plugin:import/recommended`, which brings a pile of rules this
     // tree has never been written against and which TypeScript already answers better.
     //
-    // A value-import cycle here is not a style question: `startOAuthIdentityBridge` produced a
-    // TDZ break that compiled green and showed up only as a broken app in the browser, and the
+    // A value-import cycle here is not a style question: one produced a TDZ break that compiled
+    // green and showed up only as a broken app in the browser (`store/looks.ts`), and the
     // one this rule was added alongside was `CueSlotOverviewPanel` ↔ `CueSlotEditAssignPanel`.
     // `allowUnsafeDynamicCyclicDependency` stays off; `maxDepth` stays unbounded, because the
     // cycles that hurt are rarely the two-module ones.

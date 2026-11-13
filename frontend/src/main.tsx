@@ -5,7 +5,6 @@ import App from './App';
 import { Provider } from "react-redux"
 import { store } from "./store"
 import { applyThemeClass, getInitialTheme } from "./lib/theme"
-import { startOAuthIdentityBridge } from "./store/oauthGithub"
 import { startLooksBridge } from "./store/looks"
 import { startPalettesBridge } from "./store/palettes"
 import { startProgrammerErrorBridge } from "./store/programmerErrors"
@@ -30,12 +29,6 @@ applyThemeClass(getInitialTheme())
 
 // The telemetry switch is an install setting, so turning it off on any screen stops this one too.
 lightingApi.install.subscribe(refreshTelemetry)
-
-// Keep the GitHub identity cache live for the whole app, so the sidebar badge and the re-auth
-// banner learn about a rejected authorisation without a sync page being open. Started here
-// rather than on import of the slice: see startOAuthIdentityBridge for why touching lightingApi
-// at that module's evaluation time breaks the slice outright.
-startOAuthIdentityBridge()
 
 // Same reason, one slice along: store/looks is imported from the sidebar's nav registry and from
 // pickers that mount everywhere, so its WS bridge cannot run at module-eval time either.
