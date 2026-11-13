@@ -62,14 +62,18 @@ anything it didn't put there, so don't hand-place files in it.
 
 ### Cloud sessions
 
-In a Claude Code cloud container, `scripts/cloud-session.sh [owner/repo …]` does the whole
-stand-up: installs JDK 24 (the image has 21 and the network policy blocks foojay), writes a
-pull-only `local.conf` into the data dir (`~/lighting7-data`), starts `./gradlew run` in the
-background, creates an `admin` / `lighting7-dev` account, and imports each show or venue repo
-through cloud sync — venue repos first, since a show's import needs its pinned venue version
-(`VENUE_MISSING` otherwise). Attach each repo to the session before importing it — the session's git
-proxy supplies the credentials, so the stored token is a placeholder. The script's header has the
-details; `sync.push = false` is in `docs/sync-engineering.md` §"Pull-only installs".
+In a Claude Code cloud container, `scripts/cloud-session.sh ["repo name" …]` does the whole
+stand-up: installs JDK 24 (the image has 21 and the network policy blocks foojay), resolves each
+repo by its name on Lighting7 Cloud (`GET /v1/repos`), writes a pull-only `local.conf` into the
+data dir (`~/lighting7-data`) with `cloud.baseUrl` the cloud's, starts `./gradlew run` in the
+background with the developer token, creates an `admin` / `lighting7-dev` account, and imports each
+show or venue repo — venue repos first, since a show's import needs its pinned venue version
+(`VENUE_MISSING` otherwise). The session's environment must allow the cloud's host and carry a read
+developer token from the portal, as `LIGHTING7_CLOUD_TOKEN` or as a network secret its proxy
+injects for that host; the script fails naming the host when it cannot reach it. An `owner/repo`
+argument imports from GitHub through the session's git proxy (attach the repo first) until the
+cloud-p2 plan's session 6 removes it. The script's header has the details; `sync.push = false` is in
+`docs/sync-engineering.md` §"Pull-only installs".
 
 Run Gradle there under `LC_ALL=C.UTF-8`: the image's locale is POSIX, and `compileTestKotlin`
 then fails with an internal compiler error writing class files named after test names that

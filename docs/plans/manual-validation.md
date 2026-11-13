@@ -899,7 +899,9 @@ deployed, and `FU-MANUAL-CLOUD-P2-MIGRATE` passed.
 2. A show synced on two desks: change one cue on each with both off the network, bring both back, and
    resolve the conflict on the venue desk; the other desk takes the resolution on its next sync (UC-4).
 3. A Claude Code cloud session imports a venue and a show on it from the cloud with
-   `scripts/cloud-session.sh` (session 5's record, UC-10).
+   `scripts/cloud-session.sh` (session 5's record, UC-10). *Passed 2026-11-13: TCH venue (v15, 15
+   tags) and Sleeping Beauty pinned to it, imported by name through a proxy-injected token
+   (cloud-p2 plan §6).*
 4. A desk upgraded past session 6 has no `oauth_identities` table and its backup beside the database; a
    straggler still pointing at GitHub reads `GITHUB_RETIRED` and moves from its working tree.
 5. `docs/sync-engineering.md` describes the cloud, not GitHub.

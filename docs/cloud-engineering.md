@@ -48,10 +48,11 @@ off, so `AuthService.deleteUser` deletes the user's link and invites (`deleteClo
 
 - **`baseUrl`** is the cloud, `https://lighting7.net` when absent (`CloudConfig.DEFAULT_BASE_URL`), so
   a packaged desk needs no `local.conf` to be adopted. Empty means no cloud is configured: adoption
-  answers `CLOUD_NOT_CONFIGURED` and the desk calls nothing; the test suite's config and
-  `scripts/cloud-session.sh`'s set it so. It must be `https`, or plain `http` to a loopback host (a
-  cloud on the same machine), with no credentials, query or fragment (D12). A URL the desk refuses
-  counts as not configured, and `cloud.state`'s `lastError` says why (`CLOUD_URL_INVALID`).
+  answers `CLOUD_NOT_CONFIGURED` and the desk calls nothing; the test suite's config sets it so, and so
+  does `scripts/cloud-session.sh` on a desk that has imported no cloud repo (one that has gets the
+  cloud). It must be `https`, or plain `http` to a loopback host (a cloud on the same machine), with no
+  credentials, query or fragment (D12). A URL the desk refuses counts as not configured, and
+  `cloud.state`'s `lastError` says why (`CLOUD_URL_INVALID`).
   A `local.conf` copied from `example.local.conf` between 2026-11-03 and 2026-11-05, as a packaged
   desk's first launch copies it, says `baseUrl = ""`: delete that line to take the default.
 - **`enabled = false`** is the hard kill switch: no adoption (`CLOUD_DISABLED`), no poll, no control

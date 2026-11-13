@@ -3362,8 +3362,8 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 - `FU-MIDI-SHOW-GUARD` — every surface input runs inside `SurfaceDispatch.guarded`, which turns a throw
   into a failed outcome and carries on; the OSC collector shares it (OSC plan session 1).
 - `FU-CLOUD-DEFAULT-URL` — an absent `cloud.baseUrl` is `https://lighting7.net`, so a packaged desk can
-  be adopted with no `local.conf`; an empty one is still no cloud, and the test suite and
-  `scripts/cloud-session.sh` set it so.
+  be adopted with no `local.conf`; an empty one is still no cloud, and the test suite sets it so, as
+  `scripts/cloud-session.sh` does on a desk that imports no cloud repo (one that does names the cloud).
 
 ### 2026-10
 
