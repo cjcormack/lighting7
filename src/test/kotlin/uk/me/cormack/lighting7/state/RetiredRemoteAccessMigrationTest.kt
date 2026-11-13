@@ -7,6 +7,7 @@ import org.junit.Test
 import uk.me.cormack.lighting7.cloud.RemotePolicySettings
 import uk.me.cormack.lighting7.sync.auth.CredentialStoreFactory
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
+import uk.me.cormack.lighting7.testsupport.StandInProcess
 import uk.me.cormack.lighting7.testsupport.captureLogs
 import uk.me.cormack.lighting7.testsupport.testAppConfig
 import java.nio.file.Files
@@ -135,10 +136,8 @@ class RetiredRemoteAccessMigrationTest {
         assumeTrue(!System.getProperty("os.name").orEmpty().startsWith("Windows"))
         loadOldDatabase()
         val agentPath = ngrokDir.resolve("3.24.0").resolve("ngrok")
-        Files.createDirectories(agentPath.parent)
-        Files.copy(Path.of("/bin/sleep"), agentPath)
-        agentPath.toFile().setExecutable(true)
-        val agent = ProcessBuilder(agentPath.toString(), "60").start()
+        assumeTrue(StandInProcess.install(agentPath) != null)
+        val agent = ProcessBuilder(StandInProcess.command(agentPath)).start()
         val bystander = ProcessBuilder("sleep", "60").start()
         try {
             fun pidLine(process: Process, binary: Path) =
