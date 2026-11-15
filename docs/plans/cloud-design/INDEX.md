@@ -19,7 +19,8 @@ repos. So **each phase is two plans**, one per repo, written together:
 |---|---|---|
 | P0 | `docs/plans/completed/cloud-p0-plan.md` (done) | `docs/plans/completed/p0-plan.md` (done) |
 | P1 | `docs/plans/completed/cloud-p1-plan.md` (done) | `docs/plans/p1-plan.md` (done) |
-| P2 | `docs/plans/cloud-p2-plan.md` (planned) | `docs/plans/p2-plan.md` (planned) |
+| P2 | `docs/plans/cloud-p2-plan.md` (done) | `docs/plans/p2-plan.md` (done) |
+| P3 | `docs/plans/cloud-p3-plan.md` (planned) | `docs/plans/p3-plan.md` (planned) |
 | … | `cloud-pN-plan.md` | `pN-plan.md` |
 
 Each plan is run by `/next-session` in its own repo, which keeps its own copy of the skill. A session
@@ -99,3 +100,15 @@ Each lands in the PRD's next revision; until then, the plan named is the authori
 - **v1 checks `formatVersion.json`'s form, not a ceiling** (P2). FR-SYNC-3's refusal of a version "newer
   than the server knows how to index" has nothing to refuse above while v1 indexes nothing; the cloud
   checks the file is present and well formed and records the version, and P5's indexer adds the ceiling.
+- **Backup keys and uploads travel over signed HTTP, not the control channel** (P3). REC-7 gives the desk
+  the org's data key over the control channel; P3 fetches it, and uploads, through signed `/v1/backups`
+  calls to the cloud, which keep the desk's egress to the cloud's host (no presigned S3 URL) and let a
+  backup resume part by part (cloud-p3 D1, D7, D8).
+- **A restored install keeps the old install id** (P3, OQ-6). The portal's approval adopts the new desk
+  as a new install and records a pending replacement; when an admin confirms it on the desk's own
+  listener, the cloud moves the old install's identity onto the new desk's key, so the MCP URL, links
+  and repos stay and the old key is revoked. The desk keeps its own `installs.uuid` and key
+  (cloud-p3 D9, D10).
+- **Controller reachability is the desk's ArtPoll** (P3). FR-FLEET-1 asks for it, and the desk only ever
+  sent Art-Net; it now binds 6454 once, sending every universe and reading ArtPollReply through one
+  socket, and reports unknown until a reply has reached it or when it cannot bind (cloud-p3 D4).
