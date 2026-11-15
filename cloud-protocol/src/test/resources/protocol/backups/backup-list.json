@@ -1,0 +1,30 @@
+{"backups": [
+  {
+    "backupId": "01JC9T4M2Z8Q6V0B3N5K7R1W4X",
+    "installId": "inst_01JBX3Q5Z8",
+    "installName": "Front-of-house desk",
+    "kind": "SCHEDULED",
+    "status": "COMPLETE",
+    "sizeBytes": 140509184,
+    "parts": 3,
+    "partsReceived": [1, 2, 3],
+    "sha256": "f1d2d2f924e986ac86fdf7b36c94bcdf32beec15a7a5b2b51e6b5c4a1d7f2c3b",
+    "keyId": "dk_2026_11",
+    "manifest": {
+      "deskVersion": "1.5.0",
+      "schemaVersion": 18,
+      "syncFormatVersion": 56,
+      "deskInstallUuid": "6f1d2c3e-8a4b-4c5d-9e6f-7a8b9c0d1e2f",
+      "friendlyName": "Front-of-house desk",
+      "installId": "inst_01JBX3Q5Z8",
+      "createdAt": "2026-11-15T04:00:03.000Z",
+      "files": [
+        {"path": "lighting7.db", "sizeBytes": 18874368, "sha256": "9b74c9897bac770ffc029102a200c5de2f3a4ba1d1a8c3c3e3d6b0c55a5e1e6f"},
+        {"path": "scene-images/3f2b8c1d-4e5a-4b6c-8d7e-9f0a1b2c3d4e/5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8.png", "sizeBytes": 2097152, "sha256": "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"},
+        {"path": "extra/local.conf", "sizeBytes": 412, "sha256": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"}
+      ]
+    },
+    "createdAt": "2026-11-15T04:00:41.000Z",
+    "completedAt": "2026-11-15T04:02:41.000Z"
+  }
+]}

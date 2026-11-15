@@ -82,10 +82,29 @@ sealed interface Message {
         val capabilities: List<String> = emptyList(),
     ) : Message
 
-    /** Desk → cloud, every [Welcome.heartbeatS] seconds. */
+    /**
+     * Desk → cloud, every [Welcome.heartbeatS] seconds. A desk that announces [Capability.HEALTH_V2]
+     * fills the optional fields; a P2 desk sends [uptimeS] and [deskVersion] alone, and an absent
+     * field means the desk did not say, never zero or empty. Nothing a show holds is ever here.
+     */
     @Serializable
     @SerialName("health")
-    data class Health(val uptimeS: Long, val deskVersion: String) : Message
+    data class Health(
+        val uptimeS: Long,
+        val deskVersion: String,
+        /** As [Hello.platform]. */
+        val platform: String? = null,
+        /** The project the desk runs now; absent when it runs none. */
+        val project: HealthProject? = null,
+        /** The live project's universes, in its order. */
+        val universes: List<HealthUniverse>? = null,
+        val sync: HealthSync? = null,
+        /** Free space on the data directory's file store, in MiB. */
+        val diskFreeMb: Long? = null,
+        /** The update client's state; absent where the desk has none. */
+        val update: HealthUpdate? = null,
+        val backup: HealthBackup? = null,
+    ) : Message
 
     /** Cloud → desk: the install was removed in the portal. The desk forgets its adoption. */
     @Serializable
@@ -224,6 +243,11 @@ sealed interface Message {
     @SerialName("sync.changed")
     data class SyncChanged(val repoId: String, val url: String, val headSha: String) : Message
 
+    /** Cloud → desk: make a backup now, the portal's *Back up now*. Sent and forgotten; the outcome is in the next [Health.backup]. */
+    @Serializable
+    @SerialName("backup.request")
+    data object BackupRequest : Message
+
     /** A message of a type this version does not know, or of another protocol version, kept whole so it re-encodes as it came. */
     data class Unknown(override val type: String, val body: JsonObject) : Message
 
@@ -268,6 +292,7 @@ private val decoders: Map<String, DeserializationStrategy<Message>> = listOf<Des
     Message.McpCall.serializer(),
     Message.McpResult.serializer(),
     Message.SyncChanged.serializer(),
+    Message.BackupRequest.serializer(),
 ).associateBy { it.descriptor.serialName }
 
 /** A known message beside its own serializer, so it encodes without an unchecked cast. */
@@ -302,6 +327,7 @@ private fun Message.typed(): Typed<*> = when (this) {
     is Message.McpCall -> Typed(Message.McpCall.serializer(), this)
     is Message.McpResult -> Typed(Message.McpResult.serializer(), this)
     is Message.SyncChanged -> Typed(Message.SyncChanged.serializer(), this)
+    is Message.BackupRequest -> Typed(Message.BackupRequest.serializer(), this)
     is Message.Unknown -> error("An unknown message has no serializer")
 }
 

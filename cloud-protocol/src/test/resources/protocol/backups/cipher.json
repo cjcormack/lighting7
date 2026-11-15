@@ -1,0 +1,40 @@
+{
+  "comment": "Computed with Python's cryptography (AESGCM). 'pattern' plaintext is byte i = i mod 251.",
+  "keyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "keyId": "dk_2026_11",
+  "backupId": "01JC9T4M2Z8Q6V0B3N5K7R1W4X",
+  "baseNonceHex": "a1a2a3a4a5a6a7a8a9aaabac",
+  "headerHex": "4c37424b01000a646b5f323032365f3131a1a2a3a4a5a6a7a8a9aaabac001a30314a433954344d325a385136563042334e354b375231573458",
+  "vectors": [
+    {
+      "name": "empty",
+      "plaintextBytes": 0,
+      "plaintextHex": "",
+      "fileHex": "4c37424b01000a646b5f323032365f3131a1a2a3a4a5a6a7a8a9aaabac001a30314a433954344d325a385136563042334e354b37523157345863a23efb9d960726579f8335be34d8f2",
+      "fileBytes": 73,
+      "fileSha256": "089d0fdaf7c358875c3d1444da681935a864d92f889d4f2224de62fb03c18ff8"
+    },
+    {
+      "name": "short",
+      "plaintextBytes": 16,
+      "plaintextHex": "4c69676874696e6737206261636b7570",
+      "fileHex": "4c37424b01000a646b5f323032365f3131a1a2a3a4a5a6a7a8a9aaabac001a30314a433954344d325a385136563042334e354b3752315734586a86e007803c5008b95ed01137a9b903e3d4b7da0908b59c18421656f91447fe",
+      "fileBytes": 89,
+      "fileSha256": "c78e980962eec31ccfc237c8af095bc2ba6f685c04547dd6a8553c434cbd9b4d"
+    },
+    {
+      "name": "exactChunk",
+      "plaintextBytes": 1048576,
+      "plaintext": "pattern",
+      "fileBytes": 1048649,
+      "fileSha256": "059ab4b88df525b3a973eafc50ab597c9d51ba520f228f9f7e1a983c123faa8e"
+    },
+    {
+      "name": "threeChunks",
+      "plaintextBytes": 2097159,
+      "plaintext": "pattern",
+      "fileBytes": 2097264,
+      "fileSha256": "250812c21410cf08b4f142d864799914d77eeb53ee6b243699df6ecc9df78643"
+    }
+  ]
+}

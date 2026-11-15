@@ -42,7 +42,7 @@ class InstallKeysTest {
     @Test
     fun `every vector's canonical bytes and signature match`() {
         val vectors = fixtureJson("signing/vectors.json").jsonObject.getValue("vectors").jsonArray
-        assertEquals(setOf("auth", "adoptionPoll", "unadopt", "repoApiList", "repoApiCreate"), vectors.map { it.jsonObject.getValue("payload").jsonPrimitive.content }.toSet())
+        assertEquals(setOf("auth", "adoptionPoll", "unadopt", "repoApiList", "repoApiCreate", "backupApiKey", "backupApiList", "backupApiPart", "backupApiReplace"), vectors.map { it.jsonObject.getValue("payload").jsonPrimitive.content }.toSet())
         for (entry in vectors) {
             val vector = entry.jsonObject
             val fields = vector.getValue("fields").jsonObject.mapValues { it.value.jsonPrimitive.content }
@@ -51,6 +51,13 @@ class InstallKeysTest {
                 "adoptionPoll" -> AdoptionPollPayload(fields.getValue("adoptionId"), fields.getValue("timestamp"))
                 "unadopt" -> UnadoptPayload(fields.getValue("installId"), fields.getValue("timestamp"))
                 "repoApiList", "repoApiCreate" -> RepoApiPayload.of(
+                    fields.getValue("installId"),
+                    fields.getValue("method"),
+                    fields.getValue("path"),
+                    fields.getValue("timestamp"),
+                    vector.getValue("body").jsonPrimitive.content.toByteArray(),
+                ).also { assertEquals(fields.getValue("bodySha256"), it.bodySha256, "$name's body digest") }
+                "backupApiKey", "backupApiList", "backupApiPart", "backupApiReplace" -> BackupApiPayload.of(
                     fields.getValue("installId"),
                     fields.getValue("method"),
                     fields.getValue("path"),
@@ -90,6 +97,33 @@ class InstallKeysTest {
         val body = RepoApiPayload.of("inst_01JBX3Q5Z8", "GET", "/v1/repos", "2026-11-02T22:18:03.000Z", "{}".toByteArray())
         assertFalse(InstallKeys.verify(publicKey, body, signature))
         assertFailsWith<IllegalArgumentException> { RepoApiPayload.of("inst_01JBX3Q5Z8", "GET", "/v1/repos?x=1", "2026-11-02T22:18:03.000Z", ByteArray(0)) }
+    }
+
+    @Test
+    fun `a backup API signature never verifies as a repo call's, and covers its query and body`() {
+        val ts = "2026-11-02T22:18:03.000Z"
+        val backup = BackupApiPayload.of("inst_01JBX3Q5Z8", "GET", "/v1/backups", ts, ByteArray(0))
+        val repo = RepoApiPayload.of("inst_01JBX3Q5Z8", "GET", "/v1/backups", ts, ByteArray(0))
+        assertEquals(backup.fields, repo.fields)
+        val signature = InstallKeys.sign(privateKey, backup)
+        assertTrue(InstallKeys.verify(publicKey, backup, signature))
+        assertFalse(InstallKeys.verify(publicKey, repo, signature))
+        assertFalse(InstallKeys.verify(publicKey, backup.copy(path = "/v1/backups?installId=inst_other"), signature))
+        val part = BackupApiPayload.of("inst_01JBX3Q5Z8", "PUT", CloudPaths.backupPart("01JC9T4M2Z8Q6V0B3N5K7R1W4X", 1), ts, "one".toByteArray())
+        val partSignature = InstallKeys.sign(privateKey, part)
+        assertFalse(InstallKeys.verify(publicKey, part.copy(path = CloudPaths.backupPart("01JC9T4M2Z8Q6V0B3N5K7R1W4X", 2)), partSignature))
+        assertFalse(InstallKeys.verify(publicKey, BackupApiPayload.of("inst_01JBX3Q5Z8", "PUT", part.path, ts, "two".toByteArray()), partSignature))
+    }
+
+    @Test
+    fun `a backup payload hashes a stream as it hashes the same bytes`() {
+        val ts = "2026-11-02T22:18:03.000Z"
+        val body = ByteArray(200_000) { (it % 251).toByte() }
+        val path = CloudPaths.backupPart("01JC9T4M2Z8Q6V0B3N5K7R1W4X", 1)
+        assertEquals(
+            BackupApiPayload.of("inst_01JBX3Q5Z8", "PUT", path, ts, body),
+            BackupApiPayload.of("inst_01JBX3Q5Z8", "PUT", path, ts, java.io.ByteArrayInputStream(body)),
+        )
     }
 
     @Test

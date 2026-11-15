@@ -52,7 +52,30 @@ class GoldenFixturesTest {
                 listOf(Capability.REMOTE_V1, Capability.REMOTE_NO_SIDECAR),
             ),
         ),
-        "health" to Envelope("d-0003", Message.Health(3600, "1.4.0")),
+        "health" to Envelope(
+            "d-0014",
+            Message.Health(
+                uptimeS = 3600,
+                deskVersion = "1.5.0",
+                platform = "windows-x64",
+                project = HealthProject("3f2b8c1d-4e5a-4b6c-8d7e-9f0a1b2c3d4e", "Winter Gala"),
+                universes = listOf(
+                    HealthUniverse(0, "192.168.1.50", 44.0, reachable = true, lastReplyS = 4),
+                    HealthUniverse(1, "192.168.1.51", 44.0, reachable = false, lastReplyS = 95),
+                    HealthUniverse(2, "255.255.255.255", 0.5),
+                ),
+                sync = HealthSync(
+                    lastRunAt = "2026-11-15T03:00:12.000Z",
+                    lastOkAt = "2026-11-14T03:00:09.000Z",
+                    failingSince = "2026-11-15T03:00:12.000Z",
+                    code = ErrorCode.SYNC_QUOTA_EXCEEDED,
+                ),
+                diskFreeMb = 182_044,
+                update = HealthUpdate("READY_TO_APPLY", stagedVersion = "1.5.1"),
+                backup = HealthBackup(enabled = true, lastOkAt = "2026-11-15T04:02:41.000Z"),
+            ),
+        ),
+        "health-p2" to Envelope("d-0003", Message.Health(3600, "1.4.0")),
         "unadopted" to Envelope("c-0003", Message.Unadopted),
         "error" to Envelope("c-0004", Message.Error(ErrorCode.PROTOCOL_ERROR, "hello came before welcome"), replyTo = "d-0002"),
         "capabilities" to Envelope("d-0004", Message.Capabilities(listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.MCP_OFF))),
@@ -121,6 +144,7 @@ class GoldenFixturesTest {
                 "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
             ),
         ),
+        "backup.request" to Envelope("c-0014", Message.BackupRequest),
         "unknown" to Envelope(
             "c-0005",
             Message.Unknown(
@@ -130,12 +154,28 @@ class GoldenFixturesTest {
         ),
     )
 
+    private val backupId = "01JC9T4M2Z8Q6V0B3N5K7R1W4X"
+
+    private fun approvedHere(restore: AdoptionRestore) = AdoptionPollResult.Approved(
+        "inst_01JD2R8K6P",
+        CloudOrg("org_3Hc8Wn", "Cormack Lighting"),
+        CloudAccount("acc_9Pz4Rt", "owner@example.com", "Desk Owner"),
+        restore,
+    )
+
     private class Dto<T>(val serializer: KSerializer<T>, val value: T)
 
     private val adoption: Map<String, Dto<*>> = mapOf(
         "adoption-request" to Dto(
             AdoptionRequest.serializer(),
             AdoptionRequest("11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo", "6f1d2c3e-8a4b-4c5d-9e6f-7a8b9c0d1e2f", "Front-of-house desk", "windows-x64", "1.4.0"),
+        ),
+        "adoption-request-p3" to Dto(
+            AdoptionRequest.serializer(),
+            AdoptionRequest(
+                "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo", "6f1d2c3e-8a4b-4c5d-9e6f-7a8b9c0d1e2f", "Front-of-house desk", "windows-x64", "1.5.0",
+                capabilities = listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.SYNC_V1, Capability.HEALTH_V2, Capability.BACKUP_V1),
+            ),
         ),
         "adoption-started" to Dto(
             AdoptionStarted.serializer(),
@@ -151,6 +191,9 @@ class GoldenFixturesTest {
                 CloudAccount("acc_9Pz4Rt", "owner@example.com", "Desk Owner"),
             ),
         ),
+        "poll-approved-replace-backup" to Dto(AdoptionPollResult.serializer(), approvedHere(AdoptionRestore("inst_01JBX3Q5Z8", "Front-of-house desk", backupId))),
+        "poll-approved-replace" to Dto(AdoptionPollResult.serializer(), approvedHere(AdoptionRestore("inst_01JBX3Q5Z8", "Front-of-house desk"))),
+        "poll-approved-backup" to Dto(AdoptionPollResult.serializer(), approvedHere(AdoptionRestore(backupId = backupId))),
         "poll-denied" to Dto(AdoptionPollResult.serializer(), AdoptionPollResult.Denied),
         "poll-expired" to Dto(AdoptionPollResult.serializer(), AdoptionPollResult.Expired),
         "api-error" to Dto(ApiError.serializer(), ApiError(ErrorCode.CLOCK_SKEW, "The timestamp is 7 minutes from the cloud's clock")),
@@ -183,6 +226,63 @@ class GoldenFixturesTest {
         "repo-list" to Dto(RepoList.serializer(), RepoList(listOf(showRepo, newVenueRepo))),
         "repo-exists" to Dto(RepoExistsError.serializer(), RepoExistsError(ErrorCode.REPO_EXISTS, "Winter Gala already has a repo in this org", showRepo)),
     )
+
+    private val manifest = BackupManifest(
+        deskVersion = "1.5.0",
+        schemaVersion = 18,
+        syncFormatVersion = 56,
+        deskInstallUuid = "6f1d2c3e-8a4b-4c5d-9e6f-7a8b9c0d1e2f",
+        friendlyName = "Front-of-house desk",
+        installId = "inst_01JBX3Q5Z8",
+        createdAt = "2026-11-15T04:00:03.000Z",
+        files = listOf(
+            BackupFile("lighting7.db", 18_874_368, "9b74c9897bac770ffc029102a200c5de2f3a4ba1d1a8c3c3e3d6b0c55a5e1e6f"),
+            BackupFile(
+                "scene-images/3f2b8c1d-4e5a-4b6c-8d7e-9f0a1b2c3d4e/5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8.png",
+                2_097_152,
+                "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8",
+            ),
+            BackupFile("extra/local.conf", 412, "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"),
+        ),
+    )
+    private val archiveSha = "f1d2d2f924e986ac86fdf7b36c94bcdf32beec15a7a5b2b51e6b5c4a1d7f2c3b"
+    private val completeBackup = BackupDto(
+        backupId = backupId,
+        installId = "inst_01JBX3Q5Z8",
+        installName = "Front-of-house desk",
+        kind = BackupKind.SCHEDULED,
+        status = BackupStatus.COMPLETE,
+        sizeBytes = 140_509_184,
+        parts = 3,
+        partsReceived = listOf(1, 2, 3),
+        sha256 = archiveSha,
+        keyId = "dk_2026_11",
+        manifest = manifest,
+        createdAt = "2026-11-15T04:00:41.000Z",
+        completedAt = "2026-11-15T04:02:41.000Z",
+    )
+
+    private val backups: Map<String, Dto<*>> = mapOf(
+        "backup-key" to Dto(BackupKeyDto.serializer(), BackupKeyDto("dk_2026_11", "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8")),
+        "declare-backup-request" to Dto(
+            DeclareBackupRequest.serializer(),
+            DeclareBackupRequest(backupId, BackupKind.SCHEDULED, 140_509_184, 3, archiveSha, "dk_2026_11", manifest),
+        ),
+        "backup" to Dto(BackupDto.serializer(), completeBackup),
+        "backup-uploading" to Dto(
+            BackupDto.serializer(),
+            completeBackup.copy(status = BackupStatus.UPLOADING, partsReceived = listOf(1, 3), completedAt = null),
+        ),
+        "backup-list" to Dto(BackupList.serializer(), BackupList(listOf(completeBackup))),
+        "replaced" to Dto(ReplacedDto.serializer(), ReplacedDto("inst_01JBX3Q5Z8")),
+    )
+
+    @Test
+    fun `every backup fixture decodes to its value and re-encodes as written`() {
+        for ((name, dto) in backups) {
+            assertRoundTrips("backups/$name.json", dto)
+        }
+    }
 
     @Test
     fun `every message fixture decodes to its value and re-encodes as written`() {
@@ -226,15 +326,16 @@ class GoldenFixturesTest {
             .map { requireNotNull(it.findAnnotation<SerialName>()) { "${it.simpleName} has no @SerialName" }.value }
             .toSet()
         assertEquals(sealedTypes, KNOWN_MESSAGE_TYPES, "every Message subclass decodes")
-        assertEquals(KNOWN_MESSAGE_TYPES + "unknown", messages.keys, "a fixture per message type, and one unknown")
+        assertEquals(KNOWN_MESSAGE_TYPES + "unknown" + "health-p2", messages.keys, "a fixture per message type, a P2 heartbeat and one unknown")
         assertEquals(messages.keys, fixtureNames("messages"), "no message fixture goes unchecked")
         assertEquals(adoption.keys, fixtureNames("adoption"), "no adoption fixture goes unchecked")
         assertEquals(repos.keys + "push-refusals", fixtureNames("repos"), "no repo fixture goes unchecked")
+        assertEquals(backups.keys + "cipher", fixtureNames("backups"), "no backup fixture goes unchecked; BackupCipherTest checks cipher")
         assertEquals(setOf("vectors", "git"), fixtureNames("tokens"), "DeskTokensTest and InstallGitTokensTest check tokens/")
         assertEquals(setOf("framing", "ctl"), fixtureNames("link"), "LinkContractsTest checks link/")
         assertEquals(setOf("messages"), fixtureNames("remote-frame"), "LinkContractsTest checks remote-frame/")
         assertEquals(
-            setOf("messages", "adoption", "repos", "signing", "tokens", "link", "remote-frame", "close-codes"),
+            setOf("messages", "adoption", "repos", "backups", "signing", "tokens", "link", "remote-frame", "close-codes"),
             requireNotNull(File(resource("protocol")).listFiles()).map { it.nameWithoutExtension }.toSet(),
             "every fixture directory is one a test reads",
         )
@@ -258,6 +359,8 @@ class GoldenFixturesTest {
             put("deskTokenClockSkewS", DeskTokens.CLOCK_SKEW.seconds)
             put("gitTokenMaxLifetimeS", InstallGitTokens.MAX_LIFETIME.seconds)
             put("gitTokenClockSkewS", InstallGitTokens.CLOCK_SKEW.seconds)
+            put("backupPartBytes", BACKUP_PART_BYTES)
+            put("backupChunkBytes", BackupCipher.CHUNK_BYTES)
             put("pushRefusalCodes", JsonArray(PushRefusals.CODES.map { JsonPrimitive(it) }))
         }
         assertEquals(expected, written)

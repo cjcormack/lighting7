@@ -57,7 +57,7 @@ install that comes back as the old install, its MCP URL and links working (UC-8)
 
 - **D1 — The protocol for P3** (R3). `cloud-protocol` gains, all additive within protocol 1:
   - `Health`'s new fields, every one optional so the cloud reads a P2 desk's heartbeat as before:
-    `platform`, `project {uuid, name}?`, `universes: [{universe, address?, framesPerS, reachable?,
+    `platform`, `project {uuid, name}?`, `universes: [{universe, address?, framesPerS?, reachable?,
     lastReplyS?}]`, `sync {lastRunAt?, lastOkAt?, failingSince?, code?}`, `diskFreeMb`, `update
     {phase, lastOutcome?, stagedVersion?}?`, `backup {enabled, lastOkAt?, lastFailedAt?, code?}`.
     `reachable` absent means unknown (no reply expected, `dmx.mock`, or the poller could not bind,
@@ -70,8 +70,9 @@ install that comes back as the old install, its MCP URL and links working (UC-8)
     {backupId, kind, sizeBytes, parts, sha256, keyId, manifest}` (the id the desk minted, D7; `kind` `SCHEDULED`, `REQUESTED` by `backup.request` or `MANUAL` by the Cloud tab's button) answering
     `BackupDto {backupId, status, partsReceived, …}`; `PUT /v1/backups/{backupId}/parts/{n}` (one part,
     at most 64 MiB, its own signature over its own hash); `POST /v1/backups/{backupId}/complete`; `GET
-    /v1/backups/{backupId}`, which streams a complete backup (`Range` honoured) and answers an uploading
-    one's `BackupDto`, `partsReceived` naming the parts the cloud holds (D8); and `GET
+    /v1/backups/{backupId}`, the backup's `BackupDto` whatever its status, `partsReceived` naming the
+    parts the cloud holds (D8); `GET /v1/backups/{backupId}/file`, a complete backup's file (`Range`
+    honoured); and `GET
     /v1/backups?installId=` for restore. `CloudPaths.BACKUPS`.
   - The replacement (D9), signed over the same payload: `POST /v1/installs/{installId}/replace`, the
     calling desk confirming the replacement its adoption recorded, answering `ReplacedDto {installId}`,
@@ -83,6 +84,22 @@ install that comes back as the old install, its MCP URL and links working (UC-8)
     `BACKUP_NOT_FOUND`, `BACKUP_PART_INVALID`, `BACKUP_INCOMPLETE`, `BACKUP_KEY_UNKNOWN`,
     `BACKUP_TOO_NEW`, `REPLACEMENT_NOT_FOUND`, `REPLACEMENT_EXPIRED`.
   - Golden fixtures for each, which `GoldenFixturesTest` demands.
+  - As session 1 settled it (`docs/cloud-protocol.md` §"Health", §"Backups", §"The backup file"):
+    `universes[].universe` is the Art-Net port address; `BackupApiPayload` signs the install id too,
+    as `RepoApiPayload` does, and the request target with its query; `GET /v1/backups` without
+    `installId` lists the org's backups, so a removed install's can be found; `BackupDto` carries
+    `installId`, `installName`, `createdAt` and the manifest, so a restoring desk can show the backup and
+    refuse a newer one (`BACKUP_TOO_NEW`) before downloading it; parts are numbered from 1;
+    `backup.request` is sent and forgotten, its outcome in the next heartbeat; and `BackupIds` mints and
+    checks the ULID both sides use. `GET /v1/backups/{backupId}` answers only `BackupDto`, so a desk
+    resuming after a lost `complete` answer is never handed the whole archive: the bytes are `GET
+    /v1/backups/{backupId}/file` (`CloudPaths.backupFile`), 409 `BACKUP_INCOMPLETE` while uploading, and a
+    `complete` sent again on a complete backup answers its `BackupDto`. `backupPartCount` is the declare's
+    `parts` on both sides; `backupsOf` URL-encodes the install id it signs. `HealthUniverse.framesPerS`
+    is optional, as every other health field is. `AdoptionRequest` gains `capabilities?`, `hello`'s
+    strings: a P2 desk silently drops an approval's `restore` and approval comes before its first `hello`,
+    so the portal offers *Replace* and *Restore* only to an adoption whose request announces `backup.v1`
+    (D9).
 - **D2 — The heartbeat reads only what is already in memory** (FR-FLEET-1, R6, `docs/cloud-engineering.md`
   §"Show safety" rule 5). A new `cloud/DeskHealth.kt` assembles the payload on a `cloud-N` thread from
   `StateFlow`s and lock-free counters, never the database and never a lock the show takes:
@@ -167,7 +184,9 @@ install that comes back as the old install, its MCP URL and links working (UC-8)
   backup (the cloud plan's D13). Approval adopts the desk as a new install, as today, and records on it
   a pending replacement; the desk's adoption answer carries `restore`, which `cloud_connection` keeps
   until the desk confirms or declines. Nothing about the old install moves until the desk confirms.
-  `restore` has three shapes:
+  The portal offers *Replace* and *Restore* only to an adoption whose `AdoptionRequest.capabilities`
+  names `backup.v1`: a desk that sends none (P2) would drop `restore` unread, and the cloud has no
+  `hello` from it until it is approved (D1). `restore` has three shapes:
   - `replacesInstallId` and `backupId`: the Cloud tab (or onboarding's step) shows *Replace "<old
     name>" and restore its backup of <date>*;
   - `replacesInstallId` alone: *Replace "<old name>"*, which moves the identity and restores no data;
@@ -255,7 +274,7 @@ runs the checks §"Pre-commit checks" names for what it touches; `cloud-protocol
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The protocol for P3 | planned | | | |
+| 1 | The protocol for P3 | in review | `claude/eager-pasteur-p6ei2n` | | |
 | 2 | The full heartbeat | planned | | | |
 | 3 | Art-Net controller reachability | planned | | | |
 | 4 | Making and uploading backups | planned | | | |

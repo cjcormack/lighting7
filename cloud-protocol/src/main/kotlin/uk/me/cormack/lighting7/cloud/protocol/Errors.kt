@@ -158,6 +158,42 @@ object ErrorCode {
     /** A push refusal: the cloud cannot store it now, whatever the org's storage. */
     const val SYNC_STORAGE_UNAVAILABLE: String = "SYNC_STORAGE_UNAVAILABLE"
 
+    /** The org does not have off-site backups. */
+    const val BACKUPS_OFF: String = "BACKUPS_OFF"
+
+    /** The backup would take the org past its backup storage. */
+    const val BACKUP_QUOTA_EXCEEDED: String = "BACKUP_QUOTA_EXCEEDED"
+
+    /** A backup larger than the cloud takes, whatever the org's storage. */
+    const val BACKUP_TOO_LARGE: String = "BACKUP_TOO_LARGE"
+
+    /** A declare whose `backupId` the org already has. */
+    const val BACKUP_ID_TAKEN: String = "BACKUP_ID_TAKEN"
+
+    /** A backup the org does not have: never declared, aborted, expired, or another org's. */
+    const val BACKUP_NOT_FOUND: String = "BACKUP_NOT_FOUND"
+
+    /** A part out of range, of the wrong size, or for a backup already complete. */
+    const val BACKUP_PART_INVALID: String = "BACKUP_PART_INVALID"
+
+    /**
+     * A complete before every part is in, a whole that does not match its declared hash or size, or a
+     * backup's file asked for while it is uploading.
+     */
+    const val BACKUP_INCOMPLETE: String = "BACKUP_INCOMPLETE"
+
+    /** A data key id the org never had. */
+    const val BACKUP_KEY_UNKNOWN: String = "BACKUP_KEY_UNKNOWN"
+
+    /** A backup made by a newer desk than the one restoring it: its schema or sync format is ahead. */
+    const val BACKUP_TOO_NEW: String = "BACKUP_TOO_NEW"
+
+    /** A replacement confirm or decline from an install with no pending replacement. */
+    const val REPLACEMENT_NOT_FOUND: String = "REPLACEMENT_NOT_FOUND"
+
+    /** A pending replacement older than its 7 days. */
+    const val REPLACEMENT_EXPIRED: String = "REPLACEMENT_EXPIRED"
+
     const val TOKEN_MALFORMED: String = "TOKEN_MALFORMED"
     const val TOKEN_UNKNOWN_KEY: String = "TOKEN_UNKNOWN_KEY"
     const val TOKEN_BAD_SIGNATURE: String = "TOKEN_BAD_SIGNATURE"
@@ -191,5 +227,14 @@ object Capability {
     /** No sidecar is running: an offer is refused with [ErrorCode.SIDECAR_UNAVAILABLE]. */
     const val REMOTE_NO_SIDECAR: String = "remote.no-sidecar"
 
-    val ALL: List<String> = listOf(REMOTE_V1, MCP_V1, SYNC_V1, REMOTE_OFF, MCP_OFF, REMOTE_NO_SIDECAR)
+    /** The desk fills [Message.Health]'s optional fields. */
+    const val HEALTH_V2: String = "health.v2"
+
+    /** The desk makes off-site backups and takes [Message.BackupRequest]. */
+    const val BACKUP_V1: String = "backup.v1"
+
+    /** The *Off-site backups* switch is off: a [Message.BackupRequest] is ignored. */
+    const val BACKUP_OFF: String = "backup.off"
+
+    val ALL: List<String> = listOf(REMOTE_V1, MCP_V1, SYNC_V1, REMOTE_OFF, MCP_OFF, REMOTE_NO_SIDECAR, HEALTH_V2, BACKUP_V1, BACKUP_OFF)
 }

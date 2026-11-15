@@ -22,6 +22,11 @@ data class AdoptionRequest(
     val friendlyName: String,
     val platform: String,
     val deskVersion: String,
+    /**
+     * What the desk speaks, [Capability] strings as [Message.Hello] carries them; absent from a desk that
+     * announces nothing here. The portal offers a replacement or a restore only beside [Capability.BACKUP_V1].
+     */
+    val capabilities: List<String>? = null,
 )
 
 /** Cloud → desk: the adoption is waiting for someone to approve it in the portal. */
@@ -60,10 +65,19 @@ sealed interface AdoptionPollResult {
     @SerialName("slow_down")
     data class SlowDown(val intervalS: Int) : AdoptionPollResult
 
-    /** Approved: the install is now [installId] in [org], approved by [account]. */
+    /**
+     * Approved: the install is now [installId] in [org], approved by [account]. [restore] is present
+     * when the approver said this desk replaces an install, restores a backup, or both; nothing moves
+     * until an admin confirms it on the desk.
+     */
     @Serializable
     @SerialName("approved")
-    data class Approved(val installId: String, val org: CloudOrg, val account: CloudAccount) : AdoptionPollResult
+    data class Approved(
+        val installId: String,
+        val org: CloudOrg,
+        val account: CloudAccount,
+        val restore: AdoptionRestore? = null,
+    ) : AdoptionPollResult
 
     /** Refused in the portal. */
     @Serializable
@@ -74,6 +88,23 @@ sealed interface AdoptionPollResult {
     @Serializable
     @SerialName("expired")
     data object Expired : AdoptionPollResult
+}
+
+/**
+ * What an approval asks the desk to restore: the install it replaces ([replacesInstallId], named
+ * [replacesName]), a backup ([backupId]), or both. At least one, and [replacesName] exactly when
+ * [replacesInstallId]; anything else fails to decode.
+ */
+@Serializable
+data class AdoptionRestore(
+    val replacesInstallId: String? = null,
+    val replacesName: String? = null,
+    val backupId: String? = null,
+) {
+    init {
+        require(replacesInstallId != null || backupId != null) { "A restore names an install it replaces, a backup, or both" }
+        require((replacesInstallId == null) == (replacesName == null)) { "A replaced install comes with its name" }
+    }
 }
 
 @Serializable
