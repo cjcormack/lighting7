@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.cloud.protocol
 
 import kotlinx.serialization.json.Json
+import java.net.URLEncoder
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
@@ -52,6 +53,45 @@ object CloudPaths {
 
     /** `GET`, signed ([RepoApiPayload]); answered [RepoDto]. */
     fun repo(repoId: String): String = "$REPOS/$repoId"
+
+    /**
+     * `POST` a [DeclareBackupRequest], answered [BackupDto]; `GET`, answered [BackupList], or with
+     * [backupsOf]'s query one install's. Every backup call is signed ([BackupApiPayload]).
+     */
+    const val BACKUPS: String = "/v1/backups"
+
+    /** `GET`: the org's current data key, [BackupKeyDto]. Never a backup's id, which is a ULID. */
+    const val BACKUP_KEY: String = "$BACKUPS/key"
+
+    /** `GET`: the data key [keyId], [BackupKeyDto]. */
+    fun backupKey(keyId: String): String = "$BACKUP_KEY/$keyId"
+
+    /**
+     * `GET` the backups [installId] made, [BackupList]. The id is URL-encoded, and the signature covers
+     * this string as sent ([BackupApiPayload]).
+     */
+    fun backupsOf(installId: String): String = "$BACKUPS?installId=${URLEncoder.encode(installId, Charsets.UTF_8)}"
+
+    /** `GET`: the backup's [BackupDto], whatever its status; how an interrupted upload resumes. */
+    fun backup(backupId: String): String = "$BACKUPS/$backupId"
+
+    /**
+     * `GET`: a complete backup's encrypted file, `Range` honoured; 409 [ErrorCode.BACKUP_INCOMPLETE]
+     * while it is uploading.
+     */
+    fun backupFile(backupId: String): String = "$BACKUPS/$backupId/file"
+
+    /** `PUT` part [n] (from 1) of [backupId], its raw bytes; answered [BackupDto]. */
+    fun backupPart(backupId: String, n: Int): String = "$BACKUPS/$backupId/parts/$n"
+
+    /** `POST`, no body: every part is in; answered [BackupDto]. Sent again on a complete backup, answered its [BackupDto]. */
+    fun backupComplete(backupId: String): String = "$BACKUPS/$backupId/complete"
+
+    /**
+     * `POST`, no body, signed ([BackupApiPayload]): [installId], the calling install, confirms the
+     * replacement its adoption recorded, answered [ReplacedDto]; `DELETE` declines it.
+     */
+    fun installReplace(installId: String): String = "/v1/installs/$installId/replace"
 }
 
 /**
@@ -62,7 +102,7 @@ object SignatureHeaders {
     const val TIMESTAMP: String = "Lighting7-Timestamp"
     const val SIGNATURE: String = "Lighting7-Signature"
 
-    /** The signing install's id, on a call to the repo API. */
+    /** The signing install's id, on a call to the repo or backup API. */
     const val INSTALL: String = "Lighting7-Install"
 }
 

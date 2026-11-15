@@ -94,7 +94,7 @@ Each has a fixture in `cloud-protocol/src/test/resources/protocol/messages/`, na
 | `auth` | desk → cloud | `installId`, `timestamp`, `signature` | `challenge` |
 | `welcome` | cloud → desk | `orgName`, `heartbeatS`, `remoteOrigin?` | `auth` |
 | `hello` | desk → cloud | `protocol`, `deskVersion`, `platform`, `deskInstallUuid`, `friendlyName`, `capabilities` | |
-| `health` | desk → cloud | `uptimeS`, `deskVersion` | |
+| `health` | desk → cloud | `uptimeS`, `deskVersion`, and with `health.v2` `platform?`, `project?`, `universes?`, `sync?`, `diskFreeMb?`, `update?`, `backup?` (§"Health") | |
 | `unadopted` | cloud → desk | none: the install was removed in the portal | |
 | `error` | either | `code` (`ErrorCode`, or a newer one), `message` | any request it refuses |
 | `capabilities` | desk → cloud | `list`: the whole capability list, replacing `hello`'s | |
@@ -114,6 +114,7 @@ Each has a fixture in `cloud-protocol/src/test/resources/protocol/messages/`, na
 | `mcp.call` | cloud → desk | `token`, `grant: {id, clientName}`, `request` (a JSON-RPC message) | |
 | `mcp.result` | desk → cloud | `response?` (absent for a notification) | `mcp.call` |
 | `sync.changed` | cloud → desk | `repoId`, `url`, `headSha`: a cloud repo was pushed | |
+| `backup.request` | cloud → desk | none: make a backup now, the portal's *Back up now* (§"Backups") | |
 
 `unknown.json` is a type this version does not know, and must survive a decode and re-encode.
 
@@ -176,8 +177,11 @@ stops it serving it, so the cloud can tell a user why before it asks:
 | `remote.off` | Its *Remote sessions* switch is off | `REMOTE_ACCESS_OFF` |
 | `mcp.off` | Its *Claude (MCP)* switch is off | `MCP_ACCESS_OFF` |
 | `remote.no-sidecar` | No sidecar is running | `SIDECAR_UNAVAILABLE` |
+| `health.v2` | The desk fills `health`'s optional fields | nothing: a desk without it sends P2's heartbeat |
+| `backup.v1` | The desk makes off-site backups and takes `backup.request` | nothing: the cloud sends it no `backup.request` |
+| `backup.off` | Its *Off-site backups* switch is off | nothing: the portal says so, and a `backup.request` is ignored |
 
-`remote.v1` and `mcp.v1` are announced whatever their switches say. A `capabilities` message replaces
+`remote.v1`, `mcp.v1` and `backup.v1` are announced whatever their switches say; `health.v2` while adopted, always. A `capabilities` message replaces
 the whole list. A capability the cloud does not know is ignored.
 
 ## Close codes
@@ -226,6 +230,15 @@ rather than failing to decode. `close-codes.json` pins every list here and the c
 | `REPO_NOT_FOUND` | A repo the org does not have: never made, deleted, or another org's |
 | `SYNC_READ_ONLY` | A push under a credential that may only read |
 | `SYNC_NON_FAST_FORWARD`, `SYNC_REF_PROTECTED`, `SYNC_TAG_IMMUTABLE`, `SYNC_FORMAT_INVALID`, `SYNC_QUOTA_EXCEEDED`, `SYNC_STORAGE_UNAVAILABLE` | Why a pushed ref was refused (§"Git") |
+| `BACKUPS_OFF` | The org does not have off-site backups |
+| `BACKUP_QUOTA_EXCEEDED`, `BACKUP_TOO_LARGE` | A backup past the org's backup storage, or past what the cloud takes at all |
+| `BACKUP_ID_TAKEN` | A declare whose `backupId` the org already has |
+| `BACKUP_NOT_FOUND` | A backup the org does not have: never declared, aborted, expired, or another org's |
+| `BACKUP_PART_INVALID` | A part out of range, of the wrong size, or for a complete backup |
+| `BACKUP_INCOMPLETE` | A complete before every part is in, or a whole that does not match its declare |
+| `BACKUP_KEY_UNKNOWN` | A data key id the org never had |
+| `BACKUP_TOO_NEW` | A backup a newer desk made, refused by the restoring desk (§"Backups") |
+| `REPLACEMENT_NOT_FOUND`, `REPLACEMENT_EXPIRED` | A replacement confirm or decline with none pending, or one past its 7 days |
 
 ## Desk access tokens
 
@@ -412,8 +425,8 @@ RFC 8628's shape, run by the desk's backend (D6). Fixtures in `protocol/adoption
 
 | Call | Request | Answer |
 |---|---|---|
-| `POST /v1/adoptions` | `AdoptionRequest {publicKey, deskInstallUuid, friendlyName, platform, deskVersion}` | `AdoptionStarted {adoptionId, userCode, verificationUri, verificationUriComplete, intervalS, expiresInS}` |
-| `POST /v1/adoptions/{adoptionId}/poll`, signed | no body | `AdoptionPollResult`, by `status`: `pending`, `slow_down {intervalS}`, `approved {installId, org {id, name}, account {id, email, displayName}}`, `denied`, `expired` |
+| `POST /v1/adoptions` | `AdoptionRequest {publicKey, deskInstallUuid, friendlyName, platform, deskVersion, capabilities?}` | `AdoptionStarted {adoptionId, userCode, verificationUri, verificationUriComplete, intervalS, expiresInS}` |
+| `POST /v1/adoptions/{adoptionId}/poll`, signed | no body | `AdoptionPollResult`, by `status`: `pending`, `slow_down {intervalS}`, `approved {installId, org {id, name}, account {id, email, displayName}, restore?}`, `denied`, `expired` |
 | `DELETE /v1/installs/{installId}`, signed | no body | 2xx, or an `ApiError` |
 
 A refusal is an HTTP error status with an `ApiError {code, message}` body. `userCode` is `XXXX-XXXX`
@@ -421,6 +434,17 @@ from RFC 8628's twenty consonants (`UserCode`). An `AdoptionPollResult` status t
 know fails to decode, so a new status is a new protocol version. Its `status` is written only when the
 value is encoded as an `AdoptionPollResult`, not as one of its subclasses: Ktor's `call.respond(value)`
 takes the static type, so the cloud responds with `call.respond<AdoptionPollResult>(…)`.
+
+An approval's `restore {replacesInstallId?, replacesName?, backupId?}` (P3) says the approver chose to
+have this desk replace an install of the org, restore one of its backups, or both: at least one of
+`replacesInstallId` and `backupId`, and `replacesName` exactly beside `replacesInstallId`; any other
+shape fails to decode (`AdoptionRestore`). The desk is adopted as a new install either way, and nothing
+moves until an admin confirms on the desk (§"Backups").
+
+`AdoptionRequest.capabilities` (P3) is `hello`'s list (`Capability`), sent before the desk has a channel:
+approval comes before the first `hello`, and a desk without P3 drops `restore` unread. The portal offers
+*Replace* and *Restore* only to an adoption whose request names `backup.v1`; a request without the field
+is a desk that announces nothing.
 
 A **signed request** carries `Lighting7-Timestamp` (a `Timestamps` string) and `Lighting7-Signature`
 (`SignatureHeaders`): a poll over `AdoptionPollPayload(adoptionId, timestamp)`, an unadopt over
@@ -451,6 +475,99 @@ since the repo API takes none, the timestamp, and the lowercase hex SHA-256 of t
 built by `RepoApiPayload.of`. Binding the method, path and body keeps a signature from being replayed as
 another call within the timestamp's tolerance.
 
+## Health
+
+`health` carries `uptimeS` and `deskVersion` from every desk. A desk that announces `health.v2` adds the
+rest, each optional, an absent field meaning the desk did not say, never zero or empty, so a P2 desk's
+heartbeat reads as before (`messages/health-p2.json`):
+
+| Field | Shape | Means |
+|---|---|---|
+| `platform` | string | As `hello`'s |
+| `project` | `{uuid, name}` | The project the desk runs; absent when it runs none |
+| `universes` | `[{universe, address?, framesPerS?, reachable?, lastReplyS?}]` | The live project's universes: `universe` the Art-Net port address (`subnet * 16 + universe`), `address` its controller's, `framesPerS` over the last 30 s, absent when unsaid; `reachable` absent when unknown (no reply expected, a broadcast address, `dmx.mock`, or no reply yet proving replies arrive), which the cloud never alerts on; `lastReplyS` seconds since the controller last answered ArtPoll |
+| `sync` | `{lastRunAt?, lastOkAt?, failingSince?, code?}` | Sync across every project: `failingSince` the oldest project still failing, `code` a failing run's |
+| `diskFreeMb` | integer | Free space on the data directory's store, MiB |
+| `update` | `{phase, lastOutcome?, stagedVersion?}` | The update client's phase as the desk names it; absent where it has none |
+| `backup` | `{enabled, lastOkAt?, lastFailedAt?, code?}` | The *Off-site backups* switch and the last result |
+
+Times are `Timestamps` strings. The project's name and its controllers' addresses are the only strings
+the operator chose; nothing a show holds (cues, looks, palettes, fixtures, levels), no user name or
+email, and no DMX value is ever in a heartbeat (FR-FLEET-5).
+
+## Backups
+
+A desk's whole-install backups (cloud-p3 D5–D10), encrypted on the desk under its org's data key
+(§"The backup file") and uploaded through the cloud in parts. Every call is signed over a
+`BackupApiPayload` with `Lighting7-Install` (`SignatureHeaders.INSTALL`): the install, the method, the
+request target exactly as sent, **its query included**, the timestamp and the body's lowercase hex
+SHA-256, built by `BackupApiPayload.of` (from the bytes, or streamed from an `InputStream` so a part
+need not be held in memory). `CloudPaths.backupsOf` URL-encodes the install id it puts in the query. Fixtures in `protocol/backups/`. Every call is refused 403
+`BACKUPS_OFF` for an org without backups.
+
+| Call | Request | Answer |
+|---|---|---|
+| `GET /v1/backups/key` | no body | `BackupKeyDto {keyId, key}`: the org's current data key |
+| `GET /v1/backups/key/{keyId}` | no body | `BackupKeyDto`, or 404 `BACKUP_KEY_UNKNOWN` |
+| `POST /v1/backups` | `DeclareBackupRequest {backupId, kind, sizeBytes, parts, sha256, keyId, manifest}` | 201 `BackupDto`, or 409 `BACKUP_ID_TAKEN`, 413 `BACKUP_TOO_LARGE`, 403 `BACKUP_QUOTA_EXCEEDED` |
+| `PUT /v1/backups/{backupId}/parts/{n}` | one part's raw bytes | `BackupDto`, or 400 `BACKUP_PART_INVALID` |
+| `POST /v1/backups/{backupId}/complete` | no body | `BackupDto`, `status` `COMPLETE` (again on a complete backup), or 409 `BACKUP_INCOMPLETE` |
+| `GET /v1/backups/{backupId}` | no body | `BackupDto`, whatever its `status` |
+| `GET /v1/backups/{backupId}/file` | no body | a complete backup's encrypted file (`Range` honoured), or 409 `BACKUP_INCOMPLETE` while it is uploading |
+| `GET /v1/backups[?installId=]` | no body | `BackupList {backups}`: the org's complete backups, or one install's, newest first |
+| `POST /v1/installs/{installId}/replace` | no body | `ReplacedDto {installId}`: the old install's id, which the calling desk now is |
+| `DELETE /v1/installs/{installId}/replace` | no body | 2xx: the replacement is declined |
+
+- **The key.** `key` is the data key's 32 bytes, base64url unpadded (`BackupKeyDto.keyBytes`). The desk
+  fetches it for each backup and keeps it in memory only. `/v1/backups/key` is never a backup's id,
+  which is a ULID (`BackupIds`).
+- **The declare.** `backupId` is minted by the desk before it encrypts, so the file's header carries it;
+  the org's ids are unique. `kind` is `SCHEDULED`, `REQUESTED` (by `backup.request`) or `MANUAL`
+  (`BackupKind`), or a newer kind. `sizeBytes` and `sha256` are the encrypted file's, `parts` its count
+  of `BACKUP_PART_BYTES` (64 MiB) parts, `backupPartCount(sizeBytes)` (at least one): every part but the
+  last is exactly that.
+- **Parts** are numbered from 1, each signed over its own bytes, so each carries its own signature over
+  its own hash. A part may be sent again, and the cloud keeps one copy of each. `BackupDto.partsReceived`
+  lists the parts the cloud holds, ascending, which is how an interrupted upload resumes: the desk asks
+  `GET /v1/backups/{backupId}` for an uploading one and sends the rest. That call only ever answers a
+  `BackupDto`, so a desk whose `complete` answer was lost reads `COMPLETE` there and sends `complete`
+  again, which answers the same `BackupDto`; the file itself is `GET …/file`. The cloud aborts an upload
+  left incomplete for 24 hours.
+- **`BackupDto`** is `{backupId, installId, installName, kind, status, sizeBytes, parts, partsReceived,
+  sha256, keyId, manifest, createdAt, completedAt?}`, `status` `UPLOADING` or `COMPLETE`
+  (`BackupStatus`). It carries the manifest so a restoring desk can refuse a backup it cannot read before
+  downloading it.
+- **`BackupManifest`** is `{deskVersion, schemaVersion, syncFormatVersion, deskInstallUuid, friendlyName,
+  installId, createdAt, files: [{path, sizeBytes, sha256}]}`: the archive's `manifest.json`, sent in the
+  declare too. A desk refuses to restore one whose `schemaVersion` (its database's `user_version`) or
+  `syncFormatVersion` is above its own, `BACKUP_TOO_NEW`.
+- **`backup.request`** asks a desk that announces `backup.v1` for a backup now. It is sent and forgotten;
+  a desk with `backup.off` ignores it, and the outcome is in the next heartbeat's `backup`.
+- **The replacement.** An approval with `restore.replacesInstallId` (§"Adoption") records a pending
+  replacement on the new install. Only that desk's confirm (`POST …/replace`, `installId` its own new id)
+  moves the old install's identity onto it, answered with the old id; `DELETE` declines it. With none
+  pending, `REPLACEMENT_NOT_FOUND`; past its 7 days, `REPLACEMENT_EXPIRED`.
+
+## The backup file
+
+`BackupCipher`: AES-256-GCM over 1 MiB chunks (`BackupCipher.CHUNK_BYTES`), sealed as the archive is
+written and opened as it is read, so the archive never touches the disk in plaintext.
+
+- **The header**: the magic `L7BK`, the format version (one byte, 1), the key id, a random 12-byte base
+  nonce, and the backup's id, each string a 2-byte big-endian length and its UTF-8 (at most 256 bytes).
+- **Chunk `i`** (from 0) holds 1 MiB of plaintext, the last the rest (an empty archive is one empty last
+  chunk), sealed with the base nonce with its last 8 bytes XORed with `i` as a big-endian integer, and
+  AAD of the header's SHA-256, `i` as 8 big-endian bytes, and one byte, 1 for the last chunk and 0
+  otherwise. Each sealed chunk is its ciphertext and 16-byte tag, so every chunk but the last is
+  1 MiB + 16 bytes and a reader knows the last by the file's end.
+
+So a chunk moved, dropped or altered, a file cut short (at a chunk boundary too), bytes appended, a
+header put onto another backup's chunks, and a wrong key all fail; and a reader checks the header names
+the backup it expects before it asks for a key. `BackupCipher.decryptingStream` releases each chunk's
+plaintext only once its tag verifies, and fails at the end of a file cut short: an archive is good only
+once it is read to its end without failing. `backups/cipher.json` holds four vectors under a fixed key
+and nonce: empty, a short text, exactly one chunk and three chunks.
+
 ## Signing
 
 `InstallKeys` is the install key (D4): Ed25519 from the JDK, no dependency.
@@ -476,8 +593,9 @@ next.
 | `AdoptionPollPayload` | `lighting7-cloud/adoption-poll/v1` | `adoptionId`, `timestamp` |
 | `UnadoptPayload` | `lighting7-cloud/unadopt/v1` | `installId`, `timestamp` |
 | `RepoApiPayload` | `lighting7-cloud/repo-api/v1` | `installId`, `method`, `path`, `timestamp`, `bodySha256` |
+| `BackupApiPayload` | `lighting7-cloud/backup-api/v1` | `installId`, `method`, `path`, `timestamp`, `bodySha256` |
 
-A later phase that signs something new (P3's backups) adds a payload with its own domain. A desk access
+A later phase that signs something new adds a payload with its own domain. A desk access
 token and a git token are not `SignedPayload`s: each is a JWS, its bytes JOSE's (§"Desk access tokens",
 §"Git").
 
@@ -485,9 +603,12 @@ token and a git token are not `SignedPayload`s: each is a JWS, its bytes JOSE's 
 
 `cloud-protocol/src/test/resources/protocol/` is the contract both repos test against (R3):
 
-- `messages/*.json`: one envelope per message type, named by its type, and `unknown.json`.
+- `messages/*.json`: one envelope per message type, named by its type, `health-p2.json` (a P2 desk's
+  heartbeat) and `unknown.json`.
 - `adoption/*.json`: every adoption body and `api-error.json`.
 - `repos/*.json`: every repo API body, and `push-refusals.json`, reasons and the code each parses to.
+- `backups/*.json`: every backup API body and `replaced.json`, and `cipher.json`, the backup file's
+  vectors (§"The backup file").
 - `close-codes.json`: the close codes, auth failures, error codes, token refusals, capabilities and the
   constants.
 - `tokens/vectors.json`: the test key's JWK under `kid` `test-1`, a clock (`now`), and desk access
@@ -507,9 +628,9 @@ token and a git token are not `SignedPayload`s: each is a JWS, its bytes JOSE's 
 fails on a message type with no fixture or a fixture nothing checks. `InstallKeysTest` checks every
 signing vector, `DeskTokensTest` every desk access token vector and `InstallGitTokensTest` every git
 token vector (the valid ones sign to their tokens, the refused ones are refused for their reason),
-`PushRefusalsTest` every push-refusal reason, and `LinkContractsTest` the framing, `ctl` and remote-frame
+`BackupCipherTest` every cipher vector, `PushRefusalsTest` every push-refusal reason, and `LinkContractsTest` the framing, `ctl` and remote-frame
 fixtures, which describe contracts the desk's JVM never speaks: each frame's bytes are its kind and
-payload, within the limits, in an order its label allows. The signing and token vectors were computed
+payload, within the limits, in an order its label allows. The signing, token and cipher vectors were computed
 with Python's `cryptography` package, outside this code, so passing them says the desk signs and checks
 what another Ed25519 implementation would. The framing, `ctl` and remote-frame fixtures are read by the
 sidecar's Go tests, the SPA's Vitest and the cloud's tests too.

@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.cloud.protocol
 
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.security.Key
 import java.security.KeyFactory
 import java.security.KeyPair
@@ -151,9 +152,48 @@ data class RepoApiPayload(val installId: String, val method: String, val path: S
         /** The payload for a call sending [body], empty for a `GET`. */
         fun of(installId: String, method: String, path: String, timestamp: String, body: ByteArray): RepoApiPayload {
             require('?' !in path) { "The repo API takes no query" }
-            return RepoApiPayload(installId, method, path, timestamp, HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body)))
+            return RepoApiPayload(installId, method, path, timestamp, sha256Hex(body))
         }
     }
+}
+
+/**
+ * What a call to the backup API signs ([SignatureHeaders], [CloudPaths.BACKUPS],
+ * [CloudPaths.installReplace]): this install's [method] of [path] with a body whose SHA-256 is
+ * [bodySha256], lowercase hex, now. Unlike [RepoApiPayload], [path] is the request target exactly as
+ * sent, its query included ([CloudPaths.backupsOf]). A part's upload signs its own bytes, so each part
+ * carries its own signature over its own hash.
+ */
+data class BackupApiPayload(val installId: String, val method: String, val path: String, val timestamp: String, val bodySha256: String) : SignedPayload {
+    override val domain: String get() = DOMAIN
+    override val fields: List<String> get() = listOf(installId, method, path, timestamp, bodySha256)
+
+    companion object {
+        const val DOMAIN: String = "lighting7-cloud/backup-api/v1"
+
+        /** The payload for a call sending [body], empty for a `GET`. */
+        fun of(installId: String, method: String, path: String, timestamp: String, body: ByteArray): BackupApiPayload =
+            BackupApiPayload(installId, method, path, timestamp, sha256Hex(body))
+
+        /** The payload for a call sending what [body] reads, hashed as it streams; a part need not be held in memory. */
+        fun of(installId: String, method: String, path: String, timestamp: String, body: InputStream): BackupApiPayload =
+            BackupApiPayload(installId, method, path, timestamp, sha256Hex(body))
+    }
+}
+
+/** [bytes]' SHA-256, lowercase hex: a signed body's hash. */
+internal fun sha256Hex(bytes: ByteArray): String = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes))
+
+/** What [input] reads to its end, hashed as [sha256Hex] hashes bytes; [input] is not closed. */
+internal fun sha256Hex(input: InputStream): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    val buffer = ByteArray(64 * 1024)
+    while (true) {
+        val n = input.read(buffer)
+        if (n == -1) break
+        digest.update(buffer, 0, n)
+    }
+    return HexFormat.of().formatHex(digest.digest())
 }
 
 /** What an unadopt from the desk signs ([SignatureHeaders]): this install, removed now. */
