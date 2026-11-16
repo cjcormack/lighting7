@@ -317,6 +317,7 @@ The frontend's production dependencies and everything they pull in, from
 | `@rolldown/binding-linux-x64-gnu` | MIT |
 | `@rolldown/binding-linux-x64-musl` | MIT |
 | `@rolldown/binding-openharmony-arm64` | MIT |
+| `@rolldown/binding-wasm32-wasi` | MIT |
 | `@rolldown/binding-win32-arm64-msvc` | MIT |
 | `@rolldown/binding-win32-x64-msvc` | MIT |
 | `@rolldown/pluginutils` | MIT |
@@ -384,7 +385,7 @@ The frontend's production dependencies and everything they pull in, from
 | `fsevents` | MIT |
 | `get-nonce` | MIT |
 | `glsl-noise` | MIT |
-| `graceful-fs` | ISC |
+| `graceful-fs` | BlueOak-1.0.0 |
 | `hls.js` | Apache-2.0 |
 | `ieee754` | BSD-3-Clause |
 | `immediate` | MIT |
