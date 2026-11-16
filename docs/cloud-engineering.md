@@ -601,7 +601,7 @@ heartbeat.
 
 The desk makes a whole-install backup on a schedule and on demand, encrypts it on the desk under its
 org's data key and uploads it to the cloud (cloud-p3 plan D5–D8, FR-BAK-1, -2; the wire is
-`docs/cloud-protocol.md` §"Backups" and §"The backup file"). Restoring one is session 5's.
+`docs/cloud-protocol.md` §"Backups" and §"The backup file"). Restoring one is §"Restore".
 
 **What is in one** (`backup/InstallBackup.kt`, D5): a tar (`backup/Tar.kt`, ustar with a PAX `path`
 record for a long path) of `lighting7.db`, `prompt-scripts/`, `scene-images/` and `sync/` — every
@@ -670,6 +670,91 @@ nightly, portal or other window's run start.
 `"key":"…"` of its shape, and the spans are `backup.make` and `backup.upload`, carrying sizes and part
 counts only.
 
+## Restore
+
+Restoring a backup onto a desk is that desk's adoption with a backup (cloud-p3 plan D9, D10; FR-BAK-4).
+In the portal the approver may say the desk **replaces** an install of the org, and may pick a backup;
+the portal offers both only to an adoption whose request names `backup.v1`, which the desk sends among
+`AdoptionRequest.capabilities`. Approval adopts the desk as a new install, as ever, and its answer's
+`restore {replacesInstallId?, replacesName?, backupId?}` is kept on `cloud_connection`
+(`restore_replaces_install_id`, `restore_replaces_name`, `restore_backup_id`) until an admin confirms or
+declines it. **Nothing about the old install moves until then**, and the cloud alone can never start a
+restore.
+
+**The confirm** (`backup/RestoreService.kt`, on `restore-1`, never `cloud-N` or the show's threads) is
+an admin's on the desk's own listener (`POST /install/cloud/restore/confirm {name}`; 403
+`CLOUD_RESTORE_LOCAL_ONLY` on the public one), typing the old install's name, or for a backup alone the
+backup's install name (400 `CLOUD_RESTORE_NAME_MISMATCH`). It answers 202 and goes on:
+
+1. With a backup: `GET /v1/backups/{id}` must say `COMPLETE` and name a manifest this build can read
+   (`BACKUP_TOO_NEW` when its database `user_version` is past `SCHEMA_USER_VERSION` or its sync
+   `formatVersion` past this build's); the file is downloaded to `<data>/backups/restore/`, at most its
+   declared size and checked against its declared SHA-256; the key its header names is fetched (`GET
+   /v1/backups/key/{keyId}`), held in memory and zeroed after; and the archive is decrypted into
+   `incoming/` (`backup/RestoreStaging.kt`), every entry one of the paths a backup writes, every file
+   hashed as it is written and the list compared with the manifest, `extra/local.conf` hashed and never
+   written. A file that does not decrypt, an entry outside the layout or a list that does not match is
+   `BACKUP_CORRUPT`, with staging emptied. Only then is `incoming/` moved to `verified/` beside
+   `verified.json`, unmarked: a start sweeps it. So a bad backup is refused before anything changes.
+2. With a replacement: the signed `POST /v1/installs/{installId}/replace` (`CloudAdoptionService`); the
+   desk writes the old install id the cloud answers to `cloud_connection.install_id`, and the channel
+   reconnects as it with this desk's key, which the cloud moved onto the old install. One past its 7
+   days (`REPLACEMENT_EXPIRED`) clears the restore and the checked backup: the desk stays its own
+   install. Any other refusal first asks whether an earlier confirm's answer was lost: a harmless call
+   signed as the old install with this desk's key (`GET /v1/backups/key`), which the cloud accepts only
+   once it moved the identity here. Accepted, the replacement stands and the desk takes the old id;
+   refused, a replacement the cloud no longer has (`REPLACEMENT_NOT_FOUND`) clears the restore, and
+   anything else empties staging and leaves it pending. A replacement that goes unanswered leaves the
+   restore pending and the checked backup in `verified/` for the next confirm; a confirm after a restart,
+   whose download the cloud refuses because it no longer knows this desk's own id, makes the same check
+   and downloads as the old install.
+3. Only then is `verified/` moved to `ready/` beside `ready.json`, and the restore columns are cleared.
+   A staged backup sets `cloud.state`'s `restartToRestore`, and the Cloud tab asks for the restart; a
+   restart before then finds the marker and asks again.
+
+`DELETE /install/cloud/restore` declines it, from either listener: a replacement is declined in the
+cloud too (a 404 or an expiry counts as declined, unless the check above finds it already made, which
+stands), and the restore is forgotten. A staged backup can be declined the same way until the restart:
+it is deleted and `restartToRestore` cleared, while a replacement already confirmed stays. An unadopt,
+a cancelled adoption or a revoke deletes a staged backup too. A confirm never accepts a blank name to
+type. `GET /install/cloud/restore` is the status: the pending restore, the backup as the cloud
+describes it (with `tooNew`), the name to type, the phase (`IDLE`, `DOWNLOADING`, `VERIFYING`,
+`REPLACING`, `READY`) and why the last confirm stopped, or why a restore failed at the last start
+(`CLOUD_RESTORE_FAILED`).
+
+**The apply** runs at the next start, in `State.initDatabase` before the pool opens
+(`backup/RestoreApply.kt`):
+
+1. this machine's `installs` and `cloud_connection` rows are read on a connection of their own and
+   saved in a journal, `applying.json`, which names each move before it is made;
+2. the database is kept as `<db>.pre-restore-<utc>.db` (and a hot journal beside it), the snapshot
+   moved into its place, and `prompt-scripts/`, `scene-images/` and `sync/` kept beside themselves as
+   `*.pre-restore-<utc>` with the backup's moved in (copied and deleted where a rename cannot cross
+   volumes);
+3. the migrations and the reconciliation run over the restored database as over any, so an older
+   backup is upgraded first;
+4. then, before anything reads them: `installs` is this machine's row (its uuid keys `CredentialStore`
+   and so the install key) with the backup's `onboarding_pending`, or the backup's when this machine
+   had none; `cloud_connection` is this machine's
+   row — its fingerprint and install id, the old install's after a replacement — with
+   `adopted_by_user_id` cleared and the remote, MCP and approval switches the backup's (off when it had
+   none); `user_sessions` is emptied, so everyone signs in again; and for a backup alone the cloud links
+   and invites are cleared (`CloudUnlinkReason.RESTORED`), since they named the old install's identity.
+
+The journal and staging go once it stands; the kept trees go at the next start that applies nothing
+and finds no journal. A failure anywhere — the swap, a migration, the put-back — undoes every move and
+opens the database the desk had, and the restore is not tried again; a start after a crash mid-apply
+finds the journal and undoes it the same way, a move journalled but never made left as it is. Each
+undone move leaves the journal, and a move that cannot be undone keeps it, with the kept trees, for the
+next start to try again. A restore that failed is written to `failed.json` in staging; the next start
+reads it into the restore status and the Cloud tab's notice (dismissed by its time), and it goes at the
+next confirm or decline. Users, links, sync configs, machine overrides and every project come back
+as the old desk had them; the install's secrets do not, and need none.
+
+**Restore and the show.** A confirm downloads and decrypts on its own low-priority thread and writes
+the database only on its transitions (the replacement, clearing the restore); the apply runs before
+the show starts. The span is `backup.restore`, carrying the file count, never a key, a path or a name.
+
 ## The Cloud tab
 
 Install settings → **Cloud** (`frontend/src/components/cloud/CloudPanel.tsx`, `store/cloud.ts`) is the
@@ -696,6 +781,16 @@ than refetching. Its states:
 - A `notice` above the rest, dismissed on that browser alone (localStorage) by its `noticeAt`, the
   instant the desk set it, since the next expiry or revoke says the same words. The desk keeps both in
   memory until the next adoption or a restart, and no route clears them.
+
+An adopted desk draws the **Restore** section above everything (`CloudRestore.tsx`, §"Restore"),
+and onboarding's projects step draws the same, while a restore is pending: its title in one of three shapes — *Replace "Main desk"
+and restore its backup of …*, *Replace "Main desk"*, *Restore the backup of …* — what it does, the
+backup's size and desk version, a refusal for one from a newer desk, the name to type, the confirm
+and *Decline*, what a confirm is doing (re-read every 2 s while it runs) and why the last one stopped.
+Over remote access it offers *Decline* only, with the reason. Once a backup is staged it is an alert
+asking for the restart instead, with *Don't restore*, which declines it. With no restore pending it
+shows only why the last confirm stopped, *The restore stopped*, so a 202 confirm the cloud later
+refused, clearing the restore, still says why.
 
 Once adopted, the **Off-site backups** section (`CloudBackups.tsx`, §"Backups"): *Back up every night*
 and its time, *Back up now*, what a running backup is doing (re-read every 2 s while one runs, every
@@ -832,7 +927,10 @@ channel against the fake; `CloudChannelBackoffTest` the reconnect loop on a virt
 from a running desk and FR-FLEET-5; `SyncHealthTest` sync's health across projects; `InstallBackupTest`
 an archive's contents and what it leaves out, staging and a pool write during the snapshot;
 `BackupServiceTest` the upload through `FakeCloudBackups` (the backup API over an in-memory store with
-the protocol's rules), its resume, its codes, `backup.request` and the schedule on a test clock. `RemoteSessionsTest` drives
+the protocol's rules), its resume, its codes, `backup.request` and the schedule on a test clock;
+`RestoreTest` a backup made on one desk restored onto a second (two data directories) through
+`FakeCloud`'s replacement, and every way a confirm is refused or declined; `RestoreApplyTest` the
+startup apply over an older schema, its rollback and a crash mid-apply. `RemoteSessionsTest` drives
 bearer requests and sockets on the public listener through every refusal and every way a session ends;
 `ChannelOutboxTest` the two send queues on virtual time; `RemoteFrameCapTest` the rate cap on virtual
 time. `CloudLinksTest` carries invites through

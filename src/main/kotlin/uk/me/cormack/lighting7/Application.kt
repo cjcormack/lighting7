@@ -107,6 +107,8 @@ fun Application.module() {
     state.cloud.start()
     // Its own low-priority thread; the nightly backup waits for a quiet show (cloud-p3 plan D6).
     state.backups.start()
+    // A restore staged before a restart asks for its restart again (cloud-p3 plan D9).
+    state.restores.start()
     // Before the show, like the cloud, so its settings apply on a desk whose show failed to start; a
     // message that arrives before the show is up is a *failed* row. A bind failure is `osc.state`'s
     // error, never a failed startup.

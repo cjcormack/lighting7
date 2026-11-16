@@ -20,10 +20,12 @@ import io.ktor.http.content.TextContent
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.jvm.javaio.toByteReadChannel
+import io.ktor.utils.io.readAvailable
 import io.ktor.utils.io.readBuffer
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.readByteArray
 import kotlinx.serialization.KSerializer
+import uk.me.cormack.lighting7.backup.InstallBackup.Companion.toHex
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionPollPayload
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionPollResult
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionRequest
@@ -38,6 +40,7 @@ import uk.me.cormack.lighting7.cloud.protocol.CreateRepoRequest
 import uk.me.cormack.lighting7.cloud.protocol.DeclareBackupRequest
 import uk.me.cormack.lighting7.cloud.protocol.ErrorCode
 import uk.me.cormack.lighting7.cloud.protocol.InstallKeys
+import uk.me.cormack.lighting7.cloud.protocol.ReplacedDto
 import uk.me.cormack.lighting7.cloud.protocol.RepoApiPayload
 import uk.me.cormack.lighting7.cloud.protocol.RepoDto
 import uk.me.cormack.lighting7.cloud.protocol.RepoExistsError
@@ -50,8 +53,10 @@ import java.io.Closeable
 import java.io.InputStream
 import java.nio.channels.Channels
 import java.nio.channels.FileChannel
+import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
+import java.security.MessageDigest
 import java.security.PrivateKey
 import java.time.Duration
 import java.time.Instant
@@ -84,6 +89,9 @@ sealed interface RepoReader {
 /** A create's answer: the repo made, or, when [existed], the one the project already had (`REPO_EXISTS`). */
 data class RepoCreated(val repo: RepoDto, val existed: Boolean)
 
+/** A backup's file as [CloudApi.downloadBackup] wrote it: its size and SHA-256, in hex. */
+data class DownloadedBackup(val sizeBytes: Long, val sha256: String)
+
 /**
  * The cloud's adoption, repo and backup APIs over HTTP. Talks only to [baseUrl]'s host and follows no
  * redirect, with the JDK's normal certificate checks.
@@ -94,6 +102,8 @@ class CloudApi(
     private val clock: () -> Instant = Instant::now,
     /** How long one backup part's upload may take: 64 MiB on a venue's uplink. */
     private val partTimeout: Duration = Duration.ofMinutes(15),
+    /** How long a backup's download may take, a whole install on a venue's uplink. */
+    private val downloadTimeout: Duration = Duration.ofHours(2),
 ) : Closeable {
 
     private val client = HttpClient(CIO) {
@@ -207,6 +217,61 @@ class CloudApi(
     suspend fun completeBackup(signer: InstallSigner, backupId: String): CloudCall<BackupDto> {
         val path = CloudPaths.backupComplete(backupId)
         return decode(exchange(MAX_ANSWER_BYTES) { client.preparePost(baseUrl + path) { signBackupCall(signer, "POST", path, ByteArray(0)) } }, BackupDto.serializer())
+    }
+
+    /**
+     * A complete backup's encrypted file (`GET /v1/backups/{id}/file`), streamed to [target] and hashed as
+     * it comes; refused as unreachable past [maxBytes], so a cloud cannot fill the disk. A refused,
+     * unreachable or oversize download leaves no [target] behind.
+     */
+    suspend fun downloadBackup(signer: InstallSigner, backupId: String, target: Path, maxBytes: Long): CloudCall<DownloadedBackup> {
+        val path = CloudPaths.backupFile(backupId)
+        val result: CloudCall<DownloadedBackup> = try {
+            client.prepareGet(baseUrl + path) {
+                timeout { requestTimeoutMillis = downloadTimeout.toMillis() }
+                signBackupCall(signer, "GET", path, ByteArray(0))
+            }.execute { response ->
+                val channel = response.bodyAsChannel()
+                if (!response.status.isSuccess()) {
+                    val body = channel.readBuffer(MAX_ANSWER_BYTES.toLong()).readByteArray().decodeToString()
+                    val error = runCatching { CloudJson.decodeFromString(ApiError.serializer(), body) }.getOrNull()
+                    return@execute CloudCall.Refused(response.status.value, error)
+                }
+                val digest = MessageDigest.getInstance("SHA-256")
+                var written = 0L
+                Files.newOutputStream(target).use { out ->
+                    val buffer = ByteArray(1 shl 16)
+                    while (true) {
+                        val n = channel.readAvailable(buffer, 0, buffer.size)
+                        if (n == -1) break
+                        written += n
+                        if (written > maxBytes) return@execute CloudCall.Unreachable("The cloud sent more than the backup's size")
+                        digest.update(buffer, 0, n)
+                        out.write(buffer, 0, n)
+                    }
+                }
+                CloudCall.Ok(DownloadedBackup(written, digest.digest().toHex()))
+            }
+        } catch (e: CancellationException) {
+            Files.deleteIfExists(target)
+            throw e
+        } catch (e: Exception) {
+            CloudCall.Unreachable(e.message ?: e::class.simpleName ?: "no answer")
+        }
+        if (result !is CloudCall.Ok) Files.deleteIfExists(target)
+        return result
+    }
+
+    /** Confirm the replacement this install's adoption recorded (`POST /v1/installs/{id}/replace`). */
+    suspend fun replaceInstall(signer: InstallSigner): CloudCall<ReplacedDto> {
+        val path = CloudPaths.installReplace(signer.installId)
+        return decode(exchange(MAX_ANSWER_BYTES) { client.preparePost(baseUrl + path) { signBackupCall(signer, "POST", path, ByteArray(0)) } }, ReplacedDto.serializer())
+    }
+
+    /** Decline it (`DELETE /v1/installs/{id}/replace`). */
+    suspend fun declineReplacement(signer: InstallSigner): CloudCall<Unit> {
+        val path = CloudPaths.installReplace(signer.installId)
+        return callNoBody { client.prepareDelete(baseUrl + path) { signBackupCall(signer, "DELETE", path, ByteArray(0)) } }
     }
 
     private fun HttpRequestBuilder.signBackupCall(signer: InstallSigner, method: String, path: String, body: ByteArray) {

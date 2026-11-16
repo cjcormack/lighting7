@@ -118,4 +118,7 @@ enum class CloudUnlinkReason {
 
     /** Adoption linked the adopting admin to another account. */
     REPLACED,
+
+    /** A backup restored without its install's identity: its links named that install. */
+    RESTORED,
 }

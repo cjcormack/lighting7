@@ -20,7 +20,9 @@ import org.jetbrains.exposed.v1.jdbc.update
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionPollResult
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionRequest
+import uk.me.cormack.lighting7.cloud.protocol.AdoptionRestore
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionStarted
+import uk.me.cormack.lighting7.cloud.protocol.ErrorCode
 import uk.me.cormack.lighting7.cloud.protocol.InstallKeys
 import uk.me.cormack.lighting7.cloud.protocol.UserCode
 import uk.me.cormack.lighting7.models.CloudConnectionState
@@ -35,6 +37,7 @@ import uk.me.cormack.lighting7.models.clearCloudLinks
 import uk.me.cormack.lighting7.models.recordCloudLinkEvent
 import uk.me.cormack.lighting7.models.nowUtc
 import uk.me.cormack.lighting7.update.BuildInfo
+import java.security.PrivateKey
 import java.time.Instant
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -59,6 +62,8 @@ data class CloudConnectionRow(
     val remoteAccess: Boolean = false,
     val mcpAccess: Boolean = false,
     val approveSessions: Boolean = false,
+    /** A restore the approval asked for, until it is confirmed or declined (cloud-p3 plan D9). */
+    val restore: AdoptionRestore? = null,
 )
 
 /** What the desk keeps in memory only, beside the row (D11: no write per poll, heartbeat or reconnect). */
@@ -89,6 +94,10 @@ internal class CloudAdoptionService(
     private val memoryChanged: () -> Unit,
     /** These desk users' cloud links changed, so Users is told (cloud-p1 plan D12). */
     private val usersChanged: (Collection<Int>) -> Unit = {},
+    /** What the desk speaks, sent with the adoption so the portal can offer a restore (cloud-p3 plan D1). */
+    private val capabilities: () -> List<String> = { emptyList() },
+    /** The adoption is forgotten (unadopt, cancel, revoke): a staged restore goes with it (cloud-p3 plan D9). */
+    private val unadopted: () -> Unit = {},
 ) {
     private val logger = LoggerFactory.getLogger(CloudAdoptionService::class.java)
     private val mutex = Mutex()
@@ -117,6 +126,11 @@ internal class CloudAdoptionService(
                 remoteAccess = it[DaoCloudConnections.remoteAccess],
                 mcpAccess = it[DaoCloudConnections.mcpAccess],
                 approveSessions = it[DaoCloudConnections.approveSessions],
+                restore = restoreOf(
+                    it[DaoCloudConnections.restoreReplacesInstallId],
+                    it[DaoCloudConnections.restoreReplacesName],
+                    it[DaoCloudConnections.restoreBackupId],
+                ),
             )
         }
     }
@@ -178,6 +192,7 @@ internal class CloudAdoptionService(
                 friendlyName = friendlyName,
                 platform = DeskPlatform.current,
                 deskVersion = BuildInfo.current.version,
+                capabilities = capabilities(),
             )
             val started = when (val call = api().startAdoption(request)) {
                 is CloudCall.Ok -> call.value.also(::checkStarted)
@@ -274,6 +289,137 @@ internal class CloudAdoptionService(
         clearLocked(notice = "This desk was removed from ${row.orgName ?: "its organisation"} in the cloud.")
     }
 
+    /**
+     * Confirm the replacement the adoption recorded (cloud-p3 plan D9): the signed `POST
+     * /v1/installs/{installId}/replace`, then the old install's id as this desk's, which reconnects the
+     * channel as it. The restore is cleared, so a backup it named must be checked first. A replacement
+     * past its 7 days clears the restore and leaves the desk its own install; so does one the cloud no
+     * longer has, unless the old install already answers to this desk's key, when an earlier confirm's
+     * answer was lost and the replacement stands. Unreachable leaves the restore pending. Answers the
+     * install id the desk now is.
+     */
+    suspend fun confirmReplacement(): String = mutex.withLock {
+        val row = row()
+        val installId = row?.installId
+        val replaces = row?.restore?.replacesInstallId
+        if (row?.state != CloudConnectionState.ADOPTED || installId == null || replaces == null) {
+            throw CloudException(HttpStatusCode.Conflict, CloudErrorCodes.NO_RESTORE, "No replacement is waiting on this desk.")
+        }
+        val key = keys.load() ?: throw CloudException(HttpStatusCode.Conflict, CloudErrorCodes.KEY_MISSING, "This desk's install key is missing, so it can't sign the replacement.")
+        when (val call = api().replaceInstall(InstallSigner(installId, key))) {
+            is CloudCall.Ok -> {
+                replacedLocked(call.value.installId)
+                call.value.installId
+            }
+            is CloudCall.Refused -> {
+                val code = call.error?.code
+                if (code == ErrorCode.REPLACEMENT_EXPIRED) {
+                    clearRestoreLocked()
+                    throw CloudException(HttpStatusCode.Conflict, code, "The replacement expired: it waited longer than 7 days. This desk stays its own install.")
+                }
+                if (answersAs(replaces, key)) {
+                    replacedLocked(replaces)
+                    return@withLock replaces
+                }
+                if (code == ErrorCode.REPLACEMENT_NOT_FOUND) {
+                    clearRestoreLocked()
+                    throw CloudException(HttpStatusCode.Conflict, code, "The cloud has no replacement waiting for this desk any more. This desk stays its own install.")
+                }
+                throw CloudException(
+                    HttpStatusCode.BadGateway,
+                    code ?: CloudErrorCodes.REFUSED,
+                    "The cloud refused the replacement: " + (call.error?.message ?: "HTTP ${call.status}"),
+                )
+            }
+            is CloudCall.Unreachable -> throw CloudException(HttpStatusCode.Conflict, CloudErrorCodes.UNREACHABLE, "Couldn't reach the cloud: ${call.message}")
+        }
+    }
+
+    /**
+     * Whether a replacement whose answer was lost has already happened: the old install answers to this
+     * desk's key. Takes its id when it has, and answers true.
+     */
+    suspend fun settleLostReplacement(): Boolean = mutex.withLock {
+        val row = row()
+        val replaces = row?.restore?.replacesInstallId
+        if (row?.state != CloudConnectionState.ADOPTED || replaces == null) return@withLock false
+        val key = keys.load() ?: return@withLock false
+        if (!answersAs(replaces, key)) return@withLock false
+        replacedLocked(replaces)
+        true
+    }
+
+    /**
+     * Decline the restore (cloud-p3 plan D9): a replacement is declined in the cloud too, by the signed
+     * `DELETE`; one the cloud no longer has counts as declined. The desk stays its own install, unless an
+     * earlier confirm's lost answer had already moved the old install here, which stands.
+     */
+    suspend fun declineRestore(): Unit = mutex.withLock {
+        val row = row()
+        val restore = row?.restore
+        if (row?.state != CloudConnectionState.ADOPTED || restore == null) {
+            throw CloudException(HttpStatusCode.Conflict, CloudErrorCodes.NO_RESTORE, "No restore is waiting on this desk.")
+        }
+        val installId = row.installId
+        val replaces = restore.replacesInstallId
+        if (replaces != null && installId != null) {
+            val key = keys.load() ?: throw CloudException(HttpStatusCode.Conflict, CloudErrorCodes.KEY_MISSING, "This desk's install key is missing, so it can't sign the decline.")
+            when (val call = api().declineReplacement(InstallSigner(installId, key))) {
+                is CloudCall.Ok -> Unit
+                is CloudCall.Refused -> {
+                    val code = call.error?.code
+                    if (code != ErrorCode.REPLACEMENT_EXPIRED && answersAs(replaces, key)) {
+                        logger.info("The replacement of {} had already happened, so only the backup is declined", replaces)
+                        replacedLocked(replaces)
+                        return@withLock
+                    }
+                    if (code != ErrorCode.REPLACEMENT_EXPIRED && code != ErrorCode.REPLACEMENT_NOT_FOUND) {
+                        throw CloudException(
+                            HttpStatusCode.BadGateway,
+                            code ?: CloudErrorCodes.REFUSED,
+                            "The cloud refused the decline: " + (call.error?.message ?: "HTTP ${call.status}"),
+                        )
+                    }
+                }
+                is CloudCall.Unreachable -> throw CloudException(HttpStatusCode.Conflict, CloudErrorCodes.UNREACHABLE, "Couldn't reach the cloud: ${call.message}")
+            }
+        }
+        clearRestoreLocked()
+    }
+
+    /** A harmless call signed as [installId] with this desk's [key]: the cloud accepts it only once the identity moved here. */
+    private suspend fun answersAs(installId: String, key: PrivateKey): Boolean =
+        api().backupKey(InstallSigner(installId, key)) is CloudCall.Ok
+
+    /** The replacement stands: [installId] is this desk's, and the restore is no longer pending. Must hold [mutex]. */
+    private fun replacedLocked(installId: String) {
+        transaction(database) {
+            DaoCloudConnections.update {
+                it[DaoCloudConnections.installId] = installId
+                it[restoreReplacesInstallId] = null
+                it[restoreReplacesName] = null
+                it[restoreBackupId] = null
+            }
+        }
+        logger.info("This desk now replaces the install {}", installId)
+        changed()
+    }
+
+    /** Forget the restore here alone: a backup alone, once staged, asks nothing of the cloud. */
+    suspend fun clearRestore(): Unit = mutex.withLock { clearRestoreLocked() }
+
+    /** Must hold [mutex]. */
+    private fun clearRestoreLocked() {
+        transaction(database) {
+            DaoCloudConnections.update {
+                it[restoreReplacesInstallId] = null
+                it[restoreReplacesName] = null
+                it[restoreBackupId] = null
+            }
+        }
+        changed()
+    }
+
     /** Must hold [mutex]. */
     private fun launchPoll(adoptionId: String, intervalS: Int, expiresAt: Instant) {
         pollJob?.cancel()
@@ -368,6 +514,9 @@ internal class CloudAdoptionService(
                 it[verificationUriComplete] = null
                 it[pollIntervalS] = null
                 it[adoptionExpiresAt] = null
+                it[restoreReplacesInstallId] = approved.restore?.replacesInstallId
+                it[restoreReplacesName] = approved.restore?.replacesName
+                it[restoreBackupId] = approved.restore?.backupId
             }
             // Read here, in the write's transaction, so a user deleted meanwhile gets no link.
             val userId = DaoCloudConnections.selectAll().single()[DaoCloudConnections.adoptedBy]?.value
@@ -423,9 +572,15 @@ internal class CloudAdoptionService(
         memory.lastError = null
         changed()
         if (unlinked.isNotEmpty()) usersChanged(unlinked)
+        runCatching { unadopted() }.onFailure { logger.warn("Couldn't drop the staged restore", it) }
     }
 
     companion object {
+        /** A stored restore, or null when the row holds none or one the protocol would refuse. */
+        internal fun restoreOf(replacesInstallId: String?, replacesName: String?, backupId: String?): AdoptionRestore? =
+            if (replacesInstallId == null && backupId == null) null
+            else runCatching { AdoptionRestore(replacesInstallId, replacesName, backupId) }.getOrNull()
+
         const val DEFAULT_INTERVAL_S = 5
 
         /** The longest interval the desk waits between polls, whatever the cloud asks. */

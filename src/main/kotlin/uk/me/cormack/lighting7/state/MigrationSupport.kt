@@ -15,7 +15,14 @@ import javax.sql.DataSource
 // What the schema migrations that rebuild tables from the model share (`CueModelMigration`,
 // `TerminologyMigration`): the backup taken before anything moves, and the rebuild itself.
 
-private val BACKUP_STAMP: DateTimeFormatter =
+/**
+ * The `PRAGMA user_version` this build leaves a database at: the last one-shot step's. A new step moves
+ * it. A restore refuses a backup whose database is past it (cloud-p3 plan D9).
+ */
+const val SCHEMA_USER_VERSION: Int = GITHUB_RETIREMENT_USER_VERSION
+
+/** The UTC stamp a kept copy's name carries, the migrations' backups and a restore's alike. */
+internal val BACKUP_STAMP: DateTimeFormatter =
     DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC)
 
 /**

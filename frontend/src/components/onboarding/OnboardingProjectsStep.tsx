@@ -20,6 +20,7 @@ import { restApi } from "@/store/restApi"
 import { useCloudReposQuery, useCloudSyncImportMutation } from "@/store/cloudSync"
 import { useCloudAdopted } from "@/components/cloudSync/useCloudAdopted"
 import { CloudAdoptionFlow } from "@/components/cloud/CloudPanel"
+import { CloudRestore, hasRestore } from "@/components/cloud/CloudRestore"
 import { useCloudStateQuery } from "@/store/cloud"
 import { useFinishOnboardingMutation } from "@/store/installs"
 import { useCurrentProjectQuery, useProjectListQuery, useUpdateProjectMutation } from "@/store/projects"
@@ -93,6 +94,7 @@ export function OnboardingProjectsStep({ onBack }: { onBack: () => void }) {
     <div className="space-y-5">
       <section className="space-y-3">
         <h3 className="text-sm font-medium">From Lighting7 Cloud</h3>
+        {cloud != null && hasRestore(cloud) && <CloudRestore state={cloud} />}
         {adopted == null ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" />

@@ -30,6 +30,8 @@ import org.junit.After
 import org.junit.Test
 import uk.me.cormack.lighting7.backup.BackupErrorCodes
 import uk.me.cormack.lighting7.backup.BackupStatusDto
+import uk.me.cormack.lighting7.backup.RestoreStatusDto
+import uk.me.cormack.lighting7.cloud.protocol.AdoptionRestore
 import uk.me.cormack.lighting7.cloud.CloudErrorCodes
 import uk.me.cormack.lighting7.cloud.CloudStateDto
 import uk.me.cormack.lighting7.cloud.protocol.BackupKind
@@ -350,5 +352,44 @@ class InstallCloudRoutesTest : RouteIntegrationTest() {
         val read = http.get("/api/rest/install/cloud/backups") { remote(admin) }
         assertEquals(HttpStatusCode.OK, read.status, read.bodyAsText())
         assertFalse(read.body<BackupStatusDto>().enabled)
+    }
+
+    @Test
+    fun `a restore is confirmed only at the desk, and only with the old install's name typed`() = testApplication {
+        fake.restore = AdoptionRestore(replacesInstallId = "inst-old", replacesName = "Old desk")
+        val desk = RemoteDesk(state, fake)
+        desk.adopt(seedUser(state, "admin").userId)
+        mountPublic()
+        val http = jsonClient()
+        val admin = desk.caller("admin")
+
+        val status = http.get("/api/rest/install/cloud/restore") { remote(admin) }.body<RestoreStatusDto>()
+        assertEquals("Old desk", status.confirmName)
+        assertEquals("inst-old", status.pending?.replacesInstallId)
+
+        val remote = http.post("/api/rest/install/cloud/restore/confirm") {
+            remote(admin); contentType(ContentType.Application.Json); setBody("""{"name":"Old desk"}""")
+        }
+        assertEquals(HttpStatusCode.Forbidden, remote.status)
+        assertEquals(CloudErrorCodes.RESTORE_LOCAL_ONLY, remote.code())
+        assertTrue(fake.replaced.isEmpty(), "a refused confirm moves nothing in the cloud")
+    }
+
+    @Test
+    fun `a confirm without the typed name is refused, and the restore stays pending`() = testApplication {
+        fake.restore = AdoptionRestore(replacesInstallId = "inst-old", replacesName = "Old desk")
+        val desk = RemoteDesk(state, fake)
+        desk.adopt(seedUser(state, "admin").userId)
+        mountTestApp(state)
+        val http = jsonClient()
+        val cookie = http.loginCookieHeader("admin")
+
+        val wrong = http.post("/api/rest/install/cloud/restore/confirm") {
+            header(HttpHeaders.Cookie, cookie); contentType(ContentType.Application.Json); setBody("""{"name":"old desk "}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, wrong.status, wrong.bodyAsText())
+        assertEquals(CloudErrorCodes.RESTORE_NAME_MISMATCH, wrong.code())
+        assertTrue(fake.replaced.isEmpty())
+        assertEquals("Old desk", http.cloud(cookie).adopted?.restore?.replacesName, "the restore is still waiting")
     }
 }

@@ -11,6 +11,7 @@ import io.ktor.server.netty.Netty
 import io.ktor.server.netty.NettyApplicationEngine
 import io.ktor.server.request.path
 import io.ktor.server.request.receiveText
+import io.ktor.server.request.uri
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
@@ -40,7 +41,10 @@ import uk.me.cormack.lighting7.cloud.protocol.Message
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionPollPayload
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionPollResult
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionRequest
+import uk.me.cormack.lighting7.cloud.protocol.AdoptionRestore
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionStarted
+import uk.me.cormack.lighting7.cloud.protocol.BackupApiPayload
+import uk.me.cormack.lighting7.cloud.protocol.ReplacedDto
 import uk.me.cormack.lighting7.cloud.protocol.ApiError
 import uk.me.cormack.lighting7.cloud.protocol.CloudAccount
 import uk.me.cormack.lighting7.cloud.protocol.CloudJson
@@ -171,6 +175,21 @@ class FakeCloud : Closeable {
     val org = CloudOrg("org-1", "Test Org")
     val account = CloudAccount("acct-1", "admin@example.com", "Test Admin")
 
+    /** What the next approval asks the desk to restore; the replacement it records waits [replacementExpiresIn]. */
+    @Volatile var restore: AdoptionRestore? = null
+    @Volatile var replacementExpiresIn: Duration = Duration.ofDays(7)
+
+    /** A pending replacement on the provisional install it is keyed by. */
+    data class Replacement(val replaces: String, val expiresAt: Instant)
+
+    val replacements = ConcurrentHashMap<String, Replacement>()
+
+    /** Every confirmed replacement, as `new → old`. */
+    val replaced = CopyOnWriteArrayList<Pair<String, String>>()
+
+    /** Make the next [loseReplaceAnswers] replacements, then answer with a body no desk can read: an answer lost. */
+    val loseReplaceAnswers = AtomicInteger(0)
+
     val adoptions = ConcurrentHashMap<String, Adoption>()
     val installs = ConcurrentHashMap<String, Install>()
     val polls = CopyOnWriteArrayList<Poll>()
@@ -225,14 +244,46 @@ class FakeCloud : Closeable {
                     val result = slowDownOnce?.let { slowDownOnce = null; AdoptionPollResult.SlowDown(it) } ?: when (decision) {
                         Decision.PENDING -> AdoptionPollResult.Pending
                         Decision.APPROVE -> {
-                            val install = installs.values.firstOrNull { it.adoptionId == id }
-                                ?: Install("inst-${ids.incrementAndGet()}", id, adoption.key).also { installs[it.id] = it }
-                            AdoptionPollResult.Approved(install.id, org, account)
+                            val existing = installs.values.firstOrNull { it.adoptionId == id }
+                            val install = existing ?: Install("inst-${ids.incrementAndGet()}", id, adoption.key).also { installs[it.id] = it }
+                            val asked = restore
+                            if (existing == null) {
+                                asked?.replacesInstallId?.let { replacements[install.id] = Replacement(it, Instant.now().plus(replacementExpiresIn)) }
+                            }
+                            AdoptionPollResult.Approved(install.id, org, account, asked)
                         }
                         Decision.DENY -> AdoptionPollResult.Denied
                         Decision.EXPIRE -> AdoptionPollResult.Expired
                     }
                     call.json(AdoptionPollResult.serializer(), result)
+                }
+                post("/v1/installs/{id}/replace") {
+                    if (gate(call)) return@post
+                    val id = call.parameters["id"].orEmpty()
+                    val install = installs[id] ?: return@post call.error(HttpStatusCode.NotFound, ErrorCode.NOT_FOUND)
+                    verify(call, install.key) { BackupApiPayload.of(id, "POST", call.request.uri, it, ByteArray(0)) }?.let {
+                        return@post call.error(HttpStatusCode.Unauthorized, it)
+                    }
+                    val replacement = replacements[id] ?: return@post call.error(HttpStatusCode.NotFound, ErrorCode.REPLACEMENT_NOT_FOUND)
+                    if (Instant.now().isAfter(replacement.expiresAt)) return@post call.error(HttpStatusCode.Gone, ErrorCode.REPLACEMENT_EXPIRED)
+                    val old = installs[replacement.replaces] ?: return@post call.error(HttpStatusCode.NotFound, ErrorCode.REPLACEMENT_NOT_FOUND)
+                    replacements.remove(id)
+                    installs.remove(id)
+                    installs[old.id] = old.copy(key = install.key, adoptionId = install.adoptionId)
+                    sessions.remove(old.id)?.close(CloseReason(CloseCode.REPLACED.code, CloseCode.REPLACED.name))
+                    replaced += id to old.id
+                    if (loseReplaceAnswers.getAndUpdate { maxOf(0, it - 1) } > 0) return@post call.respondText("lost")
+                    call.json(ReplacedDto.serializer(), ReplacedDto(old.id))
+                }
+                delete("/v1/installs/{id}/replace") {
+                    if (gate(call)) return@delete
+                    val id = call.parameters["id"].orEmpty()
+                    val install = installs[id] ?: return@delete call.error(HttpStatusCode.NotFound, ErrorCode.NOT_FOUND)
+                    verify(call, install.key) { BackupApiPayload.of(id, "DELETE", call.request.uri, it, ByteArray(0)) }?.let {
+                        return@delete call.error(HttpStatusCode.Unauthorized, it)
+                    }
+                    replacements.remove(id) ?: return@delete call.error(HttpStatusCode.NotFound, ErrorCode.REPLACEMENT_NOT_FOUND)
+                    call.respondText("", status = HttpStatusCode.NoContent)
                 }
                 delete("/v1/installs/{id}") {
                     if (gate(call)) return@delete
