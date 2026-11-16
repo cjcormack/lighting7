@@ -2,6 +2,13 @@
   "_comment": "Run by TokenScrubberTest and lib/sentryScrub.test.ts against secret-patterns.json. `expected` absent means the input passes untouched.",
   "cases": [
     {
+      "input": "GET /v1/backups/key answered {\"keyId\":\"key-1\",\"key\":\"q8Jx3m0Qw2v9Zr7Lp5Tn1Ys4Hc6Bd8Ke0Ag2Uf4Wi6O\"}",
+      "expected": "GET /v1/backups/key answered {\"keyId\":\"key-1\",\"key\":\"[redacted]\"}"
+    },
+    {
+      "input": "{\"key\":\"short\"} and a manifest's \"key\": \"not-a-key\" pass"
+    },
+    {
       "input": "push to https://cloud.example/git/org1/repo1.git with x-install-token:eyJhbGciOiJFZERTQSIsInR5cCI6Imw3Z2l0In0.eyJpc3MiOiJpbnN0XzAxIn0.c2lnbmF0dXJlLWJ5dGVz_-x failed",
       "expected": "push to https://cloud.example/git/org1/repo1.git with x-install-token:[redacted] failed"
     },

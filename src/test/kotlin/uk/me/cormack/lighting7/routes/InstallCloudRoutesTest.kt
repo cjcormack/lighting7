@@ -28,8 +28,11 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Test
+import uk.me.cormack.lighting7.backup.BackupErrorCodes
+import uk.me.cormack.lighting7.backup.BackupStatusDto
 import uk.me.cormack.lighting7.cloud.CloudErrorCodes
 import uk.me.cormack.lighting7.cloud.CloudStateDto
+import uk.me.cormack.lighting7.cloud.protocol.BackupKind
 import uk.me.cormack.lighting7.mcp.publicModule
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.testsupport.FakeCloud
@@ -269,5 +272,83 @@ class InstallCloudRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, listing.status, listing.bodyAsText())
         val end = http.delete("/api/rest/install/cloud/sessions/nothing") { remote(admin) }
         assertEquals(CloudErrorCodes.NO_SESSION, end.code(), "End is open to either listener: it only reduces reach")
+    }
+
+    @Test
+    fun `the backup settings change only on the desk's own listener, and Back up now needs an adopted desk`() = testApplication {
+        seedUser(state, "admin")
+        mountTestApp(state)
+        val http = jsonClient()
+        val cookie = http.loginCookieHeader("admin")
+        suspend fun put(body: String) = http.put("/api/rest/install/cloud/backups") {
+            header(HttpHeaders.Cookie, cookie); contentType(ContentType.Application.Json); setBody(body)
+        }
+
+        val set = put("""{"enabled":true,"dailyAt":"03:30"}""")
+        assertEquals(HttpStatusCode.OK, set.status, set.bodyAsText())
+        val status = set.body<BackupStatusDto>()
+        assertTrue(status.enabled)
+        assertEquals("03:30", status.dailyAt)
+        assertTrue(state.backups.enabled)
+
+        val bad = put("""{"dailyAt":"25:00"}""")
+        assertEquals(HttpStatusCode.BadRequest, bad.status)
+        assertEquals(BackupErrorCodes.SETTINGS_INVALID, bad.code())
+        assertEquals("03:30", state.backups.status.value.dailyAt, "a refused time changes nothing")
+
+        val run = http.post("/api/rest/install/cloud/backups/run") { header(HttpHeaders.Cookie, cookie) }
+        assertEquals(HttpStatusCode.Conflict, run.status)
+        assertEquals(CloudErrorCodes.NOT_ADOPTED, run.code())
+    }
+
+    @Test
+    fun `Back up now on the desk's own listener runs with the switch off, and answers the run it started`() = testApplication {
+        val desk = RemoteDesk(state, fake)
+        desk.adopt(seedUser(state, "admin").userId)
+        mountTestApp(state)
+        val http = jsonClient()
+        val cookie = http.loginCookieHeader("admin")
+        val run = http.post("/api/rest/install/cloud/backups/run") { header(HttpHeaders.Cookie, cookie) }
+        assertEquals(HttpStatusCode.Accepted, run.status, run.bodyAsText())
+        assertFalse(state.backups.enabled)
+        assertEquals(BackupKind.MANUAL, run.body<BackupStatusDto>().running?.kind)
+    }
+
+    @Test
+    fun `Back up now over remote access runs only while the nightly switch is on`() = testApplication {
+        val desk = RemoteDesk(state, fake)
+        desk.adopt(seedUser(state, "admin").userId)
+        mountPublic()
+        val http = jsonClient()
+        val admin = desk.caller("admin")
+
+        val off = http.post("/api/rest/install/cloud/backups/run") { remote(admin) }
+        assertEquals(HttpStatusCode.Forbidden, off.status, off.bodyAsText())
+        assertEquals(BackupErrorCodes.REMOTE_OFF, off.code())
+        assertNull(state.backups.status.value.running, "a refused run starts nothing")
+
+        state.backups.update(enabled = true)
+        val on = http.post("/api/rest/install/cloud/backups/run") { remote(admin) }
+        assertEquals(HttpStatusCode.Accepted, on.status, on.bodyAsText())
+        assertEquals(BackupKind.MANUAL, on.body<BackupStatusDto>().running?.kind)
+    }
+
+    @Test
+    fun `the backup settings are refused on the public listener, and read there`() = testApplication {
+        val desk = RemoteDesk(state, fake)
+        desk.adopt(seedUser(state, "admin").userId)
+        mountPublic()
+        val http = jsonClient()
+        val admin = desk.caller("admin")
+        val put = http.put("/api/rest/install/cloud/backups") {
+            remote(admin); contentType(ContentType.Application.Json); setBody("""{"enabled":true}""")
+        }
+        assertEquals(HttpStatusCode.Forbidden, put.status)
+        assertEquals(CloudErrorCodes.SETTINGS_LOCAL_ONLY, put.code())
+        assertFalse(state.backups.enabled)
+
+        val read = http.get("/api/rest/install/cloud/backups") { remote(admin) }
+        assertEquals(HttpStatusCode.OK, read.status, read.bodyAsText())
+        assertFalse(read.body<BackupStatusDto>().enabled)
     }
 }

@@ -102,6 +102,9 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
 
     /** Set when database step 18 met GitHub sync's table this start: the repos whose credentials go once [credentialStore] exists. */
     private var retiredGitHub: List<String>? = null
+
+    /** The SQLite file: `database.path` in `local.conf`, else `<appDataDir>/lighting7.db`. */
+    val databasePath: Path = Paths.get(config.optionalString("database.path") ?: appDataDir().resolve("lighting7.db").toString())
     val database = initDatabase()
     val projectManager = ProjectManager(database) { this }
 
@@ -153,8 +156,51 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
                 if (uk.me.cormack.lighting7.cloud.CloudRepoUrls.isCloudRepo(url, cloudConfig.baseUrl)) syncNudges.offer(url)
             },
             health = deskHealth::payload,
+            backups = object : uk.me.cormack.lighting7.cloud.CloudBackups {
+                override val enabled: Boolean get() = backups.enabled
+
+                override fun requested() {
+                    backups.request(uk.me.cormack.lighting7.cloud.protocol.BackupKind.REQUESTED)
+                }
+            },
         )
     }
+
+    /**
+     * The desk's off-site backups (cloud-p3 plan D5–D8): its settings read once here, its schedule
+     * started only by `Application.module()`, so a test's `State` backs nothing up unasked.
+     */
+    val backups: uk.me.cormack.lighting7.backup.BackupService = uk.me.cormack.lighting7.backup.BackupService(
+        database = database,
+        staging = uk.me.cormack.lighting7.backup.InstallBackup(appDataDir().resolve("backups").resolve("staging")),
+        sources = {
+            uk.me.cormack.lighting7.backup.BackupSources(
+                databasePath = databasePath,
+                promptScripts = promptScriptStoreRoot,
+                sceneImages = sceneImages.root,
+                syncTrees = syncWorkingTreeRoot,
+                localConf = System.getProperty(CONFIG_FILE_PROPERTY)?.let { Paths.get(it) },
+            )
+        },
+        origin = {
+            cloud.installSigner()?.let { signer ->
+                val install = org.jetbrains.exposed.v1.jdbc.transactions.transaction(database) { DaoInstall.all().first().let { it.uuid.toString() to it.friendlyName } }
+                uk.me.cormack.lighting7.backup.BackupOrigin(
+                    deskVersion = uk.me.cormack.lighting7.update.BuildInfo.current.version,
+                    syncFormatVersion = uk.me.cormack.lighting7.sync.dto.FormatVersionJson().formatVersion,
+                    deskInstallUuid = install.first,
+                    friendlyName = install.second,
+                    installId = signer.installId,
+                )
+            }
+        },
+        signer = { cloud.installSigner() },
+        api = { cloud.api() },
+        busy = {
+            showOrNull?.let { show -> show.cueStackManager.getActiveStackIds().isNotEmpty() || !show.programmerStore.isEmpty } ?: false
+        },
+        switchChanged = { if (cloudDelegate.isInitialized()) cloud.backupSwitchChanged() },
+    )
 
     /**
      * Sync's outcome across every project, in memory for the heartbeat (cloud-p3 plan D2), read from
@@ -197,6 +243,7 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
                 ?.takeIf { it.channelKind == uk.me.cormack.lighting7.update.UpdateChannelKind.PACKAGED_WINDOWS }
                 ?.summary?.value
         },
+        backup = { backups.health() },
         dataDir = appDataDir(),
     )
 
@@ -1249,6 +1296,7 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
         // the retention `FU-TEST-COREMIDI-INIT-DEADLOCK` was written about, and `RouteIntegrationTest`
         // tears a State down between every test.
         runCatching { handState.close() }
+        runCatching { backups.close() }
         runCatching { sceneryService.close() }
         runCatching { effectsService.close() }
         runCatching { rigSafety.close() }
@@ -1478,8 +1526,7 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
 
     private fun initDatabase(): Database {
         val startedAt = java.time.Instant.now()
-        val dbPath = config.optionalString("database.path")
-            ?: appDataDir().resolve("lighting7.db").toString()
+        val dbPath = databasePath.toString()
         val ds = HikariDataSource(HikariConfig().apply {
             driverClassName = "org.sqlite.JDBC"
             jdbcUrl = "jdbc:sqlite:$dbPath"
@@ -1627,6 +1674,9 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
     }
 
 }
+
+/** The system property `main` sets to the `local.conf` it loaded, which a backup keeps; unset in tests. */
+const val CONFIG_FILE_PROPERTY = "lighting7.configFile"
 
 /** How long a CoreMIDI notification burst is allowed to settle before one rescan answers it. */
 private const val COREMIDI_RESCAN_DEBOUNCE_MS = 250L

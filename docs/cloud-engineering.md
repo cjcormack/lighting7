@@ -207,7 +207,7 @@ what is already in memory, never the database and never a lock the show takes:
 | `sync` | `SyncHealth` (`sync/SyncHealth.kt`), one rule live and seeded: the activity log's run rows move it — `SyncLogger` hands it each row it writes, and startup replays `sync_log_entry` — and so does each project's `sync_configs.last_synced_at`, which every good run writes, the quiet auto runs that log nothing included (`RemoteSyncEngine.runSync` calls `ran` for those live). A project is failing from its first failed run until its next good one; `failingSince` is the oldest failing project's first failure and `code` its latest `SyncErrorCode`. A run stopped on conflicts counts as failing, `CONFLICTS_PENDING`, since auto-sync then waits on the operator, until it is applied or aborted. A refusal saying the project is not set up to sync (`REPO_URL_MISSING`, `SYNC_DISABLED`, `SYNC_OFF`, `NO_REPO`, `VENUE_DRAFT_NOT_SYNCED`, `CLOUD_NOT_ADOPTED`, and `SESSION_PENDING`, already failing as conflicts) is no run. A disconnect logs `REPO_DISCONNECTED`, which ends the project's failure, and the seed counts only projects with a repo attached; a deleted project is forgotten, and a run still in flight for it reports nothing. An unexpected error in a run is logged as `RUN_FAILED` with `SYNC_FAILED`. Absent while no project has synced |
 | `diskFreeMb` | `FileStore.usableSpace` of the data directory's store, read at most once a minute |
 | `update` | `UpdateService.summary`, a `StateFlow` republished on every change of phase; absent unless the update client runs (a packaged Windows install) |
-| `backup` | Absent until the desk makes backups (session 4) |
+| `backup` | `BackupService.health()`: the *Off-site backups* switch, the last good and failed times and the last failure's code while the last attempt failed, all in memory (§"Backups") |
 
 **What is never sent** (FR-FLEET-5): the project's name and its controllers' addresses are the only
 strings the operator chose. No cue, Look, palette, group or fixture name, no level, no DMX value and no
@@ -597,6 +597,79 @@ install key's, which the portal shows too. `connection`, `retryAt`, `lastOnlineA
 `lastError` are §"The control channel"'s; a frame goes out on each change of status, never per
 heartbeat.
 
+## Backups
+
+The desk makes a whole-install backup on a schedule and on demand, encrypts it on the desk under its
+org's data key and uploads it to the cloud (cloud-p3 plan D5–D8, FR-BAK-1, -2; the wire is
+`docs/cloud-protocol.md` §"Backups" and §"The backup file"). Restoring one is session 5's.
+
+**What is in one** (`backup/InstallBackup.kt`, D5): a tar (`backup/Tar.kt`, ustar with a PAX `path`
+record for a long path) of `lighting7.db`, `prompt-scripts/`, `scene-images/` and `sync/` — every
+project's working tree, synced or not — the `local.conf` the desk loaded (the `-config` file `main`
+resolved, recorded as the `lighting7.configFile` property; none when it loaded none) as
+`extra/local.conf`, and `manifest.json` last,
+naming every file before it in archive order with its size and SHA-256, the desk version, the database's
+`user_version`, the sync `formatVersion` the desk writes, the source `installs.uuid` and friendly name,
+the cloud install id and the time. The tar is sealed by `BackupCipher` as it is written, so the archive
+never touches the disk in plaintext. Each file is opened before any of it is written, so one deleted
+since the walk (a sync tidying its tree) is left out whole; one that shrinks mid-copy fails the backup.
+Nothing else in the data directory is in it: no `credentials.enc`,
+script cache, exports, Sentry spools, sidecar files, updates, logs, lock, `RESET-ADMIN` or migration
+backups, so no secret leaves the desk.
+
+**The snapshot.** `VACUUM INTO` on a connection of its own, opened with `DriverManager` in autocommit and
+never taken from the pool, with a 10 s busy timeout; the show's one pooled connection stays free. Under
+the rollback journal the snapshot's shared lock holds a pool write off for the snapshot's length, and
+the write waits inside sqlite-jdbc's 3 s busy timeout: measured at 64 ms for 13 MB, 143 ms for 50 MB,
+446 ms for 200 MB (the plan's §4). The snapshot is the one plaintext file: staging
+(`<data>/backups/staging/`) is owner-only, the snapshot is deleted as soon as it is in the archive, and
+every start sweeps a snapshot, a half-written archive and an archive with no record.
+
+**Staging** holds at most one backup: its archive, `<backupId>.l7bk`, and its record, `<backupId>.json`
+(the declare's fields, when it was made and when the cloud took its declare). A new backup discards
+the one staged; an upload deletes both.
+
+**When** (`backup/BackupService.kt`, D6): the machine-local `backup_settings` row — `enabled` (off until
+an admin turns it on), `daily_at` (local time, default 04:00) and the last result. A scheduled backup at
+`daily_at` waits while a cue stack runs or the programmer holds anything, checking every 10 minutes, for
+at most 6 hours, then runs anyway (`BackupSchedule`). The Cloud tab's *Back up now* (`MANUAL`) and the
+cloud's `backup.request` (`REQUESTED`) run at once; a `backup.request` with the switch off is ignored,
+and announced as `backup.off` beside `backup.v1`. At most one runs at a time, and an ask while one runs
+is answered with the running one, except that a scheduled backup still waiting for a quiet show gives
+way: the one asked for runs at once, and tonight's wait ends. An ask claims the run before it answers,
+so the route's 202 already shows it. A scheduled backup runs on a job of its own, outside the schedule
+loop, so a settings change (which replaces the loop) never cancels one; it re-checks the switch before
+it runs. The last result's kind is the one the cloud lists the backup under: a resumed backup keeps the
+kind it was declared with. The work runs on `backup-1`, one thread of its own at the lowest
+priority, never `cloud-N` and never the show's, and writes the database only when a backup ends and when
+an admin changes the settings.
+
+**Each run** fetches the org's current data key (`GET /v1/backups/key`), held in memory and zeroed once
+the archive is sealed; mints the backup's id (`BackupIds`), which the archive's header carries; makes
+the archive; declares it; uploads each 64 MiB part, streamed from the file and signed over its own
+hash, retrying a part three times with backoff when the cloud does not answer or answers 5xx; and
+completes. A failed upload keeps the archive staged: the next run within 20 hours of its declare asks
+`GET /v1/backups/{id}` for `partsReceived` and sends the rest (a lost declare answer, `BACKUP_ID_TAKEN`,
+is resumed the same way; one the cloud already holds whole is done), inside the cloud's 24-hour abort.
+After 20 hours, or on `BACKUP_TOO_LARGE`, `BACKUP_NOT_FOUND` or `BACKUP_KEY_UNKNOWN`, it is discarded and
+the next run starts afresh. The last result's code is the cloud's (`BACKUPS_OFF`,
+`BACKUP_QUOTA_EXCEEDED`, `BACKUP_TOO_LARGE`, …), `CLOUD_UNREACHABLE`, `CLOUD_NOT_ADOPTED` or
+`BACKUP_FAILED`.
+
+**Routes**, admin only, under `routes/installCloud.kt`: `GET /install/cloud/backups` (the status:
+settings, the next run, a run in progress with its phase and parts, the last result), `PUT …`
+`{enabled?, dailyAt?}` — **only from the desk's own listener**, 403 `CLOUD_SETTINGS_LOCAL_ONLY`, as every
+switch on what leaves through the cloud; 400 `BACKUP_SETTINGS_INVALID` for a time that is not `HH:mm` —
+and `POST …/run`, 202 with the status, its run already there, 409 `CLOUD_NOT_ADOPTED` before adoption.
+At the desk it runs with the switch off; over remote access only with it on, else 403
+`BACKUP_REMOTE_OFF`, since what leaves through the cloud is the desk's decision.
+The Cloud tab re-reads the status every 2 s while a backup runs and every 30 s otherwise, so it sees a
+nightly, portal or other window's run start.
+
+**Traces and logs name no key** (D11): `BackupKeyDto.toString` hides the key, `TokenScrubber` redacts a
+`"key":"…"` of its shape, and the spans are `backup.make` and `backup.upload`, carrying sizes and part
+counts only.
+
 ## The Cloud tab
 
 Install settings → **Cloud** (`frontend/src/components/cloud/CloudPanel.tsx`, `store/cloud.ts`) is the
@@ -623,6 +696,12 @@ than refetching. Its states:
 - A `notice` above the rest, dismissed on that browser alone (localStorage) by its `noticeAt`, the
   instant the desk set it, since the next expiry or revoke says the same words. The desk keeps both in
   memory until the next adoption or a restart, and no route clears them.
+
+Once adopted, the **Off-site backups** section (`CloudBackups.tsx`, §"Backups"): *Back up every night*
+and its time, *Back up now*, what a running backup is doing (re-read every 2 s while one runs, every
+30 s otherwise), and the last backup's time, size and kind, or why the last one failed. Over remote
+access the switch and the time are drawn disabled with the reason, and *Back up now* is too while the
+switch is off, with its own reason.
 
 Below the adoption, the **Remote access** section (`CloudRemoteAccess.tsx`, P1 D6, D13): once adopted,
 *Remote sessions* with the sidecar's status under it while it is on, *Approve each new session on this
@@ -715,14 +794,17 @@ does the show run exactly as before with the cloud down, hung or hostile? The ru
 8. **A `sync.changed` is a nudge, not work.** The channel's thread offers the URL to `SyncNudges` — a
    bounded set behind a conflated wake-up, no lock the show takes, no database — and returns; the sync
    it brings forward runs on the scheduler's coroutine, as a timed tick would (§"Cloud sync").
-9. **A relayed MCP call is the desk's own work, not the channel's.** The channel's thread only judges
+9. **A backup is the desk's own work too.** It runs on `backup-1` at the lowest priority, reads the
+   database through a connection of its own, writes it only when a backup ends, and a `backup.request`
+   is handed to it and returned from (§"Backups").
+10. **A relayed MCP call is the desk's own work, not the channel's.** The channel's thread only judges
    the switch and the queue and hands the call on: the token, the link and the tool run on
    `Dispatchers.IO`, four at once and four waiting, `DESK_BUSY` beyond (`docs/mcp-engineering.md`
    §"Through the cloud").
 
 `CloudOutageOutputTimingTest` is the rules' proof (NFR-SAFE-1): a fade's Art-Net frames, timed with no
 connector, then with the cloud connected, flooding the channel with `sync.changed`, stopping reading,
-dropping the connection and refusing every reconnect, and with a full heartbeat every second, each run held to the baseline's frame count, end,
+dropping the connection and refusing every reconnect, with a full heartbeat every second, and with a backup made and uploaded mid-fade, each run held to the baseline's frame count, end,
 p99 and longest frame gap, each plus a margin.
 `LinkSidecarSafetyTest` holds the sidecar to the same (NFR-SAFE-2): the real one running, killed mid-fade
 and stopped with SIGSTOP mid-fade until its stdin queue fills, then a stand-in flooding its stdout and one
@@ -747,7 +829,10 @@ never use the real cloud (R5). `CloudRepoSyncTest` syncs shows and venues betwee
 `InstallCloudRoutesTest` the routes and their refusals on both listeners; `CloudChannelTest` the
 channel against the fake; `CloudChannelBackoffTest` the reconnect loop on a virtual clock; and
 `CloudOutageOutputTimingTest` the show's output through a cloud outage; `DeskHealthTest` the heartbeat
-from a running desk and FR-FLEET-5; `SyncHealthTest` sync's health across projects. `RemoteSessionsTest` drives
+from a running desk and FR-FLEET-5; `SyncHealthTest` sync's health across projects; `InstallBackupTest`
+an archive's contents and what it leaves out, staging and a pool write during the snapshot;
+`BackupServiceTest` the upload through `FakeCloudBackups` (the backup API over an in-memory store with
+the protocol's rules), its resume, its codes, `backup.request` and the schedule on a test clock. `RemoteSessionsTest` drives
 bearer requests and sockets on the public listener through every refusal and every way a session ends;
 `ChannelOutboxTest` the two send queues on virtual time; `RemoteFrameCapTest` the rate cap on virtual
 time. `CloudLinksTest` carries invites through

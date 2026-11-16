@@ -7,6 +7,7 @@ import uk.me.cormack.lighting7.models.DaoBuskPads
 import uk.me.cormack.lighting7.models.DaoBuskPages
 import uk.me.cormack.lighting7.models.DaoBuskRigRows
 import uk.me.cormack.lighting7.models.DaoBuskRigTiles
+import uk.me.cormack.lighting7.models.DaoBackupSettingsTable
 import uk.me.cormack.lighting7.models.DaoCloudConnections
 import uk.me.cormack.lighting7.models.DaoCloudIdentityLinks
 import uk.me.cormack.lighting7.models.DaoCloudLinkEvents
@@ -169,6 +170,7 @@ object SyncDispositions {
         ),
         DaoInstalls to SyncDisposition.MachineLocal("this install's identity"),
         DaoCloudConnections to SyncDisposition.MachineLocal("this install's adoption by Lighting7 Cloud"),
+        DaoBackupSettingsTable to SyncDisposition.MachineLocal("whether and when this desk backs itself up to the cloud, and how the last one went"),
         DaoCloudIdentityLinks to SyncDisposition.MachineLocal("which cloud account each desk account is"),
         DaoCloudRemoteSessions to SyncDisposition.MachineLocal("the audit of remote sessions through the cloud"),
         DaoCloudLinkInvites to SyncDisposition.MachineLocal("invites to link a cloud account to a desk account"),

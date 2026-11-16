@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.cloud
 
+import uk.me.cormack.lighting7.cloud.protocol.HealthBackup
 import uk.me.cormack.lighting7.cloud.protocol.HealthProject
 import uk.me.cormack.lighting7.cloud.protocol.HealthSync
 import uk.me.cormack.lighting7.cloud.protocol.HealthUniverse
@@ -31,6 +32,8 @@ class DeskHealth(
     private val sync: () -> SyncHealth.Summary,
     /** Null where the desk runs no update client. */
     private val update: () -> UpdateSummary?,
+    /** The off-site backups' switch and last result (cloud-p3 plan D6); null where the desk makes none. */
+    private val backup: () -> HealthBackup? = { null },
     private val dataDir: Path,
     private val nowMs: () -> Long = System::currentTimeMillis,
     /** The uptime and version every heartbeat carries. */
@@ -52,6 +55,7 @@ class DeskHealth(
         update = field("update") {
             update()?.let { HealthUpdate(it.phase.name, it.lastApplySucceeded?.let(::outcomeOf), it.stagedVersion) }
         },
+        backup = field("backup", backup),
     )
 
     private fun <T> field(name: String, read: () -> T?): T? = try {

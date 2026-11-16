@@ -1,6 +1,6 @@
 # Lighting7 Cloud P3: fleet health and backups, the desk's side
 
-> **Document status: IN PROGRESS — written 2026-11-15; sessions 1–2 merged.** The desk half of the PRD's
+> **Document status: IN PROGRESS — written 2026-11-15; sessions 1–3 merged.** The desk half of the PRD's
 > phase P3; its exit, `FU-MANUAL-CLOUD-P3`, is an operator check in
 > [`manual-validation.md`](manual-validation.md), added by session 4. The cloud half is
 > `docs/plans/p3-plan.md` in `cjcormack/lighting7-cloud`. Design record:
@@ -171,6 +171,16 @@ install that comes back as the old install, its MCP URL and links working (UC-8)
   not, so no secret leaves the desk (FR-BAK-1). The manifest names the desk version, the database's
   `user_version`, the sync `formatVersion` it writes, the source `installs.uuid` and friendly name,
   the cloud install id, the time, and every file's size and SHA-256.
+
+  As session 4 built it: `manifest.json` is the archive's **last** entry, not its first, since it lists
+  every file's hash and the files are hashed as they stream in (a tar header needs the size first, so a
+  file is read once); the tar is the desk's own (`backup/Tar.kt`, ustar with a PAX `path` record for a long
+  path) rather than a new dependency. A file deleted between the walk and its turn is left out (it is
+  opened before its header is written, so it leaves nothing behind); one that shrinks fails the backup.
+  `local.conf` is the file the desk actually loaded, which `main` records as the `lighting7.configFile`
+  property, not a guess at its place; the database path is one `State.databasePath` the backup and
+  `initDatabase` share. The snapshot's own connection sets a 10 s `busy_timeout`. Staging keeps each
+  archive's declare beside it as `<backupId>.json`, which is what a resume reads.
 - **D6 — When a backup runs** (FR-BAK-1, D-17's spirit). A machine-local `backup_settings` row (R7):
   `enabled` (off until an admin turns it on), `daily_at` (local time, default 04:00) and the last
   result. The Cloud tab's *Off-site backups* section turns it on, sets the time and runs one now; like
@@ -182,6 +192,18 @@ install that comes back as the old install, its MCP URL and links working (UC-8)
   running one). The work runs on a dedicated single thread at low priority, never `cloud-N`, never the
   show's dispatchers, and writes the database only at its start and end (a transition). A backup needs
   the cloud only to fetch the key (before it starts) and to upload (after the archive is made).
+
+  As session 4 built it: the Cloud tab's *Back up now* at the desk runs with the switch off too (the
+  switch is the nightly run and the cloud's `backup.request`); over remote access it runs only with the
+  switch on (403 `BACKUP_REMOTE_OFF`), since what leaves through the cloud is the desk's decision. It
+  needs the desk adopted (409 `CLOUD_NOT_ADOPTED`). The
+  settings `PUT` takes no adoption, like the scripts switches. The work writes the database only when a
+  backup ends, never at its start, and holds no row while it runs. A desk without the cloud's backups
+  sees each run's refusal (`BACKUPS_OFF`) as its last result. One asked for while the scheduled one is
+  only waiting for a quiet show runs at once and ends that night's wait; the ask claims the run before
+  the route answers, so its 202 shows it. The scheduled backup runs outside the schedule loop, so a
+  settings change never cancels one in progress, and re-checks the switch before it runs. The last
+  result's kind is the backup's own, as the cloud lists it: a resumed one keeps its declared kind.
 - **D7 — Encrypted on the desk under the org's data key** (FR-BAK-2, REC-7). The desk fetches the
   org's current data key (`GET /v1/backups/key`, D1) for each backup and holds it in memory only, never
   stored. It mints the backup's id, a ULID, before encrypting, so the header can carry it before the
@@ -199,6 +221,12 @@ install that comes back as the old install, its MCP URL and links working (UC-8)
   attempt within 20 hours of its declare, asks `GET /v1/backups/{backupId}` for `partsReceived` and
   sends the rest, inside the cloud's 24-hour abort; after that it is deleted and the next scheduled run
   starts afresh. Staging never holds more than one backup.
+
+  As session 4 built it: a part is retried when the cloud does not answer or answers 5xx; a 4xx ends the
+  run at once. A declare refused `BACKUP_ID_TAKEN` (its answer lost) resumes as a staged one does, and a
+  backup the cloud already holds whole is done. `BACKUP_TOO_LARGE`, `BACKUP_NOT_FOUND` and
+  `BACKUP_KEY_UNKNOWN` discard the staged archive, since no resume gets past them; every other failure
+  keeps it. The data key's bytes are zeroed once the archive is sealed.
 - **D9 — Restore is adoption with a backup** (FR-BAK-4, OQ-6). On a fresh desk, adoption proceeds as
   today; in the portal the approver may say the desk *replaces* an install of the org, and may pick a
   backup (the cloud plan's D13). Approval adopts the desk as a new install, as today, and records on it
@@ -271,6 +299,14 @@ install that comes back as the old install, its MCP URL and links working (UC-8)
   off writes for the snapshot's duration. Session 4 measures it on the richest local project and
   records it here; if a write would wait past `busy_timeout`, it moves the snapshot to SQLite's online
   backup API in small steps (`sqlite3_backup_step`), which yields between pages.
+
+  **Measured by session 4, 2026-11-16**, in a Claude Code cloud container (no operator install is
+  reachable from one), on databases padded with 64 KiB blobs, a writer committing every 5 ms beside the
+  snapshot: `VACUUM INTO` took 64 ms at 13 MB, 143 ms at 50 MB and 446 ms at 200 MB, and the longest
+  write waited 81, 182 and 535 ms — the snapshot's length, inside sqlite-jdbc's default 3 s busy timeout
+  with room to spare up to about a gigabyte. So the snapshot stays `VACUUM INTO`. `InstallBackupTest`
+  holds a pool writer running through a backup to no failure. The operator's own database is measured
+  by `FU-MANUAL-CLOUD-P3-S4`.
 - **Port 6454.** The desk now binds it once and reads it (D4); a reply that went to a socket the
   poller does not read would look like silence, which is why nothing is unreachable until a reply has
   arrived. Another Art-Net program on the same machine may hold the port exclusively; D4 degrades to
@@ -278,6 +314,11 @@ install that comes back as the old install, its MCP URL and links working (UC-8)
 - **Backup size.** Prompt-book PDFs dominate (up to 100 MB each, and each also lives in its project's
   working tree). Session 4 records a real install's archive size here, and the cloud's
   `backups.storage.mb` bounds it.
+
+  **Not yet measured**: session 4 ran where no real install was, so the size is
+  `FU-MANUAL-CLOUD-P3-S4`'s step 4, which records it here. The archive is the database, the PDFs and
+  images and the working trees uncompressed (each PDF counted twice, once in `prompt-scripts/` and once
+  in its working tree), plus 16 bytes a MiB of encryption.
 - **A restore over a desk with data.** D9's typed confirm on the desk's own listener, and D10's kept
   copies, are the guard; the cloud alone can never start one, and a replacement approved in the portal
   moves no identity until the desk confirms it.
@@ -296,8 +337,8 @@ runs the checks §"Pre-commit checks" names for what it touches; `cloud-protocol
 |---|---|---|---|---|---|
 | 1 | The protocol for P3 | merged | `claude/eager-pasteur-p6ei2n` | [#435](https://github.com/cjcormack/lighting7/pull/435) | 7f55dac |
 | 2 | The full heartbeat | merged | `claude/relaxed-ptolemy-rbcias` | [#439](https://github.com/cjcormack/lighting7/pull/439) | fbcc3a0 |
-| 3 | Art-Net controller reachability | in review | `claude/vigilant-cori-bwv3ry` | | |
-| 4 | Making and uploading backups | planned | | | |
+| 3 | Art-Net controller reachability | merged | `claude/vigilant-cori-bwv3ry` | [#440](https://github.com/cjcormack/lighting7/pull/440) | cc4d6d5 |
+| 4 | Making and uploading backups | in review | `claude/funny-brown-mcmta3` | | |
 | 5 | Restoring onto a new desk | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session` fills

@@ -141,7 +141,7 @@ export function CloudRemoteAccess({ state }: { state: CloudState }) {
   )
 }
 
-function SwitchRow({
+export function SwitchRow({
   label,
   checked,
   disabled,

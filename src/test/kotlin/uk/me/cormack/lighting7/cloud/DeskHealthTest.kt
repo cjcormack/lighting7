@@ -14,6 +14,7 @@ import org.junit.Test
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import uk.me.cormack.lighting7.cloud.protocol.HealthBackup
 import uk.me.cormack.lighting7.cloud.protocol.Message
 import uk.me.cormack.lighting7.cloud.protocol.Capability
 import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
@@ -122,7 +123,7 @@ class DeskHealthTest {
         assertTrue((health.diskFreeMb ?: -1) >= 0, "disk free: ${health.diskFreeMb}")
         assertNull(health.sync, "no project has synced")
         assertNull(health.update, "a dev build runs no update client")
-        assertNull(health.backup)
+        assertEquals(HealthBackup(enabled = false), health.backup, "backups off, none made")
     }
 
     @Test

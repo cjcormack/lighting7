@@ -15,6 +15,8 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-CLOUD-P3`](#fu-manual-cloud-p3) | Lighting7 Cloud's P3 exit: a desk switched off, and a controller unplugged, each mailed to the owner after its threshold; last night's backup restored onto a fresh install that comes back as the old one, its MCP URL and links working; each step's time recorded | Cloud P3 S4, 2026-11-16 |
+| [`FU-MANUAL-CLOUD-P3-S4`](#fu-manual-cloud-p3-s4) | a backup made on demand appears in the portal with its size, and the next night's scheduled one too, waiting for a running stack; the Cloud tab's size beside the plan's measurement | Cloud P3 S4, 2026-11-16 |
 | [`FU-MANUAL-CLOUD-P3-S3`](#fu-manual-cloud-p3-s3) | on the rig, unplugging a controller turns its universe chip red on the desk within 40 s and green again within 15 s of plugging it back in, the heartbeat's `reachable` following; nothing goes red on a desk under `dmx.mock` | Cloud P3 S3, 2026-11-16 |
 | [`FU-MANUAL-CLOUD-P3-S2`](#fu-manual-cloud-p3-s2) | an adopted desk's install page in the portal shows its project, its universes' frame rates, its disk and its sync state within a minute, and the Cloud tab's *What the desk sends* matches it | Cloud P3 S2, 2026-11-16 |
 | [`FU-MANUAL-CLOUD-P2`](#fu-manual-cloud-p2) | Lighting7 Cloud's P2 exit: every owner project moved with its SHAs, a conflict made on two desks and resolved on the venue desk through the cloud, a Claude Code cloud session importing from the cloud, an upgraded desk's `oauth_identities` gone and a straggler moved from its working tree, and `docs/sync-engineering.md` describing the cloud | Cloud P2 S4, 2026-11-12 |
@@ -884,6 +886,46 @@ shows the migration moving nothing on stage.
    rig moves, and the four cells take the teal edge and the palette's pill, and the source chip names
    it. Select two of them: the palette's chip reads *2 of 4*. Delete one head's row from
    the palette: that cell's pill turns dashed (unresolved) and keeps its value.
+
+---
+
+## `FU-MANUAL-CLOUD-P3`
+
+**What it proves**: Lighting7 Cloud's P3 exit (cloud-p3 plan §6, UC-7 and UC-8). **Needs** the cloud's P3
+deployed and the desk's session 5 (restore) merged.
+
+**Test:**
+
+1. **UC-7.** Switch the venue desk off: the owner is mailed within its offline threshold (default 10
+   minutes), and its return clears the alert. Unplug one of its Art-Net controllers: the owner is
+   mailed after that alert's threshold, and plugging it back clears it.
+2. **UC-8, the restore drill.** Take last night's scheduled backup of the owner's main desk and restore
+   it onto a fresh install (a spare machine or a VM): adopt it with *replaces* in the portal, confirm on
+   the desk, restart. It opens the old desk's current show, its users sign in, the MCP URL in Claude
+   reaches it, a synced project syncs, and the old machine, if still on, shows itself unadopted.
+3. Record the time each step took here, beside the check.
+
+---
+
+## `FU-MANUAL-CLOUD-P3-S4`
+
+**What it proves**: the desk makes and uploads off-site backups (cloud-p3 plan session 4, D5–D8) from a
+real install. **Needs** the cloud's P3 session 4 deployed (`lighting7-cloud` `docs/plans/p3-plan.md`) and
+the org's backups on.
+
+**Test**, on the operator's main desk, adopted:
+
+1. Install settings › Cloud › *Off-site backups*: *Back up now*. The section says *Making the backup…*,
+   then *Uploading…* (with parts for an install over 64 MiB), then the last backup's time and size.
+   Fades running throughout look exactly as before.
+2. The portal lists the backup with the same size.
+3. Turn *Back up every night* on, at a time a few minutes ahead, with a cue stack running. It waits
+   (*Waiting for the show to go quiet…*); stop the stack and within 10 minutes it runs, and the portal
+   lists it as a scheduled backup.
+4. Record the archive's size here and in the plan's §4, beside the size of the data directory's
+   `lighting7.db`, `prompt-scripts/` and `sync/`.
+
+Record the date and anything that read differently here.
 
 ---
 

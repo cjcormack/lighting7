@@ -86,6 +86,9 @@ import kotlin.time.Duration.Companion.seconds
  *
  * For P2 it hosts the org's repos ([repos]): the repo API and git over smart HTTP, with the protocol's
  * push rules.
+ *
+ * For P3 it records each heartbeat in [received] and hosts the org's backups ([backups]): the backup
+ * API, signed as the protocol says, over an in-memory store.
  */
 class FakeCloud : Closeable {
 
@@ -177,6 +180,9 @@ class FakeCloud : Closeable {
     /** The org's repos and their git (cloud-p2 plan §3). */
     val repos = FakeCloudRepos(this)
 
+    /** The org's off-site backups (cloud-p3 plan §3). */
+    val backups = FakeCloudBackups(this)
+
     private val server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration> =
         embeddedServer(Netty, port = 0, host = "127.0.0.1") {
             install(WebSockets) { maxFrameSize = 64L * 1024 * 1024 }
@@ -194,6 +200,7 @@ class FakeCloud : Closeable {
             }
             routing {
                 repos.routes(this)
+                backups.routes(this)
                 webSocket(CloudPaths.DESK_CHANNEL) { channel(this) }
                 post("/v1/adoptions") {
                     if (gate(call)) return@post
