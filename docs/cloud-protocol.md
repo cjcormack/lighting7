@@ -522,10 +522,10 @@ need not be held in memory). `CloudPaths.backupsOf` URL-encodes the install id i
   fetches it for each backup and keeps it in memory only. `/v1/backups/key` is never a backup's id,
   which is a ULID (`BackupIds`).
 - **The declare.** `backupId` is minted by the desk before it encrypts, so the file's header carries it;
-  the org's ids are unique. `kind` is `SCHEDULED`, `REQUESTED` (by `backup.request`) or `MANUAL`
-  (`BackupKind`), or a newer kind. `sizeBytes` and `sha256` are the encrypted file's, `parts` its count
-  of `BACKUP_PART_BYTES` (64 MiB) parts, `backupPartCount(sizeBytes)` (at least one): every part but the
-  last is exactly that.
+  the org's ids are unique. `kind` is `SCHEDULED`, `REQUESTED` (by `backup.request`), `MANUAL` or
+  `QUIT` (made as the desk quits) (`BackupKind`), or a newer kind. `sizeBytes` and `sha256` are the
+  encrypted file's, `parts` its count of `BACKUP_PART_BYTES` (64 MiB) parts, `backupPartCount(sizeBytes)`
+  (at least one): every part but the last is exactly that.
 - **Parts** are numbered from 1, each signed over its own bytes, so each carries its own signature over
   its own hash. A part may be sent again, and the cloud keeps one copy of each. `BackupDto.partsReceived`
   lists the parts the cloud holds, ascending, which is how an interrupted upload resumes: the desk asks

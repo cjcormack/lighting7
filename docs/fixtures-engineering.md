@@ -967,12 +967,13 @@ desk-owned, attached to each show as it starts, like the effects service — and
   only once that end has been acted on — the blackout, *Undo*'s lamps, `notOff` — never as soon as
   the last hold ends, so no window sees a finished run without them, and a window that sees one
   finished may send *Undo* or *Release* without meeting `COMMAND_RUN_BUSY`.
-- **Quit desk** (`POST /install/quit` `{force?}`, D13) is separate (D9): admin only, refused on the
+- **Quit desk** (`POST /install/quit` `{force?, skipBackup?}`, D13) is separate (D9): admin only, refused on the
   public listener whatever the role (`QUIT_LOCAL_ONLY`), and `RIG_NOT_SAFE` unless the rig is ready,
-  made safe and cooling, or the caller sends `force`. It answers 202, writes the scaler writer's pending rows and exits 0
-  half a second later; the JVM's shutdown hooks stop the server. The Windows launcher exits with a
-  backend that exits — 0 for 0 — and never restarts it (`launcherExitCode`). Under `./gradlew run`
-  the build ends `BUILD SUCCESSFUL`: the launcher's own `run` runs only as `./gradlew :launcher:run`,
+  made safe and cooling, or the caller sends `force`. It answers 202, backs up first when the desk backs
+  up on quit, for at most 15 minutes (`backingUp`, `docs/cloud-engineering.md` §"Backups"; `skipBackup`
+  ends the wait), writes the scaler writer's pending rows and exits 0 half a second later (2.5 s after a
+  backup); the JVM's shutdown hooks stop the server. The Windows launcher exits with a backend that
+  exits — 0 for 0 — and never restarts it (`launcherExitCode`). Under `./gradlew run` the build ends `BUILD SUCCESSFUL`: the launcher's own `run` runs only as `./gradlew :launcher:run`,
   so a bare `run` no longer goes on to start a second desk after the first quits.
 
 Every operation is REST and answers the run it started; every window follows it on `rigSafety.state`

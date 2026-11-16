@@ -34,6 +34,9 @@ object BackupKind {
 
     /** The desk's own *Back up now*. */
     const val MANUAL: String = "MANUAL"
+
+    /** Made as the desk quits, by *Quit desk*. */
+    const val QUIT: String = "QUIT"
 }
 
 /** Where a backup is, its `status`. */

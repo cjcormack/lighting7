@@ -9,10 +9,11 @@ import {
   useBackupStatusQuery,
   useRunBackupMutation,
   useSetBackupSettingsMutation,
-  type BackupRun,
+  type BackupSettingsChange,
   type BackupStatus,
   type CloudState,
 } from '@/store/cloud'
+import { RunningLine } from './BackupRunLine'
 import { LOCAL_ONLY_REASON, SwitchRow } from './CloudRemoteAccess'
 
 /** How often the section re-reads the status while a backup runs: no frame announces its progress. */
@@ -20,10 +21,15 @@ export const BACKUP_POLL_MS = 2000
 /** How often it re-reads while none runs, to see one start from the schedule, the portal or another window. */
 export const BACKUP_IDLE_POLL_MS = 30_000
 
-const KIND_LABEL: Record<string, string> = { SCHEDULED: 'Nightly', REQUESTED: 'From the portal', MANUAL: 'From this desk' }
+const KIND_LABEL: Record<string, string> = {
+  SCHEDULED: 'Nightly',
+  REQUESTED: 'From the portal',
+  MANUAL: 'From this desk',
+  QUIT: 'As the desk quit',
+}
 
 export const REMOTE_OFF_REASON =
-  'Over remote access a backup can be started only while Back up every night is on: what leaves through the cloud is the desk’s decision.'
+  'Over remote access a backup can be started only while Back up to Lighting7 Cloud is on: what leaves through the cloud is the desk’s decision.'
 
 export function formatSize(bytes: number): string {
   const mb = bytes / (1024 * 1024)
@@ -33,9 +39,10 @@ export function formatSize(bytes: number): string {
 }
 
 /**
- * The Cloud tab's *Off-site backups* section (lighting7 cloud-p3 plan D6): the switch, the time each
- * night's backup runs, *Back up now*, a backup running and the last result. The settings change only
- * on the desk's own listener; over remote access it reads, and *Back up now* works only with the switch on.
+ * The Cloud tab's *Off-site backups* section (lighting7 cloud-p3 plan D6): the switch, when it backs up
+ * — each night at a time, when the desk quits, or both — *Back up now*, a backup running and the last
+ * result. The settings change only on the desk's own listener; over remote access it reads, and
+ * *Back up now* works only with the switch on.
  */
 export function CloudBackups({ state }: { state: CloudState }) {
   const cached = cloudApi.endpoints.backupStatus.useQueryState(undefined)
@@ -47,6 +54,7 @@ export function CloudBackups({ state }: { state: CloudState }) {
   const [run, { isLoading: starting, error: runError, reset: resetRun }] = useRunBackupMutation()
   const remote = state.remote === true
   const remoteOff = remote && status?.enabled !== true
+  const nightly = status?.nightly !== false
 
   if (status == null) {
     return (
@@ -63,7 +71,7 @@ export function CloudBackups({ state }: { state: CloudState }) {
     )
   }
 
-  const set = (body: { enabled?: boolean; dailyAt?: string }) => {
+  const set = (body: BackupSettingsChange) => {
     resetSave()
     save(body).unwrap().catch(() => {
       // Shown below.
@@ -85,23 +93,50 @@ export function CloudBackups({ state }: { state: CloudState }) {
         {remote && <p className="text-xs text-muted-foreground">{LOCAL_ONLY_REASON}</p>}
       </div>
       <SwitchRow
-        label="Back up every night"
+        label="Back up to Lighting7 Cloud"
         checked={status.enabled}
         disabled={remote || saving}
         onChange={(on) => set({ enabled: on })}
       >
         A copy of this whole desk — every show, its accounts and its settings — encrypted here under{' '}
         {state.adopted?.orgName ?? 'the cloud'}’s key and kept by Lighting7 Cloud, so a new machine can be
-        brought back from it. It waits for the show to be quiet, for up to six hours.
+        brought back from it.
       </SwitchRow>
       {status.enabled && (
-        <DailyAt
-          key={status.dailyAt}
-          value={status.dailyAt}
-          disabled={remote || saving}
-          nextAt={status.nextAt}
-          onSave={(dailyAt) => set({ dailyAt })}
-        />
+        <div className="space-y-4 border-l pl-4" data-testid="cloud-backup-schedules">
+          <SwitchRow
+            label="Every night"
+            checked={nightly}
+            disabled={remote || saving}
+            onChange={(on) => set({ nightly: on })}
+          >
+            For a desk left running. It waits for the show to be quiet, for up to six hours.
+          </SwitchRow>
+          {nightly && (
+            <DailyAt
+              key={status.dailyAt}
+              value={status.dailyAt}
+              disabled={remote || saving}
+              nextAt={status.nextAt}
+              onSave={(dailyAt) => set({ dailyAt })}
+            />
+          )}
+          <SwitchRow
+            label="When the desk quits"
+            checked={status.onQuit === true}
+            disabled={remote || saving}
+            onChange={(on) => set({ onQuit: on })}
+          >
+            For a desk switched off between shows. Quit desk backs up before the desk stops; one that cannot
+            finish uploading is finished when the desk next starts. Stopping the desk any other way backs
+            nothing up.
+          </SwitchRow>
+          {!nightly && status.onQuit !== true && (
+            <p className="text-xs text-muted-foreground" data-testid="cloud-backup-no-schedule">
+              Nothing backs up on its own: only Back up now and the portal’s.
+            </p>
+          )}
+        </div>
       )}
       {saveError != null && <ErrorAlert error={saveError} />}
 
@@ -151,31 +186,6 @@ function DailyAt({
         <p className="text-xs text-muted-foreground">Next: {new Date(nextAt).toLocaleString()}</p>
       )}
     </div>
-  )
-}
-
-function RunningLine({ run }: { run: BackupRun }) {
-  let words: string
-  switch (run.phase) {
-    case 'WAITING':
-      words = 'Waiting for the show to go quiet…'
-      break
-    case 'MAKING':
-      words = 'Making the backup…'
-      break
-    case 'UPLOADING':
-      words =
-        run.parts != null && run.parts > 1
-          ? `Uploading, part ${Math.min((run.partsSent ?? 0) + 1, run.parts)} of ${run.parts}…`
-          : 'Uploading…'
-      break
-    default:
-      words = 'Backing up…'
-  }
-  return (
-    <span className="text-sm text-muted-foreground" data-testid="cloud-backup-running">
-      {words}
-    </span>
   )
 }
 

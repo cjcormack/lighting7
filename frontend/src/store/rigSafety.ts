@@ -2,6 +2,15 @@ import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import type { CueTarget } from '../api/cuesApi'
 import { NOTHING_SAFE, type CommandRole, type CommandRun, type RigSafetyState } from '../api/rigSafetyApi'
+import type { BackupStatus } from './cloud'
+
+/** Mirrors `QuitDeskResponse`: a desk backing up first exits once the backup has ended. */
+export interface QuitDeskAnswer {
+  rigWasSafe: boolean
+  backingUp?: boolean
+  /** The backups' status as the quit began, while backing up. */
+  backup?: BackupStatus | null
+}
 
 /**
  * The end of the night (venue-visit plan S6) — see `api/rigSafetyApi.ts`.
@@ -62,8 +71,8 @@ const rigSafetySlice = restApi.injectEndpoints({
     releaseRigSafe: build.mutation<RigSafetyResponse, { projectId: number }>({
       query: ({ projectId }) => ({ url: `projects/${projectId}/rig-safe/release`, method: 'POST', body: {} }),
     }),
-    quitDesk: build.mutation<{ rigWasSafe: boolean }, { force: boolean }>({
-      query: ({ force }) => ({ url: 'install/quit', method: 'POST', body: { force } }),
+    quitDesk: build.mutation<QuitDeskAnswer, { force: boolean; skipBackup?: boolean }>({
+      query: (body) => ({ url: 'install/quit', method: 'POST', body }),
     }),
   }),
   overrideExisting: false,

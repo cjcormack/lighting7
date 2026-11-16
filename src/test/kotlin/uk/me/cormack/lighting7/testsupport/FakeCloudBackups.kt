@@ -71,6 +71,9 @@ class FakeCloudBackups(private val cloud: FakeCloud) {
     /** Answer the next [failParts] part uploads 503. */
     val failParts = AtomicInteger(0)
 
+    /** Answer the data key 503, as an unreachable cloud fails before anything is staged. */
+    @Volatile var failKey: Boolean = false
+
     /** Answer this many uploads of each part number 503, before taking it. */
     val failPart = ConcurrentHashMap<Int, Int>()
 
@@ -87,6 +90,7 @@ class FakeCloudBackups(private val cloud: FakeCloud) {
     fun routes(route: Route) = with(route) {
         get(CloudPaths.BACKUP_KEY) {
             caller(call, ByteArray(0)) ?: return@get
+            if (failKey) return@get call.apiError(HttpStatusCode.ServiceUnavailable, "UNAVAILABLE")
             call.json(BackupKeyDto.serializer(), BackupKeyDto(currentKeyId, java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(currentKey)))
         }
         get("${CloudPaths.BACKUP_KEY}/{keyId}") {

@@ -919,13 +919,22 @@ the org's backups on.
    then *Uploading…* (with parts for an install over 64 MiB), then the last backup's time and size.
    Fades running throughout look exactly as before.
 2. The portal lists the backup with the same size.
-3. Turn *Back up every night* on, at a time a few minutes ahead, with a cue stack running. It waits
-   (*Waiting for the show to go quiet…*); stop the stack and within 10 minutes it runs, and the portal
-   lists it as a scheduled backup.
+3. Turn *Back up to Lighting7 Cloud* on with *Every night at* a time a few minutes ahead, with a cue
+   stack running. It waits (*Waiting for the show to go quiet…*); stop the stack and within 10 minutes
+   it runs, and the portal lists it as a scheduled backup.
 4. Record the archive's size here and in the plan's §4, beside the size of the data directory's
    `lighting7.db`, `prompt-scripts/` and `sync/`.
 
 Record the date and anything that read differently here.
+
+**When the desk quits**, on the same desk with *When the desk quits* on:
+
+1. Make the rig safe and *Quit desk*. The quit screen says the desk is backing up, then that it
+   quit with its backup uploaded; the portal lists it as a quit backup.
+2. Start the desk, *Quit desk* again and press *Quit without waiting* while it uploads. The desk
+   quits at once and the screen says the backup did not finish.
+3. Start the desk. Within a minute the unfinished backup is uploaded, and the portal lists it as a quit
+   backup with no second one beside it.
 
 ---
 
