@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.plugins
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.models.toIsoUtc
 import uk.me.cormack.lighting7.routes.toDto
 
 // ─── Outbound (no inbound) ──────────────────────────────────────────────
@@ -122,6 +123,37 @@ data class OscStateOutMessage(
 
 // ─── Subscriptions ──────────────────────────────────────────────────────
 
+/**
+ * Whether the live project's Art-Net controllers answer ArtPoll (cloud-p3 plan D4), for the Universes
+ * settings. `StateFlow`-backed, so the subscription is the snapshot; every socket, since the
+ * addresses are the project's own and the state is the rig's; outbound only. [polling] false means
+ * nothing reads replies (`dmx.mock`, or 6454 held by another program), so every controller is unknown.
+ */
+@Serializable
+@SerialName("artNet.reachability")
+data class ArtNetReachabilityOutMessage(
+    val polling: Boolean,
+    val controllers: List<ArtNetControllerReachabilityDto>,
+) : MachineOutMessage()
+
+@Serializable
+data class ArtNetControllerReachabilityDto(
+    val address: String,
+    val state: uk.me.cormack.lighting7.dmx.Reachability,
+    val lastReplyAt: String? = null,
+)
+
+internal fun uk.me.cormack.lighting7.dmx.ArtNetReachability.toMessage() = ArtNetReachabilityOutMessage(
+    polling = polling,
+    controllers = controllers.map { (address, reach) ->
+        ArtNetControllerReachabilityDto(
+            address = address,
+            state = reach.state,
+            lastReplyAt = reach.lastReplyAtMs?.let { java.time.Instant.ofEpochMilli(it).toIsoUtc() },
+        )
+    },
+)
+
 fun setupMachineSubscriptions(scope: SocketScope) {
     scope.subscribe(scope.state.authService.userChanges) { userId ->
         // Own-account frame first. If a demoted admin learns about the list before it learns
@@ -144,6 +176,8 @@ fun setupMachineSubscriptions(scope: SocketScope) {
     }
 
     scope.subscribe(scope.state.machineEventsFlow) { message -> scope.send(message) }
+
+    scope.subscribe(scope.state.artNetPoller.state) { reach -> scope.send(reach.toMessage()) }
 
     // Every socket on the desk's own listener, never a remote one (OSC plan D5, D12).
     if (!scope.remote) {

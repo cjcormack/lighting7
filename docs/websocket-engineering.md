@@ -1151,6 +1151,7 @@ Machine-scoped, so registered in the pre-warm-up band and unaffected by project 
 | `cloud.state` | `state`: `configured`, `enabled`, `adoption?`, `adopted?`, `connection`, `link?` (the sidecar's status, `OFF` when absent), `retryAt?`, `lastError?`, `lastOnlineAt?`, `notice?`, `noticeAt?`, `remote?`, `remoteSwitches` (`remoteAccess`, `mcpAccess`, `approveSessions`) | Admin sockets only (and bootstrap-open ones), snapshot on connect; a pending adoption's code and links left out on the public listener |
 | `remoteSession.pending` | `sessions`: `[{sid, email, displayName, linkedUser?, expiresAt}]`, oldest first, empty once none waits | Admin sockets (and bootstrap-open ones) **on the desk's own listener** only, snapshot on connect |
 | `osc.state` | `state`: `enabled`, `listening` (UDP), `tcpListening`, `port`, `error?`, `received`, `dropped`, `refused`, `refusedSenders` (`[{address, count, lastAt}]`, most recent first), `recent` (`[{at, sender, address, args, outcome, detail}]`, newest first, at most 50), `warnings` (`[{id, at, changes: [{address, was, now?, reason?}]}]`, received addresses a change moved, newest first, at most 10) | **Every** socket on the desk's own listener, operators' included; none on the public listener. Snapshot on connect |
+| `artNet.reachability` | `polling`, `controllers`: `[{address, state, lastReplyAt?}]`, `state` `REACHABLE \| UNREACHABLE \| UNKNOWN` (`docs/dmx-engineering.md` §"Controller reachability") | **Every** socket, both listeners. `StateFlow`-backed: snapshot on connect, then every change |
 
 The account frames are payload-free **deliberately, not just by convention**: sockets are open to
 operators while `/api/rest/users` is admin-only, so a body here would leak exactly what that gate
@@ -1531,7 +1532,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/RecentValuesSocket.kt` | The value editors' recent values: `recentValues.state` and `recentValues.record` |
 | `plugins/StackFxAmountSocket.kt` | Each stack's FX amount: `stackFxAmount.state` and `stackFxAmount.set` |
 | `plugins/MoveInDarkSocket.kt` | What the live show moves in the dark: `moveInDark.state` |
-| `plugins/MachineSocket.kt` | Accounts, install row, update state, Lighting7 Cloud state (machine-scoped band) |
+| `plugins/MachineSocket.kt` | Accounts, install row, update state, Lighting7 Cloud state, Art-Net controller reachability (machine-scoped band) |
 | `plugins/ParkSocket.kt` | Park state and park/unpark writes |
 | `plugins/ProgrammerSocket.kt` | Programmer values, layer stack, include target, provenance |
 | `plugins/ProjectSocket.kt` | Current project and switch events |

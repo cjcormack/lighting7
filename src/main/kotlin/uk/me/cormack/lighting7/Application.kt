@@ -104,9 +104,11 @@ fun Application.module() {
     // message that arrives before the show is up is a *failed* row. A bind failure is `osc.state`'s
     // error, never a failed startup.
     runCatching { state.osc.start() }.onFailure { log.warn("OSC did not start: {}", it.toString()) }
+    state.startArtNetPoller()
     monitor.subscribe(ApplicationStopping) {
         runCatching { state.cloud.close() }
         state.closeOsc()
+        state.artNetPoller.close()
         publicListener?.stop(1_000, 2_000)
     }
 

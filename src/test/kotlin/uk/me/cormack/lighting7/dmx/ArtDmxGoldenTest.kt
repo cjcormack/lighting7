@@ -13,6 +13,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 /**
  * [DefaultArtNetTransport] sends exactly the datagrams artnet4j 0.6.2 sent for the same calls,
@@ -133,6 +134,21 @@ class ArtDmxGoldenTest {
         val fallback = transport(rx, bindPort = holder.localPort)
         fallback.unicastDmx("127.0.0.1", 0, 0, ByteArray(2))
         assertNotEquals(holder.localPort, sourcePort(rx))
+    }
+
+    @Test
+    fun `transports on one socket send from its port, and stopping one leaves it open for the rest`() {
+        val rx = receiver()
+        val socket = ArtNetSocket(0).also { opened += it }
+        val first = DefaultArtNetTransport(socket, rx.localPort, InetAddress.getLoopbackAddress()).also { it.start() }
+        val second = DefaultArtNetTransport(socket, rx.localPort, InetAddress.getLoopbackAddress()).also { it.start() }
+        val port = checkNotNull(socket.localPort)
+        assertTrue(socket.listening)
+        first.unicastDmx("127.0.0.1", 0, 0, ByteArray(2))
+        assertEquals(port, sourcePort(rx))
+        first.stop()
+        second.unicastDmx("127.0.0.1", 0, 1, ByteArray(2))
+        assertEquals(port, sourcePort(rx))
     }
 
     @Test

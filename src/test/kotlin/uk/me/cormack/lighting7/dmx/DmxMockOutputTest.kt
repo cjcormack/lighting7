@@ -10,6 +10,7 @@ import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -40,5 +41,13 @@ class DmxMockOutputTest : RouteIntegrationTest() {
 
         assertEquals(180u.toUByte(), controller.getValue(7))
         assertTrue(heard.await(2, TimeUnit.SECONDS), "the transmit loop still tells the listeners what it would have sent")
+    }
+
+    @Test
+    fun `no poller runs, so every controller's reachability is unknown`() {
+        state.startArtNetPoller()
+        assertFalse(state.artNetPoller.state.value.polling)
+        assertFalse(Thread.getAllStackTraces().keys.any { it.name == ArtNetPoller.THREAD_NAME && it.isAlive })
+        assertEquals(Reachability.UNKNOWN, state.artNetPoller.state.value.of("10.0.0.1").state)
     }
 }

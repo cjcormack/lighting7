@@ -63,6 +63,9 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // OSC in (OSC plan §3 "Wire"), machine band, every socket on the desk's own listener: off on a
         // fresh desk, which is still what the OSC tab starts from.
         OscStateOutMessage::class,
+        // Art-Net controller reachability (cloud-p3 plan D4), machine band, every socket: not polling
+        // on a test desk, which is still what the Universes settings start from.
+        ArtNetReachabilityOutMessage::class,
         // Scenery, in the show band: on a desk where nothing has gone yet its frame names no
         // element, and that empty frame is still what a Stage view starts from.
         SceneryStateOutMessage::class,

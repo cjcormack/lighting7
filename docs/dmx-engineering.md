@@ -467,19 +467,31 @@ rig.
 Art-Net 4 specification with no dependency. It replaced artnet4j, whose GPL v3 kept the desk from
 being MIT (cloud-p0 plan, session 2).
 
-It only sends. Nothing reads the socket, so the desk answers no ArtPoll, which artnet4j did not
-either. A broadcast goes to `255.255.255.255:6454`, a unicast to the configured address on 6454.
+It only sends; `ArtNetPoller` reads the socket it sends through (§"Controller reachability"). The
+desk answers no ArtPoll, which artnet4j did not either. A broadcast goes to `255.255.255.255:6454`, a
+unicast to the configured address on 6454.
 
 A failed send, or a unicast address that does not resolve, costs that frame and nothing else: the
 transport logs it once, drops frames until a send succeeds, and logs the recovery. It never throws
 an I/O error to the controller, whose loop gives up after 20 consecutive errors (§"Error Handling"),
 so a node rebooting or a cable pulled does not end a universe's output.
 
-Each controller's transport binds the wildcard address on 6454 with `SO_REUSEADDR` and
-`SO_BROADCAST`, so every universe's transport shares the port with the others, and with any other
-program on the machine that also binds it for reuse. If 6454 cannot be bound (a socket holds it
-without reuse), the transport sends from an ephemeral port instead, logged as a warning. `stop`
-closes whichever it bound.
+**The desk binds 6454 once** (cloud-p3 plan D4). `dmx/ArtNetSocket.kt` owns the socket: the wildcard
+address on 6454 with `SO_REUSEADDR` and `SO_BROADCAST`, bound the first time anything asks for it, so
+it shares the port with any other program on the machine that also binds it for reuse. Every universe
+`DbFixtureLoader` builds sends through `ArtNetSocket.shared`, which outlives every controller and every
+project switch: a transport's `stop` leaves it open. Before, each universe bound its own socket on 6454
+and none read it, so a unicast ArtPollReply landed on whichever the kernel picked and a poller on yet
+another would have missed it. If 6454 cannot be bound (a socket holds it without reuse), the socket
+sends from an ephemeral port instead, logged as a warning, and is not `listening`; the poller tries
+6454 again every 10 s (`ArtNetSocket.retryBind`) and, once it binds, the socket moves onto it, closing
+the ephemeral one, and logs that once. A
+`DefaultArtNetTransport` built without a socket (tests, `ArtNetController`'s default) binds one of its
+own and closes it on `stop`. A `DatagramSocket` sends and receives safely from different threads, but its sends
+are serialised: every universe queues behind one send at a time. A UDP send on a LAN returns as soon as
+the datagram is in the kernel's buffer, so this costs nothing in practice, and one socket is the price
+of reading replies at all (cloud-p3 plan D4). `ArtNetPollerOutputTimingTest` holds a fade sent through the shared socket to the same timing with the
+poller polling as fast as its loop turns.
 
 **The datagrams are artnet4j's, byte for byte.** `ArtDmxGoldenTest` holds the transport to frames
 captured from artnet4j 0.6.2 before it left the build (`src/test/resources/dmx/artdmx/`, whose README
@@ -500,10 +512,45 @@ it into nibbles to follow the specification would re-address every one of them. 
 always sends 512 channels, so Length never departs. A frame over 512 channels is refused with
 `IllegalArgumentException`.
 
+## Controller reachability
+
+`dmx/ArtNetPoller.kt` says whether each controller the live project's universes name answers
+(cloud-p3 plan D4, FR-FLEET-1, FR-FLEET-3(b)). On its own `artpoll-1` thread, at below-normal priority,
+it reads the shared socket (§"The Art-Net transport") and sends an ArtPoll — the 14-byte Art-Net 4 form
+every node accepts — unicast to each distinct address every 10 s, and at once to an address it has not
+polled. An ArtPollReply is matched by its source address and the IP it reports; everything else on the
+port, the desk's own ArtDMX looped back included, is ignored. The addresses come from
+`ProjectManager.liveControllers` (an Art-Net controller's `address`, `dmx.mock` controllers left out),
+read at most once a receive timeout (500 ms) — or sooner on a reply — however busy the port is, so a
+project switch is followed within about that. Every address is resolved and classed (a local
+interface's broadcast address among them) when the set changes and again every 10 s, so an interface
+that comes up later is seen. Intervals are on a monotonic clock; only a reply's reported time is wall
+time.
+
+| State | When |
+|---|---|
+| `REACHABLE` | It replied within 30 s |
+| `UNREACHABLE` | It has not, it was first polled at least 30 s ago, **and** the poller has had an ArtPollReply from some node since it started — proof that replies reach this socket |
+| `UNKNOWN` | Anything else: no reply from anything yet, inside a controller's first 30 s, a broadcast address (the limited broadcast, a local interface's, multicast) or none, an address that did not resolve, `dmx.mock`, or a socket that is not `listening` |
+
+So a controller unplugged turns unreachable 30–40 s after its last reply, and back within one poll of
+its return. An address leaving the project and coming back starts its 30 s afresh. Unknown is never an
+alarm: the cloud alerts on `reachable: false` only. The rule is `ReachabilityTracker`, on whatever clock
+the poller is handed; `ArtNetPollerTest` runs it against a fake node on loopback on a test clock.
+
+`ArtNetPoller.state` is a `StateFlow<ArtNetReachability>` (`polling`, and per address its state and the
+time of its last reply), read by the heartbeat (`docs/cloud-engineering.md` §"Health") and streamed as
+the machine frame `artNet.reachability`, which the Patches page's universe chips draw as a dot: green
+answering, red not answering, none while unknown, on the live project only. `State.startArtNetPoller`
+starts it from `Application.module()` and never under `dmx.mock`, so a test's `State` reads nothing. If
+6454 is held without reuse it logs once, leaves every controller unknown and `polling` false, and tries
+the port again every 10 s until it binds. A poller started again starts from nothing: no reply yet,
+every controller inside its first 30 s.
+
 ## Mock output
 
 `dmx.mock = true` in `local.conf` gives every universe `DbFixtureLoader` builds as Art-Net the
-`SilentArtNetTransport`, which binds no socket and sends nothing. It is for a development desk run
+`SilentArtNetTransport`, which binds no socket and sends nothing, and no `ArtNetPoller` runs. It is for a development desk run
 in the venue beside the one driving the rig, which would otherwise broadcast the same universes on
 6454 and fight it.
 
@@ -691,6 +738,8 @@ when the attribute category is a slider (see
 | `DmxController.kt` | Sealed interface definition |
 | `ArtNetController.kt` | ArtNet implementation with coroutine architecture |
 | `ArtNetTransport.kt` | The transport seam and `DefaultArtNetTransport`, the ArtDMX sender |
+| `ArtNetSocket.kt` | The desk's one socket on 6454, shared by every universe and read by the poller |
+| `ArtNetPoller.kt` | ArtPoll and ArtPollReply, the reachability rule and `artpoll-1` |
 | `MockDmxController.kt` | In-memory fake for tests; `getEffectiveValue()` for asserting modifier chain |
 | `Universe.kt` | Universe addressing data class |
 | `ChannelChange.kt` | Value change request data class (with easing curve) |

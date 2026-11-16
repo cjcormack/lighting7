@@ -3,10 +3,7 @@ package uk.me.cormack.lighting7.dmx
 import org.slf4j.LoggerFactory
 import java.io.IOException
 import java.net.DatagramPacket
-import java.net.DatagramSocket
 import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.SocketException
 
 /**
  * Transport seam for ArtNet packet I/O. Production is [DefaultArtNetTransport]; tests inject
@@ -32,9 +29,8 @@ internal object SilentArtNetTransport : ArtNetTransport {
 }
 
 /**
- * Sends ArtDMX, written from Artistic Licence's Art-Net 4 specification. It only sends; nothing
- * reads the socket. `ArtDmxGoldenTest` pins every byte, including where they depart from the
- * specification:
+ * Sends ArtDMX, written from Artistic Licence's Art-Net 4 specification, through an [ArtNetSocket].
+ * `ArtDmxGoldenTest` pins every byte, including where they depart from the specification:
  * - Sequence counts every packet this transport builds, from 1, and wraps from 255 to 0 rather
  *   than to 1.
  * - Physical is always 2.
@@ -46,53 +42,51 @@ internal object SilentArtNetTransport : ArtNetTransport {
  * A failed send or an address that does not resolve costs that frame, never the universe: it is
  * logged once until a send succeeds again, and not thrown.
  *
- * Each transport binds the wildcard address on [bindPort] with `SO_REUSEADDR`, so every
- * universe's transport shares 6454 with the others and with any reusing listener on the
- * machine. If the port cannot be bound, this one sends from an ephemeral port instead. [stop]
- * closes whichever it bound.
+ * The show's universes share [ArtNetSocket.shared], which outlives every transport: [stop] leaves
+ * it open. A transport built on a port of its own owns its socket and closes it on [stop].
  */
-internal class DefaultArtNetTransport(
-    private val bindPort: Int = ART_NET_PORT,
-    private val destinationPort: Int = ART_NET_PORT,
-    private val broadcastAddress: InetAddress = InetAddress.getByAddress(byteArrayOf(-1, -1, -1, -1)),
+internal class DefaultArtNetTransport private constructor(
+    private val socket: ArtNetSocket,
+    private val ownsSocket: Boolean,
+    private val destinationPort: Int,
+    private val broadcastAddress: InetAddress,
 ) : ArtNetTransport {
+    /** A transport on [socket], which it never closes. */
+    constructor(
+        socket: ArtNetSocket,
+        destinationPort: Int = ArtNetSocket.ART_NET_PORT,
+        broadcastAddress: InetAddress = LIMITED_BROADCAST,
+    ) : this(socket, ownsSocket = false, destinationPort, broadcastAddress)
+
+    /** A transport on a socket of its own bound to [bindPort], closed by [stop]. */
+    constructor(
+        bindPort: Int = ArtNetSocket.ART_NET_PORT,
+        destinationPort: Int = ArtNetSocket.ART_NET_PORT,
+        broadcastAddress: InetAddress = LIMITED_BROADCAST,
+    ) : this(ArtNetSocket(bindPort), ownsSocket = true, destinationPort, broadcastAddress)
+
     companion object {
-        const val ART_NET_PORT = 6454
         const val MAX_DMX_LENGTH = 512
         private const val HEADER_LENGTH = 18
         private const val OP_DMX = 0x5000
-        private const val PROTOCOL_VERSION = 14
         private const val PHYSICAL = 2
-        private val ID = "Art-Net\u0000".toByteArray(Charsets.US_ASCII)
+        private val LIMITED_BROADCAST: InetAddress = InetAddress.getByAddress(byteArrayOf(-1, -1, -1, -1))
         private val log = LoggerFactory.getLogger(DefaultArtNetTransport::class.java)
     }
 
-    @Volatile
-    private var socket: DatagramSocket? = null
-
     /** The port this transport sends from, once started. */
-    internal val localPort: Int? get() = socket?.localPort
+    internal val localPort: Int? get() = socket.localPort
 
     private val packet = ByteArray(HEADER_LENGTH + MAX_DMX_LENGTH)
     private var sequence = 0
     private var failing = false
 
     override fun start() {
-        socket = try {
-            bound(bindPort)
-        } catch (e: SocketException) {
-            log.warn("Art-Net port {} is unavailable; sending from an ephemeral port", bindPort, e)
-            try {
-                bound(0)
-            } catch (e: SocketException) {
-                log.error("No socket for Art-Net output", e)
-                null
-            }
-        }
+        socket.open()
     }
 
     override fun stop() {
-        socket?.close()
+        if (ownsSocket) socket.close()
     }
 
     override fun broadcastDmx(subnet: Int, universe: Int, dmxData: ByteArray) {
@@ -103,34 +97,20 @@ internal class DefaultArtNetTransport(
         send(address, subnet, universe, dmxData)
     }
 
-    private fun bound(port: Int): DatagramSocket {
-        val s = DatagramSocket(null)
-        try {
-            s.reuseAddress = true
-            s.broadcast = true
-            s.bind(InetSocketAddress(port))
-        } catch (e: SocketException) {
-            s.close()
-            throw e
-        }
-        return s
-    }
-
     /** [address] null is a broadcast. */
     private fun send(address: String?, subnet: Int, universe: Int, dmxData: ByteArray) {
         require(dmxData.size <= MAX_DMX_LENGTH) { "ArtDMX carries at most $MAX_DMX_LENGTH channels, not ${dmxData.size}" }
-        val socket = checkNotNull(socket) { "transport has no socket" }
         val length = (dmxData.size + 1) and 1.inv()
         val portAddress = (subnet shl 4) or universe
         synchronized(packet) {
             try {
                 val to = if (address == null) broadcastAddress else InetAddress.getByName(address)
                 sequence = (sequence + 1) and 0xFF
-                ID.copyInto(packet)
+                ArtNetHeader.writeId(packet)
                 packet[8] = OP_DMX.toByte()
                 packet[9] = (OP_DMX shr 8).toByte()
                 packet[10] = 0
-                packet[11] = PROTOCOL_VERSION.toByte()
+                packet[11] = ArtNetHeader.PROTOCOL_VERSION.toByte()
                 packet[12] = sequence.toByte()
                 packet[13] = PHYSICAL.toByte()
                 packet[14] = portAddress.toByte()
