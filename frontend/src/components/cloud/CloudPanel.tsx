@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils'
 import { errorCode } from '@/lib/venueSyncRefusal'
 import { useAuthStatusQuery } from '@/store/auth'
 import { CloudBackups } from './CloudBackups'
+import { CloudRestore, hasRestore } from './CloudRestore'
 import { CloudHeartbeat } from './CloudHeartbeat'
 import { CloudMoveSection } from './CloudMoveSection'
 import { CloudRemoteAccess } from './CloudRemoteAccess'
@@ -71,6 +72,7 @@ function CloudBody({ state }: { state: CloudState }) {
   return (
     <div className="max-w-2xl space-y-6">
       <Notice notice={state.notice} noticeAt={state.noticeAt} />
+      {hasRestore(state) && <CloudRestore state={state} />}
       {!state.configured && (
         <Unavailable title="No cloud configured">
           {state.lastError != null ? (

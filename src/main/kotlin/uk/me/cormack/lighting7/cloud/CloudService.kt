@@ -85,6 +85,8 @@ class CloudService(
     private val health: (() -> Message.Health)? = null,
     /** The desk's off-site backups (cloud-p3 plan D6); without them `backup.v1` is not announced. */
     private val backups: CloudBackups? = null,
+    /** The adoption was forgotten (unadopt, cancel, revoke): a staged restore goes with it (cloud-p3 plan D9). */
+    private val onUnadopted: () -> Unit = {},
 ) {
     private val logger = LoggerFactory.getLogger(CloudService::class.java)
 
@@ -327,6 +329,8 @@ class CloudService(
         changed = ::refresh,
         memoryChanged = ::publishMemory,
         usersChanged = { users -> users.forEach { authService?.announceUserChanged(it) } },
+        capabilities = ::capabilities,
+        unadopted = { onUnadopted() },
     )
 
     // Never fails construction: a desk whose cloud state cannot be read still boots, and says so.
@@ -371,6 +375,37 @@ class CloudService(
     suspend fun cancelAdoption() = adoption.cancel()
 
     suspend fun unadopt(force: Boolean) = adoption.unadopt(force)
+
+    /** What an approval asked this desk to restore, while it waits for a confirm or decline (cloud-p3 plan D9). */
+    fun pendingRestore(): CloudRestoreDto? = adoption.row()?.takeIf { it.state == CloudConnectionState.ADOPTED }?.restore?.let {
+        CloudRestoreDto(it.replacesInstallId, it.replacesName, it.backupId)
+    }
+
+    /** Confirm the pending replacement and reconnect as the old install; answers its id. */
+    suspend fun confirmReplacement(): String = adoption.confirmReplacement()
+
+    /** Whether a replacement whose answer was lost already happened; takes the old install's id when it did. */
+    suspend fun settleLostReplacement(): Boolean = adoption.settleLostReplacement()
+
+    /** Decline the pending restore, and the replacement with it in the cloud. */
+    suspend fun declineRestore() = adoption.declineRestore()
+
+    /** A restore failed where no request could answer it, at startup: every window's Cloud tab says so, dismissed by [at]. */
+    fun restoreFailed(message: String, at: Instant) {
+        memory.notice = message
+        memory.noticeAt = at
+        publishMemory()
+    }
+
+    /** Forget a pending restore here, once its backup is staged and no replacement is asked for. */
+    suspend fun clearRestore() = adoption.clearRestore()
+
+    /** A restored backup is staged for the next start: every window's Cloud tab asks for a restart. */
+    @Volatile var restartToRestore: Boolean = false
+        set(value) {
+            field = value
+            synchronized(publishLock) { _state.value = _state.value.copy(restartToRestore = value) }
+        }
 
     /** The cloud removed this install: forget it and say so. */
     suspend fun revoked(installId: String? = null) = adoption.revoked(installId)
@@ -640,6 +675,7 @@ class CloudService(
                 adoptedBy = displayName,
                 linkedEmail = email,
                 fingerprint = r.fingerprint,
+                restore = r.restore?.let { CloudRestoreDto(it.replacesInstallId, it.replacesName, it.backupId) },
             )
         }
         val channel = memory.channel
@@ -656,6 +692,7 @@ class CloudService(
             notice = memory.notice,
             noticeAt = memory.noticeAt?.toIsoUtc(),
             remoteSwitches = switches,
+            restartToRestore = restartToRestore,
         )
     }
 

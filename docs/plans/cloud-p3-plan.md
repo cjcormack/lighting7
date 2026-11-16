@@ -253,6 +253,26 @@ install that comes back as the old install, its MCP URL and links working (UC-8)
   pending replacement expiring after 7 days, `REPLACEMENT_EXPIRED`) leaves the old install untouched and
   this desk adopted as its own install; a downloaded backup is decrypted into staging and deleted once it
   is applied or declined.
+
+  As session 5 built it: the desk sends its capabilities in `AdoptionRequest` (no desk did before), so
+  the portal can offer a restore. The confirm (`POST /install/cloud/restore/confirm {name}`) answers 202
+  and the work goes on, on `restore-1`, followed by `GET /install/cloud/restore`; `DELETE` declines, from
+  either listener, since it only leaves the desk as it is. Staging is `<data>/backups/restore/`, apart
+  from the backups' own, whose sweep would take a download for an orphaned archive; `backups.root` in
+  `local.conf` moves both, for tests. The downloaded file is checked against the cloud's declared size and
+  hash (taken as it downloads) before it is decrypted, and every archive entry must be one of the paths a
+  backup writes. A checked backup waits unmarked in `verified/`, which a start sweeps, and is marked ready
+  (`ready/` beside `ready.json`) only once the replacement is confirmed, so a restart mid-replacement
+  applies nothing. A replacement refused empties staging; one expired clears the restore; one the cloud no
+  longer has clears it too unless a harmless call signed as the old install with this desk's key (`GET
+  /v1/backups/key`) is accepted, which means an earlier confirm's answer was lost and the replacement
+  stands: the desk takes the old id and carries on. An unanswered replacement leaves the restore pending
+  and the checked tree for the next confirm; a confirm after a restart, refused because the cloud no
+  longer knows this desk's own id, makes the same check and stages the backup as the old install. A staged
+  backup survives a restart before the one that applies it: the desk asks for the restart again
+  (`cloud.state`'s `restartToRestore`). Until that restart it can be declined (*Don't restore*), which
+  deletes it; a replacement already confirmed stays. An unadopt, cancel or revoke deletes it too. A
+  confirm never accepts a blank name to type.
 - **D10 — The restore is applied at startup, before the database opens.** `State.initDatabase` first
   looks for a ready restore in staging. If one is there:
   1. this machine's own rows, `installs` and `cloud_connection`, are read from the current database and
@@ -273,6 +293,20 @@ install that comes back as the old install, its MCP URL and links working (UC-8)
   applied. Users, links, sync configs, machine overrides and every project come back as the old desk had
   them; the install's secrets do not, and need none: the install key is this desk's, and GitHub's tokens
   are gone. A failure at any step puts the kept files back and starts on the database as it was.
+
+  As session 5 built it: the saved rows are kept column by column, read and written with plain JDBC,
+  so a machine row survives a schema the migrations then widen; they are held in a journal rewritten
+  after each move, so a start after a crash mid-apply undoes it; `installs.onboarding_pending` is the
+  backup's, not the fresh desk's, which may still be in onboarding; a backup alone records its links'
+  removal as `RESTORED`; and the kept trees are swept at the next start that applies nothing, while the
+  kept database stays, as the migrations' copies do. Each move is journalled before it is made, and undoing
+  one a crash left unmade changes nothing; each undone move leaves the journal, and a journal is deleted
+  only once every move in it is undone, so a failed undo is retried at the next start and no kept tree is
+  swept while a journal remains. A backup's `installs` row stays when this machine had none to save. A
+  restore that fails at startup is recorded as `failed.json` in staging, which the next start reads into
+  the restore status's `lastError` (`CLOUD_RESTORE_FAILED`) and the Cloud tab's notice, until the next
+  confirm or decline. `SCHEMA_USER_VERSION` (`state/MigrationSupport.kt`)
+  is what `BACKUP_TOO_NEW` compares a backup's database with, and a new one-shot step moves it.
 - **D11 — Traces and logs name no key.** `TokenScrubber` learns the data key's shape in `BackupKeyDto`;
   a backup span is named by its constant (`backup.make`, `backup.upload`, `backup.restore`) with sizes
   and part counts, never a key, a path under the data directory or a project's name.
@@ -338,8 +372,8 @@ runs the checks §"Pre-commit checks" names for what it touches; `cloud-protocol
 | 1 | The protocol for P3 | merged | `claude/eager-pasteur-p6ei2n` | [#435](https://github.com/cjcormack/lighting7/pull/435) | 7f55dac |
 | 2 | The full heartbeat | merged | `claude/relaxed-ptolemy-rbcias` | [#439](https://github.com/cjcormack/lighting7/pull/439) | fbcc3a0 |
 | 3 | Art-Net controller reachability | merged | `claude/vigilant-cori-bwv3ry` | [#440](https://github.com/cjcormack/lighting7/pull/440) | cc4d6d5 |
-| 4 | Making and uploading backups | in review | `claude/funny-brown-mcmta3` | | |
-| 5 | Restoring onto a new desk | planned | | | |
+| 4 | Making and uploading backups | in review | `claude/funny-brown-mcmta3` | [#441](https://github.com/cjcormack/lighting7/pull/441) | d2ed8d4 |
+| 5 | Restoring onto a new desk | in review | `claude/keen-newton-7nu4og` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session` fills
 *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts the

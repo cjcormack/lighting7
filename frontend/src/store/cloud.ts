@@ -22,6 +22,15 @@ export interface CloudAdopted {
   adoptedBy?: string | null
   linkedEmail?: string | null
   fingerprint: string
+  /** What the adoption's approval asked this desk to restore, waiting for a confirm or decline. */
+  restore?: CloudRestore | null
+}
+
+/** Mirrors `CloudRestoreDto`: the install this desk replaces, a backup, or both. */
+export interface CloudRestore {
+  replacesInstallId?: string | null
+  replacesName?: string | null
+  backupId?: string | null
 }
 
 /** Mirrors `CloudStateDto`: what `GET /install/cloud`, every Cloud route and `cloud.state` answer. */
@@ -45,6 +54,25 @@ export interface CloudState {
   remote?: boolean
   /** What may come through the cloud now: absent from a desk before the Cloud tab carried it. */
   remoteSwitches?: Pick<RemoteAccessSettings, 'remoteAccess' | 'mcpAccess' | 'approveSessions'>
+  /** A restored backup is staged and applies when the desk next starts. */
+  restartToRestore?: boolean
+}
+
+/** Mirrors `RestoreStatusDto`: a pending restore, its backup and how a confirm is going. */
+export interface RestoreStatus {
+  pending?: CloudRestore | null
+  backup?: {
+    backupId: string
+    installName: string
+    createdAt: string
+    sizeBytes: number
+    deskVersion: string
+    tooNew: boolean
+  } | null
+  /** What the confirm must be typed as. */
+  confirmName?: string | null
+  phase: 'IDLE' | 'DOWNLOADING' | 'VERIFYING' | 'REPLACING' | 'READY' | string
+  lastError?: { code: string; message: string } | null
 }
 
 /**
@@ -189,6 +217,24 @@ export const cloudApi = restApi.injectEndpoints({
         }
       },
     }),
+    restoreStatus: build.query<RestoreStatus, void>({
+      query: () => 'install/cloud/restore',
+      providesTags: ['CloudRestore'],
+    }),
+    confirmRestore: build.mutation<RestoreStatus, { name: string }>({
+      query: (body) => ({ url: 'install/cloud/restore/confirm', method: 'POST', body }),
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        const answer = await queryFulfilled.catch(() => null)
+        if (answer != null) dispatch(cloudApi.util.upsertQueryData('restoreStatus', undefined, answer.data))
+      },
+    }),
+    declineRestore: build.mutation<RestoreStatus, void>({
+      query: () => ({ url: 'install/cloud/restore', method: 'DELETE' }),
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        const answer = await queryFulfilled.catch(() => null)
+        if (answer != null) dispatch(cloudApi.util.upsertQueryData('restoreStatus', undefined, answer.data))
+      },
+    }),
     remoteSessions: build.query<RemoteSessions, void>({
       query: () => 'install/cloud/sessions',
       providesTags: ['CloudRemoteSessions'],
@@ -238,6 +284,9 @@ export const {
   useBackupStatusQuery,
   useSetBackupSettingsMutation,
   useRunBackupMutation,
+  useRestoreStatusQuery,
+  useConfirmRestoreMutation,
+  useDeclineRestoreMutation,
   useRemoteSessionsQuery,
   useEndRemoteSessionMutation,
   useAllowRemoteSessionMutation,
@@ -254,6 +303,11 @@ lightingApi.cloud.subscribe((state) => {
   const switches = state.remoteSwitches
   if (switches != null) {
     store.dispatch(cloudApi.util.updateQueryData('remoteAccessSettings', undefined, (draft) => ({ ...draft, ...switches })))
+  }
+  if (before?.adopted?.restore?.backupId !== state.adopted?.restore?.backupId
+    || before?.adopted?.restore?.replacesInstallId !== state.adopted?.restore?.replacesInstallId
+    || before?.restartToRestore !== state.restartToRestore) {
+    store.dispatch(cloudApi.util.invalidateTags(['CloudRestore']))
   }
   if (before?.adopted?.installId !== state.adopted?.installId) {
     store.dispatch(cloudApi.util.invalidateTags(['CloudRemoteAccess', 'CloudRemoteSessions']))

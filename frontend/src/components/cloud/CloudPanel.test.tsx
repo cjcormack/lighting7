@@ -58,6 +58,8 @@ vi.mock('./CloudMoveSection', () => ({ CloudMoveSection: () => null }))
 vi.mock('./CloudHeartbeat', () => ({ CloudHeartbeat: () => null }))
 // And the backups section (CloudBackups.test.tsx).
 vi.mock('./CloudBackups', () => ({ CloudBackups: () => null }))
+// And the restore section (CloudRestore.test.tsx).
+vi.mock('./CloudRestore', () => ({ CloudRestore: () => null, hasRestore: () => false }))
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
