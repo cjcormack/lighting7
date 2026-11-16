@@ -7,6 +7,8 @@ import uk.me.cormack.lighting7.cloud.protocol.HealthUpdate
 import uk.me.cormack.lighting7.cloud.protocol.Message
 import uk.me.cormack.lighting7.cloud.protocol.Timestamps
 import uk.me.cormack.lighting7.dmx.ArtNetController
+import uk.me.cormack.lighting7.dmx.ArtNetReachability
+import uk.me.cormack.lighting7.dmx.Reachability
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.sync.SyncHealth
 import uk.me.cormack.lighting7.update.UpdateSummary
@@ -24,6 +26,8 @@ import org.slf4j.LoggerFactory
 class DeskHealth(
     private val project: () -> HealthProject?,
     private val controllers: () -> List<DmxController>,
+    /** The poller's view of the live project's controllers (D4); every controller unknown by default. */
+    private val reachability: () -> ArtNetReachability = { ArtNetReachability() },
     private val sync: () -> SyncHealth.Summary,
     /** Null where the desk runs no update client. */
     private val update: () -> UpdateSummary?,
@@ -58,16 +62,27 @@ class DeskHealth(
     }
 
     /** The live project's Art-Net universes in the order its rig registered them; absent when it has none. */
-    private fun universes(): List<HealthUniverse>? = controllers()
-        .filterIsInstance<ArtNetController>()
-        .map { controller ->
-            HealthUniverse(
-                universe = controller.universe.subnet * 16 + controller.universe.universe,
-                address = controller.address,
-                framesPerS = (controller.packetsPerSecond * 10).roundToLong() / 10.0,
-            )
-        }
-        .ifEmpty { null }
+    private fun universes(): List<HealthUniverse>? {
+        val reach = reachability()
+        val now = nowMs()
+        return controllers()
+            .filterIsInstance<ArtNetController>()
+            .map { controller ->
+                val controllerReach = reach.of(controller.address)
+                HealthUniverse(
+                    universe = controller.universe.subnet * 16 + controller.universe.universe,
+                    address = controller.address,
+                    framesPerS = (controller.packetsPerSecond * 10).roundToLong() / 10.0,
+                    reachable = when (controllerReach.state) {
+                        Reachability.REACHABLE -> true
+                        Reachability.UNREACHABLE -> false
+                        Reachability.UNKNOWN -> null
+                    },
+                    lastReplyS = controllerReach.lastReplyAtMs?.let { ((now - it) / 1000).coerceAtLeast(0) },
+                )
+            }
+            .ifEmpty { null }
+    }
 
     /** Free space on the data directory's store, read at most once a [DISK_INTERVAL_MS]. */
     private fun diskFreeMb(): Long? {

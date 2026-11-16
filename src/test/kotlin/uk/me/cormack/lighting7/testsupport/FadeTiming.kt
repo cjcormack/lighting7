@@ -4,8 +4,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import uk.me.cormack.lighting7.dmx.ArtNetController
+import uk.me.cormack.lighting7.dmx.ArtNetSocket
 import uk.me.cormack.lighting7.dmx.ArtNetTransport
+import uk.me.cormack.lighting7.dmx.DefaultArtNetTransport
 import uk.me.cormack.lighting7.dmx.Universe
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -43,19 +49,52 @@ object FadeTiming {
     /** Fade channel 1 from 0 to full over [FADE_MS], running [midway] halfway through. */
     fun fade(midway: () -> Unit = {}): Fade {
         val transport = TimedTransport()
+        return measure(transport, transport.frames, midway)
+    }
+
+    /**
+     * The same fade sent for real through [socket] to a loopback receiver, each frame timed as it
+     * arrives: for what else reads or sends on the socket, `ArtNetPoller` beside a fade.
+     */
+    fun fadeThrough(socket: ArtNetSocket, midway: () -> Unit = {}): Fade {
+        val rx = DatagramSocket(InetSocketAddress(InetAddress.getLoopbackAddress(), 0)).apply { soTimeout = 50 }
+        val frames = CopyOnWriteArrayList<Sent>()
+        val running = java.util.concurrent.atomic.AtomicBoolean(true)
+        val reader = Thread {
+            val buffer = ByteArray(600)
+            while (running.get()) {
+                val p = DatagramPacket(buffer, buffer.size)
+                try {
+                    rx.receive(p)
+                } catch (_: Exception) {
+                    continue
+                }
+                if (p.length > 18) frames += Sent(System.nanoTime(), buffer[18].toInt() and 0xff)
+            }
+        }.apply { isDaemon = true; start() }
+        try {
+            return measure(DefaultArtNetTransport(socket, rx.localPort, InetAddress.getLoopbackAddress()), frames, midway)
+        } finally {
+            running.set(false)
+            reader.join(1000)
+            rx.close()
+        }
+    }
+
+    private fun measure(transport: ArtNetTransport, frames: List<Sent>, midway: () -> Unit): Fade {
         val controller = ArtNetController(Universe(0, 0), transport = transport)
         try {
-            runBlocking { withTimeout(2.seconds) { while (transport.frames.size < 4) delay(5) } }
+            runBlocking { withTimeout(2.seconds) { while (frames.size < 4) delay(5) } }
             val start = System.nanoTime()
             controller.setValue(1, 255u, FADE_MS)
             Thread.sleep(FADE_MS / 2)
             midway()
             runBlocking {
                 withTimeout(10.seconds) {
-                    while (transport.frames.none { it.atNanos > start && it.level == 255 }) delay(5)
+                    while (frames.none { it.atNanos > start && it.level == 255 }) delay(5)
                 }
             }
-            val during = transport.frames.filter { it.atNanos >= start }
+            val during = frames.filter { it.atNanos >= start }
             val end = during.first { it.level == 255 }
             val window = during.filter { it.atNanos <= end.atNanos }
             val gaps = window.zipWithNext { a, b -> (b.atNanos - a.atNanos) / 1e6 }.sorted()

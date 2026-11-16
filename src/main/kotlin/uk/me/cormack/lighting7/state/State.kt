@@ -164,12 +164,33 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
         runCatching { health.seed(database) }.onFailure { logger.warn("Couldn't read sync's health from its log", it) }
     }
 
+    /**
+     * Whether the live project's Art-Net controllers answer ArtPoll (cloud-p3 plan D4), read on the
+     * one 6454 socket the show's universes send through. Started only by `Application.module()`, and
+     * never under `dmx.mock`, so a test's `State` reads no socket.
+     */
+    val artNetPoller = uk.me.cormack.lighting7.dmx.ArtNetPoller(
+        socket = uk.me.cormack.lighting7.dmx.ArtNetSocket.shared,
+        addresses = {
+            projectManager.liveControllers.value
+                .filterIsInstance<uk.me.cormack.lighting7.dmx.ArtNetController>()
+                .filterNot { it.mockOutput }
+                .map { it.address }
+        },
+    )
+
+    /** Starts [artNetPoller], unless `dmx.mock`, which binds nothing and so could read nothing. */
+    fun startArtNetPoller() {
+        if (!dmxMock) artNetPoller.start()
+    }
+
     /** The heartbeat's body (cloud-p3 plan D2): only what is already in memory. */
     val deskHealth = uk.me.cormack.lighting7.cloud.DeskHealth(
         project = {
             projectManager.liveProject.value?.let { uk.me.cormack.lighting7.cloud.protocol.HealthProject(it.uuid, it.name) }
         },
         controllers = { projectManager.liveControllers.value },
+        reachability = { artNetPoller.state.value },
         sync = { syncHealth.state.value },
         update = {
             updateServiceDelegate.takeIf { it.isInitialized() }?.value

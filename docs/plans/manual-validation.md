@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-CLOUD-P3-S3`](#fu-manual-cloud-p3-s3) | on the rig, unplugging a controller turns its universe chip red on the desk within 40 s and green again within 15 s of plugging it back in, the heartbeat's `reachable` following; nothing goes red on a desk under `dmx.mock` | Cloud P3 S3, 2026-11-16 |
 | [`FU-MANUAL-CLOUD-P3-S2`](#fu-manual-cloud-p3-s2) | an adopted desk's install page in the portal shows its project, its universes' frame rates, its disk and its sync state within a minute, and the Cloud tab's *What the desk sends* matches it | Cloud P3 S2, 2026-11-16 |
 | [`FU-MANUAL-CLOUD-P2`](#fu-manual-cloud-p2) | Lighting7 Cloud's P2 exit: every owner project moved with its SHAs, a conflict made on two desks and resolved on the venue desk through the cloud, a Claude Code cloud session importing from the cloud, an upgraded desk's `oauth_identities` gone and a straggler moved from its working tree, and `docs/sync-engineering.md` describing the cloud | Cloud P2 S4, 2026-11-12 |
 | [`FU-MANUAL-CLOUD-P2-S3`](#fu-manual-cloud-p2-s3) | *Sync to the cloud* on a new show puts it on the portal's Projects page, a second desk imports it from *Import from the cloud*, and an edit on one reaches the other within seconds by `sync.changed`; onboarding lists the org's projects venues first | Cloud P2 S3, 2026-11-12 |
@@ -883,6 +884,24 @@ shows the migration moving nothing on stage.
    rig moves, and the four cells take the teal edge and the palette's pill, and the source chip names
    it. Select two of them: the palette's chip reads *2 of 4*. Delete one head's row from
    the palette: that cell's pill turns dashed (unresolved) and keeps its value.
+
+---
+
+## `FU-MANUAL-CLOUD-P3-S3`
+
+**What it proves**: the desk knows whether its Art-Net controllers answer (cloud-p3 plan session 3, D4),
+on real nodes, which reply to 6454 rather than to the port that polled them.
+
+**Test**, on the rig, with the show's universes each naming its node's unicast address:
+
+1. Patches: within 15 s of the desk starting, each universe chip whose node is up carries a green dot.
+2. Unplug one node's network. Within 40 s its universe's dot turns red; the others stay green. On an
+   adopted desk, *What the desk sends* shows that universe `reachable: false` with a growing `lastReplyS`.
+3. Plug it back in. Within 15 s the dot is green again, and the heartbeat says `reachable: true`.
+4. Fades running throughout look exactly as before.
+5. A universe left on broadcast (no address) shows no dot.
+
+Record the date, the nodes' makes and anything that read differently here.
 
 ---
 

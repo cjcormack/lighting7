@@ -152,6 +152,36 @@ class DeskHealthTest {
     }
 
     @Test
+    fun `each universe carries its controller's reachability and seconds since its last reply`() {
+        val now = 5_000_000L
+        val addresses = state.projectManager.liveControllers.value
+            .filterIsInstance<uk.me.cormack.lighting7.dmx.ArtNetController>().map { it.address }
+        assertEquals("10.0.0.1", addresses.first())
+        val health = DeskHealth(
+            project = { null },
+            controllers = { state.projectManager.liveControllers.value },
+            reachability = {
+                uk.me.cormack.lighting7.dmx.ArtNetReachability(
+                    polling = true,
+                    controllers = mapOf(
+                        "10.0.0.1" to uk.me.cormack.lighting7.dmx.ControllerReachability(
+                            uk.me.cormack.lighting7.dmx.Reachability.UNREACHABLE, lastReplyAtMs = now - 42_500,
+                        ),
+                    ),
+                )
+            },
+            sync = { uk.me.cormack.lighting7.sync.SyncHealth.Summary() },
+            update = { null },
+            dataDir = java.nio.file.Path.of(System.getProperty("java.io.tmpdir")),
+            nowMs = { now },
+        ).payload()
+        val universes = assertNotNull(health.universes)
+        assertEquals(false, universes.first().reachable)
+        assertEquals(42L, universes.first().lastReplyS)
+        assertTrue(universes.drop(1).all { it.address == "10.0.0.1" || (it.reachable == null && it.lastReplyS == null) }, "$universes")
+    }
+
+    @Test
     fun `a reader that throws leaves only its own field out`() {
         val health = DeskHealth(
             project = { error("broken") },

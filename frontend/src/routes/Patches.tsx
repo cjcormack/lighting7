@@ -53,7 +53,9 @@ import { filterPatches } from "@/lib/patchFilter"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { SheetPage } from "@/components/sheet/SheetPage"
-import { useProjectQuery } from "../store/projects"
+import { useCurrentProjectQuery, useProjectQuery } from "../store/projects"
+import { reachabilityOf, useArtNetReachability } from "../store/artNet"
+import type { ControllerReachabilityState } from "../api/artNetWsApi"
 
 // ─── Redirect ─────────────────────────────────────────────────────────
 
@@ -648,6 +650,10 @@ function UniverseChip({
   const [intervalMs, setIntervalMs] = useState(String(config.refreshIntervalMs))
   const [error, setError] = useState<string | null>(null)
   const [runUpdateConfig, { isLoading: isSaving }] = useUpdateUniverseConfigMutation()
+  const { data: currentProject } = useCurrentProjectQuery()
+  const liveReachability = useArtNetReachability()
+  // The desk polls only the live project's controllers.
+  const reachability = currentProject?.id === projectId ? reachabilityOf(liveReachability, config.address) : "UNKNOWN"
 
   // Sync local state when config changes from server
   useEffect(() => {
@@ -701,6 +707,7 @@ function UniverseChip({
           ) : (
             <span className="text-muted-foreground/50 italic">no address</span>
           )}
+          <ReachabilityDot state={reachability} />
           {/* The fill bar: how many of the universe's 512 addresses its heads occupy. Titan draws
               one per line; here it is the one thing about a universe an operator patching by
               hand wants to see at a glance. */}
@@ -788,6 +795,24 @@ function UniverseChip({
         </div>
       </PopoverContent>
     </Popover>
+  )
+}
+
+const REACHABILITY_WORDS: Record<'REACHABLE' | 'UNREACHABLE', string> = {
+  REACHABLE: 'Controller answering',
+  UNREACHABLE: 'Controller not answering',
+}
+
+/** Whether the universe's controller answers ArtPoll; nothing while that is unknown. */
+function ReachabilityDot({ state }: { state: ControllerReachabilityState }) {
+  if (state === 'UNKNOWN') return null
+  return (
+    <span
+      className={`size-1.5 shrink-0 rounded-full ${state === 'REACHABLE' ? 'bg-emerald-500' : 'bg-destructive'}`}
+      title={REACHABILITY_WORDS[state]}
+      role="img"
+      aria-label={REACHABILITY_WORDS[state]}
+    />
   )
 }
 

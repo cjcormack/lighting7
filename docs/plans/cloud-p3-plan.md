@@ -1,6 +1,6 @@
 # Lighting7 Cloud P3: fleet health and backups, the desk's side
 
-> **Document status: IN PROGRESS — written 2026-11-15; session 1 merged.** The desk half of the PRD's
+> **Document status: IN PROGRESS — written 2026-11-15; sessions 1–2 merged.** The desk half of the PRD's
 > phase P3; its exit, `FU-MANUAL-CLOUD-P3`, is an operator check in
 > [`manual-validation.md`](manual-validation.md), added by session 4. The cloud half is
 > `docs/plans/p3-plan.md` in `cjcormack/lighting7-cloud`. Design record:
@@ -144,6 +144,16 @@ install that comes back as the old install, its MCP URL and links working (UC-8)
   program holding 6454 without `SO_REUSEADDR`) logs once and leaves every controller unknown, which the
   cloud never alerts on. The Universes settings show each controller's state, so a desk without the
   cloud benefits too.
+
+  As session 3 built it: the socket is the process's, `ArtNetSocket.shared`, bound by the first
+  transport or poller to ask for it and kept across every project switch, since a transport's `stop`
+  no longer closes it; a transport built without one (tests) still binds and closes its own. The
+  "Universes settings" are the Patches page's universe chips, which draw a dot from the machine frame
+  `artNet.reachability` (`StateFlow`-backed, every socket) on the live project only. An address that
+  leaves the live project and comes back starts its 30 s afresh. Addresses are resolved and classed
+  again every 10 s, so one that did not resolve, or a broadcast address whose interface was down, is
+  picked up. A bind failure is not final: the poller tries 6454 again every 10 s and the socket moves
+  onto it once it binds.
 - **D5 — A backup is one archive of what matters** (FR-BAK-1). `backup/InstallBackup.kt` writes to
   `<data>/backups/staging/`:
   1. `VACUUM INTO` a snapshot of the database on its own JDBC connection, opened with `DriverManager` to
@@ -285,8 +295,8 @@ runs the checks §"Pre-commit checks" names for what it touches; `cloud-protocol
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
 | 1 | The protocol for P3 | merged | `claude/eager-pasteur-p6ei2n` | [#435](https://github.com/cjcormack/lighting7/pull/435) | 7f55dac |
-| 2 | The full heartbeat | in review | `claude/relaxed-ptolemy-rbcias` | | |
-| 3 | Art-Net controller reachability | planned | | | |
+| 2 | The full heartbeat | merged | `claude/relaxed-ptolemy-rbcias` | [#439](https://github.com/cjcormack/lighting7/pull/439) | fbcc3a0 |
+| 3 | Art-Net controller reachability | in review | `claude/vigilant-cori-bwv3ry` | | |
 | 4 | Making and uploading backups | planned | | | |
 | 5 | Restoring onto a new desk | planned | | | |
 
