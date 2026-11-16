@@ -19,6 +19,7 @@ import { formatError } from '@/lib/formatError'
 import { cn } from '@/lib/utils'
 import { errorCode } from '@/lib/venueSyncRefusal'
 import { useAuthStatusQuery } from '@/store/auth'
+import { CloudHeartbeat } from './CloudHeartbeat'
 import { CloudMoveSection } from './CloudMoveSection'
 import { CloudRemoteAccess } from './CloudRemoteAccess'
 import {
@@ -252,6 +253,7 @@ function Adopted({ adopted, state }: { adopted: CloudAdopted; state: CloudState 
         <dt className="text-muted-foreground">Install key</dt>
         <dd className="font-mono text-xs">{adopted.fingerprint}</dd>
       </dl>
+      <CloudHeartbeat />
       <Button variant="destructive" onClick={() => setConfirm(true)}>
         Remove from cloud
       </Button>

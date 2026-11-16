@@ -152,8 +152,32 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
             onSyncChanged = { url ->
                 if (uk.me.cormack.lighting7.cloud.CloudRepoUrls.isCloudRepo(url, cloudConfig.baseUrl)) syncNudges.offer(url)
             },
+            health = deskHealth::payload,
         )
     }
+
+    /**
+     * Sync's outcome across every project, in memory for the heartbeat (cloud-p3 plan D2), read from
+     * the activity log once here.
+     */
+    val syncHealth = uk.me.cormack.lighting7.sync.SyncHealth().also { health ->
+        runCatching { health.seed(database) }.onFailure { logger.warn("Couldn't read sync's health from its log", it) }
+    }
+
+    /** The heartbeat's body (cloud-p3 plan D2): only what is already in memory. */
+    val deskHealth = uk.me.cormack.lighting7.cloud.DeskHealth(
+        project = {
+            projectManager.liveProject.value?.let { uk.me.cormack.lighting7.cloud.protocol.HealthProject(it.uuid, it.name) }
+        },
+        controllers = { projectManager.liveControllers.value },
+        sync = { syncHealth.state.value },
+        update = {
+            updateServiceDelegate.takeIf { it.isInitialized() }?.value
+                ?.takeIf { it.channelKind == uk.me.cormack.lighting7.update.UpdateChannelKind.PACKAGED_WINDOWS }
+                ?.summary?.value
+        },
+        dataDir = appDataDir(),
+    )
 
     /** A cloud's `sync.changed`, handed from the channel's thread to [autoSyncScheduler] (cloud-p2 plan D5). */
     val syncNudges = uk.me.cormack.lighting7.sync.SyncNudges()

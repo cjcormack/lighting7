@@ -82,6 +82,15 @@ export interface RemoteSessions {
   recent: RemoteSession[]
 }
 
+/**
+ * Mirrors `CloudHeartbeatDto`: the last heartbeat this desk built for the cloud, exactly as it goes on
+ * the wire, and when. Both absent before the first.
+ */
+export interface CloudHeartbeat {
+  sentAt?: string | null
+  health?: Record<string, unknown> | null
+}
+
 export const cloudApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     cloudState: build.query<CloudState, void>({
@@ -123,6 +132,10 @@ export const cloudApi = restApi.injectEndpoints({
           // The section renders the refusal; the cache keeps the last confirmed switches.
         }
       },
+    }),
+    cloudHeartbeat: build.query<CloudHeartbeat, void>({
+      query: () => 'install/cloud/heartbeat',
+      keepUnusedDataFor: 0,
     }),
     remoteSessions: build.query<RemoteSessions, void>({
       query: () => 'install/cloud/sessions',
@@ -169,6 +182,7 @@ export const {
   useUnadoptCloudMutation,
   useRemoteAccessSettingsQuery,
   useSetRemoteAccessMutation,
+  useCloudHeartbeatQuery,
   useRemoteSessionsQuery,
   useEndRemoteSessionMutation,
   useAllowRemoteSessionMutation,

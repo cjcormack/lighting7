@@ -1,6 +1,9 @@
 package uk.me.cormack.lighting7.state
 
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import uk.me.cormack.lighting7.history.WriteOrigin
 import kotlinx.coroutines.flow.SharedFlow
@@ -11,12 +14,14 @@ import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.neq
 import uk.me.cormack.lighting7.telemetry.Tracing
+import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.show.DbFixtureLoader
+import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.show.Show
 import uk.me.cormack.lighting7.show.ShowCarry
 import uk.me.cormack.lighting7.sync.SceneImageRepoSync
@@ -49,6 +54,18 @@ class ProjectManager(
 
     /** The show if [initialize] has run, otherwise null (no throw). */
     val showOrNull: Show? get() = _show
+
+    private val _liveProject = MutableStateFlow<LiveProject?>(null)
+
+    /** The current project's uuid and name, for readers that must not touch the database (the heartbeat). */
+    val liveProject: StateFlow<LiveProject?> = _liveProject.asStateFlow()
+
+    private val _liveControllers = MutableStateFlow<List<DmxController>>(emptyList())
+
+    /** The live show's controllers as its last register left them, read without the register's lock. */
+    val liveControllers: StateFlow<List<DmxController>> = _liveControllers.asStateFlow()
+
+    data class LiveProject(val id: Int, val uuid: String, val name: String)
 
     /**
      * Project switches, as events — **replay 0 on purpose.** This is not a snapshot of "which
@@ -92,6 +109,7 @@ class ProjectManager(
 
         _currentProject = project
         _show = createShow(project)
+        publishLive(project)
         return _show!!
     }
 
@@ -161,6 +179,7 @@ class ProjectManager(
         // Create and start new show
         _currentProject = newProject
         _show = Tracing.span("project.load") { createShow(newProject, carry) }
+        publishLive(newProject)
         Tracing.span("project.start") { _show!!.start(seedValues = carry?.values.orEmpty()) }
         carry?.let { carried -> Tracing.span("project.resume") { _show!!.resume(carried) } }
 
@@ -183,7 +202,34 @@ class ProjectManager(
             state = stateProvider(),
             project = project,
             carried = carried,
-        )
+        ).also(::followLive)
+    }
+
+    /** Called once [_show] is the project's show: from here its listener keeps both flows. */
+    private fun publishLive(project: DaoProject) {
+        _liveProject.value = LiveProject(project.id.value, project.uuid.toString(), project.name)
+        _liveControllers.value = _show?.fixtures?.controllers.orEmpty()
+    }
+
+    private var liveListener: Pair<Show, FixturesChangeListener>? = null
+
+    /** Keep [liveProject]'s name and [liveControllers] true to [show] while it is the live show. */
+    private fun followLive(show: Show) {
+        val listener = object : FixturesChangeListener {
+            override fun controllersChanged() {
+                if (_show === show) _liveControllers.value = show.fixtures.controllers
+            }
+
+            override fun projectDetailsChanged(projectId: Int) {
+                if (_show !== show) return
+                val live = _liveProject.value ?: return
+                if (live.id != projectId) return
+                val name = transaction(database) { DaoProject.findById(projectId)?.name } ?: return
+                _liveProject.compareAndSet(live, live.copy(name = name))
+            }
+        }
+        show.fixtures.registerListener(listener)
+        liveListener = show to listener
     }
 
     /**
@@ -233,6 +279,10 @@ class ProjectManager(
     }
 
     private fun shutdownShow(show: Show, finalFrames: Map<Universe, Map<Int, UByte>>) {
+        liveListener?.takeIf { it.first === show }?.let { (_, listener) ->
+            show.fixtures.unregisterListener(listener)
+            liveListener = null
+        }
         show.beginClose()
         // 1. Pin every controller on the frame it leaves on the rig ([finalFrames]) before anything
         //    is stopped. Stopping the FX engine resets every property its effects covered, and that

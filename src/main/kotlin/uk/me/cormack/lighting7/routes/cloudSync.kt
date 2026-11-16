@@ -45,6 +45,7 @@ import uk.me.cormack.lighting7.sync.SyncException
 import uk.me.cormack.lighting7.sync.SyncOutcome
 import uk.me.cormack.lighting7.sync.SyncRunResult
 import uk.me.cormack.lighting7.sync.AutoSyncScheduler
+import uk.me.cormack.lighting7.sync.SyncLogEvent
 import uk.me.cormack.lighting7.sync.SyncLogger
 import uk.me.cormack.lighting7.sync.SyncWorkingTree
 import uk.me.cormack.lighting7.sync.canonicalDecode
@@ -602,15 +603,19 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
      */
     post<ProjectSyncDisconnectResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
+            var disconnected: String? = null
             val (config, repoUrl) = transaction(state.database) {
                 val cfg = ensureSyncConfig(project)
                 val current = cfg.repoUrl?.takeIf { it.isNotBlank() }
                 if (current != null) DaoSyncLinkedRepo.remember(project, current)
+                disconnected = current
                 cfg.repoUrl = null
                 cfg.repoName = null
                 cfg.autoSyncEnabled = false
                 cfg.toBareDto() to cfg.repoUrl
             }
+            // Clears the project's sync failure from the heartbeat, live and seeded.
+            disconnected?.let { state.syncLogger.info(project.id.value, SyncLogEvent.REPO_DISCONNECTED, "Disconnected from $it") }
             // Cancels the auto-sync loop for this project (no repo → nothing to sync).
             state.autoSyncScheduler.reschedule(project.id.value)
             call.respond(decorateSyncConfig(state, config, repoUrl))

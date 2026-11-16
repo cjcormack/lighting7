@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-CLOUD-P3-S2`](#fu-manual-cloud-p3-s2) | an adopted desk's install page in the portal shows its project, its universes' frame rates, its disk and its sync state within a minute, and the Cloud tab's *What the desk sends* matches it | Cloud P3 S2, 2026-11-16 |
 | [`FU-MANUAL-CLOUD-P2`](#fu-manual-cloud-p2) | Lighting7 Cloud's P2 exit: every owner project moved with its SHAs, a conflict made on two desks and resolved on the venue desk through the cloud, a Claude Code cloud session importing from the cloud, an upgraded desk's `oauth_identities` gone and a straggler moved from its working tree, and `docs/sync-engineering.md` describing the cloud | Cloud P2 S4, 2026-11-12 |
 | [`FU-MANUAL-CLOUD-P2-S3`](#fu-manual-cloud-p2-s3) | *Sync to the cloud* on a new show puts it on the portal's Projects page, a second desk imports it from *Import from the cloud*, and an edit on one reaches the other within seconds by `sync.changed`; onboarding lists the org's projects venues first | Cloud P2 S3, 2026-11-12 |
 | [`FU-MANUAL-CLOUD-P2-S2`](#fu-manual-cloud-p2-s2) | a show attached to its cloud repo by hand syncs from an adopted desk, a second desk pulls it, and an edit reaches the second by `sync.changed` before its auto-sync interval | Cloud P2 S2, 2026-11-12 |
@@ -882,6 +883,25 @@ shows the migration moving nothing on stage.
    rig moves, and the four cells take the teal edge and the palette's pill, and the source chip names
    it. Select two of them: the palette's chip reads *2 of 4*. Delete one head's row from
    the palette: that cell's pill turns dashed (unresolved) and keeps its value.
+
+---
+
+## `FU-MANUAL-CLOUD-P3-S2`
+
+**What it proves**: the full heartbeat reaches the cloud from a real desk (cloud-p3 plan session 2, D2,
+D3). **Needs** the cloud's P3 session 1 deployed (`lighting7-cloud` `docs/plans/p3-plan.md`).
+
+**Test**, on an adopted desk running a show with Art-Net universes:
+
+1. Within a minute, the portal's install page shows the show's name, each universe with its controller's
+   address and a frame rate near the desk's (about 40/s), the disk's free space and the platform.
+2. On the desk, Install settings › Cloud › *What the desk sends*: the JSON names the same project,
+   universes and disk, and no cue, Look, palette, fixture or user name.
+3. Switch to another project: within a heartbeat or two, both show the new one and its universes.
+4. Make a synced project's sync fail (detach its network, or revoke its repo in the portal) and run
+   *Sync now*: the install page shows sync failing since then, with its code; a good run clears it.
+
+Record the date and anything that read differently here.
 
 ---
 
