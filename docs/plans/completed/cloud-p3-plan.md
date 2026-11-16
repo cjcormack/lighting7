@@ -1,10 +1,10 @@
 # Lighting7 Cloud P3: fleet health and backups, the desk's side
 
-> **Document status: IN PROGRESS — written 2026-11-15; sessions 1–3 merged.** The desk half of the PRD's
+> **Document status: DONE — written 2026-11-15; sessions 1–5 merged (2026-11-16).** The desk half of the PRD's
 > phase P3; its exit, `FU-MANUAL-CLOUD-P3`, is an operator check in
-> [`manual-validation.md`](manual-validation.md), added by session 4. The cloud half is
+> [`manual-validation.md`](../manual-validation.md#fu-manual-cloud-p3), added by session 4. The cloud half is
 > `docs/plans/p3-plan.md` in `cjcormack/lighting7-cloud`. Design record:
-> [`cloud-design/INDEX.md`](cloud-design/INDEX.md), whose rules R1–R7 apply to every session here.
+> [`cloud-design/INDEX.md`](../cloud-design/INDEX.md), whose rules R1–R7 apply to every session here.
 
 ## 1. Context
 
@@ -372,8 +372,8 @@ runs the checks §"Pre-commit checks" names for what it touches; `cloud-protocol
 | 1 | The protocol for P3 | merged | `claude/eager-pasteur-p6ei2n` | [#435](https://github.com/cjcormack/lighting7/pull/435) | 7f55dac |
 | 2 | The full heartbeat | merged | `claude/relaxed-ptolemy-rbcias` | [#439](https://github.com/cjcormack/lighting7/pull/439) | fbcc3a0 |
 | 3 | Art-Net controller reachability | merged | `claude/vigilant-cori-bwv3ry` | [#440](https://github.com/cjcormack/lighting7/pull/440) | cc4d6d5 |
-| 4 | Making and uploading backups | in review | `claude/funny-brown-mcmta3` | [#441](https://github.com/cjcormack/lighting7/pull/441) | d2ed8d4 |
-| 5 | Restoring onto a new desk | in review | `claude/keen-newton-7nu4og` | | |
+| 4 | Making and uploading backups | merged | `claude/funny-brown-mcmta3` | [#441](https://github.com/cjcormack/lighting7/pull/441) | d2ed8d4 |
+| 5 | Restoring onto a new desk | merged | `claude/keen-newton-7nu4og` | [#442](https://github.com/cjcormack/lighting7/pull/442) | ccaeb5d |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session` fills
 *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts the
@@ -477,4 +477,4 @@ cloud alerts).
 
 ## 8. Follow-ups
 
-Recorded in [`followups.md`](followups.md) by the session that finds them.
+Recorded in [`followups.md`](../followups.md) by the session that finds them.
