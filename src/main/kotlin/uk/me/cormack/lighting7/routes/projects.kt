@@ -271,6 +271,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         // history); a version itself is refused by the write guard.
         delete<ProjectIdResource> { resource ->
             var deletedUuids: List<String> = emptyList()
+            var deletedIds: List<Int> = emptyList()
             val result = transaction(state.database) {
                 val project = DaoProject.findById(resource.id)
                     ?: return@transaction DeleteResult.NOT_FOUND
@@ -300,6 +301,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                     emptyList()
                 }
                 deletedUuids = (listOf(project) + snapshots).map { it.uuid.toString() }
+                deletedIds = (listOf(project) + snapshots).map { it.id.value }
                 snapshots.forEach { deleteProjectRows(state, it) }
                 deleteProjectRows(state, project)
 
@@ -308,6 +310,7 @@ internal fun Route.routeApiRestProjects(state: State) {
 
             when (result) {
                 DeleteResult.SUCCESS -> {
+                    deletedIds.forEach(state.syncHealth::deleted)
                     deletedUuids.forEach { deleteProjectFiles(state, it) }
                     call.respond(HttpStatusCode.NoContent)
                 }

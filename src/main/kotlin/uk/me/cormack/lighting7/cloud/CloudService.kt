@@ -78,6 +78,11 @@ class CloudService(
     mcpHandler: (suspend (JsonObject, AuthenticatedUser) -> JsonObject?)? = null,
     /** Takes a `sync.changed`'s repo URL on the channel's thread, and must return at once (cloud-p2 plan D5). */
     private val onSyncChanged: (url: String) -> Unit = {},
+    /**
+     * Each heartbeat's body, assembled on the channel's thread from memory alone (cloud-p3 plan D2).
+     * Without one the desk sends the version and uptime alone, and does not announce `health.v2`.
+     */
+    private val health: (() -> Message.Health)? = null,
 ) {
     private val logger = LoggerFactory.getLogger(CloudService::class.java)
 
@@ -245,8 +250,24 @@ class CloudService(
         return ended
     }
 
+    @Volatile private var lastSent: SentHeartbeat? = null
+    @Volatile private var healthWarned = false
+
+    /** The last heartbeat this desk built for the cloud and when, for the Cloud tab; memory only. */
+    val lastHeartbeat: SentHeartbeat? get() = lastSent
+
     private val channelHandler = object : ChannelHandler {
         override fun capabilities(): List<String> = this@CloudService.capabilities()
+
+        override fun health(): Message.Health {
+            val full = health?.let { provider ->
+                runCatching(provider).onFailure {
+                    if (!healthWarned) logger.warn("Couldn't assemble the heartbeat; sending the bare one", it)
+                    healthWarned = true
+                }.getOrNull()
+            }
+            return (full ?: ChannelConnection.bareHealth()).also { lastSent = SentHeartbeat(clock(), it) }
+        }
 
         override fun online(connection: ChannelConnection) {
             liveConnection = connection
@@ -471,11 +492,16 @@ class CloudService(
         liveConnection?.refreshCapabilities()
     }
 
-    /** What the desk announces (D6): that it takes remote sessions, relays MCP and syncs with cloud repos, and the state entries for each door's switch and the sidecar. */
+    /**
+     * What the desk announces (D6): that it takes remote sessions, relays MCP, syncs with cloud repos and
+     * sends the full heartbeat (cloud-p3 plan D3, whenever it has a [health] provider), and the state entries for each door's switch and
+     * the sidecar.
+     */
     fun capabilities(): List<String> = buildList {
         add(Capability.REMOTE_V1)
         add(Capability.MCP_V1)
         add(Capability.SYNC_V1)
+        if (health != null) add(Capability.HEALTH_V2)
         val now = switches
         if (!now.remoteAccess) add(Capability.REMOTE_OFF)
         if (!now.mcpAccess) add(Capability.MCP_OFF)
@@ -650,3 +676,6 @@ class CloudService(
         private val PING_INTERVAL = 25.seconds
     }
 }
+
+/** A heartbeat as built for the cloud, and when. */
+data class SentHeartbeat(val at: Instant, val health: Message.Health)

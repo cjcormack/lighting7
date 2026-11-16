@@ -92,6 +92,7 @@ class SyncLogger(
             }
             row.toDto()
         } ?: return
+        state.syncHealth.logged(projectId, event, message, ts)
 
         try {
             state.emitCloudSyncEvent(
@@ -172,6 +173,9 @@ object SyncLogEvent {
 
     /** A move to the cloud that failed, with its code; the project stays on GitHub. */
     const val MOVE_FAILED = "MOVE_FAILED"
+
+    /** The project's repo was disconnected: a failure before it no longer counts. */
+    const val REPO_DISCONNECTED = "REPO_DISCONNECTED"
 }
 
 /** Wire shape for a single [DaoSyncLogEntry] row. */

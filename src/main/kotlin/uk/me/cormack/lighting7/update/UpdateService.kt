@@ -7,6 +7,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -114,10 +117,24 @@ class UpdateService(
 
     private val updatable: Boolean get() = enabled && channelKind == UpdateChannelKind.PACKAGED_WINDOWS
 
+    private val _summary = MutableStateFlow(UpdateSummary(UpdatePhase.IDLE))
+
+    /** The phase, the last apply's outcome and the staged version, kept in memory for the heartbeat. */
+    val summary: StateFlow<UpdateSummary> = _summary.asStateFlow()
+
     init {
         runCatching { loadCache() }.onFailure { logger.warn("Could not load the update cache", it) }
         runCatching { reconcilePreviousApply() }.onFailure { logger.warn("Could not reconcile the last apply", it) }
         runCatching { sweepStagedFiles() }.onFailure { logger.warn("Could not sweep staged installers", it) }
+        publishSummary()
+    }
+
+    private fun publishSummary() {
+        _summary.value = UpdateSummary(
+            phase = phase.get(),
+            lastApplySucceeded = applyOutcome?.succeeded,
+            stagedVersion = runCatching { stagedInstaller()?.second }.getOrNull(),
+        )
     }
 
     // ─── Status ─────────────────────────────────────────────────────────
@@ -597,10 +614,12 @@ class UpdateService(
         if (now - lastProgressNotifyMs < PROGRESS_INTERVAL_MS && percent == lastProgressPercent) return
         lastProgressNotifyMs = now
         lastProgressPercent = percent
-        notifyChanged()
+        notifyChanged(summaryMoved = false)
     }
 
-    private fun notifyChanged() {
+    /** [summaryMoved] false for download progress, which moves nothing [summary] reports. */
+    private fun notifyChanged(summaryMoved: Boolean = true) {
+        if (summaryMoved) publishSummary()
         runCatching { onStateChanged(this) }
             .onFailure { logger.warn("Update state listener threw", it) }
     }
@@ -626,3 +645,11 @@ class UpdateService(
         internal const val PROGRESS_INTERVAL_MS = 500L
     }
 }
+
+/** What the heartbeat reports of the update client. */
+data class UpdateSummary(
+    val phase: UpdatePhase,
+    /** Whether the last install handed to the launcher took; null when none has been. */
+    val lastApplySucceeded: Boolean? = null,
+    val stagedVersion: String? = null,
+)

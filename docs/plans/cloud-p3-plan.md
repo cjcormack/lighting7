@@ -1,6 +1,6 @@
 # Lighting7 Cloud P3: fleet health and backups, the desk's side
 
-> **Document status: PLANNED — written 2026-11-15, no session started.** The desk half of the PRD's
+> **Document status: IN PROGRESS — written 2026-11-15; session 1 merged.** The desk half of the PRD's
 > phase P3; its exit, `FU-MANUAL-CLOUD-P3`, is an operator check in
 > [`manual-validation.md`](manual-validation.md), added by session 4. The cloud half is
 > `docs/plans/p3-plan.md` in `cjcormack/lighting7-cloud`. Design record:
@@ -111,6 +111,16 @@ install that comes back as the old install, its MCP URL and links working (UC-8)
   - disk free: `FileStore.usableSpace` of the data directory's store, read at most once a minute;
   - update: `UpdateService`'s status, through a `StateFlow` if it is not one;
   - backup: D6's service state; reachability: D4's.
+
+  As session 2 built it: the live controllers are a second `ProjectManager` `StateFlow`, followed by a
+  `FixturesChangeListener` (`Fixtures.controllers` takes the register's lock); `SyncHealth` lives on
+  `State`, moved by the activity log's run rows as `SyncLogger` writes them and replayed from it at
+  startup, with `last_synced_at` standing for the quiet auto runs the log omits, and counts a run
+  stopped on conflicts as failing (`CONFLICTS_PENDING`) until it is applied or aborted, since
+  auto-sync then waits on the operator; a refusal that says the project is not set up to sync is no
+  run, and a disconnect ends a failure; `update` is absent unless the
+  update client runs (a packaged Windows install); `backup` is absent until session 4. The Cloud tab
+  reads the last heartbeat from `GET /install/cloud/heartbeat`, memory only.
 
   It is offered to the drop-oldest queue as today. Sent: names the operator chose for the project and
   addresses of controllers on the LAN. Never sent: anything a show holds (cues, looks, levels, patch),
@@ -274,8 +284,8 @@ runs the checks §"Pre-commit checks" names for what it touches; `cloud-protocol
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The protocol for P3 | in review | `claude/eager-pasteur-p6ei2n` | | |
-| 2 | The full heartbeat | planned | | | |
+| 1 | The protocol for P3 | merged | `claude/eager-pasteur-p6ei2n` | [#435](https://github.com/cjcormack/lighting7/pull/435) | 7f55dac |
+| 2 | The full heartbeat | in review | `claude/relaxed-ptolemy-rbcias` | | |
 | 3 | Art-Net controller reachability | planned | | | |
 | 4 | Making and uploading backups | planned | | | |
 | 5 | Restoring onto a new desk | planned | | | |

@@ -74,12 +74,16 @@ class CloudChannelTest {
         runCatching { state.shutdown() }
     }
 
-    private fun service(enabled: Boolean = true): CloudService = CloudService(
+    private fun service(
+        enabled: Boolean = true,
+        health: (() -> Message.Health)? = state.deskHealth::payload,
+    ): CloudService = CloudService(
         database = state.database,
         config = CloudConfig(fake.baseUrl, enabled),
         credentialStore = { store },
         userChanges = state.authService.userChanges,
         apiFactory = { CloudApi(it, Duration.ofSeconds(5)) },
+        health = health,
     ).also {
         it.pollDelay = { 20.milliseconds }
         it.handshakeTimeout = 2.seconds
@@ -96,8 +100,8 @@ class CloudChannelTest {
     }
 
     /** An adopted service, online. */
-    private fun online(): Pair<CloudService, String> {
-        val service = service()
+    private fun online(health: (() -> Message.Health)? = state.deskHealth::payload): Pair<CloudService, String> {
+        val service = service(health = health)
         fake.decision = FakeCloud.Decision.APPROVE
         runBlocking { service.startAdoption(adminId) }
         val installId = service.await("adopted") { it.adopted != null }.adopted!!.installId
@@ -134,12 +138,15 @@ class CloudChannelTest {
         assertEquals(DeskPlatform.current, hello.platform)
         assertEquals(BuildInfo.current.version, hello.deskVersion)
         assertEquals(
-            listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.SYNC_V1, Capability.REMOTE_OFF, Capability.MCP_OFF, Capability.REMOTE_NO_SIDECAR),
+            listOf(Capability.REMOTE_V1, Capability.MCP_V1, Capability.SYNC_V1, Capability.HEALTH_V2, Capability.REMOTE_OFF, Capability.MCP_OFF, Capability.REMOTE_NO_SIDECAR),
             hello.capabilities,
             "a desk with both switches off and no sidecar says so",
         )
         val health = sent.filterIsInstance<Message.Health>().first()
         assertEquals(BuildInfo.current.version, health.deskVersion)
+        assertEquals(DeskPlatform.current, health.platform, "the full heartbeat")
+        assertNotNull(health.diskFreeMb)
+        assertEquals(DeskPlatform.current, service.lastHeartbeat?.health?.platform, "the Cloud tab's last heartbeat")
 
         val now = service.state.value
         assertNotNull(now.lastOnlineAt)
@@ -149,7 +156,28 @@ class CloudChannelTest {
     }
 
     @Test
-    fun `heartbeats and reconnects write nothing to the database`() {
+    fun `a desk with no health provider sends the bare heartbeat and does not announce health v2`() {
+        val (service, installId) = online(health = null)
+        eventually("a heartbeat") { fake.received.any { it.first == installId && it.second.body is Message.Health } }
+        val sent = fake.received.filter { it.first == installId }.map { it.second.body }
+        assertTrue(Capability.HEALTH_V2 !in (sent.first() as Message.Hello).capabilities)
+        assertNull(sent.filterIsInstance<Message.Health>().first().platform)
+        assertNull(service.lastHeartbeat?.health?.platform)
+    }
+
+    @Test
+    fun `a health provider that throws sends the bare heartbeat, and the Cloud tab shows that one`() {
+        val (service, installId) = online(health = { error("a reader broke") })
+        eventually("a heartbeat") { fake.received.any { it.first == installId && it.second.body is Message.Health } }
+        val health = fake.received.filter { it.first == installId }.map { it.second.body }.filterIsInstance<Message.Health>().first()
+        assertNull(health.platform, "the bare heartbeat")
+        val last = assertNotNull(service.lastHeartbeat)
+        assertNull(last.health.platform, "the record is what was sent, not a stale full one")
+        assertEquals(BuildInfo.current.version, last.health.deskVersion)
+    }
+
+    @Test
+    fun `full heartbeats and reconnects write nothing to the database`() {
         val (service, _) = online()
         val before = totalChanges()
         eventually("two heartbeats") { fake.received.count { it.second.body is Message.Health } >= 2 }

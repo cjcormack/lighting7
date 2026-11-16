@@ -77,6 +77,9 @@ internal interface ChannelHandler {
     /** What `hello` and `capabilities` announce now. */
     fun capabilities(): List<String> = emptyList()
 
+    /** The next heartbeat's body. */
+    fun health(): Message.Health = ChannelConnection.bareHealth()
+
     /** [connection] is online, its `hello` queued, or [connection] has gone offline. */
     fun online(connection: ChannelConnection) {}
 
@@ -352,7 +355,11 @@ internal class ChannelConnection(
             while (true) {
                 delay(heartbeat)
                 noteThread()
-                box.offerHealth(encode(Message.Health(uptimeS = uptimeS(), deskVersion = BuildInfo.current.version)))
+                val health = runCatching { handler.health() }.getOrElse {
+                    unexpected.once("health") { logger.warn("Couldn't assemble the heartbeat; sending the bare one", it) }
+                    bareHealth()
+                }
+                box.offerHealth(encode(health))
             }
         }
         try {
@@ -511,7 +518,9 @@ internal class ChannelConnection(
             return text.substring(0, end)
         }
 
-        private fun uptimeS(): Long = ManagementFactory.getRuntimeMXBean().uptime / 1000
+        /** A heartbeat of the version and uptime alone. */
+        fun bareHealth(): Message.Health =
+            Message.Health(uptimeS = ManagementFactory.getRuntimeMXBean().uptime / 1000, deskVersion = BuildInfo.current.version)
     }
 }
 

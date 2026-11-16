@@ -2994,7 +2994,7 @@ Stable event codes (see [`SyncLogEvent`](../src/main/kotlin/uk/me/cormack/lighti
 |---|---|---|
 | `RUN_STARTED` | `RemoteSyncEngine.runSync` (start) | Manual runs only — suppressed for `AUTO`. |
 | `RUN_DONE` | `RemoteSyncEngine.runSync` (success) | Outcome + summary in the message. Suppressed for an `AUTO` run whose outcome is `NO_OP`. |
-| `RUN_FAILED` | `RemoteSyncEngine.runSync` (catch) | `{code}: {message}` shape. |
+| `RUN_FAILED` | `RemoteSyncEngine.runSync` (catch) | `{code}: {message}` shape; an unexpected error is `SYNC_FAILED: {message}`. |
 | `CONFLICTS_PENDING` | `RemoteSyncEngine.runSync` | Conflict count + session id. |
 | `APPLY_DONE` | `RemoteSyncEngine.applySession` (success) | Post-resolve commit pushed. |
 | `APPLY_FAILED` | `RemoteSyncEngine.applySession` (catch) | Same shape as `RUN_FAILED`. |
@@ -3005,6 +3005,10 @@ Stable event codes (see [`SyncLogEvent`](../src/main/kotlin/uk/me/cormack/lighti
 | `AUTO_SYNC_RECOVERED` | `AutoSyncScheduler` | Ticks succeeding again after one or more failures. |
 | `RESTORED` | `SnapshotRestore.restore` | *Restored {shortSha} from {when} UTC: n back, n gone, n changed*. |
 | `RESTORE_FAILED` | `RemoteSyncEngine.restore` (catch) | A refused or failed restore, `{code}: {message}`. |
+| `REPO_DISCONNECTED` | `/sync/disconnect` | The repo detached; ends the project's failure in the heartbeat. |
+
+`SyncLogger` hands every row it writes to `SyncHealth`, the heartbeat's sync summary, which startup
+seeds from the same rows (`docs/cloud-engineering.md` §"Health").
 
 `AUTO_SYNC_TICK` was retired — it was written immediately before `RUN_STARTED` and carried
 nothing extra. The frontend renders `event` as an opaque string, so rows written before the

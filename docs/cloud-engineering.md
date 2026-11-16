@@ -137,9 +137,10 @@ unadopt, cancel or revoke. The wire side is [cloud-protocol.md](cloud-protocol.m
    each attempt until a read succeeds, so a keychain still locked at boot costs attempts, not the
    channel.
 3. **Online.** The desk sends `hello` (protocol 1, its version, platform, `installs.uuid`, friendly
-   name, its capabilities), then `health {uptimeS, deskVersion}` every `welcome.heartbeatS`
-   (clamped to 1–300 s). `hello` carries the friendly name as it was when the channel started. The
-   capabilities are `remote.v1` and `mcp.v1`, always, then the state entries of P1 D6: `remote.off` and
+   name, its capabilities), then `health` every `welcome.heartbeatS` (clamped to 1–300 s), the full
+   heartbeat of §"Health". `hello` carries the friendly name as it was when the channel started. The
+   capabilities are `remote.v1`, `mcp.v1` and `sync.v1`, always, `health.v2` whenever the service has a
+   heartbeat provider (the desk always gives it one), then the state entries of P1 D6: `remote.off` and
    `mcp.off` while their switch is off, `remote.no-sidecar` while no sidecar runs
    (`CloudService.capabilities`). Whenever the list changes the desk sends
    `capabilities`, the whole list, on the connection it was announced on, never ahead of its `hello`
@@ -190,6 +191,34 @@ reading; the pings are what notice first. Either way the desk reconnects.
 
 An adoption error (the row's, or a poll's) outranks the channel's. Only a revoke changes what the
 desk holds; nothing about a connection is written to the database.
+
+## Health
+
+Every heartbeat is the full one (cloud-p3 plan D2, FR-FLEET-1; the protocol's fields are
+`docs/cloud-protocol.md` §"Health"), and `health.v2` is announced whenever the desk is adopted: health
+is not a switch (D3). `cloud/DeskHealth.kt` builds it on the channel's thread, at each heartbeat, from
+what is already in memory, never the database and never a lock the show takes:
+
+| Field | From |
+|---|---|
+| `uptimeS`, `deskVersion`, `platform` | The JVM's uptime, `BuildInfo`, `DeskPlatform` |
+| `project` | `ProjectManager.liveProject`, a `StateFlow` set at every load and switch, and renamed on the show's `projectDetailsChanged` |
+| `universes` | `ProjectManager.liveControllers`, the live show's controllers as its last register left them (followed by a `FixturesChangeListener` on the live show only, so never the register's lock): each Art-Net controller's port address, address and `packetsPerSecond` over 30 s, in the order the rig registered them, the loader's (the project's universes by number). Absent with no Art-Net controller. `reachable` and `lastReplyS` are absent until the poller (D4) |
+| `sync` | `SyncHealth` (`sync/SyncHealth.kt`), one rule live and seeded: the activity log's run rows move it — `SyncLogger` hands it each row it writes, and startup replays `sync_log_entry` — and so does each project's `sync_configs.last_synced_at`, which every good run writes, the quiet auto runs that log nothing included (`RemoteSyncEngine.runSync` calls `ran` for those live). A project is failing from its first failed run until its next good one; `failingSince` is the oldest failing project's first failure and `code` its latest `SyncErrorCode`. A run stopped on conflicts counts as failing, `CONFLICTS_PENDING`, since auto-sync then waits on the operator, until it is applied or aborted. A refusal saying the project is not set up to sync (`REPO_URL_MISSING`, `SYNC_DISABLED`, `SYNC_OFF`, `NO_REPO`, `VENUE_DRAFT_NOT_SYNCED`, `CLOUD_NOT_ADOPTED`, and `SESSION_PENDING`, already failing as conflicts) is no run. A disconnect logs `REPO_DISCONNECTED`, which ends the project's failure, and the seed counts only projects with a repo attached; a deleted project is forgotten, and a run still in flight for it reports nothing. An unexpected error in a run is logged as `RUN_FAILED` with `SYNC_FAILED`. Absent while no project has synced |
+| `diskFreeMb` | `FileStore.usableSpace` of the data directory's store, read at most once a minute |
+| `update` | `UpdateService.summary`, a `StateFlow` republished on every change of phase; absent unless the update client runs (a packaged Windows install) |
+| `backup` | Absent until the desk makes backups (session 4) |
+
+**What is never sent** (FR-FLEET-5): the project's name and its controllers' addresses are the only
+strings the operator chose. No cue, Look, palette, group or fixture name, no level, no DMX value and no
+user name or email is read by `DeskHealth`, and `DeskHealthTest` searches a rich project's heartbeat for
+every such name. The Cloud tab's *What the desk sends* shows the last heartbeat as JSON
+(`GET /install/cloud/heartbeat`, admin only, memory only: `CloudService.lastHeartbeat`), so the owner
+sees exactly what leaves the desk.
+
+A field that cannot be read, by a bug, is left out and logged once; the rest is sent. A heartbeat that
+cannot be built at all is logged once and sent bare (`uptimeS`, `deskVersion`), and the Cloud tab shows
+that bare one; the loop never stops for it.
 
 ## Desk access tokens
 
@@ -588,7 +617,9 @@ than refetching. Its states:
   fingerprint, the connection (*Online*, *Connecting…*, *Retrying in n s* counted down from `retryAt`,
   *Not connected*) with `lastError`'s message, and **Remove from cloud**. Its confirm unadopts; when the
   answer is `CLOUD_UNREACHABLE` it shows the desk's reason (unreachable, refused, turned off, a changed
-  URL, a missing key) and offers **Forget on this desk only**, `?force=true`.
+  URL, a missing key) and offers **Forget on this desk only**, `?force=true`. Under it, *What the desk
+  sends*: a disclosure that, while open, reads `GET /install/cloud/heartbeat` every 15 s and shows the
+  last heartbeat as JSON (`CloudHeartbeat.tsx`).
 - A `notice` above the rest, dismissed on that browser alone (localStorage) by its `noticeAt`, the
   instant the desk set it, since the next expiry or revoke says the same words. The desk keeps both in
   memory until the next adoption or a restart, and no route clears them.
@@ -672,7 +703,8 @@ does the show run exactly as before with the cloud down, hung or hostile? The ru
 4. **Bounded queues.** The channel's heartbeat queue holds 16 frames and drops the oldest; its other
    queue refuses a frame it has no room for. Neither blocks, so nothing that sends to the cloud ever
    waits on it.
-5. **No lock the show takes.** The connector reads desk state only from `StateFlow`s and `BuildInfo`.
+5. **No lock the show takes.** The connector reads desk state only from `StateFlow`s, lock-free
+   counters (a controller's frame rate) and `BuildInfo`; the heartbeat (§"Health") is built that way.
    The adoption reads the database only on a transition, an account change or a request (the install
    row, the adopting account's name and link), never on a timer: a poll's error is republished from
    memory.
@@ -690,7 +722,7 @@ does the show run exactly as before with the cloud down, hung or hostile? The ru
 
 `CloudOutageOutputTimingTest` is the rules' proof (NFR-SAFE-1): a fade's Art-Net frames, timed with no
 connector, then with the cloud connected, flooding the channel with `sync.changed`, stopping reading,
-dropping the connection and refusing every reconnect, each run held to the baseline's frame count, end,
+dropping the connection and refusing every reconnect, and with a full heartbeat every second, each run held to the baseline's frame count, end,
 p99 and longest frame gap, each plus a margin.
 `LinkSidecarSafetyTest` holds the sidecar to the same (NFR-SAFE-2): the real one running, killed mid-fade
 and stopped with SIGSTOP mid-fade until its stdin queue fills, then a stand-in flooding its stdout and one
@@ -714,7 +746,8 @@ never use the real cloud (R5). `CloudRepoSyncTest` syncs shows and venues betwee
 `CloudAdoptionTest` drives `CloudService` through every adoption and unadopt path;
 `InstallCloudRoutesTest` the routes and their refusals on both listeners; `CloudChannelTest` the
 channel against the fake; `CloudChannelBackoffTest` the reconnect loop on a virtual clock; and
-`CloudOutageOutputTimingTest` the show's output through a cloud outage. `RemoteSessionsTest` drives
+`CloudOutageOutputTimingTest` the show's output through a cloud outage; `DeskHealthTest` the heartbeat
+from a running desk and FR-FLEET-5; `SyncHealthTest` sync's health across projects. `RemoteSessionsTest` drives
 bearer requests and sockets on the public listener through every refusal and every way a session ends;
 `ChannelOutboxTest` the two send queues on virtual time; `RemoteFrameCapTest` the rate cap on virtual
 time. `CloudLinksTest` carries invites through

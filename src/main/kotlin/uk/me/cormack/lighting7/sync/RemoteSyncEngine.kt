@@ -79,11 +79,20 @@ class RemoteSyncEngine(
         installFriendlyName: String,
         trigger: SyncTrigger = SyncTrigger.MANUAL,
     ): SyncRunResult = try {
-        traceRun(projectId, projectUuid, installUuid, installFriendlyName, trigger).also { DeskMetrics.global.syncRun(it.outcome, trigger) }
+        traceRun(projectId, projectUuid, installUuid, installFriendlyName, trigger).also {
+            DeskMetrics.global.syncRun(it.outcome, trigger)
+            // The one run the log does not record; its `last_synced_at` is the seed's record of it.
+            if (it.outcome == SyncOutcome.NO_OP && !trigger.logsIdleRuns) state.syncHealth.ran(projectId)
+        }
     } catch (e: kotlin.coroutines.cancellation.CancellationException) {
         throw e
     } catch (e: Throwable) {
         DeskMetrics.global.syncRun(null, trigger)
+        if (e !is SyncException) {
+            runCatching {
+                syncLogger.error(projectId, SyncLogEvent.RUN_FAILED, "${SyncHealth.UNKNOWN_CODE}: ${e.message ?: e::class.simpleName}")
+            }
+        }
         throw e
     }
 

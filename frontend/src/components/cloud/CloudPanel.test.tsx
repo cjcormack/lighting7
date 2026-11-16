@@ -54,6 +54,8 @@ vi.mock('@/store/auth', () => ({
 
 // The move has tests of its own (CloudMoveSection.test.tsx).
 vi.mock('./CloudMoveSection', () => ({ CloudMoveSection: () => null }))
+// So has the heartbeat disclosure (CloudHeartbeat.test.tsx).
+vi.mock('./CloudHeartbeat', () => ({ CloudHeartbeat: () => null }))
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 

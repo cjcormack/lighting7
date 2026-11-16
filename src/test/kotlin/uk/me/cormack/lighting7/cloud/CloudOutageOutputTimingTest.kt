@@ -108,4 +108,30 @@ class CloudOutageOutputTimingTest {
         await("a refused reconnect") { it.lastError?.code == CloudErrorCodes.CONNECT_FAILED }
         assertTrue(fake.channelAttempts.get() > attempts, "the desk tried to reconnect")
     }
+
+    @Test
+    fun `a fade runs as it does with no connector while a full heartbeat goes every second`() {
+        val baseline = fade()
+
+        val adminId = seedUser(state, "admin").userId
+        val store = InMemoryCredentialStore()
+        val s = CloudService(
+            database = state.database,
+            config = CloudConfig(fake.baseUrl, true),
+            credentialStore = { store },
+            apiFactory = { CloudApi(it, Duration.ofSeconds(5)) },
+            health = state.deskHealth::payload,
+        ).also { service = it }
+        s.pollDelay = { 20.milliseconds }
+        s.start()
+        fake.decision = FakeCloud.Decision.APPROVE
+        runBlocking { s.startAdoption(adminId) }
+        await("online") { it.connection == CloudConnectionStatus.ONLINE }
+
+        val before = fake.received.count { it.second.body is Message.Health }
+        assertLike(baseline, fade(), "full heartbeats every second")
+        val during = fake.received.count { it.second.body is Message.Health } - before
+        assertTrue(during >= 2, "heartbeats went out during the fade: $during")
+        assertTrue(fake.received.mapNotNull { it.second.body as? Message.Health }.last().diskFreeMb != null, "they were full ones")
+    }
 }

@@ -116,6 +116,7 @@ internal fun removeIfEmptyPlaceholder(state: State, projectId: Int): String? {
         deleteProjectRows(state, project)
         project.name
     } ?: return null
+    state.syncHealth.deleted(projectId)
     deleteProjectFiles(state, uuid)
     logger.info("Onboarding removed the empty placeholder project '{}'", name)
     return name

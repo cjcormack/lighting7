@@ -11,13 +11,18 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.RoutingContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import uk.me.cormack.lighting7.auth.authenticatedUser
 import uk.me.cormack.lighting7.auth.authenticatedUserOrNull
 import uk.me.cormack.lighting7.cloud.AllowResult
 import uk.me.cormack.lighting7.cloud.CloudErrorCodes
 import uk.me.cormack.lighting7.cloud.CloudException
 import uk.me.cormack.lighting7.cloud.CloudStateDto
+import uk.me.cormack.lighting7.cloud.protocol.CloudJson
+import uk.me.cormack.lighting7.cloud.protocol.Message
 import uk.me.cormack.lighting7.mcp.isRemote
+import uk.me.cormack.lighting7.models.toIsoUtc
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -38,6 +43,8 @@ import uk.me.cormack.lighting7.state.State
  *   [CloudErrorCodes.SETTINGS_LOCAL_ONLY] on the public one, since a compromised cloud can mint a
  *   linked admin's token, so nothing it can sign may widen what comes through it (D-17). 409
  *   [CloudErrorCodes.NOT_ADOPTED] for a cloud switch before adoption; the other three need none.
+ * - `GET /install/cloud/heartbeat`: the last heartbeat built for the cloud and when, exactly as it
+ *   goes on the wire (cloud-p3 plan D2); both absent before the first.
  * - `GET /install/cloud/sessions`: the open remote sessions and the latest ended ones.
  * - `DELETE /install/cloud/sessions/{sid}`: end an open one, from either listener: it only reduces reach.
  * - `POST /install/cloud/sessions/{sid}/allow` and `…/deny`: answer a session waiting for an admin
@@ -105,6 +112,16 @@ internal fun Route.routeApiRestInstallCloud(state: State) {
             return@put refuse(e.status, e.code, e.message ?: e.code)
         }
         call.respond(remoteAccessOf(state))
+    }
+
+    get<InstallCloudResource.Heartbeat> {
+        val sent = state.cloud.lastHeartbeat
+        call.respond(
+            CloudHeartbeatDto(
+                sentAt = sent?.at?.toIsoUtc(),
+                health = sent?.let { CloudJson.encodeToJsonElement(Message.Health.serializer(), it.health).jsonObject },
+            ),
+        )
     }
 
     get<InstallCloudResource.Sessions> {
@@ -220,6 +237,9 @@ data class InstallCloudResource(val force: Boolean = false) {
     @Resource("remote")
     data class Remote(val parent: InstallCloudResource = InstallCloudResource())
 
+    @Resource("heartbeat")
+    data class Heartbeat(val parent: InstallCloudResource = InstallCloudResource())
+
     @Resource("sessions")
     data class Sessions(val parent: InstallCloudResource = InstallCloudResource()) {
         @Resource("{sid}")
@@ -236,3 +256,7 @@ data class InstallCloudResource(val force: Boolean = false) {
 /** Who answered, for the log: the signed-in admin, or the desk itself while it has no accounts. */
 private val io.ktor.server.application.ApplicationCall.actorName: String
     get() = authenticatedUserOrNull?.username ?: "the desk"
+
+/** `GET /install/cloud/heartbeat`: the last heartbeat's body as the cloud receives it, and when it was built. */
+@Serializable
+data class CloudHeartbeatDto(val sentAt: String? = null, val health: JsonObject? = null)
