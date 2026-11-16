@@ -3,17 +3,23 @@ package uk.me.cormack.lighting7.cloud
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareDelete
 import io.ktor.client.request.prepareGet
 import io.ktor.client.request.preparePost
+import io.ktor.client.request.preparePut
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpStatement
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.ContentType
+import io.ktor.http.content.ByteArrayContent
+import io.ktor.http.content.OutgoingContent
 import io.ktor.http.content.TextContent
 import io.ktor.http.isSuccess
+import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.jvm.javaio.toByteReadChannel
 import io.ktor.utils.io.readBuffer
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.readByteArray
@@ -23,9 +29,13 @@ import uk.me.cormack.lighting7.cloud.protocol.AdoptionPollResult
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionRequest
 import uk.me.cormack.lighting7.cloud.protocol.AdoptionStarted
 import uk.me.cormack.lighting7.cloud.protocol.ApiError
+import uk.me.cormack.lighting7.cloud.protocol.BackupApiPayload
+import uk.me.cormack.lighting7.cloud.protocol.BackupDto
+import uk.me.cormack.lighting7.cloud.protocol.BackupKeyDto
 import uk.me.cormack.lighting7.cloud.protocol.CloudJson
 import uk.me.cormack.lighting7.cloud.protocol.CloudPaths
 import uk.me.cormack.lighting7.cloud.protocol.CreateRepoRequest
+import uk.me.cormack.lighting7.cloud.protocol.DeclareBackupRequest
 import uk.me.cormack.lighting7.cloud.protocol.ErrorCode
 import uk.me.cormack.lighting7.cloud.protocol.InstallKeys
 import uk.me.cormack.lighting7.cloud.protocol.RepoApiPayload
@@ -37,6 +47,11 @@ import uk.me.cormack.lighting7.cloud.protocol.SignedPayload
 import uk.me.cormack.lighting7.cloud.protocol.Timestamps
 import uk.me.cormack.lighting7.cloud.protocol.UnadoptPayload
 import java.io.Closeable
+import java.io.InputStream
+import java.nio.channels.Channels
+import java.nio.channels.FileChannel
+import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import java.security.PrivateKey
 import java.time.Duration
 import java.time.Instant
@@ -70,13 +85,15 @@ sealed interface RepoReader {
 data class RepoCreated(val repo: RepoDto, val existed: Boolean)
 
 /**
- * The adoption API (cloud-p0 plan D6, D8) and the repo API (cloud-p2 plan D1) over HTTP. Talks only to [baseUrl]'s host and follows
- * no redirect (D12), with the JDK's normal certificate checks.
+ * The cloud's adoption, repo and backup APIs over HTTP. Talks only to [baseUrl]'s host and follows no
+ * redirect, with the JDK's normal certificate checks.
  */
 class CloudApi(
     private val baseUrl: String,
     requestTimeout: Duration = Duration.ofSeconds(15),
     private val clock: () -> Instant = Instant::now,
+    /** How long one backup part's upload may take: 64 MiB on a venue's uplink. */
+    private val partTimeout: Duration = Duration.ofMinutes(15),
 ) : Closeable {
 
     private val client = HttpClient(CIO) {
@@ -131,6 +148,72 @@ class CloudApi(
     suspend fun getRepo(reader: RepoReader, repoId: String): CloudCall<RepoDto> {
         val path = CloudPaths.repo(repoId)
         return decode(exchange(MAX_ANSWER_BYTES) { client.prepareGet(baseUrl + path) { signRepoCall(reader, "GET", path, ByteArray(0)) } }, RepoDto.serializer())
+    }
+
+    /** The org's current data key (`GET /v1/backups/key`), or the one [keyId] names. Held in memory by the caller, never stored. */
+    suspend fun backupKey(signer: InstallSigner, keyId: String? = null): CloudCall<BackupKeyDto> {
+        val path = keyId?.let(CloudPaths::backupKey) ?: CloudPaths.BACKUP_KEY
+        return decode(exchange(MAX_ANSWER_BYTES) { client.prepareGet(baseUrl + path) { signBackupCall(signer, "GET", path, ByteArray(0)) } }, BackupKeyDto.serializer())
+    }
+
+    /** Declare a backup about to be uploaded (`POST /v1/backups`). */
+    suspend fun declareBackup(signer: InstallSigner, request: DeclareBackupRequest): CloudCall<BackupDto> {
+        val body = CloudJson.encodeToString(DeclareBackupRequest.serializer(), request).encodeToByteArray()
+        return decode(
+            exchange(MAX_ANSWER_BYTES) {
+                client.preparePost(baseUrl + CloudPaths.BACKUPS) {
+                    signBackupCall(signer, "POST", CloudPaths.BACKUPS, body)
+                    setBody(ByteArrayContent(body, ContentType.Application.Json))
+                }
+            },
+            BackupDto.serializer(),
+        )
+    }
+
+    /** A backup as the cloud holds it (`GET /v1/backups/{id}`): which parts it has, for a resume. */
+    suspend fun backup(signer: InstallSigner, backupId: String): CloudCall<BackupDto> {
+        val path = CloudPaths.backup(backupId)
+        return decode(exchange(MAX_ANSWER_BYTES) { client.prepareGet(baseUrl + path) { signBackupCall(signer, "GET", path, ByteArray(0)) } }, BackupDto.serializer())
+    }
+
+    /**
+     * Part [n] of [backupId]: [length] bytes of [file] from [offset], streamed and signed over their own
+     * hash, never held in memory. Its timeout is [partTimeout], not the API's.
+     */
+    suspend fun uploadBackupPart(signer: InstallSigner, backupId: String, n: Int, file: Path, offset: Long, length: Long): CloudCall<BackupDto> {
+        val path = CloudPaths.backupPart(backupId, n)
+        val timestamp = Timestamps.format(clock())
+        val payload = regionOf(file, offset, length).use { BackupApiPayload.of(signer.installId, "PUT", path, timestamp, it) }
+        val content = object : OutgoingContent.ReadChannelContent() {
+            override val contentLength: Long = length
+            override val contentType: ContentType = ContentType.Application.OctetStream
+            override fun readFrom(): ByteReadChannel = regionOf(file, offset, length).toByteReadChannel()
+        }
+        return decode(
+            exchange(MAX_ANSWER_BYTES) {
+                client.preparePut(baseUrl + path) {
+                    timeout { requestTimeoutMillis = partTimeout.toMillis() }
+                    header(SignatureHeaders.INSTALL, signer.installId)
+                    header(SignatureHeaders.TIMESTAMP, timestamp)
+                    header(SignatureHeaders.SIGNATURE, InstallKeys.sign(signer.key, payload))
+                    setBody(content)
+                }
+            },
+            BackupDto.serializer(),
+        )
+    }
+
+    /** Every part is in (`POST /v1/backups/{id}/complete`). */
+    suspend fun completeBackup(signer: InstallSigner, backupId: String): CloudCall<BackupDto> {
+        val path = CloudPaths.backupComplete(backupId)
+        return decode(exchange(MAX_ANSWER_BYTES) { client.preparePost(baseUrl + path) { signBackupCall(signer, "POST", path, ByteArray(0)) } }, BackupDto.serializer())
+    }
+
+    private fun HttpRequestBuilder.signBackupCall(signer: InstallSigner, method: String, path: String, body: ByteArray) {
+        val timestamp = Timestamps.format(clock())
+        header(SignatureHeaders.INSTALL, signer.installId)
+        header(SignatureHeaders.TIMESTAMP, timestamp)
+        header(SignatureHeaders.SIGNATURE, InstallKeys.sign(signer.key, BackupApiPayload.of(signer.installId, method, path, timestamp, body)))
     }
 
     private fun HttpRequestBuilder.signRepoCall(reader: RepoReader, method: String, path: String, body: ByteArray) {
@@ -206,6 +289,27 @@ class CloudApi(
     }
 
     companion object {
+        /** [length] bytes of [file] from [offset]. */
+        private fun regionOf(file: Path, offset: Long, length: Long): InputStream {
+            val channel = FileChannel.open(file, StandardOpenOption.READ).position(offset)
+            val whole = Channels.newInputStream(channel)
+            return object : InputStream() {
+                private var left = length
+
+                override fun read(): Int {
+                    if (left <= 0) return -1
+                    return whole.read().also { if (it >= 0) left-- }
+                }
+
+                override fun read(b: ByteArray, off: Int, len: Int): Int {
+                    if (left <= 0) return -1
+                    return whole.read(b, off, minOf(len.toLong(), left).toInt()).also { if (it > 0) left -= it }
+                }
+
+                override fun close() = whole.close()
+            }
+        }
+
         /** Far above any adoption or repo answer; the control channel's frames have their own limit. */
         const val MAX_ANSWER_BYTES: Int = 64 * 1024
 

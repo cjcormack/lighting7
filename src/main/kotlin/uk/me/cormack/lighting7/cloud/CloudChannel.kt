@@ -109,6 +109,9 @@ internal interface ChannelHandler {
     /** A `sync.changed` (cloud-p2 plan D5): a nudge to sync, handed off and never waited on. */
     fun syncChanged(changed: Message.SyncChanged) {}
 
+    /** A `backup.request` (cloud-p3 plan D6): handed off and never waited on; its outcome rides the next heartbeat. */
+    fun backupRequest() {}
+
     object None : ChannelHandler
 }
 
@@ -393,6 +396,7 @@ internal class ChannelConnection(
                     is Message.LinkRefused -> handler.linkRefused(body)
                     is Message.McpCall -> handler.mcpCall(inbound.envelope.id, body)
                     is Message.SyncChanged -> handler.syncChanged(body)
+                    is Message.BackupRequest -> handler.backupRequest()
                     else -> ignore(inbound.envelope)
                 }
             }

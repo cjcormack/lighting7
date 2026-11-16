@@ -56,6 +56,8 @@ vi.mock('@/store/auth', () => ({
 vi.mock('./CloudMoveSection', () => ({ CloudMoveSection: () => null }))
 // So has the heartbeat disclosure (CloudHeartbeat.test.tsx).
 vi.mock('./CloudHeartbeat', () => ({ CloudHeartbeat: () => null }))
+// And the backups section (CloudBackups.test.tsx).
+vi.mock('./CloudBackups', () => ({ CloudBackups: () => null }))
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 

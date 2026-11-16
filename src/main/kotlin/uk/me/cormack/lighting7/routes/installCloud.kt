@@ -15,10 +15,13 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import uk.me.cormack.lighting7.auth.authenticatedUser
 import uk.me.cormack.lighting7.auth.authenticatedUserOrNull
+import uk.me.cormack.lighting7.backup.BackupErrorCodes
+import uk.me.cormack.lighting7.backup.BackupFailure
 import uk.me.cormack.lighting7.cloud.AllowResult
 import uk.me.cormack.lighting7.cloud.CloudErrorCodes
 import uk.me.cormack.lighting7.cloud.CloudException
 import uk.me.cormack.lighting7.cloud.CloudStateDto
+import uk.me.cormack.lighting7.cloud.protocol.BackupKind
 import uk.me.cormack.lighting7.cloud.protocol.CloudJson
 import uk.me.cormack.lighting7.cloud.protocol.Message
 import uk.me.cormack.lighting7.mcp.isRemote
@@ -45,6 +48,14 @@ import uk.me.cormack.lighting7.state.State
  *   [CloudErrorCodes.NOT_ADOPTED] for a cloud switch before adoption; the other three need none.
  * - `GET /install/cloud/heartbeat`: the last heartbeat built for the cloud and when, exactly as it
  *   goes on the wire (cloud-p3 plan D2); both absent before the first.
+ * - `GET /install/cloud/backups`: the *Off-site backups* section (cloud-p3 plan D6): the switch, the
+ *   time, a backup running and the last result.
+ * - `PUT /install/cloud/backups` `{enabled?, dailyAt?}`: change them, **only from the desk's own
+ *   listener** (403 [CloudErrorCodes.SETTINGS_LOCAL_ONLY]), as every switch on what leaves through the
+ *   cloud is; 400 `BACKUP_SETTINGS_INVALID` for a time that is not `HH:mm`.
+ * - `POST /install/cloud/backups/run`: *Back up now*, answered 202 with the status at once, the running
+ *   backup when one already runs; 409 [CloudErrorCodes.NOT_ADOPTED] before adoption; over remote access
+ *   403 `BACKUP_REMOTE_OFF` while the nightly switch is off.
  * - `GET /install/cloud/sessions`: the open remote sessions and the latest ended ones.
  * - `DELETE /install/cloud/sessions/{sid}`: end an open one, from either listener: it only reduces reach.
  * - `POST /install/cloud/sessions/{sid}/allow` and `…/deny`: answer a session waiting for an admin
@@ -122,6 +133,35 @@ internal fun Route.routeApiRestInstallCloud(state: State) {
                 health = sent?.let { CloudJson.encodeToJsonElement(Message.Health.serializer(), it.health).jsonObject },
             ),
         )
+    }
+
+    get<InstallCloudResource.Backups> {
+        call.respond(state.backups.status.value)
+    }
+
+    put<InstallCloudResource.Backups> {
+        if (call.isRemote) return@put refuseRemoteSettings()
+        val request = call.receive<UpdateBackupSettingsRequest>()
+        try {
+            call.respond(state.backups.update(enabled = request.enabled, dailyAt = request.dailyAt))
+        } catch (e: BackupFailure) {
+            refuse(HttpStatusCode.BadRequest, e.code, e.message ?: e.code)
+        }
+    }
+
+    post<InstallCloudResource.Backups.Run> {
+        if (state.cloud.current().adopted == null) {
+            return@post refuse(HttpStatusCode.Conflict, CloudErrorCodes.NOT_ADOPTED, "Adopt this desk before backing it up: the backup goes to its cloud.")
+        }
+        if (call.isRemote && !state.backups.enabled) {
+            return@post refuse(
+                HttpStatusCode.Forbidden,
+                BackupErrorCodes.REMOTE_OFF,
+                "Over remote access a backup can be started only while Back up every night is on: what leaves through the cloud is the desk's decision.",
+            )
+        }
+        state.backups.request(BackupKind.MANUAL)
+        call.respond(HttpStatusCode.Accepted, state.backups.status.value)
     }
 
     get<InstallCloudResource.Sessions> {
@@ -240,6 +280,12 @@ data class InstallCloudResource(val force: Boolean = false) {
     @Resource("heartbeat")
     data class Heartbeat(val parent: InstallCloudResource = InstallCloudResource())
 
+    @Resource("backups")
+    data class Backups(val parent: InstallCloudResource = InstallCloudResource()) {
+        @Resource("run")
+        data class Run(val parent: Backups = Backups())
+    }
+
     @Resource("sessions")
     data class Sessions(val parent: InstallCloudResource = InstallCloudResource()) {
         @Resource("{sid}")
@@ -256,6 +302,10 @@ data class InstallCloudResource(val force: Boolean = false) {
 /** Who answered, for the log: the signed-in admin, or the desk itself while it has no accounts. */
 private val io.ktor.server.application.ApplicationCall.actorName: String
     get() = authenticatedUserOrNull?.username ?: "the desk"
+
+/** Every field optional: absent leaves it as it is. */
+@Serializable
+data class UpdateBackupSettingsRequest(val enabled: Boolean? = null, val dailyAt: String? = null)
 
 /** `GET /install/cloud/heartbeat`: the last heartbeat's body as the cloud receives it, and when it was built. */
 @Serializable

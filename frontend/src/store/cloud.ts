@@ -91,6 +91,33 @@ export interface CloudHeartbeat {
   health?: Record<string, unknown> | null
 }
 
+/** Mirrors `BackupRunDto`: a backup running now. */
+export interface BackupRun {
+  kind: 'SCHEDULED' | 'REQUESTED' | 'MANUAL' | string
+  /** Waiting for the show to go quiet, making the archive, or uploading it. */
+  phase: 'WAITING' | 'MAKING' | 'UPLOADING' | string
+  startedAt: string
+  parts?: number | null
+  partsSent?: number | null
+}
+
+/** Mirrors `BackupStatusDto`: the Cloud tab's *Off-site backups* section. */
+export interface BackupStatus {
+  enabled: boolean
+  /** Local time, `HH:mm`. */
+  dailyAt: string
+  nextAt?: string | null
+  running?: BackupRun | null
+  lastOkAt?: string | null
+  lastFailedAt?: string | null
+  /** The last failure's code and words, while the last attempt failed. */
+  lastCode?: string | null
+  lastMessage?: string | null
+  lastBackupId?: string | null
+  lastKind?: string | null
+  lastSizeBytes?: number | null
+}
+
 export const cloudApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     cloudState: build.query<CloudState, void>({
@@ -136,6 +163,31 @@ export const cloudApi = restApi.injectEndpoints({
     cloudHeartbeat: build.query<CloudHeartbeat, void>({
       query: () => 'install/cloud/heartbeat',
       keepUnusedDataFor: 0,
+    }),
+    backupStatus: build.query<BackupStatus, void>({
+      query: () => 'install/cloud/backups',
+    }),
+    setBackupSettings: build.mutation<BackupStatus, { enabled?: boolean; dailyAt?: string }>({
+      query: (body) => ({ url: 'install/cloud/backups', method: 'PUT', body }),
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled
+          dispatch(cloudApi.util.upsertQueryData('backupStatus', undefined, data))
+        } catch {
+          // The section renders the refusal.
+        }
+      },
+    }),
+    runBackup: build.mutation<BackupStatus, void>({
+      query: () => ({ url: 'install/cloud/backups/run', method: 'POST' }),
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled
+          dispatch(cloudApi.util.upsertQueryData('backupStatus', undefined, data))
+        } catch {
+          // The section renders the refusal.
+        }
+      },
     }),
     remoteSessions: build.query<RemoteSessions, void>({
       query: () => 'install/cloud/sessions',
@@ -183,6 +235,9 @@ export const {
   useRemoteAccessSettingsQuery,
   useSetRemoteAccessMutation,
   useCloudHeartbeatQuery,
+  useBackupStatusQuery,
+  useSetBackupSettingsMutation,
+  useRunBackupMutation,
   useRemoteSessionsQuery,
   useEndRemoteSessionMutation,
   useAllowRemoteSessionMutation,

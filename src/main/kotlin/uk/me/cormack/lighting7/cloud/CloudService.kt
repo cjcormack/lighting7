@@ -83,6 +83,8 @@ class CloudService(
      * Without one the desk sends the version and uptime alone, and does not announce `health.v2`.
      */
     private val health: (() -> Message.Health)? = null,
+    /** The desk's off-site backups (cloud-p3 plan D6); without them `backup.v1` is not announced. */
+    private val backups: CloudBackups? = null,
 ) {
     private val logger = LoggerFactory.getLogger(CloudService::class.java)
 
@@ -307,6 +309,10 @@ class CloudService(
         override fun mcpCall(id: String, call: Message.McpCall) = mcpRelay.call(id, call)
 
         override fun syncChanged(changed: Message.SyncChanged) = onSyncChanged(changed.url)
+
+        override fun backupRequest() {
+            backups?.requested()
+        }
     }
 
     private val adoption = CloudAdoptionService(
@@ -493,19 +499,29 @@ class CloudService(
     }
 
     /**
-     * What the desk announces (D6): that it takes remote sessions, relays MCP, syncs with cloud repos and
-     * sends the full heartbeat (cloud-p3 plan D3, whenever it has a [health] provider), and the state entries for each door's switch and
-     * the sidecar.
+     * What the desk announces (D6): that it takes remote sessions, relays MCP, syncs with cloud repos,
+     * sends the full heartbeat (cloud-p3 plan D3, whenever it has a [health] provider) and makes off-site
+     * backups (cloud-p3 plan D1, whenever it has [backups]), and the state entries for each door's switch,
+     * the backups' and the sidecar.
      */
     fun capabilities(): List<String> = buildList {
         add(Capability.REMOTE_V1)
         add(Capability.MCP_V1)
         add(Capability.SYNC_V1)
         if (health != null) add(Capability.HEALTH_V2)
+        backups?.let { b ->
+            add(Capability.BACKUP_V1)
+            if (!b.enabled) add(Capability.BACKUP_OFF)
+        }
         val now = switches
         if (!now.remoteAccess) add(Capability.REMOTE_OFF)
         if (!now.mcpAccess) add(Capability.MCP_OFF)
         if (!sidecarRunning) add(Capability.REMOTE_NO_SIDECAR)
+    }
+
+    /** The *Off-site backups* switch moved: say what is announced now (cloud-p3 plan D1). */
+    fun backupSwitchChanged() {
+        liveConnection?.refreshCapabilities()
     }
 
     /**
@@ -675,6 +691,14 @@ class CloudService(
         /** WebSocket pings, so a cloud that vanished without closing is noticed within a ping and its timeout. */
         private val PING_INTERVAL = 25.seconds
     }
+}
+
+/** What the cloud channel needs of the desk's backups: the switch, and a request handed off at once. */
+interface CloudBackups {
+    val enabled: Boolean
+
+    /** The cloud's `backup.request`; must return at once. */
+    fun requested()
 }
 
 /** A heartbeat as built for the cloud, and when. */

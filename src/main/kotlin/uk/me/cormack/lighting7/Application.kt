@@ -22,6 +22,7 @@ import uk.me.cormack.lighting7.plugins.configureSockets
 import uk.me.cormack.lighting7.plugins.installSentryTracing
 import uk.me.cormack.lighting7.routes.configureRouting
 import uk.me.cormack.lighting7.state.BootPhase
+import uk.me.cormack.lighting7.state.CONFIG_FILE_PROPERTY
 import uk.me.cormack.lighting7.state.InstanceLock
 import uk.me.cormack.lighting7.state.MdnsService
 import uk.me.cormack.lighting7.state.State
@@ -70,6 +71,10 @@ fun main(argv: Array<String>) {
         }
         args += "-config=$configPath"
     }
+    args.lastOrNull { it.startsWith("-config=") && it != "-config=application.conf" }
+        ?.let { Path.of(it.removePrefix("-config=")).toAbsolutePath() }
+        ?.takeIf { Files.isRegularFile(it) }
+        ?.let { System.setProperty(CONFIG_FILE_PROPERTY, it.toString()) }
 
     EngineMain.main(args.toTypedArray())
 }
@@ -100,6 +105,8 @@ fun Application.module() {
     val publicListener = startPublicListener(state)
     // On its own scope, off the show's path: a pending adoption resumes polling.
     state.cloud.start()
+    // Its own low-priority thread; the nightly backup waits for a quiet show (cloud-p3 plan D6).
+    state.backups.start()
     // Before the show, like the cloud, so its settings apply on a desk whose show failed to start; a
     // message that arrives before the show is up is a *failed* row. A bind failure is `osc.state`'s
     // error, never a failed startup.
