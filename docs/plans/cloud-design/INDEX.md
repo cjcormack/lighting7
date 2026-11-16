@@ -20,7 +20,7 @@ repos. So **each phase is two plans**, one per repo, written together:
 | P0 | `docs/plans/completed/cloud-p0-plan.md` (done) | `docs/plans/completed/p0-plan.md` (done) |
 | P1 | `docs/plans/completed/cloud-p1-plan.md` (done) | `docs/plans/p1-plan.md` (done) |
 | P2 | `docs/plans/cloud-p2-plan.md` (done) | `docs/plans/p2-plan.md` (done) |
-| P3 | `docs/plans/cloud-p3-plan.md` (planned) | `docs/plans/p3-plan.md` (planned) |
+| P3 | `docs/plans/completed/cloud-p3-plan.md` (done) | `docs/plans/p3-plan.md` (planned) |
 | … | `cloud-pN-plan.md` | `pN-plan.md` |
 
 Each plan is run by `/next-session` in its own repo, which keeps its own copy of the skill. A session
