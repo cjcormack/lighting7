@@ -55,6 +55,7 @@ read its licence from the `LICENSE` file in its module (`go env GOMODCACHE`), ad
 |---|---|
 | MIT, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD | Permissive: keep the notice. The Eclipse Distribution License 1.0 is the BSD 3-Clause and is recorded as it. |
 | Apache-2.0 | Permissive, with a patent grant. |
+| BlueOak-1.0.0 | Permissive, with a patent grant: keep the notice. graceful-fs moved to it from ISC in 4.2.12. |
 | EPL-1.0, EPL-2.0, MPL-2.0 | Weak copyleft that reaches only the library's own files. Allowed for a library used unmodified, as every one here is. |
 | blessing | SQLite's public-domain dedication. |
 
