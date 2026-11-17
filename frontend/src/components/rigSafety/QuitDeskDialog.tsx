@@ -38,11 +38,11 @@ export function QuitDeskDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     setError(null)
     quitDesk({ force: !safe })
       .unwrap()
-      .then(() => {
+      .then((answer) => {
         onOpenChange(false)
         const at = Date.now()
         const until = coolsAt(rig, at)
-        markDeskQuit(until > at ? until : null)
+        markDeskQuit(until > at ? until : null, answer.backingUp === true ? (answer.backup ?? null) : null)
       })
       .catch((e: unknown) => setError(formatError(e)))
   }

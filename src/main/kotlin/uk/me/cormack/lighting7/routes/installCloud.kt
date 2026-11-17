@@ -50,12 +50,12 @@ import uk.me.cormack.lighting7.state.State
  *   goes on the wire (cloud-p3 plan D2); both absent before the first.
  * - `GET /install/cloud/backups`: the *Off-site backups* section (cloud-p3 plan D6): the switch, the
  *   time, a backup running and the last result.
- * - `PUT /install/cloud/backups` `{enabled?, dailyAt?}`: change them, **only from the desk's own
+ * - `PUT /install/cloud/backups` `{enabled?, dailyAt?, nightly?, onQuit?}`: change them, **only from the desk's own
  *   listener** (403 [CloudErrorCodes.SETTINGS_LOCAL_ONLY]), as every switch on what leaves through the
  *   cloud is; 400 `BACKUP_SETTINGS_INVALID` for a time that is not `HH:mm`.
  * - `POST /install/cloud/backups/run`: *Back up now*, answered 202 with the status at once, the running
  *   backup when one already runs; 409 [CloudErrorCodes.NOT_ADOPTED] before adoption; over remote access
- *   403 `BACKUP_REMOTE_OFF` while the nightly switch is off.
+ *   403 `BACKUP_REMOTE_OFF` while the backups switch is off.
  * - `GET /install/cloud/restore`: what the adoption's approval asked this desk to restore (cloud-p3
  *   plan D9), the backup it names, the name a confirm must type, and how a confirm is going.
  * - `POST /install/cloud/restore/confirm` `{name}`: confirm it, **only from the desk's own listener**
@@ -151,7 +151,7 @@ internal fun Route.routeApiRestInstallCloud(state: State) {
         if (call.isRemote) return@put refuseRemoteSettings()
         val request = call.receive<UpdateBackupSettingsRequest>()
         try {
-            call.respond(state.backups.update(enabled = request.enabled, dailyAt = request.dailyAt))
+            call.respond(state.backups.update(enabled = request.enabled, dailyAt = request.dailyAt, nightly = request.nightly, onQuit = request.onQuit))
         } catch (e: BackupFailure) {
             refuse(HttpStatusCode.BadRequest, e.code, e.message ?: e.code)
         }
@@ -165,7 +165,7 @@ internal fun Route.routeApiRestInstallCloud(state: State) {
             return@post refuse(
                 HttpStatusCode.Forbidden,
                 BackupErrorCodes.REMOTE_OFF,
-                "Over remote access a backup can be started only while Back up every night is on: what leaves through the cloud is the desk's decision.",
+                "Over remote access a backup can be started only while Back up to Lighting7 Cloud is on: what leaves through the cloud is the desk's decision.",
             )
         }
         state.backups.request(BackupKind.MANUAL)
@@ -353,7 +353,12 @@ data class ConfirmRestoreRequest(val name: String)
 
 /** Every field optional: absent leaves it as it is. */
 @Serializable
-data class UpdateBackupSettingsRequest(val enabled: Boolean? = null, val dailyAt: String? = null)
+data class UpdateBackupSettingsRequest(
+    val enabled: Boolean? = null,
+    val dailyAt: String? = null,
+    val nightly: Boolean? = null,
+    val onQuit: Boolean? = null,
+)
 
 /** `GET /install/cloud/heartbeat`: the last heartbeat's body as the cloud receives it, and when it was built. */
 @Serializable

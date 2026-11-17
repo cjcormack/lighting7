@@ -8,6 +8,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.auth.requireAdmin
+import uk.me.cormack.lighting7.backup.BackupStatusDto
 import uk.me.cormack.lighting7.mcp.isRemote
 import uk.me.cormack.lighting7.state.State
 
@@ -20,6 +21,10 @@ import uk.me.cormack.lighting7.state.State
  * - **It warns when the rig is not marked safe**: 409 [CODE_RIG_NOT_SAFE] unless *Ready to switch
  *   off* holds, the rig is made safe and only cooling (quitting cuts no fixture's mains), or the
  *   caller sends `force`, which the confirm sends once the operator has read why.
+ *
+ * - **It backs up first** when the desk backs up on quit (the Cloud tab's *When the desk quits*): it
+ *   answers `backingUp` with the backup's status and exits once the backup has ended. `skipBackup`
+ *   (*Quit without waiting*) ends the wait at once.
  *
  * Making the rig safe and quitting are separate (D9): this never lamps off or blacks out.
  */
@@ -40,8 +45,15 @@ internal fun Route.routeApiRestInstallQuit(state: State) {
                 ErrorResponse("The rig is not marked safe to switch off — make it safe first, or quit anyway", CODE_RIG_NOT_SAFE),
             )
         }
-        call.respond(HttpStatusCode.Accepted, QuitDeskResponse(rigWasSafe = ready))
-        state.quitDesk()
+        val quit = state.quitDesk(skipBackup = request.skipBackup)
+        try {
+            call.respond(
+                HttpStatusCode.Accepted,
+                QuitDeskResponse(rigWasSafe = ready, backingUp = quit.backingUp, backup = state.backups.status.value.takeIf { quit.backingUp }),
+            )
+        } finally {
+            quit.proceed()
+        }
     }
 }
 
@@ -49,10 +61,16 @@ internal const val CODE_QUIT_LOCAL_ONLY = "QUIT_LOCAL_ONLY"
 internal const val CODE_RIG_NOT_SAFE = "RIG_NOT_SAFE"
 
 @Serializable
-data class QuitDeskRequest(val force: Boolean = false)
+data class QuitDeskRequest(val force: Boolean = false, val skipBackup: Boolean = false)
 
 @Serializable
-data class QuitDeskResponse(val rigWasSafe: Boolean)
+data class QuitDeskResponse(
+    val rigWasSafe: Boolean,
+    /** The desk exits once a backup it is making ends. */
+    val backingUp: Boolean = false,
+    /** The backups' status as the quit began, while [backingUp]. */
+    val backup: BackupStatusDto? = null,
+)
 
 @Resource("/install/quit")
 data object InstallQuitResource

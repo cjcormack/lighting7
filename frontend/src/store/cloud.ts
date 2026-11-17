@@ -121,7 +121,7 @@ export interface CloudHeartbeat {
 
 /** Mirrors `BackupRunDto`: a backup running now. */
 export interface BackupRun {
-  kind: 'SCHEDULED' | 'REQUESTED' | 'MANUAL' | string
+  kind: 'SCHEDULED' | 'REQUESTED' | 'MANUAL' | 'QUIT' | string
   /** Waiting for the show to go quiet, making the archive, or uploading it. */
   phase: 'WAITING' | 'MAKING' | 'UPLOADING' | string
   startedAt: string
@@ -129,11 +129,23 @@ export interface BackupRun {
   partsSent?: number | null
 }
 
+/** The `PUT /install/cloud/backups` body: each field absent keeps what is stored. */
+export interface BackupSettingsChange {
+  enabled?: boolean
+  dailyAt?: string
+  nightly?: boolean
+  onQuit?: boolean
+}
+
 /** Mirrors `BackupStatusDto`: the Cloud tab's *Off-site backups* section. */
 export interface BackupStatus {
   enabled: boolean
   /** Local time, `HH:mm`. */
   dailyAt: string
+  /** Back up each night at `dailyAt`; absent means on. */
+  nightly?: boolean
+  /** Back up when Quit desk stops the desk. */
+  onQuit?: boolean
   nextAt?: string | null
   running?: BackupRun | null
   lastOkAt?: string | null
@@ -195,7 +207,7 @@ export const cloudApi = restApi.injectEndpoints({
     backupStatus: build.query<BackupStatus, void>({
       query: () => 'install/cloud/backups',
     }),
-    setBackupSettings: build.mutation<BackupStatus, { enabled?: boolean; dailyAt?: string }>({
+    setBackupSettings: build.mutation<BackupStatus, BackupSettingsChange>({
       query: (body) => ({ url: 'install/cloud/backups', method: 'PUT', body }),
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
         try {

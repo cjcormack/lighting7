@@ -84,9 +84,6 @@ import uk.me.cormack.lighting7.telemetry.DbTracing
 
 private val logger = LoggerFactory.getLogger("State")
 
-/** How long *Quit desk* waits for its answer to reach the browser before the process goes. */
-private const val QUIT_GRACE_MS = 500L
-
 /** [localSyncRepos]: a `file:` remote syncs with no credentials, as tests stand bare repos in for remotes; the desk never sets it. */
 class State(val config: ApplicationConfig, private val localSyncRepos: Boolean = false) {
     // Exposed's `Database.connect()` doesn't surface the underlying datasource, so the
@@ -1032,19 +1029,27 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
     /** How the desk process ends. A test seam: *Quit desk*'s route test must not end the JVM. */
     @Volatile internal var exitDesk: () -> Unit = { kotlin.system.exitProcess(0) }
 
-    /**
-     * *Quit desk* (venue-visit plan S6, D13): once the request's answer has had time to leave, write
-     * what the scaler writer still holds and exit 0. The JVM's shutdown hooks stop the server; the
-     * Windows launcher exits with its backend rather than restarting it, and `./gradlew run` ends.
-     */
-    fun quitDesk() {
-        Thread({
-            Thread.sleep(QUIT_GRACE_MS)
+    private val deskQuit = DeskQuit(
+        startBackup = {
+            runCatching { flushScalerWrites() }
+            backups.startQuitBackup()
+        },
+        exit = {
             runCatching { flushScalerWrites() }
             logger.info("Quit desk: exiting")
             exitDesk()
-        }, "quit-desk").start()
-    }
+        },
+    )
+
+    /**
+     * *Quit desk* (venue-visit plan S6, D13): back up first when the desk backs up on quit, waiting at
+     * most 15 minutes, then, once the request's answer has had time to leave, write what the scaler
+     * writer still holds and exit 0. The JVM's shutdown hooks stop the server; the Windows launcher exits
+     * with its backend rather than restarting it, and `./gradlew run` ends. Nothing waits or exits until
+     * [QuitStart.proceed]. A second call only ends the wait for the backup when [skipBackup]; it starts
+     * nothing.
+     */
+    internal fun quitDesk(skipBackup: Boolean = false): QuitStart = deskQuit.quit(skipBackup)
 
     /**
      * Whether *Make rig safe*'s blackout holds on [projectId], read without creating its holder: a

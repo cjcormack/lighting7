@@ -11,7 +11,9 @@ vi.mock('@/store/rigSafety', () => ({
   useQuitDeskMutation: () => [quitDesk, { isLoading: false }],
 }))
 const markDeskQuit = vi.fn()
-vi.mock('./deskQuit', () => ({ markDeskQuit: (coolsAt: number | null) => markDeskQuit(coolsAt) }))
+vi.mock('./deskQuit', () => ({
+  markDeskQuit: (coolsAt: number | null, backup?: unknown) => (backup == null ? markDeskQuit(coolsAt) : markDeskQuit(coolsAt, backup)),
+}))
 
 import { QuitDeskDialog } from './QuitDeskDialog'
 
@@ -32,6 +34,15 @@ describe('QuitDeskDialog', () => {
     expect(quitDesk).toHaveBeenCalledWith({ force: false })
     expect(markDeskQuit).toHaveBeenCalled()
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('hands the quit screen the backup a desk makes before it exits', async () => {
+    rig = { ...NOTHING_SAFE, ready: true, blackout: true }
+    const status = { enabled: true, dailyAt: '04:00', onQuit: true, running: { kind: 'QUIT', phase: 'MAKING', startedAt: 'x' } }
+    answer = Promise.resolve({ rigWasSafe: true, backingUp: true, backup: status })
+    render(<QuitDeskDialog open onOpenChange={() => {}} />)
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Quit desk' })))
+    expect(markDeskQuit).toHaveBeenCalledWith(null, status)
   })
 
   it('quits a cooling rig without force, and says how long to leave the power on', async () => {

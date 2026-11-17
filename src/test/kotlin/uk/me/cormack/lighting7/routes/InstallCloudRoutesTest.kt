@@ -317,7 +317,7 @@ class InstallCloudRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `Back up now over remote access runs only while the nightly switch is on`() = testApplication {
+    fun `Back up now over remote access runs only while the backups switch is on`() = testApplication {
         val desk = RemoteDesk(state, fake)
         desk.adopt(seedUser(state, "admin").userId)
         mountPublic()

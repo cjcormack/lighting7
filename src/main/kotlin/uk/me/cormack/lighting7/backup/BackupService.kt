@@ -10,6 +10,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.statements.UpdateBuilder
@@ -57,6 +58,9 @@ object BackupErrorCodes {
 data class BackupSettings(
     val enabled: Boolean = false,
     val dailyAt: String = BackupSchedule.DEFAULT_DAILY_AT,
+    val nightly: Boolean = true,
+    val onQuit: Boolean = false,
+    val quitPending: Boolean = false,
     val lastOkAt: Instant? = null,
     val lastFailedAt: Instant? = null,
     val lastCode: String? = null,
@@ -75,7 +79,11 @@ data class BackupStatusDto(
     val enabled: Boolean,
     /** Local time, `HH:mm`. */
     val dailyAt: String,
-    /** When the next scheduled one is due, while the switch is on. */
+    /** Back up each night at [dailyAt]. */
+    val nightly: Boolean = true,
+    /** Back up when *Quit desk* stops the desk. */
+    val onQuit: Boolean = false,
+    /** When the next scheduled one is due, while the switch and [nightly] are on. */
     val nextAt: String? = null,
     val running: BackupRunDto? = null,
     val lastOkAt: String? = null,
@@ -140,9 +148,10 @@ object BackupSchedule {
 }
 
 /**
- * The desk's off-site backups (cloud-p3 plan D5–D8): the machine-local switch and time, the nightly
- * run and its wait for a quiet show, a backup asked for now (the Cloud tab's button, the cloud's
- * `backup.request`), and the upload in parts with its resume.
+ * The desk's off-site backups (cloud-p3 plan D5–D8): the machine-local switch, its two schedules — each
+ * night at a time, and as *Quit desk* stops the desk — the nightly run and its wait for a quiet show, a
+ * backup asked for now (the Cloud tab's button, the cloud's `backup.request`), and the upload in parts
+ * with its resume, which a start also runs for a backup left staged.
  *
  * The work runs on one thread of its own, `backup-1`, at the lowest priority, never on the show's or
  * the cloud channel's, and at most one backup runs at a time. It writes the database only when a
@@ -202,26 +211,84 @@ class BackupService(
         )
     }
 
-    /** Sweep what a stopped backup left in staging and start the nightly schedule. Idempotent. */
+    /**
+     * Sweep what a stopped backup left in staging, finish the last quit's backup while the desk backs up
+     * on quit, and start the nightly schedule. Idempotent. A staged QUIT backup is resumed, or remade
+     * past [RESUME_WINDOW]; a quit that staged nothing leaves [BackupSettings.quitPending] for a fresh one.
+     */
     fun start() {
         synchronized(scheduleLock) {
             if (started) return
             started = true
         }
-        scope.launch { runCatching { staging.sweep() }.onFailure { logger.warn("Couldn't sweep backup staging", it) } }
+        scope.launch {
+            runCatching { staging.sweep() }.onFailure { logger.warn("Couldn't sweep backup staging", it) }
+            val left = runCatching { staging.staged() }.getOrNull()
+            if (!backsUpOnQuit()) return@launch
+            if (left?.kind == BackupKind.QUIT) {
+                logger.info("Finishing the backup {} left staged at the last quit", left.backupId)
+                claim(BackupKind.QUIT)?.let { execute(it.kind) }
+            } else if (settings.quitPending) {
+                logger.info("Making the backup the last quit could not")
+                claim(BackupKind.QUIT)?.let { execute(it.kind, fresh = true) }
+            }
+        }
         reschedule()
     }
 
-    /** Change the switch or the time; only the desk's own listener's admin route calls this. */
-    fun update(enabled: Boolean? = null, dailyAt: String? = null): BackupStatusDto {
+    private fun backsUpOnQuit(): Boolean = settings.let { it.enabled && it.onQuit } && signer() != null
+
+    /**
+     * The backup *Quit desk* waits for, or null when it backs up nothing: always a fresh QUIT archive,
+     * made once a backup already making or uploading has ended; a scheduled one only waiting gives way.
+     * One that does not finish uploading stays staged for [start] to finish.
+     */
+    fun startQuitBackup(): Job? {
+        if (!backsUpOnQuit()) return null
+        markQuitPending()
+        claim(BackupKind.QUIT)?.let { claimed -> return scope.launch { execute(claimed.kind, fresh = true) } }
+        return scope.launch {
+            while (true) {
+                status.first { running.get() == null && it.running == null }
+                claim(BackupKind.QUIT)?.let { claimed -> return@launch execute(claimed.kind, fresh = true) }
+            }
+        }
+    }
+
+    private fun markQuitPending() {
+        synchronized(this) {
+            runCatching { write { row -> row[DaoBackupSettingsTable.quitPending] = true } }
+                .onFailure { logger.warn("Couldn't record the quit's backup as pending", it) }
+            settings = settings.copy(quitPending = true)
+        }
+    }
+
+    /** Change the switch, the time or the schedules; only the desk's own listener's admin route calls this. */
+    fun update(
+        enabled: Boolean? = null,
+        dailyAt: String? = null,
+        nightly: Boolean? = null,
+        onQuit: Boolean? = null,
+    ): BackupStatusDto {
         if (dailyAt != null && !BackupSchedule.isValidTime(dailyAt)) {
             throw BackupFailure(BackupErrorCodes.SETTINGS_INVALID, "The time must be HH:mm, 00:00 to 23:59.")
         }
         val switched: Boolean
         synchronized(this) {
             val was = settings
-            val next = was.copy(enabled = enabled ?: was.enabled, dailyAt = dailyAt ?: was.dailyAt)
-            write { row -> row[DaoBackupSettingsTable.enabled] = next.enabled; row[DaoBackupSettingsTable.dailyAt] = next.dailyAt }
+            val next = was.copy(
+                enabled = enabled ?: was.enabled,
+                dailyAt = dailyAt ?: was.dailyAt,
+                nightly = nightly ?: was.nightly,
+                onQuit = onQuit ?: was.onQuit,
+            ).let { it.copy(quitPending = it.quitPending && it.enabled && it.onQuit) }
+            write { row ->
+                row[DaoBackupSettingsTable.enabled] = next.enabled
+                row[DaoBackupSettingsTable.dailyAt] = next.dailyAt
+                row[DaoBackupSettingsTable.nightly] = next.nightly
+                row[DaoBackupSettingsTable.onQuit] = next.onQuit
+                row[DaoBackupSettingsTable.quitPending] = next.quitPending
+            }
             settings = next
             switched = was.enabled != next.enabled
         }
@@ -264,10 +331,10 @@ class BackupService(
     }
 
     /** Run the backup [running] has been claimed for; it is let go at the end. */
-    private suspend fun execute(kind: String) {
+    private suspend fun execute(kind: String, fresh: Boolean = false) {
         try {
             val staged = Tracing.transactionSuspending(OP_MAKE, OP_MAKE) { span ->
-                prepare(kind).also { span?.setData("sizeBytes", it.sizeBytes) }
+                prepare(kind, fresh).also { span?.setData("sizeBytes", it.sizeBytes) }
             }
             setRunning { it.copy(phase = PHASE_UPLOADING, parts = backupPartCount(staged.sizeBytes), partsSent = 0) }
             Tracing.transactionSuspending(OP_UPLOAD, OP_UPLOAD) { span ->
@@ -293,13 +360,12 @@ class BackupService(
         }
     }
 
-    /** The staged backup to finish, while it is within [RESUME_WINDOW]; else a new archive under a fresh key. */
-    private suspend fun prepare(kind: String): StagedBackup {
+    /** The staged backup to finish, while it is within [RESUME_WINDOW] and not [fresh]; else a new archive under a fresh key. */
+    private suspend fun prepare(kind: String, fresh: Boolean): StagedBackup {
         val signer = signer() ?: throw BackupFailure(CloudErrorCodes.NOT_ADOPTED, "This desk isn't adopted, so it has nowhere to back up to.")
         val api = api() ?: throw BackupFailure(CloudErrorCodes.NOT_ADOPTED, "This desk has no cloud configured.")
         staging.staged()?.let { staged ->
-            val since = Timestamps.parse(staged.declaredAt ?: staged.madeAt)
-            if (since != null && Duration.between(since, clock()) < RESUME_WINDOW) return staged
+            if (!fresh && resumable(staged)) return staged
             staging.discard(staged.backupId)
         }
         val key = api.backupKey(signer).orFail()
@@ -311,6 +377,12 @@ class BackupService(
         } finally {
             keyBytes.fill(0)
         }
+    }
+
+    /** Whether [staged] was declared (or made) within [RESUME_WINDOW], so the cloud still holds its upload. */
+    private fun resumable(staged: StagedBackup): Boolean {
+        val since = Timestamps.parse(staged.declaredAt ?: staged.madeAt) ?: return false
+        return Duration.between(since, clock()) < RESUME_WINDOW
     }
 
     /** Declare (once), send every part the cloud lacks, then complete; the archive stays staged on a failure. */
@@ -384,7 +456,7 @@ class BackupService(
             scheduleJob = scope.launch {
                 while (true) {
                     val s = settings
-                    if (!s.enabled) {
+                    if (!s.enabled || !s.nightly) {
                         nextDue = null
                         publish()
                         return@launch
@@ -405,19 +477,19 @@ class BackupService(
      * anyway. A backup asked for while it waits runs instead, and ends tonight's wait.
      */
     internal suspend fun runScheduled() {
-        if (!settings.enabled) return
+        if (!nightlyOn) return
         if (busy()) {
             val waiting = BackupRunDto(BackupKind.SCHEDULED, PHASE_WAITING, clock().toIsoUtc())
             if (!running.compareAndSet(null, waiting)) return
             publish()
             val quiet = try {
-                BackupSchedule.awaitQuiet({ running.get() === waiting && settings.enabled && busy() }, clock, sleep)
+                BackupSchedule.awaitQuiet({ running.get() === waiting && nightlyOn && busy() }, clock, sleep)
             } catch (e: CancellationException) {
                 if (running.compareAndSet(waiting, null)) publish()
                 throw e
             }
             if (running.get() !== waiting) return
-            if (!settings.enabled) {
+            if (!nightlyOn) {
                 if (running.compareAndSet(waiting, null)) publish()
                 return
             }
@@ -434,38 +506,45 @@ class BackupService(
         }
     }
 
+    private val nightlyOn: Boolean get() = settings.let { it.enabled && it.nightly }
+
     private fun recordOk(staged: StagedBackup) {
         val now = clock()
-        val next = settings.copy(
-            lastOkAt = now,
-            lastCode = null,
-            lastMessage = null,
-            lastBackupId = staged.backupId,
-            lastKind = staged.kind,
-            lastSizeBytes = staged.sizeBytes,
-        )
-        writeResult(next)
+        writeResult {
+            it.copy(
+                lastOkAt = now,
+                lastCode = null,
+                lastMessage = null,
+                lastBackupId = staged.backupId,
+                lastKind = staged.kind,
+                lastSizeBytes = staged.sizeBytes,
+                quitPending = it.quitPending && staged.kind != BackupKind.QUIT,
+            )
+        }
     }
 
     private fun recordFailure(code: String, message: String) {
-        writeResult(settings.copy(lastFailedAt = clock(), lastCode = code, lastMessage = message.take(500)))
+        val now = clock()
+        writeResult { it.copy(lastFailedAt = now, lastCode = code, lastMessage = message.take(500)) }
     }
 
-    private fun writeResult(next: BackupSettings) {
+    /** Record a result: [change] sets only result fields, applied to the settings as they are now. */
+    private fun writeResult(change: (BackupSettings) -> BackupSettings) {
         synchronized(this) {
-            val merged = next.copy(enabled = settings.enabled, dailyAt = settings.dailyAt)
+            val next = change(settings)
             runCatching {
                 write { row ->
-                    row[DaoBackupSettingsTable.lastOkAt] = merged.lastOkAt
-                    row[DaoBackupSettingsTable.lastFailedAt] = merged.lastFailedAt
-                    row[DaoBackupSettingsTable.lastCode] = merged.lastCode
-                    row[DaoBackupSettingsTable.lastMessage] = merged.lastMessage
-                    row[DaoBackupSettingsTable.lastBackupId] = merged.lastBackupId
-                    row[DaoBackupSettingsTable.lastKind] = merged.lastKind
-                    row[DaoBackupSettingsTable.lastSizeBytes] = merged.lastSizeBytes
+                    row[DaoBackupSettingsTable.lastOkAt] = next.lastOkAt
+                    row[DaoBackupSettingsTable.lastFailedAt] = next.lastFailedAt
+                    row[DaoBackupSettingsTable.lastCode] = next.lastCode
+                    row[DaoBackupSettingsTable.lastMessage] = next.lastMessage
+                    row[DaoBackupSettingsTable.lastBackupId] = next.lastBackupId
+                    row[DaoBackupSettingsTable.lastKind] = next.lastKind
+                    row[DaoBackupSettingsTable.lastSizeBytes] = next.lastSizeBytes
+                    row[DaoBackupSettingsTable.quitPending] = next.quitPending
                 }
             }.onFailure { logger.warn("Couldn't record the backup's result", it) }
-            settings = merged
+            settings = next
         }
     }
 
@@ -491,6 +570,9 @@ class BackupService(
             BackupSettings(
                 enabled = it[DaoBackupSettingsTable.enabled],
                 dailyAt = it[DaoBackupSettingsTable.dailyAt],
+                nightly = it[DaoBackupSettingsTable.nightly],
+                onQuit = it[DaoBackupSettingsTable.onQuit],
+                quitPending = it[DaoBackupSettingsTable.quitPending],
                 lastOkAt = it[DaoBackupSettingsTable.lastOkAt],
                 lastFailedAt = it[DaoBackupSettingsTable.lastFailedAt],
                 lastCode = it[DaoBackupSettingsTable.lastCode],
@@ -517,7 +599,9 @@ class BackupService(
         return BackupStatusDto(
             enabled = s.enabled,
             dailyAt = s.dailyAt,
-            nextAt = nextDue?.takeIf { s.enabled }?.toIsoUtc(),
+            nightly = s.nightly,
+            onQuit = s.onQuit,
+            nextAt = nextDue?.takeIf { s.enabled && s.nightly }?.toIsoUtc(),
             running = running.get(),
             lastOkAt = s.lastOkAt?.toIsoUtc(),
             lastFailedAt = s.lastFailedAt?.toIsoUtc(),

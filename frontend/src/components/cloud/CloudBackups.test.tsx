@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { BackupStatus, CloudState } from '@/store/cloud'
+import type { BackupSettingsChange, BackupStatus, CloudState } from '@/store/cloud'
 
 const mocks = vi.hoisted(() => ({
   status: undefined as BackupStatus | undefined,
-  save: vi.fn((_body: { enabled?: boolean; dailyAt?: string }) => Promise.resolve({})),
+  save: vi.fn((_body: BackupSettingsChange) => Promise.resolve({})),
   run: vi.fn(() => Promise.resolve({})),
   pollingInterval: undefined as number | undefined,
 }))
@@ -17,7 +17,7 @@ vi.mock('@/store/cloud', () => ({
     return { data: mocks.status, error: undefined }
   },
   useSetBackupSettingsMutation: () => [
-    (body: { enabled?: boolean; dailyAt?: string }) => ({ unwrap: () => mocks.save(body) }),
+    (body: BackupSettingsChange) => ({ unwrap: () => mocks.save(body) }),
     { isLoading: false, error: undefined, reset: () => {} },
   ],
   useRunBackupMutation: () => [() => ({ unwrap: () => mocks.run() }), { isLoading: false, error: undefined, reset: () => {} }],
@@ -43,12 +43,42 @@ describe('CloudBackups', () => {
     mocks.run.mockClear()
   })
 
-  it('turns the nightly backup on', () => {
+  it('turns backups on', () => {
     mocks.status = status()
     render(<CloudBackups state={adopted} />)
     expect(screen.getByText('No backup made yet.')).toBeTruthy()
-    fireEvent.click(screen.getByRole('switch', { name: 'Back up every night' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Back up to Lighting7 Cloud' }))
     expect(mocks.save).toHaveBeenCalledWith({ enabled: true })
+  })
+
+  it('offers both schedules once on, nightly by default, and backing up on quit', () => {
+    mocks.status = status({ enabled: true })
+    render(<CloudBackups state={adopted} />)
+    expect(screen.getByRole('switch', { name: 'Every night' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByLabelText('Each night at')).toBeTruthy()
+    expect(screen.getByRole('switch', { name: 'When the desk quits' }).getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(screen.getByRole('switch', { name: 'When the desk quits' }))
+    expect(mocks.save).toHaveBeenCalledWith({ onQuit: true })
+    fireEvent.click(screen.getByRole('switch', { name: 'Every night' }))
+    expect(mocks.save).toHaveBeenCalledWith({ nightly: false })
+  })
+
+  it('hides the time with nightly off, and says when nothing backs up on its own', () => {
+    mocks.status = status({ enabled: true, nightly: false, onQuit: true })
+    render(<CloudBackups state={adopted} />)
+    expect(screen.queryByLabelText('Each night at')).toBeNull()
+    expect(screen.queryByTestId('cloud-backup-no-schedule')).toBeNull()
+    cleanup()
+
+    mocks.status = status({ enabled: true, nightly: false, onQuit: false })
+    render(<CloudBackups state={adopted} />)
+    expect(screen.getByTestId('cloud-backup-no-schedule')).toBeTruthy()
+  })
+
+  it('names a backup made as the desk quit', () => {
+    mocks.status = status({ lastOkAt: '2026-11-15T23:00:00.000Z', lastKind: 'QUIT' })
+    render(<CloudBackups state={adopted} />)
+    expect(screen.getByTestId('cloud-backup-last').textContent).toContain('As the desk quit')
   })
 
   it('sets the time once the field is left', () => {
@@ -95,7 +125,7 @@ describe('CloudBackups', () => {
   it('reads but cannot change the settings over remote access', () => {
     mocks.status = status({ enabled: true })
     render(<CloudBackups state={{ ...adopted, remote: true }} />)
-    expect((screen.getByRole('switch', { name: 'Back up every night' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('switch', { name: 'Back up to Lighting7 Cloud' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Back up now' }) as HTMLButtonElement).disabled).toBe(false)
     expect(screen.queryByText(REMOTE_OFF_REASON)).toBeNull()
   })

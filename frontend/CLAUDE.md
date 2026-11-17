@@ -6680,7 +6680,14 @@ frame:
   how long to leave the rig's power on, and `markDeskQuit(coolsAt)` hands that time to `DeskQuitScreen`,
   which counts it out once no window hears the desk; it shows refusals inline (`quitDesk` is in
   `SILENT_ENDPOINTS`). On success `markDeskQuit()` raises `DeskQuitScreen`, mounted in `App` beside
-  the gates so the reconnect screens they draw once the socket closes never cover it.
+  the gates so the reconnect screens they draw once the socket closes never cover it. A desk that
+  backs up on quit (the Cloud tab's *When the desk quits*) answers `backingUp` with the backups'
+  status, which `markDeskQuit(coolsAt, backup)` hands on: the screen reads `GET
+  /install/cloud/backups` every second (a read from before the quit set aside, by its
+  `fulfilledTimeStamp`), says what the backup is doing, that the desk waits 15 minutes at most, and
+  offers *Quit without waiting* (`skipBackup`), and once the desk stops answering — the only sure sign
+  it has gone — says whether it backed up. `RunningLine` is `cloud/BackupRunLine.tsx`, kept apart from
+  the Cloud tab so the always-mounted screen does not pull it in.
 
 The fixture panel's *Commands* menu reads the restrike ledger too: a *Lamp on* (`role: 'LAMP_ON'` on
 the descriptor) inside its restrike time says *Still cooling — restrike in 5:54* in the menu and the

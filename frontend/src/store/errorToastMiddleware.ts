@@ -51,8 +51,9 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // Update stage's confirm draws a refused dry run (CUE_NOT_LIVE: the cue went off) and toasts a refused send itself.
   'updateCueStage', // src/components/cues/UpdateStageDialog.tsx
   'runFixtureCommand', // src/components/fixtures/FixtureCommandsMenu.tsx — toasts the refusal naming the unit and the command
-  // RIG_NOT_SAFE is an ordinary step in quitting — the confirm asks about it — and the rest it shows inline.
-  'quitDesk', // src/components/rigSafety/QuitDeskDialog.tsx
+  // RIG_NOT_SAFE is an ordinary step in quitting — the confirm asks about it — and the rest it shows
+  // inline; *Quit without waiting* on the quit screen ignores a refusal, since the desk may have gone.
+  'quitDesk', // src/components/rigSafety/QuitDeskDialog.tsx, src/components/rigSafety/DeskQuitScreen.tsx
   // A refused update (an open decision, a clash, a version moved on) is drawn in the review sheet,
   // which keeps the operator's answers for the retry; a refused *Run against* in its confirm, and
   // the banner's *Hold output* toasts its own.

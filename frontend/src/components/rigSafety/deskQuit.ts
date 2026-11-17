@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import type { BackupStatus } from '@/store/cloud'
 
 /**
  * Whether this window quit the desk (venue-visit plan S6, D13), and when on this browser's clock the
@@ -9,13 +10,17 @@ import { useSyncExternalStore } from 'react'
 export interface DeskQuit {
   /** `Date.now()` at which the mains can be cut, or null when nothing was cooling. */
   coolsAt: number | null
+  /** The backups' status as the quit began, while the desk backs up before it exits. */
+  backup: BackupStatus | null
+  /** `Date.now()` when this window marked the quit: a status read before it says nothing of the quit. */
+  at: number
 }
 
 let quit: DeskQuit | null = null
 const listeners = new Set<() => void>()
 
-export function markDeskQuit(coolsAt: number | null = null): void {
-  quit = { coolsAt }
+export function markDeskQuit(coolsAt: number | null = null, backup: BackupStatus | null = null): void {
+  quit = { coolsAt, backup, at: Date.now() }
   listeners.forEach((l) => l())
 }
 

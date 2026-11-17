@@ -44,6 +44,7 @@ import kotlin.io.path.name
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
@@ -379,13 +380,222 @@ class BackupServiceTest {
     @Test
     fun `the settings are kept in the database and survive a restart`() {
         val c = adoptedCloud()
-        backups(c).update(enabled = true, dailyAt = "02:15")
+        backups(c).update(enabled = true, dailyAt = "02:15", nightly = false, onQuit = true)
         val again = BackupService(state.database, InstallBackup(dir.resolve("staging")), ::sources, { null }, { null }, { null })
         try {
             assertTrue(again.enabled)
             assertEquals("02:15", again.status.value.dailyAt)
+            assertFalse(again.status.value.nightly)
+            assertTrue(again.status.value.onQuit)
         } finally {
             again.close()
         }
+    }
+
+    @Test
+    fun `a desk backs up nightly by default and on quit only when asked`() {
+        val c = adoptedCloud()
+        val b = backups(c)
+        assertTrue(b.status.value.nightly)
+        assertFalse(b.status.value.onQuit)
+        assertNull(b.startQuitBackup(), "nothing on quit with the switch off")
+        b.update(enabled = true)
+        assertNull(b.startQuitBackup(), "nothing on quit until asked")
+    }
+
+    @Test
+    fun `with nightly off a scheduled backup does nothing and none is due`() {
+        val c = adoptedCloud()
+        val b = backups(c)
+        b.update(enabled = true, nightly = false)
+        b.start()
+        runBlocking { b.runScheduled() }
+        assertNull(b.status.value.nextAt)
+        assertTrue(fake.backups.backups.isEmpty())
+    }
+
+    @Test
+    fun `a quit backup makes a fresh archive and is listed as QUIT`() {
+        val c = adoptedCloud()
+        val b = backups(c)
+        b.update(enabled = true, nightly = false, onQuit = true)
+        fake.backups.failParts.set(4)
+        runBlocking { b.runOnce(BackupKind.MANUAL) }
+        val oldId = fake.backups.backups.keys.single()
+
+        val job = b.startQuitBackup()
+        assertNotNull(job)
+        assertEquals(BackupKind.QUIT, b.status.value.running?.kind, "claimed before it answers")
+        runBlocking { withTimeout(30.seconds) { job.join() } }
+        val status = b.status.value
+        assertNull(status.lastCode, status.lastMessage)
+        assertEquals(BackupKind.QUIT, status.lastKind)
+        assertNotEquals(oldId, status.lastBackupId, "not the archive staged before")
+        assertFalse(fake.backups.backups.getValue(oldId).complete)
+        assertEquals(emptyList(), staged())
+    }
+
+    @Test
+    fun `a quit backup waits for one already making, then makes its own`() {
+        val c = adoptedCloud()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val first = AtomicInteger()
+        val b = backups(c, sources = { if (first.getAndIncrement() == 0) { entered.countDown(); release.await() }; sources() })
+        b.update(enabled = true, onQuit = true)
+        assertTrue(b.request(BackupKind.MANUAL))
+        assertTrue(entered.await(30, TimeUnit.SECONDS))
+        val job = b.startQuitBackup()
+        assertNotNull(job)
+        assertEquals(BackupKind.MANUAL, b.status.value.running?.kind)
+        release.countDown()
+        runBlocking { withTimeout(30.seconds) { job.join() } }
+        assertEquals(setOf(BackupKind.MANUAL, BackupKind.QUIT), fake.backups.backups.values.map { it.request.kind }.toSet())
+        assertEquals(2, fake.backups.backups.size)
+        assertTrue(fake.backups.backups.values.all { it.complete })
+        assertEquals(BackupKind.QUIT, b.status.value.lastKind)
+        assertNull(b.status.value.running)
+    }
+
+    @Test
+    fun `a start finishes a backup left staged while the switch is on`() {
+        val c = adoptedCloud()
+        val b = backups(c)
+        b.update(enabled = true, nightly = false, onQuit = true)
+        fake.backups.failParts.set(4)
+        val failed = runBlocking { b.runOnce(BackupKind.QUIT) }
+        assertEquals("UNAVAILABLE", failed.lastCode)
+        b.close()
+
+        val again = backups(c)
+        again.start()
+        val status = awaitComplete(again)
+        assertNull(status.lastCode, status.lastMessage)
+        assertEquals(BackupKind.QUIT, status.lastKind)
+        assertEquals(1, fake.backups.backups.size, "the staged upload was finished, not made again")
+        assertEquals(emptyList(), staged())
+    }
+
+    @Test
+    fun `a start with on quit off leaves a staged backup of another kind for the next run`() {
+        val c = adoptedCloud()
+        val b = backups(c)
+        b.update(enabled = true, nightly = false, onQuit = false)
+        fake.backups.failParts.set(4)
+        runBlocking { b.runOnce(BackupKind.MANUAL) }
+        b.close()
+
+        val again = backups(c)
+        again.start()
+        runBlocking { delay(500) }
+        assertNull(again.status.value.running)
+        assertFalse(fake.backups.backups.values.single().complete)
+        assertTrue(staged().any { it.endsWith(".l7bk") }, "still staged")
+    }
+
+    @Test
+    fun `a start with on quit on leaves a staged backup of another kind for the next run`() {
+        val c = adoptedCloud()
+        val b = backups(c)
+        b.update(enabled = true, nightly = false, onQuit = true)
+        fake.backups.failParts.set(4)
+        runBlocking { b.runOnce(BackupKind.MANUAL) }
+        b.close()
+
+        val again = backups(c)
+        again.start()
+        runBlocking { delay(500) }
+        assertNull(again.status.value.running)
+        assertFalse(fake.backups.backups.values.single().complete)
+        assertTrue(staged().any { it.endsWith(".l7bk") }, "still staged")
+    }
+
+    @Test
+    fun `turning on quit off forgets a pending quit backup`() {
+        val c = adoptedCloud()
+        val b = backups(c)
+        b.update(enabled = true, nightly = false, onQuit = true)
+        fake.backups.failKey = true
+        val job = assertNotNull(b.startQuitBackup())
+        runBlocking { withTimeout(30.seconds) { job.join() } }
+        fake.backups.failKey = false
+        fake.backups.failParts.set(4)
+        runBlocking { b.runOnce(BackupKind.MANUAL) }
+        b.update(onQuit = false)
+        b.close()
+
+        val off = backups(c)
+        off.start()
+        runBlocking { delay(500) }
+        assertNull(off.status.value.running)
+        off.update(onQuit = true)
+        off.close()
+
+        val on = backups(c)
+        on.start()
+        runBlocking { delay(500) }
+        assertNull(on.status.value.running)
+        assertEquals(BackupKind.MANUAL, fake.backups.backups.values.single().request.kind)
+        assertFalse(fake.backups.backups.values.single().complete)
+        assertTrue(staged().any { it.endsWith(".l7bk") }, "still staged")
+    }
+
+    @Test
+    fun `a start past the resume window makes the quit's backup afresh`() {
+        val c = adoptedCloud()
+        val b = backups(c)
+        b.update(enabled = true, nightly = false, onQuit = true)
+        fake.backups.failParts.set(4)
+        runBlocking { b.runOnce(BackupKind.QUIT) }
+        val oldId = fake.backups.backups.keys.single()
+        b.close()
+
+        now.set(now.get().plus(Duration.ofHours(21)))
+        val again = backups(c)
+        again.start()
+        val status = awaitComplete(again)
+        assertNull(status.lastCode, status.lastMessage)
+        assertEquals(BackupKind.QUIT, status.lastKind)
+        assertNotEquals(oldId, status.lastBackupId)
+        assertEquals(BackupKind.QUIT, fake.backups.backups.getValue(status.lastBackupId!!).request.kind)
+        assertEquals(emptyList(), staged())
+    }
+
+    @Test
+    fun `a quit that could not reach the cloud is backed up at the next start`() {
+        val c = adoptedCloud()
+        val b = backups(c)
+        b.update(enabled = true, nightly = false, onQuit = true)
+        fake.backups.failKey = true
+        val job = assertNotNull(b.startQuitBackup())
+        runBlocking { withTimeout(30.seconds) { job.join() } }
+        assertNotNull(b.status.value.lastCode)
+        assertEquals(emptyList(), staged(), "nothing was staged")
+        b.close()
+
+        fake.backups.failKey = false
+        val again = backups(c)
+        again.start()
+        val status = awaitComplete(again)
+        assertNull(status.lastCode, status.lastMessage)
+        assertEquals(BackupKind.QUIT, status.lastKind)
+        assertEquals(BackupKind.QUIT, fake.backups.backups.values.single().request.kind)
+    }
+
+    @Test
+    fun `a quit whose backup was made leaves nothing for the next start`() {
+        val c = adoptedCloud()
+        val b = backups(c)
+        b.update(enabled = true, nightly = false, onQuit = true)
+        val job = assertNotNull(b.startQuitBackup())
+        runBlocking { withTimeout(30.seconds) { job.join() } }
+        assertNull(b.status.value.lastCode, b.status.value.lastMessage)
+        b.close()
+
+        val again = backups(c)
+        again.start()
+        runBlocking { delay(500) }
+        assertNull(again.status.value.running)
+        assertEquals(1, fake.backups.backups.size, "no second backup at start")
     }
 }

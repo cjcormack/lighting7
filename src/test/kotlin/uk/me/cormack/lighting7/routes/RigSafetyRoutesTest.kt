@@ -368,6 +368,7 @@ class RigSafetyRoutesTest : RouteIntegrationTest() {
         val forced = client.json("install/quit", """{"force":true}""")
         assertEquals(HttpStatusCode.Accepted, forced.status, forced.bodyAsText())
         assertFalse(forced.body<QuitDeskResponse>().rigWasSafe)
+        assertFalse(forced.body<QuitDeskResponse>().backingUp, "a desk not backing up on quit exits at once")
         withTimeout(5_000) { exited.await() }
     }
 

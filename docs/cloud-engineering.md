@@ -630,9 +630,10 @@ every start sweeps a snapshot, a half-written archive and an archive with no rec
 the one staged; an upload deletes both.
 
 **When** (`backup/BackupService.kt`, D6): the machine-local `backup_settings` row — `enabled` (off until
-an admin turns it on), `daily_at` (local time, default 04:00) and the last result. A scheduled backup at
-`daily_at` waits while a cue stack runs or the programmer holds anything, checking every 10 minutes, for
-at most 6 hours, then runs anyway (`BackupSchedule`). The Cloud tab's *Back up now* (`MANUAL`) and the
+an admin turns it on), its two schedules, `nightly` (on) with `daily_at` (local time, default 04:00) and
+`on_quit` (off), either or both, `quit_pending` and the last result. A scheduled backup at `daily_at` waits while a cue
+stack runs or the programmer holds anything, checking every 10 minutes, for at most 6 hours, then runs
+anyway (`BackupSchedule`). The Cloud tab's *Back up now* (`MANUAL`) and the
 cloud's `backup.request` (`REQUESTED`) run at once; a `backup.request` with the switch off is ignored,
 and announced as `backup.off` beside `backup.v1`. At most one runs at a time, and an ask while one runs
 is answered with the running one, except that a scheduled backup still waiting for a quiet show gives
@@ -643,6 +644,25 @@ it runs. The last result's kind is the one the cloud lists the backup under: a r
 kind it was declared with. The work runs on `backup-1`, one thread of its own at the lowest
 priority, never `cloud-N` and never the show's, and writes the database only when a backup ends and when
 an admin changes the settings.
+
+**On quit**, for a desk switched off between shows rather than left running: with `on_quit` on, an
+adopted desk's *Quit desk* (`POST /install/quit`) starts a `QUIT` backup, answers `backingUp` with the
+status, and exits once the backup has ended, uploaded or failed, or after 15 minutes at most
+(`state/DeskQuit.kt`); `{skipBackup: true}` (*Quit without waiting*) ends the wait at once. After a
+backup the desk waits 2.5 s more before it exits, so a window polling each second reads how it ended;
+the wait and that grace start only once the answer has been sent. A quit always ends with a fresh `QUIT`
+archive of the state it quit with: a backup already making or uploading is waited for and the quit's
+made after it (the 15 minutes still bound both), and a scheduled one only waiting gives way. A failure
+to start one never stops the quit. One that does not finish uploading stays staged, and the next start
+finishes it while the switch and `on_quit` are on: within 20 hours it resumes; past them the cloud has
+aborted it, so a fresh `QUIT` backup is made, which still holds the state the desk quit with since
+nothing has run since. A staged backup of another kind is never the quit's, and is left for the next
+run. A quit whose backup staged nothing — the cloud unreachable, so no data key, or the wait cut short
+while the archive was being made — leaves `quit_pending` set, and the next start makes a fresh `QUIT`
+backup for it; only a `QUIT` backup made clears it, and so does turning `on_quit` or the switch off. The quit writes the scaler
+writer's pending rows before the snapshot, so the grand master the desk quit at is in it. Only *Quit
+desk* backs up: the Windows tray's Quit ends the backend process outright, and a closed terminal or a
+power cut runs nothing.
 
 **Each run** fetches the org's current data key (`GET /v1/backups/key`), held in memory and zeroed once
 the archive is sealed; mints the backup's id (`BackupIds`), which the archive's header carries; makes
@@ -658,9 +678,9 @@ the next run starts afresh. The last result's code is the cloud's (`BACKUPS_OFF`
 
 **Routes**, admin only, under `routes/installCloud.kt`: `GET /install/cloud/backups` (the status:
 settings, the next run, a run in progress with its phase and parts, the last result), `PUT …`
-`{enabled?, dailyAt?}` — **only from the desk's own listener**, 403 `CLOUD_SETTINGS_LOCAL_ONLY`, as every
-switch on what leaves through the cloud; 400 `BACKUP_SETTINGS_INVALID` for a time that is not `HH:mm` —
-and `POST …/run`, 202 with the status, its run already there, 409 `CLOUD_NOT_ADOPTED` before adoption.
+`{enabled?, dailyAt?, nightly?, onQuit?}` — **only from the desk's own listener**, 403
+`CLOUD_SETTINGS_LOCAL_ONLY`, as every switch on what leaves through the cloud; 400
+`BACKUP_SETTINGS_INVALID` for a time that is not `HH:mm` — and `POST …/run`, 202 with the status, its run already there, 409 `CLOUD_NOT_ADOPTED` before adoption.
 At the desk it runs with the switch off; over remote access only with it on, else 403
 `BACKUP_REMOTE_OFF`, since what leaves through the cloud is the desk's decision.
 The Cloud tab re-reads the status every 2 s while a backup runs and every 30 s otherwise, so it sees a
@@ -792,9 +812,9 @@ asking for the restart instead, with *Don't restore*, which declines it. With no
 shows only why the last confirm stopped, *The restore stopped*, so a 202 confirm the cloud later
 refused, clearing the restore, still says why.
 
-Once adopted, the **Off-site backups** section (`CloudBackups.tsx`, §"Backups"): *Back up every night*
-and its time, *Back up now*, what a running backup is doing (re-read every 2 s while one runs, every
-30 s otherwise), and the last backup's time, size and kind, or why the last one failed. Over remote
+Once adopted, the **Off-site backups** section (`CloudBackups.tsx`, §"Backups"): *Back up to Lighting7
+Cloud*, and under it *Every night* with its time and *When the desk quits*, *Back up now*, what a
+running backup is doing (re-read every 2 s while one runs, every 30 s otherwise), and the last backup's time, size and kind, or why the last one failed. Over remote
 access the switch and the time are drawn disabled with the reason, and *Back up now* is too while the
 switch is off, with its own reason.
 
