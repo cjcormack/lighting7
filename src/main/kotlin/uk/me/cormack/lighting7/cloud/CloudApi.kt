@@ -170,7 +170,7 @@ class CloudApi(
     suspend fun declareBackup(signer: InstallSigner, request: DeclareBackupRequest): CloudCall<BackupDto> {
         val body = CloudJson.encodeToString(DeclareBackupRequest.serializer(), request).encodeToByteArray()
         return decode(
-            exchange(MAX_ANSWER_BYTES) {
+            exchange(MAX_BACKUP_ANSWER_BYTES) {
                 client.preparePost(baseUrl + CloudPaths.BACKUPS) {
                     signBackupCall(signer, "POST", CloudPaths.BACKUPS, body)
                     setBody(ByteArrayContent(body, ContentType.Application.Json))
@@ -183,7 +183,7 @@ class CloudApi(
     /** A backup as the cloud holds it (`GET /v1/backups/{id}`): which parts it has, for a resume. */
     suspend fun backup(signer: InstallSigner, backupId: String): CloudCall<BackupDto> {
         val path = CloudPaths.backup(backupId)
-        return decode(exchange(MAX_ANSWER_BYTES) { client.prepareGet(baseUrl + path) { signBackupCall(signer, "GET", path, ByteArray(0)) } }, BackupDto.serializer())
+        return decode(exchange(MAX_BACKUP_ANSWER_BYTES) { client.prepareGet(baseUrl + path) { signBackupCall(signer, "GET", path, ByteArray(0)) } }, BackupDto.serializer())
     }
 
     /**
@@ -200,7 +200,7 @@ class CloudApi(
             override fun readFrom(): ByteReadChannel = regionOf(file, offset, length).toByteReadChannel()
         }
         return decode(
-            exchange(MAX_ANSWER_BYTES) {
+            exchange(MAX_BACKUP_ANSWER_BYTES) {
                 client.preparePut(baseUrl + path) {
                     timeout { requestTimeoutMillis = partTimeout.toMillis() }
                     header(SignatureHeaders.INSTALL, signer.installId)
@@ -216,7 +216,7 @@ class CloudApi(
     /** Every part is in (`POST /v1/backups/{id}/complete`). */
     suspend fun completeBackup(signer: InstallSigner, backupId: String): CloudCall<BackupDto> {
         val path = CloudPaths.backupComplete(backupId)
-        return decode(exchange(MAX_ANSWER_BYTES) { client.preparePost(baseUrl + path) { signBackupCall(signer, "POST", path, ByteArray(0)) } }, BackupDto.serializer())
+        return decode(exchange(MAX_BACKUP_ANSWER_BYTES) { client.preparePost(baseUrl + path) { signBackupCall(signer, "POST", path, ByteArray(0)) } }, BackupDto.serializer())
     }
 
     /**
@@ -380,5 +380,8 @@ class CloudApi(
 
         /** An org's repo list: thousands of repos. */
         const val MAX_LIST_BYTES: Int = 4 * 1024 * 1024
+
+        /** A [BackupDto], which echoes the manifest's every file: about 80 000 of them. */
+        const val MAX_BACKUP_ANSWER_BYTES: Int = 16 * 1024 * 1024
     }
 }
