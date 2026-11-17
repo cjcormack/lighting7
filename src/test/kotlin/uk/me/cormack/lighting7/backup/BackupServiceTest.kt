@@ -164,6 +164,27 @@ class BackupServiceTest {
     }
 
     @Test
+    fun `a backup of thousands of files is not refused for the cloud echoing its manifest`() {
+        val c = adoptedCloud()
+        val b = backups(c, sources = {
+            sources().also { s ->
+                val objects = s.syncTrees.resolve("a-project/.git/objects")
+                for (i in 0 until 2000) {
+                    val file = objects.resolve("%02x/%038x".format(i % 256, i))
+                    Files.createDirectories(file.parent)
+                    Files.writeString(file, "object $i")
+                }
+            }
+        })
+        val status = runBlocking { b.runOnce(BackupKind.MANUAL) }
+
+        assertNull(status.lastCode, status.lastMessage)
+        val stored = fake.backups.backups.values.single()
+        assertTrue(stored.complete)
+        assertTrue(CloudJson.encodeToString(BackupManifest.serializer(), stored.request.manifest).length > CloudApi.MAX_ANSWER_BYTES)
+    }
+
+    @Test
     fun `a failed part is retried, and once past its retries the next run resumes from the parts the cloud holds`() {
         val c = adoptedCloud()
         bigFile()
