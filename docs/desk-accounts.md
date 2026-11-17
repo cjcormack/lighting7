@@ -157,6 +157,13 @@ Sessions die when: the user logs out, they change their own password (all *other
 sessions), an admin sets their password or disables or deletes them (all sessions), or a
 QR reset is redeemed (all sessions).
 
+**After a restore the accounts are the old desk's** (cloud-p3 plan D10, `docs/cloud-engineering.md`
+§"Restore"). Restoring a backup onto a desk replaces its `users` with the backup's, so the fresh desk's
+own accounts are gone and the old desk's passwords and roles come back with it; every session is
+emptied, so everyone signs in again. The adopting admin is not carried over (`adopted_by_user_id` is
+cleared). A restore that replaced the old install keeps its cloud links, which now name this desk; a
+backup restored alone clears them, and each user links again.
+
 ## Account edits reach other clients
 
 `revocations` has a sibling. **`AuthService.userChanges`** carries the userId of any account row

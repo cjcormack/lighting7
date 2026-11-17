@@ -54,4 +54,12 @@ object DaoCloudConnections : IntIdTable("cloud_connection") {
     val mcpAccess = bool("mcp_access").default(false)
     /** Each new remote session waits for an admin at the desk to allow it (D13). */
     val approveSessions = bool("approve_sessions").default(false)
+
+    // A restore the approval asked for (cloud-p3 plan D9), kept until an admin at the desk confirms or
+    // declines it. Nothing about the old install moves until then.
+    /** The install this desk would replace. */
+    val restoreReplacesInstallId = text("restore_replaces_install_id").nullable()
+    val restoreReplacesName = text("restore_replaces_name").nullable()
+    /** The backup this desk would restore. */
+    val restoreBackupId = text("restore_backup_id").nullable()
 }

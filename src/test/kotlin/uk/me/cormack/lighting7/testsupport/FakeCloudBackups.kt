@@ -45,10 +45,12 @@ import java.util.concurrent.atomic.AtomicInteger
 class FakeCloudBackups(private val cloud: FakeCloud) {
     class Stored(
         val installId: String,
-        val request: DeclareBackupRequest,
+        @Volatile var request: DeclareBackupRequest,
         val parts: ConcurrentHashMap<Int, ByteArray> = ConcurrentHashMap(),
         @Volatile var complete: Boolean = false,
         val createdAt: Instant = Instant.now(),
+        /** The install's friendly name when it declared the backup. */
+        val installName: String = "Test desk",
     ) {
         fun bytes(): ByteArray = ByteArrayOutputStream().also { out -> (1..request.parts).forEach { out.write(parts.getValue(it)) } }.toByteArray()
     }
@@ -112,7 +114,8 @@ class FakeCloudBackups(private val cloud: FakeCloud) {
             if (backups.values.sumOf { it.request.sizeBytes } + request.sizeBytes > quotaBytes) {
                 return@post call.apiError(HttpStatusCode.Conflict, ErrorCode.BACKUP_QUOTA_EXCEEDED)
             }
-            if (backups.putIfAbsent(request.backupId, Stored(installId, request)) != null) {
+            val installName = cloud.installs[installId]?.let { cloud.adoptions[it.adoptionId]?.request?.friendlyName } ?: "Test desk"
+            if (backups.putIfAbsent(request.backupId, Stored(installId, request, installName = installName)) != null) {
                 return@post call.apiError(HttpStatusCode.Conflict, ErrorCode.BACKUP_ID_TAKEN)
             }
             call.json(BackupDto.serializer(), dtoOf(backups.getValue(request.backupId)), HttpStatusCode.Created)
@@ -167,7 +170,7 @@ class FakeCloudBackups(private val cloud: FakeCloud) {
     private fun dtoOf(stored: Stored) = BackupDto(
         backupId = stored.request.backupId,
         installId = stored.installId,
-        installName = "Test desk",
+        installName = stored.installName,
         kind = stored.request.kind,
         status = if (stored.complete) BackupStatus.COMPLETE else BackupStatus.UPLOADING,
         sizeBytes = stored.request.sizeBytes,

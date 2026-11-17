@@ -56,6 +56,14 @@ import uk.me.cormack.lighting7.state.State
  * - `POST /install/cloud/backups/run`: *Back up now*, answered 202 with the status at once, the running
  *   backup when one already runs; 409 [CloudErrorCodes.NOT_ADOPTED] before adoption; over remote access
  *   403 `BACKUP_REMOTE_OFF` while the backups switch is off.
+ * - `GET /install/cloud/restore`: what the adoption's approval asked this desk to restore (cloud-p3
+ *   plan D9), the backup it names, the name a confirm must type, and how a confirm is going.
+ * - `POST /install/cloud/restore/confirm` `{name}`: confirm it, **only from the desk's own listener**
+ *   (403 [CloudErrorCodes.RESTORE_LOCAL_ONLY]), since it replaces everything on this desk; 400
+ *   [CloudErrorCodes.RESTORE_NAME_MISMATCH] unless [name] is the old install's (or, for a backup alone,
+ *   the backup's install name); 409 [CloudErrorCodes.NO_RESTORE] or [CloudErrorCodes.RESTORE_BUSY].
+ *   Answered 202 with the status; the download, check and replacement go on after it.
+ * - `DELETE /install/cloud/restore`: decline it, from either listener: it only leaves the desk as it is.
  * - `GET /install/cloud/sessions`: the open remote sessions and the latest ended ones.
  * - `DELETE /install/cloud/sessions/{sid}`: end an open one, from either listener: it only reduces reach.
  * - `POST /install/cloud/sessions/{sid}/allow` and `…/deny`: answer a session waiting for an admin
@@ -162,6 +170,36 @@ internal fun Route.routeApiRestInstallCloud(state: State) {
         }
         state.backups.request(BackupKind.MANUAL)
         call.respond(HttpStatusCode.Accepted, state.backups.status.value)
+    }
+
+    get<InstallCloudResource.Restore> {
+        call.respond(state.restores.status())
+    }
+
+    post<InstallCloudResource.Restore.Confirm> {
+        if (call.isRemote) {
+            return@post refuse(
+                HttpStatusCode.Forbidden,
+                CloudErrorCodes.RESTORE_LOCAL_ONLY,
+                "A restore replaces everything on this desk, so it can only be confirmed at the desk itself.",
+            )
+        }
+        val request = call.receive<ConfirmRestoreRequest>()
+        try {
+            state.restores.begin(request.name)
+        } catch (e: CloudException) {
+            return@post refuse(e.status, e.code, e.message ?: e.code)
+        }
+        call.respond(HttpStatusCode.Accepted, state.restores.status())
+    }
+
+    delete<InstallCloudResource.Restore> {
+        try {
+            state.restores.decline()
+        } catch (e: CloudException) {
+            return@delete refuse(e.status, e.code, e.message ?: e.code)
+        }
+        call.respond(state.restores.status())
     }
 
     get<InstallCloudResource.Sessions> {
@@ -286,6 +324,12 @@ data class InstallCloudResource(val force: Boolean = false) {
         data class Run(val parent: Backups = Backups())
     }
 
+    @Resource("restore")
+    data class Restore(val parent: InstallCloudResource = InstallCloudResource()) {
+        @Resource("confirm")
+        data class Confirm(val parent: Restore = Restore())
+    }
+
     @Resource("sessions")
     data class Sessions(val parent: InstallCloudResource = InstallCloudResource()) {
         @Resource("{sid}")
@@ -302,6 +346,10 @@ data class InstallCloudResource(val force: Boolean = false) {
 /** Who answered, for the log: the signed-in admin, or the desk itself while it has no accounts. */
 private val io.ktor.server.application.ApplicationCall.actorName: String
     get() = authenticatedUserOrNull?.username ?: "the desk"
+
+/** The confirm's typed name: the replaced install's, or the backup's install name. */
+@Serializable
+data class ConfirmRestoreRequest(val name: String)
 
 /** Every field optional: absent leaves it as it is. */
 @Serializable

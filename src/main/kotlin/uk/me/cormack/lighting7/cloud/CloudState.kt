@@ -32,6 +32,8 @@ data class CloudStateDto(
     val remote: Boolean = false,
     /** What may come through the cloud now (cloud-p1 plan D6, D13): every window's Cloud tab follows it. */
     val remoteSwitches: RemoteSwitches = RemoteSwitches(),
+    /** A restored backup is staged and applies when the desk next starts (cloud-p3 plan D9). */
+    val restartToRestore: Boolean = false,
 ) {
     /**
      * What a caller on the public listener sees: the pending adoption's code and links left out,
@@ -64,6 +66,16 @@ data class CloudAdoptedDto(
     /** The cloud account linked to [adoptedBy]. */
     val linkedEmail: String? = null,
     val fingerprint: String,
+    /** A restore the approval asked for, waiting for an admin at the desk to confirm or decline it (cloud-p3 plan D9). */
+    val restore: CloudRestoreDto? = null,
+)
+
+/** What an approval asked this desk to restore: the install it replaces, a backup, or both. */
+@Serializable
+data class CloudRestoreDto(
+    val replacesInstallId: String? = null,
+    val replacesName: String? = null,
+    val backupId: String? = null,
 )
 
 @Serializable
@@ -98,6 +110,18 @@ object CloudErrorCodes {
     const val ADOPT_LOCAL_ONLY = "CLOUD_ADOPT_LOCAL_ONLY"
     const val NEEDS_ACCOUNT = "CLOUD_NEEDS_ACCOUNT"
     const val NOT_CONFIGURED = "CLOUD_NOT_CONFIGURED"
+
+    // Restore (cloud-p3 plan D9).
+    const val NO_RESTORE = "CLOUD_NO_RESTORE"
+    /** A restore confirmed from the public listener: it replaces everything on this desk. */
+    const val RESTORE_LOCAL_ONLY = "CLOUD_RESTORE_LOCAL_ONLY"
+    /** The confirm's typed name is not the old install's, or the backup's. */
+    const val RESTORE_NAME_MISMATCH = "CLOUD_RESTORE_NAME_MISMATCH"
+    const val RESTORE_BUSY = "CLOUD_RESTORE_BUSY"
+    /** A staged restore failed while the desk started, which put the desk back as it was. */
+    const val RESTORE_FAILED = "CLOUD_RESTORE_FAILED"
+    /** The backup's file failed to decrypt, or a file in it is not the one its manifest names. */
+    const val BACKUP_CORRUPT = "BACKUP_CORRUPT"
     const val DISABLED = "CLOUD_DISABLED"
     const val ALREADY_ADOPTED = "CLOUD_ALREADY_ADOPTED"
     const val ADOPTION_IN_PROGRESS = "CLOUD_ADOPTION_IN_PROGRESS"

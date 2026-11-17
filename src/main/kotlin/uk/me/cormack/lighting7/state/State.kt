@@ -100,6 +100,37 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
     /** Set when database step 18 met GitHub sync's table this start: the repos whose credentials go once [credentialStore] exists. */
     private var retiredGitHub: List<String>? = null
 
+    /**
+     * Root directory under which per-project cloud-sync working trees live, one per
+     * `{projectUuid}/repo/`. Defaults to `<appDataDir>/sync` and is overridable via
+     * `sync.workingTreeRoot` in `local.conf` (handy for tests and for users who want
+     * the repo on a different volume). Resolved once per [State] so a misconfigured
+     * path fails loudly at startup.
+     */
+    val syncWorkingTreeRoot: Path = config.optionalString("sync.workingTreeRoot")
+        ?.let { Paths.get(it) }
+        ?: appDataDir().resolve("sync")
+
+    /**
+     * Root directory for prompt-book script PDFs, stored content-addressed as
+     * `{projectUuid}/{sha256}.pdf`. Defaults to `<appDataDir>/prompt-scripts` and is
+     * overridable via `promptBooks.scriptStoreRoot` in `local.conf` (handy for tests).
+     * The store is deliberately outside the DB and outside git sync (JSON-only).
+     */
+    val promptScriptStoreRoot: Path = config.optionalString("promptBooks.scriptStoreRoot")
+        ?.let { Paths.get(it) }
+        ?: appDataDir().resolve("prompt-scripts")
+
+    /** Where [sceneImages] keeps its files: `stage.sceneImageStoreRoot`, else `<appDataDir>/scene-images`. */
+    private val sceneImageStoreRoot: Path =
+        config.optionalString("stage.sceneImageStoreRoot")?.let { Paths.get(it) } ?: appDataDir().resolve("scene-images")
+
+    /** Backups' staging and a restore's (cloud-p3 plan D5, D9): `backups.root`, else `<appDataDir>/backups`. */
+    private val backupsRoot: Path = config.optionalString("backups.root")?.let { Paths.get(it) } ?: appDataDir().resolve("backups")
+
+    /** A restore the desk confirmed, staged until [initDatabase] applies it at the next start. */
+    val restoreStaging = uk.me.cormack.lighting7.backup.RestoreStaging(backupsRoot.resolve("restore"))
+
     /** The SQLite file: `database.path` in `local.conf`, else `<appDataDir>/lighting7.db`. */
     val databasePath: Path = Paths.get(config.optionalString("database.path") ?: appDataDir().resolve("lighting7.db").toString())
     val database = initDatabase()
@@ -160,6 +191,7 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
                     backups.request(uk.me.cormack.lighting7.cloud.protocol.BackupKind.REQUESTED)
                 }
             },
+            onUnadopted = { restores.dropStaged() },
         )
     }
 
@@ -169,7 +201,7 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
      */
     val backups: uk.me.cormack.lighting7.backup.BackupService = uk.me.cormack.lighting7.backup.BackupService(
         database = database,
-        staging = uk.me.cormack.lighting7.backup.InstallBackup(appDataDir().resolve("backups").resolve("staging")),
+        staging = uk.me.cormack.lighting7.backup.InstallBackup(backupsRoot.resolve("staging")),
         sources = {
             uk.me.cormack.lighting7.backup.BackupSources(
                 databasePath = databasePath,
@@ -197,6 +229,17 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
             showOrNull?.let { show -> show.cueStackManager.getActiveStackIds().isNotEmpty() || !show.programmerStore.isEmpty } ?: false
         },
         switchChanged = { if (cloudDelegate.isInitialized()) cloud.backupSwitchChanged() },
+    )
+
+    /**
+     * Restoring a backup onto this desk (cloud-p3 plan D9): the confirm's download, check and staging.
+     * Started only by `Application.module()`.
+     */
+    val restores = uk.me.cormack.lighting7.backup.RestoreService(
+        cloud = { cloud },
+        staging = restoreStaging,
+        schemaVersion = SCHEMA_USER_VERSION,
+        syncFormatVersion = uk.me.cormack.lighting7.sync.dto.FormatVersionJson().formatVersion,
     )
 
     /**
@@ -281,17 +324,6 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
     private var projectChangedJob: Job? = null
 
     /**
-     * Root directory under which per-project cloud-sync working trees live, one per
-     * `{projectUuid}/repo/`. Defaults to `<appDataDir>/sync` and is overridable via
-     * `sync.workingTreeRoot` in `local.conf` (handy for tests and for users who want
-     * the repo on a different volume). Resolved once per [State] so a misconfigured
-     * path fails loudly at startup.
-     */
-    val syncWorkingTreeRoot: Path = config.optionalString("sync.workingTreeRoot")
-        ?.let { Paths.get(it) }
-        ?: appDataDir().resolve("sync")
-
-    /**
      * `sync.push` in `local.conf` (default `true`). `false` makes this install pull-only:
      * a sync still snapshots, fetches, fast-forwards and merges, but never pushes — local
      * commits stay in the working tree. Deliberately not in the UI or `example.local.conf`:
@@ -309,16 +341,6 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
     val dmxMock: Boolean = config.optionalBoolean("dmx.mock", default = false)
 
     /**
-     * Root directory for prompt-book script PDFs, stored content-addressed as
-     * `{projectUuid}/{sha256}.pdf`. Defaults to `<appDataDir>/prompt-scripts` and is
-     * overridable via `promptBooks.scriptStoreRoot` in `local.conf` (handy for tests).
-     * The store is deliberately outside the DB and outside git sync (JSON-only).
-     */
-    val promptScriptStoreRoot: Path = config.optionalString("promptBooks.scriptStoreRoot")
-        ?.let { Paths.get(it) }
-        ?: appDataDir().resolve("prompt-scripts")
-
-    /**
      * Content-addressed on-disk location of a prompt-book script PDF:
      * `{promptScriptStoreRoot}/{projectUuid}/{hash}.pdf`. Shared by the prompt-book
      * routes (upload/serve) and the cloud-sync layer, which copies the byte-accurate
@@ -334,9 +356,7 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
      * `<appDataDir>/scene-images`, overridable as `stage.sceneImageStoreRoot` (for tests). Outside the
      * DB, and moved through sync as raw bytes by `SceneImageRepoSync`, like the prompt-book PDFs.
      */
-    val sceneImages: SceneImageStore = SceneImageStore(
-        config.optionalString("stage.sceneImageStoreRoot")?.let { Paths.get(it) } ?: appDataDir().resolve("scene-images"),
-    )
+    val sceneImages: SceneImageStore = SceneImageStore(sceneImageStoreRoot)
 
     /** Where a scene image's original lives: `{store}/{projectUuid}/{hash}.{png|jpg}`. */
     fun sceneImagePath(projectUuid: String, hash: String, format: SceneImageFormat): Path =
@@ -1302,6 +1322,7 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
         // tears a State down between every test.
         runCatching { handState.close() }
         runCatching { backups.close() }
+        runCatching { restores.close() }
         runCatching { sceneryService.close() }
         runCatching { effectsService.close() }
         runCatching { rigSafety.close() }
@@ -1529,7 +1550,46 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
         return empty
     }
 
+    /**
+     * Open the database, first applying a restore an admin confirmed (cloud-p3 plan D10): the backup's
+     * files swapped in, then the migrations over it as over any database, then this machine's own rows
+     * written back. A failure anywhere puts the kept files back and opens the database the desk had.
+     */
     private fun initDatabase(): Database {
+        val restore = uk.me.cormack.lighting7.backup.RestoreApply(
+            staging = restoreStaging,
+            databasePath = databasePath,
+            trees = mapOf(
+                uk.me.cormack.lighting7.backup.InstallBackup.PROMPT_SCRIPTS to promptScriptStoreRoot,
+                uk.me.cormack.lighting7.backup.InstallBackup.SCENE_IMAGES to sceneImageStoreRoot,
+                uk.me.cormack.lighting7.backup.InstallBackup.SYNC to syncWorkingTreeRoot,
+            ),
+        )
+        val applied = runCatching { restore.begin() }.getOrElse {
+            logger.error("Couldn't apply the restore; this desk starts as it was", it)
+            null
+        }
+        if (applied == null) {
+            if (!restore.undoPending) {
+                runCatching { restore.sweepKept() }.onFailure { logger.warn("Couldn't remove the trees an earlier restore kept", it) }
+            }
+            return openDatabase()
+        }
+        return try {
+            openDatabase().also { database ->
+                applied.writeBack(database)
+                applied.commit()
+            }
+        } catch (e: Exception) {
+            logger.error("Restoring the backup failed; this desk starts on the database it had", e)
+            runCatching { dataSource?.close() }
+            dataSource = null
+            applied.rollback(e)
+            openDatabase()
+        }
+    }
+
+    private fun openDatabase(): Database {
         val startedAt = java.time.Instant.now()
         val dbPath = databasePath.toString()
         val ds = HikariDataSource(HikariConfig().apply {

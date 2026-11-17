@@ -152,6 +152,8 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'cancelCloudAdoption', // ...same panel
   'unadoptCloud', // ...same panel
   'setRemoteAccess', // src/components/cloud/CloudRemoteAccess.tsx
+  'confirmRestore', // src/components/cloud/CloudRestore.tsx
+  'declineRestore', // ...same section
 
 
   // Call site raises its own toast.error()
