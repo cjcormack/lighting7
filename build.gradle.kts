@@ -1098,6 +1098,10 @@ fun registerJpackageTask(
             "--main-class", "uk.me.cormack.lighting7.launcher.LauncherMainKt",
             "--runtime-image", runtimeOutputDir.get().asFile.absolutePath,
             "--dest", installersDir.get().asFile.absolutePath,
+            // CVE-2026-114938: the bundled JDK 24 runtime is unpatched. The launcher's
+            // BASE64_INTRINSIC_OFF carries the same flags to the backend it spawns.
+            "--java-options", "-XX:+UnlockDiagnosticVMOptions",
+            "--java-options", "-XX:DisableIntrinsic=_base64_encodeBlock,_base64_decodeBlock",
         )
         args += extraArgs
         if (iconExists) args += listOf("--icon", iconFile.absolutePath)
