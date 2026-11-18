@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.selects.select
+import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.perf.DeskMetrics
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
@@ -54,6 +55,8 @@ class ArtNetController(
 
         /** A frame period and the cancel's dispatch, with room to spare; a wedged thread costs this much. */
         const val AWAIT_CLOSED_TIMEOUT_MS = 250L
+
+        private val log = LoggerFactory.getLogger(ArtNetController::class.java)
     }
 
     internal val fadeTickMs = 10
@@ -61,6 +64,18 @@ class ArtNetController(
     private val frameMetrics = metrics.artNet(universe)
 
     private val channelChangeChannels: Map<Int, Channel<ChannelUpdatePayload>>
+
+    /** One changer failing stops only its own channel. */
+    private val changerJob = SupervisorJob()
+    private val changerScope = CoroutineScope(
+        changerJob + Dispatchers.Default + CoroutineExceptionHandler { context, e ->
+            log.error("{} failed; that channel takes no more writes", context[CoroutineName]?.name, e)
+        }
+    )
+
+    /** Called as a changer takes each write; a test's way to make one fail. */
+    @Volatile
+    internal var onWriteTaken: ((channelNo: Int) -> Unit)? = null
 
     @Volatile
     private var refreshInterval: Int =
@@ -128,9 +143,7 @@ class ArtNetController(
 
         // Built synchronously: a write arriving during the construction window must not race
         // an async populate and trip `checkNotNull` in doSetChannelSuspend.
-        channelChangeChannels = (1..512).associateWith {
-            Channel<ChannelUpdatePayload>(Channel.Factory.CONFLATED)
-        }
+        channelChangeChannels = (1..512).associateWith { settlingChannel() }
 
         for (channelNo in 1..512) {
             currentValues[channelNo] = 0u
@@ -161,14 +174,10 @@ class ArtNetController(
             finalFrameSent.countDown()
         }
 
-        GlobalScope.launch {
-            channelChangeChannels.forEach { (channelNo, channel) ->
-                runChannelChangerChannel(channelNo, channel)
-            }
+        channelChangeChannels.forEach { (channelNo, channel) ->
+            changerScope.runChannelChangerChannel(channelNo, channel)
         }
     }
-
-    class ChannelUpdatePayload(val change: ChannelChange, val updateNotificationChannel: Channel<Unit>)
 
     override fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>) {
         runBlocking { setValuesSuspend(valuesToSet) }
@@ -211,9 +220,9 @@ class ArtNetController(
         val changeChannel = channelChangeChannels[channelNo]
         checkNotNull(changeChannel)
 
-        val updateDoneChannel = Channel<Unit>()
+        val payload = ChannelUpdatePayload(channelChange)
         try {
-            changeChannel.send(ChannelUpdatePayload(channelChange, updateDoneChannel))
+            changeChannel.send(payload)
         } catch (_: ClosedSendChannelException) {
             // The controller was closed underneath us. Reachable in normal operation: a
             // patch edit rebuilds controllers while the FX engine is still ticking, and
@@ -221,7 +230,7 @@ class ArtNetController(
             // rather than letting it propagate into the FX loop.
             return false
         }
-        updateDoneChannel.receive()
+        payload.settled.await()
 
         return true
     }
@@ -272,17 +281,11 @@ class ArtNetController(
      */
     fun close() {
         transmissionJob.cancel()
-        // The channel-changer coroutines are NOT children of transmissionJob — they were
-        // launched from a separate GlobalScope job — so cancelling the transmit loop leaves
-        // all 512 of them suspended forever on a channel nobody will write to again. Their
-        // only exit is their channel closing, so close it.
-        //
-        // Closed rather than cancelled on purpose: a changer cancelled between
-        // `changeChannel.send()` and its ack would strand the caller forever on
-        // `updateDoneChannel.receive()`. Closing still drains the buffered payload and acks
-        // it, and a racing sender gets a ClosedSendChannelException that
-        // `doSetChannelSuspend` turns into `false`.
+        // Closed rather than cancelled, so each changer still applies the write it has buffered;
+        // a racing sender gets a ClosedSendChannelException, which `doSetChannelSuspend` turns
+        // into `false`. The supervisor completes once every changer has drained.
         channelChangeChannels.values.forEach { it.close() }
+        changerJob.complete()
     }
 
     /**
@@ -367,49 +370,61 @@ class ArtNetController(
     private fun CoroutineScope.runChannelChangerChannel(channelNo: Int, channel: Channel<ChannelUpdatePayload>) {
         var isClosed = false
 
-        launch(Dispatchers.Default) {
+        launch(CoroutineName("ArtNet changer ${universe.subnet}:${universe.universe}/$channelNo")) {
             var tickerState: TickerState? = null
 
-            while (isActive && !isClosed) {
-                select<Unit> {
-                    channel.onReceiveCatching {
-                        if (it.isClosed) {
-                            isClosed = true
-                            return@onReceiveCatching
-                        }
-
-                        tickerState?.ticker?.cancel()
-                        tickerState = null
-
-                        val result = it.getOrThrow()
-
-                        val numberOfSteps = if (result.change.fadeMs == 0L) {
-                            1
-                        } else {
-                            max(1, (result.change.fadeMs / fadeTickMs).toInt())
-                        }
-
-                        if (numberOfSteps > 1) {
-                            tickerState = TickerState(this@ArtNetController, coroutineContext, channelNo, numberOfSteps, result)
-                            if (tickerState!!.setValue(0)) {
-                                tickerState = null
+            try {
+                while (isActive && !isClosed) {
+                    select<Unit> {
+                        channel.onReceiveCatching {
+                            if (it.isClosed) {
+                                isClosed = true
+                                return@onReceiveCatching
                             }
-                        } else {
-                            currentValues[channelNo] = result.change.newValue
-                        }
 
-                        result.updateNotificationChannel.send(Unit)
-                    }
+                            val result = it.getOrThrow()
+                            try {
+                                onWriteTaken?.invoke(channelNo)
 
-                    if (tickerState != null) {
-                        tickerState!!.ticker.onReceive {
-                            if (tickerState!!.setValue()) {
+                                tickerState?.ticker?.cancel()
                                 tickerState = null
+
+                                val numberOfSteps = if (result.change.fadeMs == 0L) {
+                                    1
+                                } else {
+                                    max(1, (result.change.fadeMs / fadeTickMs).toInt())
+                                }
+
+                                if (numberOfSteps > 1) {
+                                    tickerState = TickerState(this@ArtNetController, coroutineContext, channelNo, numberOfSteps, result)
+                                    if (tickerState!!.setValue(0)) {
+                                        tickerState = null
+                                    }
+                                } else {
+                                    currentValues[channelNo] = result.change.newValue
+                                }
+                            } finally {
+                                result.settled.complete(Unit)
                             }
                         }
 
+                        if (tickerState != null) {
+                            tickerState!!.ticker.onReceive {
+                                if (tickerState!!.setValue()) {
+                                    tickerState = null
+                                }
+                            }
+
+                        }
                     }
                 }
+            } finally {
+                // However the changer ends, no later write may wait on it. Closed before it is
+                // cancelled, so a racing send gets a ClosedSendChannelException rather than the
+                // cancel's CancellationException; the cancel settles what is buffered.
+                tickerState?.ticker?.cancel()
+                channel.close()
+                channel.cancel()
             }
         }
     }
@@ -496,3 +511,12 @@ class ArtNetController(
         return universe.hashCode()
     }
 }
+
+/** A write to one channel; [settled] completes once the changer has taken it or the queue has dropped it. */
+internal class ChannelUpdatePayload(val change: ChannelChange) {
+    val settled = CompletableDeferred<Unit>()
+}
+
+/** A conflated queue, so the last write wins; a write it drops is settled, or its caller waits forever. */
+internal fun settlingChannel(): Channel<ChannelUpdatePayload> =
+    Channel(Channel.CONFLATED) { dropped -> dropped.settled.complete(Unit) }
