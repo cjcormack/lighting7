@@ -128,8 +128,12 @@ class ArtNetController(
 
         // Built synchronously: a write arriving during the construction window must not race
         // an async populate and trip `checkNotNull` in doSetChannelSuspend.
+        //
+        // Conflated, so a newer write replaces one the changer has not taken yet. The replaced
+        // write's caller is still waiting on its ack, so the drop acks it: unacked, it waits
+        // forever, holding whatever lock it writes under.
         channelChangeChannels = (1..512).associateWith {
-            Channel<ChannelUpdatePayload>(Channel.Factory.CONFLATED)
+            Channel<ChannelUpdatePayload>(Channel.Factory.CONFLATED) { dropped -> dropped.applied.complete(Unit) }
         }
 
         for (channelNo in 1..512) {
@@ -168,7 +172,7 @@ class ArtNetController(
         }
     }
 
-    class ChannelUpdatePayload(val change: ChannelChange, val updateNotificationChannel: Channel<Unit>)
+    class ChannelUpdatePayload(val change: ChannelChange, val applied: CompletableDeferred<Unit> = CompletableDeferred())
 
     override fun setValues(valuesToSet: List<Pair<Int, ChannelChange>>) {
         runBlocking { setValuesSuspend(valuesToSet) }
@@ -211,9 +215,9 @@ class ArtNetController(
         val changeChannel = channelChangeChannels[channelNo]
         checkNotNull(changeChannel)
 
-        val updateDoneChannel = Channel<Unit>()
+        val payload = ChannelUpdatePayload(channelChange)
         try {
-            changeChannel.send(ChannelUpdatePayload(channelChange, updateDoneChannel))
+            changeChannel.send(payload)
         } catch (_: ClosedSendChannelException) {
             // The controller was closed underneath us. Reachable in normal operation: a
             // patch edit rebuilds controllers while the FX engine is still ticking, and
@@ -221,7 +225,7 @@ class ArtNetController(
             // rather than letting it propagate into the FX loop.
             return false
         }
-        updateDoneChannel.receive()
+        payload.applied.await()
 
         return true
     }
@@ -279,7 +283,7 @@ class ArtNetController(
         //
         // Closed rather than cancelled on purpose: a changer cancelled between
         // `changeChannel.send()` and its ack would strand the caller forever on
-        // `updateDoneChannel.receive()`. Closing still drains the buffered payload and acks
+        // `applied.await()`. Closing still drains the buffered payload and acks
         // it, and a racing sender gets a ClosedSendChannelException that
         // `doSetChannelSuspend` turns into `false`.
         channelChangeChannels.values.forEach { it.close() }
@@ -398,7 +402,7 @@ class ArtNetController(
                             currentValues[channelNo] = result.change.newValue
                         }
 
-                        result.updateNotificationChannel.send(Unit)
+                        result.applied.complete(Unit)
                     }
 
                     if (tickerState != null) {
