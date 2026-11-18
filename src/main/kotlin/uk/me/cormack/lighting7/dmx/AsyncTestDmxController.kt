@@ -5,7 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ClosedReceiveChannelException
+import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Coroutine-aware test fake for [DmxController]. Mirrors [ArtNetController]'s per-channel
- * conflated-consumer + ack-roundtrip shape so blocking-vs-suspend benchmarks (see
+ * conflated-consumer + ack shape so blocking-vs-suspend benchmarks (see
  * `BenchmarkSetValues`) measure a meaningful fan-out cost — unlike [MockDmxController],
  * whose `setValuesSuspend` falls through to the synchronous body.
  *
@@ -33,18 +33,13 @@ class AsyncTestDmxController(
     private val parkSource: ParkSource? = null,
 ) : DmxController {
 
-    private class ChannelUpdatePayload(
-        val change: ChannelChange,
-        val ack: Channel<Unit>,
-    )
-
     override val currentValues = ConcurrentHashMap<Int, UByte>(512)
 
     private val supervisor = SupervisorJob()
     private val scope = CoroutineScope(supervisor + Dispatchers.Default)
 
     private val channelChangeChannels: Map<Int, Channel<ChannelUpdatePayload>> =
-        (1..512).associateWith { Channel(Channel.Factory.CONFLATED) }
+        (1..512).associateWith { settlingChannel() }
 
     init {
         for ((channelNo, ch) in channelChangeChannels) {
@@ -52,10 +47,11 @@ class AsyncTestDmxController(
                 try {
                     for (payload in ch) {
                         currentValues[channelNo] = payload.change.newValue
-                        payload.ack.send(Unit)
+                        payload.settled.complete(Unit)
                     }
-                } catch (_: ClosedReceiveChannelException) {
-                    // channel closed during shutdown — exit cleanly
+                } finally {
+                    ch.close()
+                    ch.cancel()
                 }
             }
         }
@@ -77,9 +73,13 @@ class AsyncTestDmxController(
     private suspend fun doSetChannelSuspend(channelNo: Int, change: ChannelChange) {
         if (channelNo !in 1..512) return
         val ch = channelChangeChannels[channelNo] ?: return
-        val ack = Channel<Unit>()
-        ch.send(ChannelUpdatePayload(change, ack))
-        ack.receive()
+        val payload = ChannelUpdatePayload(change)
+        try {
+            ch.send(payload)
+        } catch (_: ClosedSendChannelException) {
+            return
+        }
+        payload.settled.await()
     }
 
     override fun setValue(channelNo: Int, channelChange: ChannelChange) {

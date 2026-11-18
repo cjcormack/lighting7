@@ -6,7 +6,7 @@ import kotlinx.coroutines.channels.ticker
 import kotlin.coroutines.CoroutineContext
 
 @OptIn(ObsoleteCoroutinesApi::class)
-internal class TickerState(private val controller: ArtNetController, coroutineContext: CoroutineContext, private val channelNo: Int, numberOfSteps: Int, channelUpdatePayload: ArtNetController.ChannelUpdatePayload) {
+internal class TickerState(private val controller: ArtNetController, coroutineContext: CoroutineContext, private val channelNo: Int, numberOfSteps: Int, channelUpdatePayload: ChannelUpdatePayload) {
     val ticker: ReceiveChannel<Unit>
 
     private val targetValue: UByte

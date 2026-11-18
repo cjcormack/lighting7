@@ -354,9 +354,13 @@ The `getValue()` method returns the pending value (what will be after `apply()`)
   context (tests, a few GENERAL-script apply edges).
 
 Both variants still guarantee read-after-write consistency — a subsequent `getValue()` on the
-same channel returns the committed value — because each channel's conflated consumer acks the
-update before the commit returns. The suspend path just doesn't pin a carrier thread on
-`runBlocking` while it waits.
+same channel returns the committed value — because each write carries a `CompletableDeferred`
+the commit awaits, settled once the channel's changer has applied it. The queue is conflated, so
+the last write wins: a write a newer one replaces before the changer takes it is settled as it
+is dropped (`onUndeliveredElement`), and a changer that ends, however it ends, settles whatever
+is still queued. Unsettled, its caller would wait forever under whatever lock it writes with.
+The changers are siblings under one `SupervisorJob`, so a failure is logged and stops only its
+own channel. The suspend path just doesn't pin a carrier thread on `runBlocking` while it waits.
 
 The FX engine commits one `ControllerTransaction` per compose pass, beat and wall-clock FX
 together — [fx-engineering.md §"Architecture: one compose pass"](fx-engineering.md#architecture-one-compose-pass).
@@ -367,7 +371,7 @@ together — [fx-engineering.md §"Architecture: one compose pass"](fx-engineeri
 micro-benchmark that times `ControllerTransaction.apply()` vs `applySuspend()` against a
 4-universe rig (128 channel writes per universe per iteration). It drives an
 `AsyncTestDmxController` that mirrors `ArtNetController`'s per-channel conflated consumer
-+ ack-roundtrip pattern without UDP — `MockDmxController.setValuesSuspend` falls through
+and settled-write shape without UDP — `MockDmxController.setValuesSuspend` falls through
 to the synchronous body and would silently flatter both paths.
 
 Skipped by default; opt in with:
