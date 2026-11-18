@@ -23,6 +23,16 @@ private val READINESS_TIMEOUT_MS: Long = run {
 }
 
 /**
+ * Turns off HotSpot's Base64 intrinsics, whose AVX-512 decoder overflows the heap on attacker-chosen
+ * input (CVE-2026-114938). The bundled runtime is JDK 24, which will not be patched. Keep the same
+ * list in `build.gradle.kts`'s jpackage `--java-options`, which covers the launcher's own JVM.
+ */
+internal val BASE64_INTRINSIC_OFF = listOf(
+    "-XX:+UnlockDiagnosticVMOptions",
+    "-XX:DisableIntrinsic=_base64_encodeBlock,_base64_decodeBlock",
+)
+
+/**
  * JVM options for the backend child — the packaged counterpart of the root build's
  * `applicationDefaultJvmArgs`, which only `./gradlew run` sees.
  *
@@ -36,7 +46,7 @@ private val READINESS_TIMEOUT_MS: Long = run {
  * is compiled for JVM 24, so no JVM that could reject the flag can be running this code.
  * `BackendCommandLineTest` pins that class-file version.
  */
-internal val BACKEND_JVM_ARGS = listOf("--sun-misc-unsafe-memory-access=allow")
+internal val BACKEND_JVM_ARGS = listOf("--sun-misc-unsafe-memory-access=allow") + BASE64_INTRINSIC_OFF
 
 /** Marker used to resolve the launcher's own JAR / classpath via [Class.protectionDomain]. */
 internal object LauncherMarker

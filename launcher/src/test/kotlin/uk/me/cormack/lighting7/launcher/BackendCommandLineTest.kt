@@ -16,9 +16,16 @@ class BackendCommandLineTest {
     private val jar = Path.of("app", "lighting7.jar").toAbsolutePath()
 
     @Test
-    fun `the backend is spawned with the Unsafe opt-in before -jar`() {
+    fun `the backend is spawned with its JVM options before -jar`() {
         assertEquals(
-            listOf(java.toString(), "--sun-misc-unsafe-memory-access=allow", "-jar", jar.toString()),
+            listOf(
+                java.toString(),
+                "--sun-misc-unsafe-memory-access=allow",
+                "-XX:+UnlockDiagnosticVMOptions",
+                "-XX:DisableIntrinsic=_base64_encodeBlock,_base64_decodeBlock",
+                "-jar",
+                jar.toString(),
+            ),
             ChildProcess.commandLine(java, jar, BACKEND_JVM_ARGS),
             "a JVM option after the jar path would be handed to main() as an argument instead",
         )
