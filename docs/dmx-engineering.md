@@ -149,6 +149,11 @@ The controller uses Kotlin coroutines with a channel-per-DMX-channel architectur
    - Independent fade tracking per channel
    - Non-blocking value updates
 
+   Every controller's changers and fade tickers run on one dedicated daemon pool (`ArtNet-changer-N`,
+   one thread per core, at least two), never `Dispatchers.Default`: callers block on a write from
+   `Default` workers, some while holding `CascadePublisher`'s publish lock that other workers wait
+   on, so a changer needing a `Default` worker to accept the write could deadlock the desk.
+
 2. **Transmission Thread**: A single dedicated thread (`ArtNetThread-{subnet}-{universe}`) handles network I/O:
    - Transmits **continuously**: one frame every `refreshIntervalMs`, whether or not any
      channel changed
@@ -353,11 +358,12 @@ The `getValue()` method returns the pending value (what will be after `apply()`)
   delegate to the suspend path via `runBlocking`. Kept for callers that aren't in a coroutine
   context (tests, a few GENERAL-script apply edges).
 
-Both variants still guarantee read-after-write consistency — a subsequent `getValue()` on the
-same channel returns the committed value — because each write carries a `CompletableDeferred`
+Both variants still guarantee read-after-write consistency for a single writer — a subsequent
+`getValue()` on the same channel returns its committed value — because each write carries a `CompletableDeferred`
 the commit awaits, settled once the channel's changer has applied it. The queue is conflated, so
 the last write wins: a write a newer one replaces before the changer takes it is settled as it
-is dropped (`onUndeliveredElement`), and a changer that ends, however it ends, settles whatever
+is dropped (`onUndeliveredElement`), before the newer write lands, so that caller may read the
+value from before both; and a changer that ends, however it ends, settles whatever
 is still queued. Unsettled, its caller would wait forever under whatever lock it writes with.
 The changers are siblings under one `SupervisorJob`, so a failure is logged and stops only its
 own channel. The suspend path just doesn't pin a carrier thread on `runBlocking` while it waits.

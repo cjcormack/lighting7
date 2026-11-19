@@ -1,7 +1,6 @@
 package uk.me.cormack.lighting7.dmx
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
@@ -36,7 +35,7 @@ class AsyncTestDmxController(
     override val currentValues = ConcurrentHashMap<Int, UByte>(512)
 
     private val supervisor = SupervisorJob()
-    private val scope = CoroutineScope(supervisor + Dispatchers.Default)
+    private val scope = CoroutineScope(supervisor + ArtNetController.changerDispatcher)
 
     private val channelChangeChannels: Map<Int, Channel<ChannelUpdatePayload>> =
         (1..512).associateWith { settlingChannel() }
