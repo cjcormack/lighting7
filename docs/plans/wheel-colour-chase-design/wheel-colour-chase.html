@@ -1,0 +1,527 @@
+<title>Wheel Colour Chases</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column in the family of the FX design pages; the desk drawings are dark in both themes, as the desk is. */
+:root {
+  --bg: #f5f4f7; --card: #ffffff; --fg: #1b1a20; --muted: #5e5b68; --line: #dddae3;
+  --accent: #6a3dcb; --accent-soft: #efe8fd; --amber: #8f5500; --amber-soft: #fbefd9;
+  --go: #1f7a45; --go-soft: #dcf2e4; --bad: #b42318; --bad-soft: #fde7e5;
+  --desk-bg: #0c0b10; --desk-panel: #15141b; --desk-raise: #1f1d27; --desk-line: #2c2a35;
+  --desk-fg: #ecebf1; --desk-muted: #a3a0ae; --desk-faint: #6d6a78;
+  --desk-violet: #a78bfa; --desk-violet-strong: #8b5cf6; --desk-amber: #f5b14a; --desk-blue: #2f7cf6;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111015; --card: #1a1920; --fg: #f2f1f5; --muted: #a6a3b0; --line: #2c2a33;
+  --accent: #b597ff; --accent-soft: #2b2140; --amber: #f5c56b; --amber-soft: #3a2c10;
+  --go: #86efac; --go-soft: #173825; --bad: #fca5a5; --bad-soft: #3b1414; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111015; --card: #1a1920; --fg: #f2f1f5; --muted: #a6a3b0; --line: #2c2a33;
+  --accent: #b597ff; --accent-soft: #2b2140; --amber: #f5c56b; --amber-soft: #3a2c10;
+  --go: #86efac; --go-soft: #173825; --bad: #fca5a5; --bad-soft: #3b1414; color-scheme: dark; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 40px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 64px; }
+.read { max-width: 760px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(32px, 5vw, 50px); font-weight: 800; line-height: 1.04; }
+h2 { font-size: 26px; font-weight: 700; }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 18px; color: var(--muted); max-width: 66ch; }
+.lede b, .muted b, li b, td b, p b { color: var(--fg); font-weight: 600; }
+.muted { color: var(--muted); }
+code { font-family: var(--mono); font-size: 0.86em; background: color-mix(in srgb, var(--line) 60%, transparent); padding: 1px 5px; border-radius: 4px; }
+section { display: flex; flex-direction: column; gap: 20px; }
+.head { display: flex; flex-direction: column; gap: 8px; }
+.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 600; font-family: var(--mono); background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.tag.back { background: var(--amber-soft); color: var(--amber); }
+.tag.both { background: var(--go-soft); color: var(--go); }
+.tag.bad { background: var(--bad-soft); color: var(--bad); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 720px; }
+th { text-align: left; font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 8px 12px 8px 0; border-bottom: 1px solid var(--fg); }
+td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--muted); }
+td:first-child { color: var(--fg); font-weight: 600; white-space: nowrap; }
+ul.points { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 14.5px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 28px; align-items: start; }
+.cols > * { min-width: 0; }
+button, select { font: inherit; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.callout { border-left: 3px solid var(--accent); background: var(--card); padding: 12px 16px; border-radius: 0 8px 8px 0; color: var(--muted); font-size: 14.5px; }
+.callout b { color: var(--fg); }
+
+/* Desk drawings */
+.board { border: 1px solid var(--line); border-radius: 12px; background: var(--desk-bg); color: var(--desk-fg); overflow: hidden; font-size: 13px; line-height: 1.4; }
+.board-cap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 9px 14px; background: var(--card); color: var(--fg); border-bottom: 1px solid var(--line); }
+.board-cap h3 { font-size: 14px; margin-right: auto; }
+.board-cap span { font-size: 12.5px; color: var(--muted); }
+.pane-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--desk-faint); }
+.seg { display: inline-flex; align-items: center; min-height: 28px; border: 1px solid var(--desk-line); border-radius: 7px; padding: 2px; gap: 2px; background: var(--desk-bg); flex-wrap: wrap; }
+.seg button, .seg span.o { height: 22px; padding: 0 8px; border-radius: 5px; border: 0; background: transparent; color: var(--desk-muted); font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; white-space: nowrap; }
+.seg button[aria-pressed="true"], .seg span.o.on { background: var(--desk-raise); color: var(--desk-fg); font-weight: 600; box-shadow: inset 0 0 0 1px var(--desk-line); }
+.seg span.o.new { box-shadow: inset 0 0 0 1px var(--desk-violet-strong); color: var(--desk-fg); }
+.seg button:hover { color: var(--desk-fg); }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.row .lab { font-size: 12px; color: var(--desk-muted); min-width: 72px; }
+.sw { width: 26px; height: 26px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12); display: inline-block; flex: none; }
+.sw.add { border: 1px dashed var(--desk-line); background: transparent; color: var(--desk-muted); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+.dchip { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--desk-line); background: var(--desk-raise); font-size: 12px; color: var(--desk-fg); white-space: nowrap; }
+.dchip.new { border-color: var(--desk-violet-strong); }
+.val { font-family: var(--mono); font-size: 12px; min-width: 44px; text-align: right; color: var(--desk-fg); }
+input[type=range] { accent-color: var(--desk-blue); flex: 1; min-width: 100px; }
+select.dsel { background: var(--desk-raise); color: var(--desk-fg); border: 1px solid var(--desk-line); border-radius: 7px; height: 28px; padding: 0 8px; font-size: 12.5px; max-width: 100%; }
+.ibtn { height: 28px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--desk-line); background: var(--desk-raise); color: var(--desk-fg); font-size: 12px; cursor: pointer; }
+.ann { font-family: var(--mono); font-size: 10px; color: var(--desk-violet); border: 1px solid var(--desk-violet-strong); border-radius: 50%; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+
+/* Playground */
+.pg { display: grid; grid-template-columns: minmax(0, 330px) minmax(0, 1fr); gap: 1px; background: var(--desk-line); }
+@media (max-width: 820px) { .pg { grid-template-columns: minmax(0, 1fr); } }
+.pg .ctl { background: var(--desk-panel); padding: 14px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.pg .out { background: var(--desk-bg); padding: 14px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.hrow { display: grid; grid-template-columns: 116px 44px minmax(0, 1fr); gap: 10px; align-items: center; }
+@media (max-width: 520px) { .hrow { grid-template-columns: 44px minmax(0, 1fr); } .hrow .hn { grid-column: 1 / -1; } }
+.hn { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.hn b { font-size: 12.5px; font-weight: 600; }
+.hn span { font-size: 10.5px; color: var(--desk-muted); font-family: var(--mono); }
+.beam { width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.14); box-shadow: 0 0 18px -4px var(--glow, transparent); }
+canvas.strip { display: block; width: 100%; height: 34px; border-radius: 4px; background: var(--desk-panel); }
+.now { font-family: var(--mono); font-size: 11px; color: var(--desk-muted); min-height: 1.4em; }
+.now b { color: var(--desk-fg); font-weight: 500; }
+.hnotes { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--desk-line); padding-top: 12px; }
+.hnote { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 8px; font-size: 12px; color: var(--desk-muted); }
+.hnote i { font-style: normal; width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; background: var(--desk-faint); }
+.hnote.warn i { background: var(--desk-amber); }
+.hnote.ok i { background: #4ade80; }
+.hnote b { color: var(--desk-fg); font-weight: 500; }
+.fine { font-size: 11.5px; color: var(--desk-faint); }
+
+/* Inspector mock */
+.insp-grid { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 1px; background: var(--desk-line); }
+@media (max-width: 820px) { .insp-grid { grid-template-columns: minmax(0, 1fr); } }
+.insp { background: var(--desk-panel); padding: 14px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.isec { display: flex; flex-direction: column; gap: 8px; }
+.isec-h { display: flex; align-items: baseline; gap: 8px; }
+.isec-h span { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--desk-faint); }
+.lands { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.lands div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px; }
+.lands dt, .lands .k { color: var(--desk-muted); font-family: var(--mono); font-size: 11px; }
+.lands .v { color: var(--desk-fg); }
+.lands .w { color: var(--desk-amber); }
+.notes { background: var(--card); color: var(--fg); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.note { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; font-size: 14px; color: var(--muted); }
+.note .ann { color: var(--accent); border-color: var(--accent); }
+.note b { color: var(--fg); }
+
+ol.dec { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 16px; counter-reset: d; }
+ol.dec li { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; }
+ol.dec li::before { counter-increment: d; content: "Q" counter(d); font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--accent); padding-top: 2px; }
+ol.dec h3 { margin-bottom: 4px; }
+ol.dec p { color: var(--muted); font-size: 14.5px; }
+ol.dec .rec { margin-top: 6px; font-size: 13.5px; }
+.sessions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+.sess { border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sess .eyebrow { color: var(--accent); }
+.sess p { font-size: 14px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+<header class="read" style="display:flex;flex-direction:column;gap:16px">
+  <p class="eyebrow">Design · 23 Nov 2026 · questions answered · planned</p>
+  <h1>Colour chases on colour-wheel heads</h1>
+  <p class="lede">Today a colour FX skips every head whose colour is a wheel. That covers the Beam Rings, the MAC 250s and the Robes. This proposal lets <b>Colour Cycle and Palette Steps</b> chase those heads too, each step on the head's nearest slot, and adds <b>Split</b>: a step through the half-and-half position between two neighbouring slots, on the wheels that have one.</p>
+  <p class="callout"><b>How I read the ask.</b> "FXs that use gobos" is taken to mean fixtures with a gobo wheel. Those spots and beams all make their colour with a wheel. A gobo chase on them already works, through Slot Steps on the gobo wheel. If you meant a colour chase locked to a gobo chase, that is a smaller change, and the playground's timing still applies.</p>
+</header>
+
+<section>
+  <div class="head read">
+    <p class="eyebrow">Today</p>
+    <h2>Where a colour chase stops</h2>
+  </div>
+  <div class="cols">
+    <ul class="points">
+      <li><b>Colour FX skip wheel heads.</b> <code>ColourTarget</code> takes only a head with a mixed colour, so a Beam Ring in the selection is left out with no message. <code>FU-FX-STEPS-COLOUR-WHEEL</code> records this for Palette Steps, and this request meets its trigger.</li>
+      <li><b>Slot Steps is the only wheel chase.</b> It works by slot name and is filed under Beam. Names differ between models (the Varytec's <code>COLOR_1</code>…<code>7</code>, the Fusion's <code>RED</code>), so one list can't cover a mixed rig, and it can't include an RGB par.</li>
+    </ul>
+    <ul class="points">
+      <li><b>The snap already exists.</b> A colour palette pressed on a wheel head lands on the slot nearest by ΔE, against each slot's preview or the unit's fitted gel. A chase can use the same rule.</li>
+      <li><b>Splits aren't modelled.</b> The MAC 250 documents split positions at 1–144 but doesn't list them, and the Robe's wheels scroll between neighbours over 0–127. The Stage view would draw the MAC 250 at level 70 as open white.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <p class="eyebrow">Playground</p>
+    <h2>One chase, three kinds of head</h2>
+    <p class="muted">A sketch of the agreed rule. The desk will own the real one, and these slot previews and split positions are estimates. Every head runs the same Colour Cycle in unison. Spread and Order work as they do today, with wheel heads counted as heads.</p>
+  </div>
+  <div class="board">
+    <div class="board-cap"><h3>Colour Cycle over a par, a MAC 250 and a Beam Ring</h3><span>2 cycles shown · the line is now</span></div>
+    <div class="pg">
+      <div class="ctl">
+        <div class="isec">
+          <div class="isec-h"><span>Colours</span></div>
+          <select class="dsel" id="preset" aria-label="Colour list">
+            <option value="mac">MAC 250 wheel, in order</option>
+            <option value="ring">Beam Ring wheel, in order</option>
+            <option value="ryb">Red · Yellow · Blue</option>
+            <option value="warm">Orange · Amber · Red</option>
+          </select>
+          <div class="swatches" id="swatches"></div>
+        </div>
+        <div class="isec">
+          <div class="isec-h"><span>Between</span></div>
+          <div class="seg" id="between" role="group" aria-label="Between">
+            <button type="button" data-v="CUT">Cut</button>
+            <button type="button" data-v="FADE">Fade</button>
+            <button type="button" data-v="SMOOTH">Smooth</button>
+            <button type="button" data-v="SPLIT" aria-pressed="true">Split</button>
+          </div>
+          <div class="row" id="fadeRow">
+            <label class="lab" for="fade" id="fadeLab">Split for</label>
+            <input type="range" id="fade" min="0" max="100" step="5" value="50">
+            <span class="val" id="fadeVal">50 %</span>
+          </div>
+        </div>
+        <div class="isec">
+          <div class="isec-h"><span>Timing</span></div>
+          <div class="row">
+            <label class="lab" for="cycle">Cycle</label>
+            <select class="dsel" id="cycle">
+              <option value="2">2 beats</option>
+              <option value="4" selected>1 bar</option>
+              <option value="8">2 bars</option>
+              <option value="16">4 bars</option>
+            </select>
+            <span class="val" style="min-width:auto">at 120 BPM</span>
+          </div>
+          <div class="row">
+            <button type="button" class="ibtn" id="play" aria-pressed="true">Pause</button>
+          </div>
+        </div>
+      </div>
+      <div class="out">
+        <div id="heads" style="display:flex;flex-direction:column;gap:14px"></div>
+        <div class="hnotes" id="hnotes" aria-live="polite"></div>
+        <p class="fine">A split is drawn with the leading slot on top and the next below. Travel uses each type's declared colour-wheel time across its whole range.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <p class="eyebrow">The rule</p>
+    <h2>What each kind of head does</h2>
+    <p class="muted">A wheel can't fade, so it changes when the RGB heads are half-way across, and the rig changes on one beat. Split is new. It holds the half-and-half between two neighbouring slots for <i>Fade</i> of each step.</p>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Between</th><th>RGB head</th><th>Wheel that splits, neighbours</th><th>Any other wheel</th></tr></thead>
+      <tbody>
+        <tr><td>Cut</td><td>A, then B at the step's edge</td><td>A, then B at the step's edge</td><td>Same</td></tr>
+        <tr><td>Fade · Smooth</td><td>A, crossing to B</td><td>A, then B at the middle of the crossing</td><td>Same</td></tr>
+        <tr><td>Split <span class="tag">new</span></td><td>A, the half-way mix held, then B</td><td>A, then the A/B split held, then B</td><td>A, then B at the middle of the split</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted read">Only FX that step reach a wheel head: Colour Cycle and Palette Steps. Rainbow Cycle, Colour Flicker, Colour Strobe and script FX still leave a wheel alone, since snapping a continuous colour every tick would rattle the wheel. Under Amount a wheel still snaps at half weight, as every setting does.</p>
+</section>
+
+<section>
+  <div class="head read">
+    <p class="eyebrow">In the editor</p>
+    <h2>The Colours section on a wheel selection</h2>
+  </div>
+  <div class="board">
+    <div class="board-cap"><h3>FX editor inspector · Colour Cycle over 2 MAC 250 and 4 Beam Rings</h3><span>numbered against the notes</span></div>
+    <div class="insp-grid">
+      <div class="insp">
+        <div class="isec">
+          <div class="isec-h"><span>Colours</span><span class="ann" style="margin-left:auto">1</span></div>
+          <div class="swatches">
+            <span class="sw" style="background:#ff00ff" title="Magenta"></span>
+            <span class="sw" style="background:#ff0000" title="Red"></span>
+            <span class="sw" style="background:#3370e0" title="Blue 108"></span>
+            <span class="sw" style="background:#00ff00" title="Green"></span>
+            <span class="sw" style="background:#ffc0cb" title="Pink"></span>
+            <span class="sw add" aria-hidden="true">+</span>
+          </div>
+          <div class="row"><span class="dchip new">Start from the MAC 250's wheel</span></div>
+        </div>
+        <div class="isec">
+          <div class="isec-h"><span>Between</span><span class="ann" style="margin-left:auto">2</span></div>
+          <div class="seg"><span class="o">Cut</span><span class="o">Fade</span><span class="o">Smooth</span><span class="o on new">Split</span></div>
+          <div class="row"><span class="lab">Split for</span><input type="range" value="50" aria-label="Split for (example)" disabled><span class="val">50 %</span></div>
+          <p class="fine" style="color:var(--desk-muted)">Each colour gives way to the next through their split, on wheels that have one.</p>
+        </div>
+      </div>
+      <div class="insp">
+        <div class="isec">
+          <div class="isec-h"><span>Lands on</span><span class="ann" style="margin-left:auto">3</span></div>
+          <div class="lands">
+            <div><span class="k">MAC 250 ×2</span><span class="v">Magenta · Magenta/Red · Red · Red/Blue 108 · Blue 108 · …</span></div>
+            <div><span class="k">Beam Ring ×4</span><span class="v">Magenta · Red · Blue · Green · Magenta</span></div>
+            <div><span class="k"></span><span class="w">No split: the Beam Ring's wheel doesn't split.</span></div>
+            <div><span class="k"></span><span class="w">Pink and Magenta are both Magenta on the Beam Ring.</span></div>
+            <div><span class="k"></span><span class="w">Red → Blue is three slots on the Beam Ring. At 0.4 s a step the wheel may not settle.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="note"><span class="ann">1</span><p><b>Start from the wheel.</b> On a selection whose wheel heads are one model, the picker starts Colour Cycle on that wheel's colours in wheel order, open left out and fitted gels read. Every neighbour in the list is then a neighbour on the wheel. <b>Split Chase</b> is the same thing as a preset.</p></div>
+      <div class="note"><span class="ann">2</span><p><b>Split</b> is a fourth option of <code>between</code>, reusing <i>Fade</i> as the share of each step held on the split. At 50 % that gives colour, split, colour, split, the classic half-step wheel chase.</p></div>
+      <div class="note"><span class="ann">3</span><p><b>The desk says what each head will do.</b> The FX preview answers each wheel head's slot, or slot and split, and the notes: two colours on one slot, a split that can't happen, a step shorter than the wheel's travel. The editor draws them and works none of them out.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <p class="eyebrow">Decisions</p>
+    <h2>Nine decisions</h2>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>#</th><th>Decision</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td>D1</td><td><b>A colour chase reaches wheel heads.</b> A colour FX that declares <code>stepsFrom</code> counts a wheel head as a member and lands each step on its nearest slot, through the same snap and fitted media a palette press uses. One FX covers pars and spots, and every head counts toward Order and Spread.</td><td><span class="tag back">desk</span></td></tr>
+        <tr><td>D2</td><td><b>Colour Cycle returns steps.</b> It hands the target its colour list, not a colour it blended itself, so each head can snap. RGB output stays identical to the DMX step, held by an equivalence test against today's script.</td><td><span class="tag back">desk</span></td></tr>
+        <tr><td>D3</td><td><b>A wheel changes at the middle of the crossing</b> under Fade and Smooth, and at the edge under Cut.</td><td><span class="tag back">desk</span></td></tr>
+        <tr><td>D4</td><td><b><code>between</code> gains Split.</b> Held for <i>Fade</i> of each step. A wheel that can split shows the split, any other wheel changes at its middle, and an RGB head holds the half-way mix.</td><td><span class="tag both">both</span></td></tr>
+        <tr><td>D5</td><td><b>A wheel declares where it splits.</b> Each colour slot can declare its level in the wheel's continuous band. Two slots split only if both declare one and they are neighbours, and their split is the midpoint. A test keeps the levels in wheel order. Nothing is guessed from names.</td><td><span class="tag back">desk</span></td></tr>
+        <tr><td>D6</td><td><b>Slot Steps on a colour wheel takes Split too</b>, since slot names on one model's wheel fix the neighbours exactly.</td><td><span class="tag back">desk</span></td></tr>
+        <tr><td>D7</td><td><b>The picker starts from the wheel</b>, in wheel order, on Split where the wheel splits and Cut where it doesn't. A <b>Split Chase</b> preset.</td><td><span class="tag">client</span></td></tr>
+        <tr><td>D8</td><td><b>The preview says what each head will do</b>: its slot or split per sample, and notes for two colours on one slot, a split that can't happen and a step faster than the wheel's travel.</td><td><span class="tag both">both</span></td></tr>
+        <tr><td>D9</td><td><b>The Stage view and tables draw a split</b>: a half-and-half disc in 2D, the share-weighted beam and a pool split in two in 3D, and <i>Red / Yellow</i> in the fixtures table. A shared vector pins the split reading on both sides.</td><td><span class="tag">client</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted read"><b>No stored change.</b> Split is a new value of an existing FX parameter, and an older desk runs it as Fade. Wheel membership and split levels live in fixture code. No table, migration or sync format moves.</p>
+</section>
+
+<section>
+  <div class="head read">
+    <p class="eyebrow">The rig</p>
+    <h2>Which fixtures can split</h2>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Fixture</th><th>What we know</th><th>What it needs</th><th>Gets</th></tr></thead>
+      <tbody>
+        <tr><td>Martin MAC 250</td><td>Split positions 1–144, documented but not listed</td><td>Each slot's level in that band, from the manual</td><td><span class="tag both">chase + split</span></td></tr>
+        <tr><td>Robe ColorSpot 575</td><td>Wheel 1 scrolls 0–127 between neighbours</td><td>Each slot's level on wheel 1. The chase leaves wheel 2 alone</td><td><span class="tag both">chase + split</span></td></tr>
+        <tr><td>Show-Sound LEDBEAMRING</td><td>Seven colours and white in 16-step bands. Chris: it doesn't split</td><td>Nothing</td><td><span class="tag">chase</span></td></tr>
+        <tr><td>Fusion 100 Spot · Varytec XL60</td><td>Chris: neither splits</td><td>Nothing</td><td><span class="tag">chase</span></td></tr>
+        <tr><td>Source Four Revolution</td><td>A gel scroller, frames by level</td><td>Nothing: a scroller's join between frames is a seam, not a look</td><td><span class="tag">chase</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <p class="eyebrow">Answered 23 Nov 2026</p>
+    <h2>Four questions</h2>
+  </div>
+  <ol class="dec read">
+    <li><div><h3>Under Split, do RGB heads hold the half-way mix or cut?</h3><p>Holding the mix keeps one rhythm across the rig, since every head changes at the same moments. Cutting keeps every par on a colour that is in the list.</p><p class="rec"><span class="tag both">agreed</span> Hold the mix.</p></div></li>
+    <li><div><h3>Under Fade, does a wheel change at the middle or roll?</h3><p>Rolling moves the wheel through the continuous band and shows every slot between the two. That's real wheel behaviour, but rarely the colour asked for.</p><p class="rec"><span class="tag both">agreed</span> Change at the middle. Rolling is out of scope.</p></div></li>
+    <li><div><h3>Should Rainbow Cycle drive a wheel's own rotation?</h3><p>A wheel head could run its scroll band under a Rainbow Cycle rather than being left alone.</p><p class="rec"><span class="tag both">agreed</span> Out of scope, filed as <code>FU-FX-RAINBOW-WHEEL-SCROLL</code>.</p></div></li>
+    <li><div><h3>Does the Beam Ring split?</h3><p>Your example chases from session 1. Whether it splits depended on what its 16-step bands hold.</p><p class="rec"><span class="tag both">answered</span> No, and nor do the Fusion or the Varytec. A forked Colour Cycle gets a line in the fork sheet saying it needs this desk or later.</p></div></li>
+  </ol>
+</section>
+
+<section>
+  <div class="head read">
+    <p class="eyebrow">If agreed</p>
+    <h2>Three sessions</h2>
+  </div>
+  <div class="sessions">
+    <div class="sess"><p class="eyebrow">Session 1 · desk</p><h3>Wheel heads in colour chases</h3><p>D1–D3. Colour Cycle on steps with its equivalence test. The colour target finds where each head lands, and suppression, Blind, the key stack, provenance and park ask it, because a wheel head's chase writes <code>colourWheel</code>, not <code>rgbColour</code>. Palette Steps reaches wheel heads, which closes <code>FU-FX-STEPS-COLOUR-WHEEL</code>.</p></div>
+    <div class="sess"><p class="eyebrow">Session 2 · desk</p><h3>Splits</h3><p>D4–D6 and D8. Split levels on the colour slots and their test, the MAC 250 and Robe annotated as estimates, the split write in both targets, Slot Steps' Split, and the preview's slots, splits and notes.</p></div>
+    <div class="sess"><p class="eyebrow">Session 3 · client</p><h3>Editor and Stage view</h3><p>D7 and D9. The Split option and wheel start, the Split Chase preset, the preview's notes in the inspector, the split drawn in 2D, 3D and the fixtures table, the shared vector, and manual-validation rows per split fixture.</p></div>
+  </div>
+  <p class="muted read">The engineering detail is in <code>docs/plans/wheel-colour-chase-plan.md</code>.</p>
+</section>
+
+</div>
+
+<script>
+(function () {
+  const PRESETS = {
+    mac: [['Magenta', '#ff00ff'], ['Red', '#ff0000'], ['Blue 108', '#3370e0'], ['Green', '#00ff00'], ['Pink', '#ffc0cb']],
+    ring: [['Red', '#ff0000'], ['Yellow', '#ffff00'], ['Blue', '#0000ff'], ['Green', '#00ff00'], ['Magenta', '#ff00ff'], ['Amber', '#ff8000'], ['Cyan', '#00ffff']],
+    ryb: [['Red', '#ff0000'], ['Yellow', '#ffff00'], ['Blue', '#0000ff']],
+    warm: [['Orange', '#ffa500'], ['Amber', '#ff8000'], ['Red', '#ff0000']],
+  };
+  // Wheel order as the indexed levels run; previews are the fixtures' declared ones.
+  const HEADS = [
+    { name: 'Par', sub: 'RGB', kind: 'rgb' },
+    { name: 'MAC 250', sub: 'wheel · splits', kind: 'wheel', split: true, colourMs: 700, slots: [
+      ['Open', '#ffffff'], ['Purple', '#800080'], ['Green 202', '#00cc55'], ['Orange', '#ffa500'], ['Blue 101', '#1e5bff'],
+      ['Magenta', '#ff00ff'], ['Red', '#ff0000'], ['Blue 108', '#3370e0'], ['Green', '#00ff00'], ['Pink', '#ffc0cb'],
+      ['Blue', '#0000ff'], ['Yellow', '#ffff00'], ['CTC', '#ffe0c0'], ['White', '#ffffff']] },
+    { name: 'Beam Ring', sub: 'wheel · no split', kind: 'wheel', split: false, colourMs: 600, slots: [
+      ['White', '#ffffff'], ['Red', '#ff0000'], ['Yellow', '#ffff00'], ['Blue', '#0000ff'], ['Green', '#00ff00'],
+      ['Magenta', '#ff00ff'], ['Amber', '#ff8000'], ['Cyan', '#00ffff']] },
+  ];
+
+  const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const rgb2hex = c => '#' + c.map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+  function lab(h) {
+    const [r, g, b] = hex2rgb(h).map(v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    const x = (r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047, y = r * 0.2126 + g * 0.7152 + b * 0.0722, z = (r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883;
+    const f = t => t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
+    return [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))];
+  }
+  const dE = (a, b) => { const p = lab(a), q = lab(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
+  function snap(head, hex) {
+    let best = 0, d = Infinity;
+    head.slots.forEach((s, i) => { if (s[0] === 'Open') return; const e = dE(hex, s[1]); if (e < d) { d = e; best = i; } });
+    return best;
+  }
+  const mix = (a, b, t) => { const p = hex2rgb(a), q = hex2rgb(b); return rgb2hex(p.map((v, i) => v + (q[i] - v) * t)); };
+
+  const state = { preset: 'mac', between: 'SPLIT', fade: 0.5, beats: 4, playing: true, t0: performance.now(), paused: 0 };
+  const $ = id => document.getElementById(id);
+
+  // What a head shows at a phase: {a, b?} where b is a split's second colour.
+  function at(head, phase, colours, snapped) {
+    const n = colours.length;
+    const p = ((phase % 1) + 1) % 1;
+    const i = Math.min(n - 1, Math.floor(p * n + 1e-9));
+    const w = p * n - i;
+    const j = (i + 1) % n;
+    const fade = state.fade, hold = 1 - fade;
+    const bt = state.between;
+    let blend = 0, split = false;
+    if (bt === 'FADE') blend = (fade <= 0 || w < hold) ? 0 : (w - hold) / fade;
+    else if (bt === 'SMOOTH') blend = (1 - Math.cos(w * Math.PI)) / 2;
+    else if (bt === 'SPLIT') { if (fade > 0 && w >= hold) { blend = 0.5; split = true; } }
+    if (head.kind === 'rgb') return { a: mix(colours[i][1], colours[j][1], blend), label: blend === 0 ? colours[i][0] : blend >= 1 ? colours[j][0] : (split ? colours[i][0] + ' + ' + colours[j][0] + ' mix' : 'crossing') };
+    const sa = snapped[i], sb = snapped[j];
+    const A = head.slots[sa], B = head.slots[sb];
+    if (split) {
+      if (sa !== sb && head.split && Math.abs(sa - sb) === 1) return { a: A[1], b: B[1], label: A[0] + ' / ' + B[0] };
+      const mid = hold + fade / 2;
+      return w < mid ? { a: A[1], label: A[0] } : { a: B[1], label: B[0] };
+    }
+    return blend < 0.5 ? { a: A[1], label: A[0] } : { a: B[1], label: B[0] };
+  }
+
+  const rows = HEADS.map(h => {
+    const el = document.createElement('div');
+    el.className = 'hrow';
+    el.innerHTML = '<div class="hn"><b>' + h.name + '</b><span>' + h.sub + '</span></div><div class="beam" role="img"></div><div style="display:flex;flex-direction:column;gap:4px;min-width:0"><canvas class="strip"></canvas><div class="now"></div></div>';
+    $('heads').appendChild(el);
+    return { head: h, beam: el.querySelector('.beam'), canvas: el.querySelector('canvas'), now: el.querySelector('.now') };
+  });
+
+  function snappedFor(head, colours) { return head.kind === 'wheel' ? colours.map(c => snap(head, c[1])) : null; }
+
+  function drawStrips() {
+    const colours = PRESETS[state.preset];
+    rows.forEach(r => {
+      const c = r.canvas, dpr = window.devicePixelRatio || 1;
+      const w = Math.max(10, c.clientWidth), h = 34;
+      c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+      const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const sn = snappedFor(r.head, colours);
+      for (let x = 0; x < w; x++) {
+        const s = at(r.head, (x / w) * 2, colours, sn);
+        if (s.b) { g.fillStyle = s.a; g.fillRect(x, 0, 1, h / 2); g.fillStyle = s.b; g.fillRect(x, h / 2, 1, h / 2); }
+        else { g.fillStyle = s.a; g.fillRect(x, 0, 1, h); }
+      }
+      g.fillStyle = 'rgba(12,11,16,0.55)'; g.fillRect(w / 2 - 0.5, 0, 1, h);
+    });
+  }
+
+  function notes() {
+    const colours = PRESETS[state.preset], n = colours.length;
+    const stepS = (state.beats * 0.5) / n;
+    const out = [];
+    rows.forEach(r => {
+      const h = r.head;
+      if (h.kind !== 'wheel') return;
+      const sn = snappedFor(h, colours);
+      out.push(['', '<b>' + h.name + '</b> lands on ' + sn.map(i => h.slots[i][0]).join(' · ')]);
+      const seen = {};
+      colours.forEach((c, k) => { const s = sn[k]; if (seen[s] != null && colours[seen[s]][0] !== c[0]) out.push(['warn', colours[seen[s]][0] + ' and ' + c[0] + ' are both ' + h.slots[s][0] + ' on the ' + h.name + '.']); else seen[s] = k; });
+      if (state.between === 'SPLIT') {
+        if (!h.split) out.push(['warn', 'No split on the ' + h.name + ': its wheel doesn’t split, so it changes at the middle of each split.']);
+        else {
+          const bad = [];
+          for (let k = 0; k < n; k++) { const a = sn[k], b = sn[(k + 1) % n]; if (a !== b && Math.abs(a - b) !== 1) bad.push(h.slots[a][0] + ' → ' + h.slots[b][0]); }
+          if (bad.length) out.push(['warn', bad.join(', ') + (bad.length > 1 ? ' aren’t' : ' isn’t') + ' neighbours on the ' + h.name + ': ' + (bad.length > 1 ? 'they change' : 'it changes') + ' at the middle.']);
+          else out.push(['ok', 'Every step splits on the ' + h.name + '.']);
+        }
+      }
+      let worst = 0;
+      for (let k = 0; k < n; k++) worst = Math.max(worst, Math.abs(sn[k] - sn[(k + 1) % n]));
+      const need = h.colourMs / 1000 * worst / (h.slots.length - 1);
+      if (need > stepS * 0.6) out.push(['warn', 'The ' + h.name + '’s wheel needs about ' + need.toFixed(2) + ' s for its longest move. This chase steps every ' + stepS.toFixed(2) + ' s, so it may not settle.']);
+    });
+    $('hnotes').innerHTML = out.map(o => '<div class="hnote ' + o[0] + '"><i></i><span>' + o[1] + '</span></div>').join('');
+  }
+
+  function swatches() {
+    $('swatches').innerHTML = PRESETS[state.preset].map(c => '<span class="sw" style="background:' + c[1] + '" title="' + c[0] + '"></span>').join('');
+  }
+
+  function controls() {
+    document.querySelectorAll('#between button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === state.between)));
+    const shown = state.between === 'FADE' || state.between === 'SPLIT';
+    $('fadeRow').hidden = !shown;
+    $('fadeLab').textContent = state.between === 'SPLIT' ? 'Split for' : 'Fade';
+    $('fadeVal').textContent = Math.round(state.fade * 100) + ' %';
+  }
+
+  function refresh() { controls(); swatches(); drawStrips(); notes(); }
+
+  function phaseNow() {
+    const elapsed = state.playing ? (performance.now() - state.t0) : state.paused;
+    return (elapsed / 1000) / (state.beats * 0.5);
+  }
+
+  function frame() {
+    const colours = PRESETS[state.preset];
+    const ph = phaseNow();
+    rows.forEach(r => {
+      const s = at(r.head, ph, colours, snappedFor(r.head, colours));
+      r.beam.style.background = s.b ? 'linear-gradient(180deg,' + s.a + ' 50%,' + s.b + ' 50%)' : s.a;
+      r.beam.style.setProperty('--glow', s.a);
+      r.beam.setAttribute('aria-label', r.head.name + ' showing ' + s.label);
+      r.now.innerHTML = 'now <b>' + s.label + '</b>';
+      const c = r.canvas, w = c.clientWidth;
+      if (!r.mark) { r.mark = document.createElement('div'); r.mark.style.cssText = 'position:absolute;top:0;width:2px;height:34px;background:#fff;border-radius:1px;pointer-events:none'; c.parentElement.style.position = 'relative'; c.parentElement.appendChild(r.mark); }
+      r.mark.style.left = ((ph % 2) / 2 * w - 1) + 'px';
+    });
+    requestAnimationFrame(frame);
+  }
+
+  $('preset').addEventListener('change', e => { state.preset = e.target.value; refresh(); });
+  $('between').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; state.between = b.dataset.v; refresh(); });
+  $('fade').addEventListener('input', e => { state.fade = e.target.value / 100; refresh(); });
+  $('cycle').addEventListener('change', e => { const ph = phaseNow(); state.beats = +e.target.value; const ms = ph * state.beats * 500; if (state.playing) state.t0 = performance.now() - ms; else state.paused = ms; refresh(); });
+  $('play').addEventListener('click', e => {
+    if (state.playing) { state.paused = performance.now() - state.t0; state.playing = false; e.target.textContent = 'Play'; }
+    else { state.t0 = performance.now() - state.paused; state.playing = true; e.target.textContent = 'Pause'; }
+    e.target.setAttribute('aria-pressed', String(state.playing));
+  });
+  window.addEventListener('resize', drawStrips);
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { state.playing = false; state.paused = 1250; $('play').textContent = 'Play'; $('play').setAttribute('aria-pressed', 'false'); }
+  refresh();
+  requestAnimationFrame(frame);
+})();
+</script>
