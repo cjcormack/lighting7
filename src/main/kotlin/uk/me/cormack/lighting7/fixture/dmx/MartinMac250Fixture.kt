@@ -55,8 +55,11 @@ sealed class MartinMac250Fixture(
      * Channel 3 — colour wheel.
      *
      * Indexed colour positions (000 open, 156–207 indexed, 208–245 scroll).
-     * Split positions (001–144, smooth half-and-half between adjacent
-     * colours) are not enumerated — write the raw level if needed.
+     * Split positions (001–144) put half of each of two adjacent colours in
+     * the beam (wheel-colour-chase plan D5): each slot's `continuousLevel` is
+     * where it is full in that band. The manual gives the band, not a table,
+     * so the levels are an estimate spread evenly over 1–144 in wheel order,
+     * checked on the rig by FU-MANUAL-WHEEL-SPLITS.
      *
      * `colourPreview` hex values are best-effort approximations for the UI;
      * exact gel hues depend on the physical filters fitted to the wheel.
@@ -65,21 +68,22 @@ sealed class MartinMac250Fixture(
         override val level: UByte,
         override val colourPreview: String? = null,
         override val noColour: Boolean = false,
+        override val continuousLevel: UByte? = null,
     ) : DmxFixtureColourSettingValue {
-        OPEN(0u, "#FFFFFF"),
-        PURPLE(156u, "#800080"),
-        GREEN_202(160u, "#00CC55"),
-        ORANGE(164u, "#FFA500"),
-        BLUE_101(168u, "#1E5BFF"),
-        MAGENTA(172u, "#FF00FF"),
-        RED(176u, "#FF0000"),
-        BLUE_108(180u, "#3370E0"),
-        GREEN(184u, "#00FF00"),
-        PINK(188u, "#FFC0CB"),
-        BLUE(192u, "#0000FF"),
-        YELLOW(196u, "#FFFF00"),
-        CTC(200u, "#FFE0C0"),
-        WHITE(204u, "#FFFFFF"),
+        OPEN(0u, "#FFFFFF", continuousLevel = 1u),
+        PURPLE(156u, "#800080", continuousLevel = 12u),
+        GREEN_202(160u, "#00CC55", continuousLevel = 23u),
+        ORANGE(164u, "#FFA500", continuousLevel = 34u),
+        BLUE_101(168u, "#1E5BFF", continuousLevel = 45u),
+        MAGENTA(172u, "#FF00FF", continuousLevel = 56u),
+        RED(176u, "#FF0000", continuousLevel = 67u),
+        BLUE_108(180u, "#3370E0", continuousLevel = 78u),
+        GREEN(184u, "#00FF00", continuousLevel = 89u),
+        PINK(188u, "#FFC0CB", continuousLevel = 100u),
+        BLUE(192u, "#0000FF", continuousLevel = 111u),
+        YELLOW(196u, "#FFFF00", continuousLevel = 122u),
+        CTC(200u, "#FFE0C0", continuousLevel = 133u),
+        WHITE(204u, "#FFFFFF", continuousLevel = 144u),
         SCROLL_CW(208u, noColour = true),
         SCROLL_CCW(227u, noColour = true),
         RANDOM_FAST(246u, noColour = true),

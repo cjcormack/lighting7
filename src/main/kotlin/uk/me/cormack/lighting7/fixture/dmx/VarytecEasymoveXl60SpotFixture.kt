@@ -46,7 +46,8 @@ sealed class VarytecEasymoveXl60SpotFixture(
      * wheel and carry no single colour.
      *
      * 0–17 open, 18–127 indexed colours, 128–192 forward rotation
-     * (slow → fast), 193–255 reverse rotation (slow → fast).
+     * (slow → fast), 193–255 reverse rotation (slow → fast). No continuous
+     * band, so the wheel does not split.
      */
     enum class Colour(
         override val level: UByte,

@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
+import uk.me.cormack.lighting7.fixture.dmx.optionsKey
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.PI
@@ -148,7 +149,7 @@ class ColourStepList(val colours: List<ExtendedColour>) : StepList {
         media: FittedMedia?,
     ): WheelSlot? {
         if (index !in colours.indices) return null
-        val slots = slotsByWheel.getOrPut(WheelKey(optionsKey(setting), attribute, media)) {
+        val slots = slotsByWheel.getOrPut(WheelKey(setting.optionsKey(), attribute, media)) {
             colours.map { colour ->
                 PaletteResolver.nearestWheelOption(setting, attribute, media, colour.color)
                     ?.first?.let { WheelSlot(it.name, it.level) }
@@ -203,7 +204,7 @@ class SlotStepList(val names: List<String>) : StepList {
     }
 
     private fun levelsFor(setting: DmxFixtureSetting<*>): List<UByte?> =
-        levelsByOptions.getOrPut(optionsKey(setting)) {
+        levelsByOptions.getOrPut(setting.optionsKey()) {
             val byName = HashMap<String, UByte>()
             for (option in setting.sortedValues) byName.putIfAbsent(normaliseSlotName(option.name), option.level)
             wanted.map { byName[it] }
@@ -215,12 +216,6 @@ class SlotStepList(val names: List<String>) : StepList {
     override fun equals(other: Any?): Boolean = other is SlotStepList && other.names == names
     override fun hashCode(): Int = names.hashCode()
     override fun toString(): String = "SlotStepList($names)"
-}
-
-/** The class a setting's options are — an enum's declaring class, so a value with a body counts as its enum. */
-private fun optionsKey(setting: DmxFixtureSetting<*>): Class<*> {
-    val first: Any = setting.sortedValues.first()
-    return (first as? Enum<*>)?.declaringJavaClass ?: first.javaClass
 }
 
 /** A slot name as [SlotStepList] compares it: lower case, no spaces, underscores or dashes. */

@@ -457,7 +457,7 @@ once it had drifted a file behind the resources and nothing but tests constructe
   Flicker, LightningStrike, CandleFlicker, FluorescentFlicker (their levels `low` / `high`)
 - **Colour**: ColourCycle (literal colours only; `between` Cut, Fade, Smooth or Split — its presets *Colour
   Fade* and *Colour Wave*; a colour chase that steps, it or Palette Steps, reaches colour-wheel heads,
-  each step on the nearest slot), RainbowCycle, ColourStrobe, ColourFlicker; and ColourWave and ColourFade,
+  each step on the nearest slot, and on Split holds a wheel's split where its slots declare one, `fixture/dmx/ColourSplits.kt`), RainbowCycle, ColourStrobe, ColourFlicker; and ColourWave and ColourFade,
   **legacy** (`legacy: true`): they run and edit what is stored, but no picker or listing offers them,
   since Colour Cycle draws each a DMX step apart (fx-settings plan D3)
 - **Position**: Path (D2: one `shape` — Circle, Figure 8, Random about a centre, or a Line between
@@ -465,7 +465,7 @@ once it had drifted a file behind the resources and nothing but tests constructe
 - **Beam**: Wave on `zoom`, `iris`, `frost` or `focus`, which the picker offers as its presets *Zoom
   Wave*, *Iris Pulse*, *Frost Pulse* and *Focus Pull* (D4), only on a head that has the attribute
 - **Steps**: PaletteSteps (through generic value palettes of one family, filed under that family)
-  and SlotSteps (a setting's option names, `beam`), one family in the library (`family: steps`) — `FxOutput.Steps`, which the **target**
+  and SlotSteps (a setting's option names, `beam`; `between` Cut or Split, a colour wheel holding the split of two neighbouring slots), one family in the library (`family: steps`) — `FxOutput.Steps`, which the **target**
   resolves per head, so each head lands on its own value for each step (effects plan D8;
   `docs/fx-engineering.md` §"Step FX")
 

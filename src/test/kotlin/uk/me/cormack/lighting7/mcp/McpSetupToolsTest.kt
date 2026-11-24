@@ -132,6 +132,15 @@ class McpSetupToolsTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `list_fixture_types names the colour wheels that split`() {
+        fun splitWheels(query: String) = call("list_fixture_types", """{"query":"$query"}""").json()["fixtureTypes"]!!.jsonArray
+            .single().jsonObject["splitWheels"]?.jsonArray?.map { it.jsonPrimitive.content }
+        assertEquals(listOf("colourWheel"), splitWheels("martin-mac-250"))
+        assertEquals(listOf("colour1", "colour2"), splitWheels("robe-color-spot"))
+        assertEquals(null, splitWheels("ledbeamring"))
+    }
+
+    @Test
     fun `patch_fixtures patches a list, groups it and loads the rig`() {
         val result = patchTwoDimmers()
         assertTrue(result.success, result.result)

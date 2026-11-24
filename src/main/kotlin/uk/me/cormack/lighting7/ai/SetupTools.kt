@@ -44,6 +44,7 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
+import uk.me.cormack.lighting7.fixture.dmx.ColourSplits
 import uk.me.cormack.lighting7.fixture.group.GroupAttributeDescriptor
 import uk.me.cormack.lighting7.fixture.group.GroupSettingAttributeDescriptor
 import uk.me.cormack.lighting7.fixture.group.GroupWhiteMixAttributeDescriptor
@@ -374,6 +375,11 @@ class SetupTools(
                             }
                         }
                         putJsonArray("capabilities") { t.capabilities.forEach { add(it) } }
+                        val wheels = t.attributes.filterIsInstance<SettingAttributeDescriptor>().map { it.name to it.options } +
+                            t.elementGroupAttributes.orEmpty().filterIsInstance<GroupSettingAttributeDescriptor>().map { it.name to it.options }
+                        val splitWheels = wheels.filter { (_, options) -> ColourSplits.splits(options.map { it.continuousLevel?.toUByte() }) }
+                            .map { it.first }.distinct()
+                        if (splitWheels.isNotEmpty()) putJsonArray("splitWheels") { splitWheels.forEach { add(it) } }
                         if (withAttributes) {
                             putJsonArray("attributes") { t.attributes.forEach { addTypeAttribute(it) } }
                             t.elementGroupAttributes?.takeIf { it.isNotEmpty() }?.let { cells ->

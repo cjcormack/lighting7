@@ -8,6 +8,7 @@ import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
+import uk.me.cormack.lighting7.fixture.dmx.ColourSplits
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.attribute.Colour
@@ -920,7 +921,8 @@ data class SettingTarget(
      * [output] as [setting]'s level on this head. A step snaps (effects plan §3.6): the step it is
      * nearer, this head's own level for it; null for a head without that slot, which holds what is
      * underneath. On a [colourWheel] a step is the slot nearest its colour on a unit fitted with
-     * [media], and so is a colour.
+     * [media], and so is a colour. In a split ([FxOutput.Steps.split]) a wheel whose two slots split
+     * ([ColourSplits]) holds their split; any other changes at the split's middle.
      */
     internal fun outputLevel(
         fixture: GroupableFixture,
@@ -932,12 +934,19 @@ data class SettingTarget(
             is FxOutput.Slider -> output.value
             is FxOutput.Steps -> {
                 val steps = output.steps
-                when {
-                    colourWheel -> steps.wheelSlotFor(output.snapped, fixture, setting, attribute, media)?.level
+                fun levelAt(index: Int): UByte? = when {
+                    colourWheel -> steps.wheelSlotFor(index, fixture, setting, attribute, media)?.level
                     // Slot Steps reads this head's own setting, which is in hand here: no second walk.
-                    steps is SlotStepList -> steps.levelFor(output.snapped, setting)
-                    else -> stepByte(steps.valueFor(output.snapped, fixture, attribute))
+                    steps is SlotStepList -> steps.levelFor(index, setting)
+                    else -> stepByte(steps.valueFor(index, fixture, attribute))
                 }
+                // In a split the wheel holds its two slots' split where it has one (D4), else snaps.
+                val split = if (output.split != null) {
+                    val from = levelAt(output.from)
+                    val to = levelAt(output.to)
+                    if (from != null && to != null) ColourSplits.levelBetween(setting, from, to) else null
+                } else null
+                split ?: levelAt(output.snapped)
             }
             is FxOutput.Colour ->
                 if (colourWheel) PaletteResolver.nearestWheelOption(setting, attribute, media, output.color.color)?.first?.level

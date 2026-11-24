@@ -40,6 +40,13 @@ interface DmxFixtureColourSettingValue : DmxFixtureSettingValue {
      * for want of a colour.
      */
     val noColour: Boolean get() = false
+
+    /**
+     * On a wheel that splits, the level in its continuous band at which this slot is full in the beam
+     * (wheel-colour-chase plan D5); null where the slot declares none, or the wheel cannot split. Two
+     * slots split where both declare one and no declared slot lies between them ([ColourSplits]).
+     */
+    val continuousLevel: UByte? get() = null
 }
 
 /**
@@ -174,3 +181,8 @@ class DmxFixtureSetting<T : DmxFixtureSettingValue>(
     }
 }
 
+/** The class a setting's options are — an enum's declaring class, so a value with a body counts as its enum. */
+internal fun DmxFixtureSetting<*>.optionsKey(): Class<*> {
+    val first: Any = sortedValues.first()
+    return (first as? Enum<*>)?.declaringJavaClass ?: first.javaClass
+}

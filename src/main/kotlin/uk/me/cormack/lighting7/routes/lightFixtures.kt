@@ -408,6 +408,9 @@ data class SettingOption(
      *  rainbow program, an auto change, or a band handing colour to other channels. Null on every
      *  other option: a COLOUR option is either this or carries a [colourPreview]. */
     val noColour: Boolean? = null,
+    /** On a COLOUR setting that splits, the level in its continuous band at which this slot is full
+     *  in the beam (wheel-colour-chase plan D5). Null where the slot declares none. */
+    val continuousLevel: Int? = null,
     /** On a STROBE setting, what this option's band does to the light (`CLOSED`, `OPEN`, `STROBE`,
      *  `RANDOM`, `PULSE` — fixture optics plan D12). Null on every other option. */
     val strobeKind: String? = null,

@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-WHEEL-SPLITS`](#fu-manual-wheel-splits) | a MAC 250 and a Robe ColorSpot 575 on a Split Chase in wheel order show each split half and half, and the estimated levels land on the wheels' real splits | Wheel colour chases S2, 2026-11-24 |
 | [`FU-MANUAL-CLOUD-P3`](#fu-manual-cloud-p3) | Lighting7 Cloud's P3 exit: a desk switched off, and a controller unplugged, each mailed to the owner after its threshold; last night's backup restored onto a fresh install that comes back as the old one, its MCP URL and links working; each step's time recorded | Cloud P3 S4, 2026-11-16 |
 | [`FU-MANUAL-CLOUD-P3-S4`](#fu-manual-cloud-p3-s4) | a backup made on demand appears in the portal with its size, and the next night's scheduled one too, waiting for a running stack; the Cloud tab's size beside the plan's measurement | Cloud P3 S4, 2026-11-16 |
 | [`FU-MANUAL-CLOUD-P3-S3`](#fu-manual-cloud-p3-s3) | on the rig, unplugging a controller turns its universe chip red on the desk within 40 s and green again within 15 s of plugging it back in, the heartbeat's `reachable` following; nothing goes red on a desk under `dmx.mock` | Cloud P3 S3, 2026-11-16 |
@@ -178,6 +179,27 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a palette that holds an FX is authored, busked and tracked exactly as a value palette is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour palette that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-WHEEL-SPLITS`
+
+**What it proves**: the split levels the MAC 250 and the Robe ColorSpot 575 declare
+(`continuousLevel`, wheel-colour-chase plan D5) are where their wheels really split.
+
+**Why it is here**: neither manual tables its continuous band, so each slot's level is spread evenly
+over the band in wheel order, marked as an estimate at its source.
+
+**Test**, on a MAC 250 and a Robe ColorSpot 575 at full with an open gobo:
+
+1. **One split each.** In the programmer, set the MAC's colour wheel to 72 (red and Blue 108): the
+   beam is half red, half blue, with neither filling more than the other. Do the same on the Robe's
+   first wheel at 35 (red and blue).
+2. **Every split.** Run a Colour Cycle over each head on the wheel's own colours in wheel order,
+   `between` Split at fade 0.5, a bar a colour: every split is half and half. Note any that is not, and
+   the level that is, and correct the slot's `continuousLevel`.
+3. **The ends.** Each wheel's first and last declared slot is full at its level (MAC 1 and 144, the
+   Robe 0 and 127).
 
 ---
 

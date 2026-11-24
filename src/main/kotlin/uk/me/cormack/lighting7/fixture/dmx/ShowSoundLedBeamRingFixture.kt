@@ -39,7 +39,7 @@ sealed class ShowSoundLedBeamRingFixture(
 
     /**
      * Channel 8 — colour wheel. 0–127 seven colours and white in 16-step bands, 128–191 rotation
-     * forward (fast → slow), 192–255 reverse (slow → fast).
+     * forward (fast → slow), 192–255 reverse (slow → fast). No continuous band, so it does not split.
      */
     enum class Colour(
         override val level: UByte,
