@@ -8,7 +8,9 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.perf.DeskMetrics
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.max
 import kotlin.time.Duration.Companion.nanoseconds
 
@@ -57,6 +59,18 @@ class ArtNetController(
         const val AWAIT_CLOSED_TIMEOUT_MS = 250L
 
         private val log = LoggerFactory.getLogger(ArtNetController::class.java)
+
+        /**
+         * Where every controller's changers and fade tickers run. Not `Dispatchers.Default`: callers
+         * block on a write from `Default` workers, some while holding the publish lock others wait on,
+         * and a changer that needs one of those workers to accept the write would never run.
+         */
+        internal val changerDispatcher: CoroutineDispatcher = run {
+            val threads = AtomicInteger()
+            Executors.newFixedThreadPool(max(2, Runtime.getRuntime().availableProcessors())) { r ->
+                Thread(r, "ArtNet-changer-${threads.incrementAndGet()}").apply { isDaemon = true }
+            }.asCoroutineDispatcher()
+        }
     }
 
     internal val fadeTickMs = 10
@@ -68,7 +82,7 @@ class ArtNetController(
     /** One changer failing stops only its own channel. */
     private val changerJob = SupervisorJob()
     private val changerScope = CoroutineScope(
-        changerJob + Dispatchers.Default + CoroutineExceptionHandler { context, e ->
+        changerJob + changerDispatcher + CoroutineExceptionHandler { context, e ->
             log.error("{} failed; that channel takes no more writes", context[CoroutineName]?.name, e)
         }
     )

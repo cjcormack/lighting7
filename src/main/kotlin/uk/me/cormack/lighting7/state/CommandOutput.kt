@@ -223,17 +223,22 @@ class CommandOutput(
                 // A park beats the hold, so one laid on a held channel mid-hold means the fixture
                 // stopped seeing the command: watch for it rather than report a hold that never landed.
                 val endAt = System.nanoTime() + holdMs * 1_000_000
-                while (true) {
-                    val left = (endAt - System.nanoTime()) / 1_000_000
-                    if (left <= 0) break
-                    delay(minOf(left, PARK_POLL_MS))
-                    channels.firstOrNull { parks.isParked(command.universe, it) }?.let { ch ->
-                        logger.warn("Command '{}' on '{}' cut short: universe {} channel {} was parked mid-hold", command.name, fixtureKey, command.universe, ch)
-                        finish(fixtureKey, started, Ended.INTERRUPTED)
-                        return@launch
+                try {
+                    while (true) {
+                        val left = (endAt - System.nanoTime()) / 1_000_000
+                        if (left <= 0) break
+                        delay(minOf(left, PARK_POLL_MS))
+                        channels.firstOrNull { parks.isParked(command.universe, it) }?.let { ch ->
+                            logger.warn("Command '{}' on '{}' cut short: universe {} channel {} was parked mid-hold", command.name, fixtureKey, command.universe, ch)
+                            finish(fixtureKey, started, Ended.INTERRUPTED)
+                            return@launch
+                        }
                     }
+                    finish(fixtureKey, started, Ended.COMPLETED)
+                } finally {
+                    // A no-op once the hold has ended; otherwise the hold failed and must still end.
+                    finish(fixtureKey, started, Ended.INTERRUPTED)
                 }
-                finish(fixtureKey, started, Ended.COMPLETED)
             }
             running[fixtureKey] = started to job
             rebuildLocked()
@@ -248,11 +253,14 @@ class CommandOutput(
             val current = running[fixtureKey] ?: return
             if (current.first !== which) return
             running.remove(fixtureKey)
-            rebuildLocked()
         }
-        notifyEnded(which, how)
-        which.done.complete(how)
-        logger.info("Command '{}' on '{}' {}", which.command.name, fixtureKey, if (how == Ended.COMPLETED) "released" else "interrupted")
+        try {
+            rebuild()
+        } finally {
+            notifyEnded(which, how)
+            which.done.complete(how)
+            logger.info("Command '{}' on '{}' {}", which.command.name, fixtureKey, if (how == Ended.COMPLETED) "released" else "interrupted")
+        }
     }
 
     private fun notifyEnded(which: Running, how: Ended) {
