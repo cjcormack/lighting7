@@ -401,6 +401,14 @@ internal class FxSampler(
                     slots = member.context.numDistinctSlots,
                     starts = starts(own[i], holding[i]),
                     rung = member.rung,
+                    notes = stepShape(standard[i], member.context)?.let { (steps, split) ->
+                        val landed = targetOf(effect) as? SettingTarget ?: return@let null
+                        WheelNotes.of(
+                            landed, fixture, steps, labelsOf(steps), split,
+                            if (landed.colourWheel) view.fittedMedia(fixture) else null,
+                            stepMs = memberCycleMs(effect, member.groupSize, dynamics[i], clock, reads) / steps.size,
+                        )
+                    }.orEmpty(),
                 )
             },
         )
@@ -503,9 +511,12 @@ internal class FxSampler(
     }
 
     /** The picked FX's cycle in real milliseconds, its first unit's Timing included. */
-    private fun cycleMs(effect: FxInstance, clock: FxSampleClock, reads: Reads): Double {
-        val groupSize = reads.membersOf(effect).values.firstOrNull()?.groupSize ?: 1
-        val division = FxPhase.memberDivision(effect.timing.cycle, reads.dynamicsOf(effect), groupSize)
+    private fun cycleMs(effect: FxInstance, clock: FxSampleClock, reads: Reads): Double =
+        memberCycleMs(effect, reads.membersOf(effect).values.firstOrNull()?.groupSize ?: 1, reads.dynamicsOf(effect), clock, reads)
+
+    /** One member's cycle of [effect] in real milliseconds, among [groupSize] units. */
+    private fun memberCycleMs(effect: FxInstance, groupSize: Int, dyn: FxDynamics, clock: FxSampleClock, reads: Reads): Double {
+        val division = FxPhase.memberDivision(effect.timing.cycle, dyn, groupSize)
         return if (effect.timingSource == TimingSource.BEAT) {
             division * MasterClock.TICKS_PER_BEAT * clock.msPerTick(reads.speedSlotOf(effect))
         } else {
@@ -524,6 +535,20 @@ internal class FxSampler(
     fun windowMsPerBeat(effect: FxInstance, clock: FxSampleClock, reads: Reads = Reads()): Double =
         reads.ownBpmOf(effect)?.let { 60_000.0 / it }
             ?: (MasterClock.TICKS_PER_BEAT * clock.msPerTick(windowSlot(effect, reads)))
+
+    /**
+     * A step FX's list and whether it holds splits, read from the FX rather than the window's samples,
+     * which a short split can fall between and a paused FX never reaches: the end of its first step
+     * is in the split wherever it has one.
+     */
+    private fun stepShape(fx: Fx?, context: FxContext): Pair<StepList, Boolean>? = try {
+        (fx?.calculate(0.0, context) as? FxOutput.Steps)?.steps?.let { steps ->
+            val end = fx.calculate((1.0 - 1e-6) / steps.size.coerceAtLeast(1), context)
+            steps to ((end as? FxOutput.Steps)?.split != null)
+        }
+    } catch (_: Throwable) {
+        null
+    }
 
     private fun fresh(effect: FxInstance): Fx? = try {
         freshFx(effect)
@@ -623,7 +648,7 @@ internal class FxSampler(
 
         private val BUNDLED = setOf(AttributeCategory.WHITE, AttributeCategory.AMBER, AttributeCategory.UV)
 
-        private fun labelsOf(steps: StepList): List<String> = when (steps) {
+        internal fun labelsOf(steps: StepList): List<String> = when (steps) {
             is PaletteStepList -> steps.steps.map { it.name }
             is SlotStepList -> steps.names
             is ColourStepList -> steps.colours.map { PaletteResolver.toHex(it.color) }
@@ -775,6 +800,8 @@ internal class FxRowOutput(
     val starts: List<Int>,
     /** Null for a split-off copy, which carries no ranks. */
     val rung: FxLadderRung?,
+    /** On a colour-wheel head, what the preview says of a step FX there (wheel-colour-chase plan D8). */
+    val notes: List<FxWheelNote> = emptyList(),
 )
 
 /**

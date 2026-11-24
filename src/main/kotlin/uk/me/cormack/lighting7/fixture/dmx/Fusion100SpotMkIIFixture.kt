@@ -56,6 +56,7 @@ sealed class Fusion100SpotMkIIFixture(
     /**
      * Colour wheel positions.
      * 8CH mode CH4 / 15CH mode CH8.
+     * The wheel has no continuous band, so it does not split.
      */
     enum class Colour(
         override val level: UByte,

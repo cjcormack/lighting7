@@ -367,11 +367,15 @@ reset read the wheel. Blind holds it as any programmer FX. Locate needs nothing:
 values, which suppression reads by the landed attribute. The sampler files a wheel head's row under
 the wheel's attribute.
 
-**Split** (D4) is a `between` value from session 1: `stepsAt(…, split = true)` holds `blend` at a half
-for `fade` of each step and says how far through the split the phase is (`FxOutput.Steps.split`). An
-RGB head holds the half-way mix; a wheel changes at the split's middle (`snapped` reads `split`), until
-session 2 declares where wheels split. An older desk reads a stored `SPLIT` as Fade, the `choice`
-default (P1); the importer passes a choice through as stored (`ColourCycleChoiceImportTest`).
+**Split** (D4): `stepsAt(…, split = true)` holds `blend` at a half for `fade` of each step and says
+how far through the split the phase is (`FxOutput.Steps.split`). An RGB head holds the half-way mix. A
+wheel whose two slots split — both declare a `continuousLevel` and are neighbours on the wheel
+(`fixture/dmx/ColourSplits.kt`, `docs/fixtures-engineering.md` §"Beam vocabulary") — holds their split
+level for the whole of it (`SettingTarget.outputLevel`); any other wheel, or two slots with a third
+between them, changes at the split's middle (`snapped` reads `split`), so every head changes on the
+same beats. A colour and the next on one slot simply hold it. An older desk reads a stored `SPLIT` as
+Fade, the `choice` default (P1); the importer passes a choice through as stored
+(`ColourCycleChoiceImportTest`). `SplitColourChaseTest` holds the three cases on one beat.
 
 ### Position FX (`FxOutput.Position`)
 
@@ -557,7 +561,7 @@ declare `outputType: STEPS`, which every target accepts (`FxTarget.accepts`; the
 | FX | Family | Steps through | Parameters |
 |----|--------|---------------|------------|
 | `PaletteSteps` | its palettes' family | generic value palettes, `pal:{uuid}` each (a `paletteList`) | `palettes`, `fadeRatio` |
-| `SlotSteps` | `beam` | one setting's option names (a `slotList`) | `slots` |
+| `SlotSteps` | `beam` | one setting's option names (a `slotList`) | `slots`, `between` (Cut or Split), `fade` |
 
 The two are one family in the library, *Steps* (terminology plan D23): both register under `steps`
 (`STEPS_CATEGORY`), which names no attribute family, and are offered and stored in the family of what
@@ -613,7 +617,9 @@ after, as to any output.
   `GOBO_3` on every head, at each head's own level. A head without the slot holds what is underneath on
   that step. Its levels are cached per option set (a setting's options are its model's enum), so the
   cache holds one entry per wheel model met. It declares only the `setting` sentinel: the client turns
-  it into the setting chosen.
+  it into the setting chosen. `between` is Cut by default; Split (wheel-colour-chase plan D6) holds a
+  colour wheel's split of two neighbouring slots for `fade` of each step, as Colour Cycle's Split does,
+  and changes any setting without one (a gobo wheel) at the split's middle.
 
 **What it is filed under.** Palette Steps registers under `family: steps`, which names no
 attribute family on purpose: a stored one carries the family of its palettes (`intensity`, `colour`, `position` or
@@ -647,6 +653,21 @@ FX palette, which names its setting from the rig, every patched head's options o
 (`rigSettingUnion`) and typed names besides, a dashed one on no patched head). *Save as palette…* on a
 running step FX banks it as `stepFxPaletteShape` says — its palettes' family, or Beam naming
 its setting.
+
+**The preview reads a wheel** (wheel-colour-chase plan D8). On a colour wheel's row, `POST /fx/preview`
+answers `wheel`: each state the result shows — `{slot, splitWith?, preview}`, `preview` the unit's
+colour for it, a split's two slots mixed by share — and per sample an index into them, read through
+`ColourSplits.reading` where the level is on the wheel's continuous band, else the slot the desk reads
+there (`DmxFixtureSetting.valueForLevel`). Each FX's output on a wheel head carries `notes`
+(`fx/WheelNotes.kt`, read from the FX itself rather than the window's samples, so a short split or a
+paused FX still has them):
+`SAME_SLOT {colours, slot}`, two step labels landing on one slot (a colour chase only); `NO_SPLIT {from,
+to, reason}` under Split, `WHEEL` for a wheel that does not split and `NOT_NEIGHBOURS` for two slots it
+cannot split; and `TOO_FAST {needMs, stepMs}` where a step is shorter than the chase's longest move on
+that wheel. The need is the type's `Travel.colourMs` times the share of the wheel the move crosses: of
+its continuous band for a move made through a split (a chase on Split, between two slots that split),
+else the indexed levels' distance of the channel's 255 steps, as the Stage view's travel reads it
+(`frontend/src/lib/travel.ts`).
 
 ### Stateful FX (`StatefulFx`)
 

@@ -10,7 +10,17 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
+import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fixture.dmx.ColourSplits
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureColourSettingValue
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
+import uk.me.cormack.lighting7.fixture.media.colourOf
+import uk.me.cormack.lighting7.fx.AttributeChannelWriter
+import uk.me.cormack.lighting7.fx.FxWheelNote
+import uk.me.cormack.lighting7.fx.PaletteFanOut
+import uk.me.cormack.lighting7.fx.PaletteResolver
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxLadderRung
@@ -34,7 +44,9 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
+import java.awt.Color
 import java.util.Base64
+import kotlin.math.roundToInt
 
 /** 400 code: the preview named a problem; every one is in `problems`. */
 internal const val CODE_FX_PREVIEW_INVALID = "FX_PREVIEW_INVALID"
@@ -183,7 +195,24 @@ internal data class FxPreviewAttributeRow(
     val underneath: FxPreviewSeries,
     val result: FxPreviewSeries,
     val fx: List<FxPreviewOutput>,
+    /** On a colour wheel, [result] read as the wheel shows it (wheel-colour-chase plan D8). */
+    val wheel: FxPreviewWheel? = null,
 )
+
+/**
+ * A colour wheel's row as slots: each distinct state the samples show, and per sample an index into
+ * [states].
+ */
+@Serializable
+internal data class FxPreviewWheel(val states: List<FxPreviewWheelState>, val samples: List<Int>)
+
+/**
+ * A wheel at one level: the [slot] in the beam, and in a split the slot it shares the beam with
+ * ([splitWith]). [preview] is the beam's colour on this unit, a split's two slots mixed by share;
+ * null for a band with no single colour.
+ */
+@Serializable
+internal data class FxPreviewWheelState(val slot: String, val splitWith: String? = null, val preview: String? = null)
 
 /** One FX's output on a row; [heldBackReason] (`STOMP`, `PROGRAMMER`, `BLIND`) when left out of the result. */
 @Serializable
@@ -192,6 +221,26 @@ internal data class FxPreviewOutput(
     val fx: Int,
     val output: FxPreviewSeries,
     val heldBackReason: String? = null,
+    /** On a colour-wheel head, what the editor should say of this FX there (wheel-colour-chase plan D8). */
+    val notes: List<FxPreviewNote> = emptyList(),
+)
+
+/**
+ * One thing a chase does on a wheel head that the operator would not guess: `SAME_SLOT` (the step
+ * labels [colours] all land on [slot]), `NO_SPLIT` (a split of [from] into [to] the wheel cannot
+ * hold, [reason] `WHEEL` or `NOT_NEIGHBOURS`, so it changes at the split's middle) or `TOO_FAST`
+ * (each step is [stepMs], the wheel's longest move [needMs]).
+ */
+@Serializable
+internal data class FxPreviewNote(
+    val kind: String,
+    val colours: List<String>? = null,
+    val slot: String? = null,
+    val from: String? = null,
+    val to: String? = null,
+    val reason: String? = null,
+    val needMs: Long? = null,
+    val stepMs: Long? = null,
 )
 
 /**
@@ -557,13 +606,16 @@ private fun answer(
                     if (slots == null) slots = output.slots
                     if (this.family == null) this.family = family
                 }
-                FxPreviewOutput(f, encode(output.output), output.heldBack?.name)
+                FxPreviewOutput(f, encode(output.output), output.heldBack?.name, output.notes.map(::noteOf))
             }
             val result = when {
                 soloRows == null -> row.result
                 else -> soloRows[row.key] ?: constant(row.underneath, row.result, n)
             }
-            FxPreviewAttributeRow(r, row.parked, encode(constant(row.underneath, row.result, 1)), encode(result), outputs)
+            FxPreviewAttributeRow(
+                r, row.parked, encode(constant(row.underneath, row.result, 1)), encode(result), outputs,
+                wheel = fixture(row.key)?.let { wheelOf(fixtures, it, attribute, result) },
+            )
         }
         family to FxPreviewAttribute(attribute, kindOf(sampledAttribute.rows.first().result), rows)
     }
@@ -633,6 +685,56 @@ private fun answer(
         fx = fx,
         truncated = (samples.truncated.map { it.name } + listOfNotNull(FxSamples.Truncation.ROWS.name.takeIf { rowsCut })).distinct().sorted(),
     )
+}
+
+private fun noteOf(note: FxWheelNote): FxPreviewNote = when (note) {
+    is FxWheelNote.SameSlot -> FxPreviewNote("SAME_SLOT", colours = note.colours, slot = note.slot)
+    is FxWheelNote.NoSplit -> FxPreviewNote("NO_SPLIT", from = note.from, to = note.to, reason = note.reason.name)
+    is FxWheelNote.TooFast -> FxPreviewNote("TOO_FAST", needMs = note.needMs, stepMs = note.stepMs)
+}
+
+/** [series] on [head]'s [attribute] read as slots, where that is a colour wheel; else null. */
+private fun wheelOf(fixtures: Fixtures, head: GroupableFixture, attribute: String, series: FxSampleSeries): FxPreviewWheel? {
+    val setting = AttributeChannelWriter.resolveAttribute(head, attribute)?.value as? DmxFixtureSetting<*> ?: return null
+    if (setting.sortedValues.first() !is DmxFixtureColourSettingValue) return null
+    val levels = when (series) {
+        is FxSampleSeries.Bytes -> series.values
+        is FxSampleSeries.Steps -> (series.values as? FxSampleSeries.Bytes)?.values ?: return null
+        else -> return null
+    }
+    val media = PaletteFanOut.mediaOf(head, fixtures::fittedMediaFor)
+    val states = ArrayList<FxPreviewWheelState>()
+    val byLevel = HashMap<UByte, Int>()
+    val samples = levels.map { byte ->
+        val level = byte.toUByte()
+        byLevel.getOrPut(level) {
+            val state = wheelState(setting, attribute, media, level)
+            states.indexOf(state).takeIf { it >= 0 } ?: states.size.also { states += state }
+        }
+    }
+    return FxPreviewWheel(states, samples)
+}
+
+/** What [setting] shows at [level]: a split on its continuous band, else the slot whose band holds it. */
+private fun wheelState(setting: DmxFixtureSetting<*>, attribute: String, media: FittedMedia?, level: UByte): FxPreviewWheelState {
+    fun option(name: String) = setting.valueForName(name)
+    ColourSplits.reading(setting, level)?.let { (a, b, share) ->
+        return when {
+            share <= 0.0 -> FxPreviewWheelState(a, preview = media.colourOf(attribute, option(a)))
+            share >= 1.0 -> FxPreviewWheelState(b, preview = media.colourOf(attribute, option(b)))
+            else -> FxPreviewWheelState(a, b, mix(media.colourOf(attribute, option(a)), media.colourOf(attribute, option(b)), share))
+        }
+    }
+    val slot = setting.valueForLevel(level)
+    return FxPreviewWheelState(slot.name, preview = media.colourOf(attribute, slot))
+}
+
+/** Two `#RRGGBB` colours [share] of the way from [a] to [b]; null where either is. */
+private fun mix(a: String?, b: String?, share: Double): String? {
+    val ca = a?.let(PaletteResolver::parseHexColour) ?: return null
+    val cb = b?.let(PaletteResolver::parseHexColour) ?: return null
+    fun lerp(x: Int, y: Int) = (x + (y - x) * share).roundToInt().coerceIn(0, 255)
+    return PaletteResolver.toHex(Color(lerp(ca.red, cb.red), lerp(ca.green, cb.green), lerp(ca.blue, cb.blue)))
 }
 
 private val LANE_ORDER = listOf(AttributeFamily.INTENSITY, AttributeFamily.COLOUR, AttributeFamily.POSITION, AttributeFamily.BEAM)

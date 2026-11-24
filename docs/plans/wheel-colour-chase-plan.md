@@ -160,8 +160,8 @@ session N — title*. Never merge a later session's PR before an earlier one.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Wheel heads in colour chases | in review | `claude/fervent-cannon-jfon7w` | | |
-| 2 | Split colours | planned | | | |
+| 1 | Wheel heads in colour chases | in review | `claude/fervent-cannon-jfon7w` | [#453](https://github.com/cjcormack/lighting7/pull/453) | 6139efe |
+| 2 | Split colours | in review | `claude/friendly-ramanujan-04vy7d` | | |
 | 3 | The editor and the Stage view | planned | | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
@@ -237,6 +237,31 @@ the next; whoever merges the last fills its own.
   `docs/plans/manual-validation.md`.
 - **Checks:** `./gradlew compileTestKotlin`, then `./gradlew test --tests` for `fx.*`, `fixture.*`,
   `routes.*` and `ai.*`; the full suite is CI's. No frontend change.
+- **Where the code differed from this plan** (corrected in session 2):
+  - The levels: the MAC 250's fourteen slots (open to white) at 1, 12, … 144 and the Robe's ten and
+    nine at 0 to 127, each spread evenly in wheel order: neither manual tables the band. The Robe's
+    open slot is at 0 on both scales, so `ColourSplitTest`'s band rule is that no indexed option
+    *other than the one whose band holds the first declared level* starts inside the declared range.
+  - The wheel lane is on the preview's attribute row as `wheel: {states, samples}`: each distinct
+    `{slot, splitWith?, preview}` once, and per sample an index into them, as a step FX's labels are
+    carried, rather than an object per sample. The notes are on each FX's output on that row
+    (`FxPreviewOutput.notes`), since a row can hold several FX.
+  - `TOO_FAST`'s share of the wheel is of its continuous band for a move made through a split (the
+    chase on Split, the two slots splitting), since that move is written on the band; any other move,
+    Cut and Fade's included, is the indexed levels' distance of 255, as `F/lib/travel.ts` reads it. It
+    names the chase's longest move on that head, once.
+  - The notes are read from the FX, not the window's samples: its step list and whether it splits from
+    evaluating it at the start and at the end of its first step, so a split shorter than a sample's gap
+    and a paused FX still get them.
+  - Outside the continuous band the wheel lane reads a level's slot by `DmxFixtureSetting.valueForLevel`,
+    the desk's reading, not as band starts.
+  - Slot Steps' `between` and `fade` are offered on every setting: no frontmatter can say "a colour wheel
+    that splits", so showing *Between* only there is the editor's, in session 3. On a setting that does
+    not split, Split changes at the split's middle.
+  - MCP's `list_fixture_types` names a type's `splitWheels` on every type, not only with `attributes`.
+  - The MCP tests are in `mcp.*`, not `ai.*`; both were run.
+  - The vector carries each wheel's options, its splits and the reading of every level 0–255, made by
+    an independent port of the rule rather than by the Kotlin model.
 
 ### Session 3 — The editor and the Stage view
 

@@ -560,6 +560,7 @@ because one channel mixes bands:
 |---|---|---|
 | `colourPreview` | `DmxFixtureColourSettingValue` | The colour this position puts in the beam, `#RRGGBB`. |
 | `noColour` | `DmxFixtureColourSettingValue` | A band with **no single colour** — a scroll, a random or rainbow program, an auto change, a rotation stop, a band handing colour to other channels. Animated through the wheel's own previews (below). |
+| `continuousLevel` | `DmxFixtureColourSettingValue` | On a wheel that splits, the level in its continuous band at which this slot is full in the beam (below). |
 | `gobo` | `DmxFixtureGoboSettingValue` | The `GoboPattern` at this position; null is deliberately open. |
 | `prismFacets` | `DmxFixturePrismSettingValue` | The prism's facet count; null is out. |
 | `zoomDeg` | `DmxFixtureZoomSettingValue` | A stepped zoom's full beam angle at this position (D2). |
@@ -579,6 +580,20 @@ is the beam's colour — a colour wheel, or the Robe's second wheel as a filter 
 (`frontend/src/lib/colourBands.ts`); beside an RGB attribute the setting is a preset on the same
 emitters and the view never reads it. A blackout band is a black preview (`#000000`, the Slender
 bar's), which the view draws dark and a palette never snaps to.
+
+**Where a colour wheel splits** (wheel-colour-chase plan D5). A wheel parked between two adjacent
+slots puts half of each in the beam — the MAC 250's 1–144, the Robe's continual 0–127 on both wheels.
+To declare it, give each slot of the wheel the level in that band at which it is full in the beam
+(`continuousLevel`, rising in the wheel's order), and leave a no-colour band without one. Two slots
+split where both declare one and no declared slot lies between them, at the midpoint of their levels
+rounded down (`fixture/dmx/ColourSplits.kt`, which also reads a level in the band as two slots and a
+share). Nothing is guessed from names, so a wheel with no continuous band — the LEDBEAMRING, the
+Fusion 100 Spot, the Varytec XL60, a scroller — declares none and says so in its KDoc.
+`ColourSplitTest` walks every COLOUR setting: declared levels rise, and lie in one band no other
+indexed option starts in. The MAC 250's and the Robe's levels are an estimate spread evenly over the
+documented band, since neither manual has a table (`FU-MANUAL-WHEEL-SPLITS`). The levels reach the
+client as `SettingOption.continuousLevel`, MCP's `list_fixture_types` names a type's `splitWheels`,
+and `src/test/resources/fixture/colourSplit.fixture.json` pins a level's reading for both sides.
 
 **On a slider** — `SliderAttributeDescriptor`, each null when unset:
 

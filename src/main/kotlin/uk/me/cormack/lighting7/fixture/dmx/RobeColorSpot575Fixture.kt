@@ -56,6 +56,12 @@ sealed class RobeColorSpot575Fixture(
      * The enum's `level` values are the centres of the indexed positioning
      * bands, with `colourPreview` swatches for the UI.
      *
+     * Each slot's `continuousLevel` is where it is full in the continual band,
+     * so the wheel splits between neighbours (wheel-colour-chase plan D5). The
+     * manual gives the band, not a table, so the levels are an estimate spread
+     * evenly over 0–127 in wheel order, checked on the rig by
+     * FU-MANUAL-WHEEL-SPLITS.
+     *
      * `colourPreview` hex values are best-effort approximations for the UI;
      * exact gel hues depend on the physical filters fitted to the wheel.
      */
@@ -63,17 +69,18 @@ sealed class RobeColorSpot575Fixture(
         override val level: UByte,
         override val colourPreview: String? = null,
         override val noColour: Boolean = false,
+        override val continuousLevel: UByte? = null,
     ) : DmxFixtureColourSettingValue {
-        OPEN(0u, "#FFFFFF"),
-        LIGHT_BLUE(133u, "#ADD8E6"),
-        RED(140u, "#FF0000"),
-        BLUE(146u, "#0000FF"),
-        LIGHT_GREEN(153u, "#90EE90"),
-        YELLOW(160u, "#FFFF00"),
-        MAGENTA(166u, "#FF00FF"),
-        CYAN(173u, "#00FFFF"),
-        GREEN(180u, "#00FF00"),
-        ORANGE(186u, "#FFA500"),
+        OPEN(0u, "#FFFFFF", continuousLevel = 0u),
+        LIGHT_BLUE(133u, "#ADD8E6", continuousLevel = 14u),
+        RED(140u, "#FF0000", continuousLevel = 28u),
+        BLUE(146u, "#0000FF", continuousLevel = 42u),
+        LIGHT_GREEN(153u, "#90EE90", continuousLevel = 56u),
+        YELLOW(160u, "#FFFF00", continuousLevel = 71u),
+        MAGENTA(166u, "#FF00FF", continuousLevel = 85u),
+        CYAN(173u, "#00FFFF", continuousLevel = 99u),
+        GREEN(180u, "#00FF00", continuousLevel = 113u),
+        ORANGE(186u, "#FFA500", continuousLevel = 127u),
         SCROLL_CW(190u, noColour = true),
         SCROLL_CCW(218u, noColour = true),
         RANDOM(244u, noColour = true),
@@ -85,22 +92,23 @@ sealed class RobeColorSpot575Fixture(
      *
      * Layout matches Colour wheel 1 but with deep / corrective filters
      * (deep red, deep blue, pink, cyan, magenta, yellow, 3200K CTC,
-     * UV filter).
+     * UV filter), and so do its estimated split levels over 0–127.
      */
     enum class Colour2(
         override val level: UByte,
         override val colourPreview: String? = null,
         override val noColour: Boolean = false,
+        override val continuousLevel: UByte? = null,
     ) : DmxFixtureColourSettingValue {
-        OPEN(0u, "#FFFFFF"),
-        DEEP_RED(133u, "#8B0000"),
-        DEEP_BLUE(140u, "#00008B"),
-        PINK(148u, "#FFC0CB"),
-        CYAN(155u, "#00FFFF"),
-        MAGENTA(163u, "#FF00FF"),
-        YELLOW(170u, "#FFFF00"),
-        CTC_3200K(178u, "#FFE0C0"),
-        UV_FILTER(185u, "#4B0082"),
+        OPEN(0u, "#FFFFFF", continuousLevel = 0u),
+        DEEP_RED(133u, "#8B0000", continuousLevel = 16u),
+        DEEP_BLUE(140u, "#00008B", continuousLevel = 32u),
+        PINK(148u, "#FFC0CB", continuousLevel = 48u),
+        CYAN(155u, "#00FFFF", continuousLevel = 64u),
+        MAGENTA(163u, "#FF00FF", continuousLevel = 79u),
+        YELLOW(170u, "#FFFF00", continuousLevel = 95u),
+        CTC_3200K(178u, "#FFE0C0", continuousLevel = 111u),
+        UV_FILTER(185u, "#4B0082", continuousLevel = 127u),
         SCROLL_CW(190u, noColour = true),
         SCROLL_CCW(218u, noColour = true),
         RANDOM(244u, noColour = true),

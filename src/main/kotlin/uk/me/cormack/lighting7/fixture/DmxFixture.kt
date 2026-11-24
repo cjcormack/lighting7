@@ -430,6 +430,7 @@ abstract class DmxFixture(
                 loadable = if (prop.media != null) settingValue.loadable else null,
                 zoomDeg = (settingValue as? DmxFixtureZoomSettingValue)?.zoomDeg,
                 noColour = (settingValue as? DmxFixtureColourSettingValue)?.noColour?.takeIf { it },
+                continuousLevel = (settingValue as? DmxFixtureColourSettingValue)?.continuousLevel?.toInt(),
                 strobeKind = (settingValue as? DmxFixtureStrobeSettingValue)?.strobeKind?.name,
                 hzMin = (settingValue as? DmxFixtureStrobeSettingValue)?.hzMin,
                 hzMax = (settingValue as? DmxFixtureStrobeSettingValue)?.hzMax,
