@@ -481,14 +481,17 @@ private fun coveredBy(state: State, targets: List<CueTargetDto>): (String) -> Bo
     return { key -> coverage.covers(selected, CueTargetDto(TargetRef.Fixture.TYPE, key)) }
 }
 
-/** What solo draws: the solo FX's attribute rows as it alone leaves them over what is underneath (D14), by row key. */
-private class Solo(val fx: FxInstance, val results: Map<String, FxSampleSeries>)
+/**
+ * What solo draws: the solo FX's rows as it alone leaves them over what is underneath (D14), by the
+ * attribute it lands on and row key.
+ */
+private class Solo(val fx: FxInstance, val results: Map<String, Map<String, FxSampleSeries>>)
 
 private fun soloResults(sampler: FxSampler, reads: FxSampler.Reads, solo: FxInstance, samples: FxSamples, clock: FxSampleClock): Solo {
     val alone = sampler.sampleAt(
         listOf(solo), FxSampleRequest.Include.ONLY, samples.rows, clock, samples.offsetsMs, samples.sampleMs, reads = reads,
     )
-    return Solo(solo, alone.attribute(solo.target.attribute)?.rows.orEmpty().associate { it.key to it.result })
+    return Solo(solo, alone.attributes.associate { sampled -> sampled.attribute to sampled.rows.associate { it.key to it.result } })
 }
 
 private fun answer(
@@ -516,7 +519,9 @@ private fun answer(
         if (effect.timingSource == TimingSource.BEAT) reads.speedSlotOf(effect)
         else reads.rateSlotOf(effect).takeIf { it != FxInstance.NO_RATE_MASTER }
     fun familyOf(effect: FxInstance): AttributeFamily? =
-        sampler.heads(listOf(effect), reads).firstNotNullOfOrNull { family(it.key, effect.target.attribute) }
+        sampler.heads(listOf(effect), reads).firstNotNullOfOrNull { head ->
+            fixture(head.key)?.let { familyForAttribute(it, effect.target.on(it).attribute) }
+        }
     val soloFamily = solo?.let { familyOf(it.fx) }
     fun uuidAt(slot: Int) = masters.getOrNull(slot)?.uuid?.toString()
 
@@ -538,8 +543,7 @@ private fun answer(
         // of the lane what is underneath.
         val soloRows = when {
             solo == null || family != soloFamily -> null
-            attribute == solo.fx.target.attribute -> solo.results
-            else -> emptyMap()
+            else -> solo.results[attribute].orEmpty()
         }
         val rows = sampledAttribute.rows.map { row ->
             val r = rowIndex.getValue(row.key)

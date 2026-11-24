@@ -423,20 +423,36 @@ object PaletteResolver {
         media: FittedMedia?,
         target: Color,
     ): SnappedSlot? {
+        val (slot, deltaE) = nearestWheelOption(setting, attribute, media, target) ?: return null
+        // A fitted gel is named beside its frame, so the editor reads "the frame holding R26".
+        val fitted = media?.slot(attribute, slot.name)?.gel
+        return SnappedSlot(if (fitted != null) "${slot.name} ($fitted)" else slot.name, slot.level, deltaE)
+    }
+
+    /**
+     * [nearestColourSlot]'s choice as the option itself and its ΔE: what a colour chase lands a step
+     * on ([ColourStepList]), which wants the option rather than the editor's words for it.
+     */
+    internal fun nearestWheelOption(
+        setting: DmxFixtureSetting<*>,
+        attribute: String,
+        media: FittedMedia?,
+        target: Color,
+    ): Pair<DmxFixtureSettingValue, Double>? {
         val targetLab = toLab(target)
-        var best: SnappedSlot? = null
+        var best: DmxFixtureSettingValue? = null
+        var bestDelta = Double.MAX_VALUE
         for (slot in setting.sortedValues) {
             val preview = media.colourOf(attribute, slot) ?: continue
             val colour = parseHex(preview) ?: continue
             if (colour.red == 0 && colour.green == 0 && colour.blue == 0) continue
             val delta = labDistance(targetLab, toLab(colour))
-            if (best == null || delta < best.deltaE) {
-                // A fitted gel is named beside its frame, so the editor reads "the frame holding R26".
-                val fitted = media?.slot(attribute, slot.name)?.gel
-                best = SnappedSlot(if (fitted != null) "${slot.name} ($fitted)" else slot.name, slot.level, delta)
+            if (best == null || delta < bestDelta) {
+                best = slot
+                bestDelta = delta
             }
         }
-        return best
+        return best?.let { it to bestDelta }
     }
 
     // ─── Position ───────────────────────────────────────────────────────────

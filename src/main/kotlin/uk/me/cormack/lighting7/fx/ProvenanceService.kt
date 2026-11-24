@@ -239,6 +239,8 @@ class ProvenanceService internal constructor(
     private val fxWeight: (FxInstance) -> Double = { it.weight(it.dynamics) },
     /** Layer 4 as the cues alone compose it — [CueAssignmentLayer.cuesOnly]. */
     private val cuesOnly: () -> LayerResolver.CueLayerSnapshot = { LayerResolver.CueLayerSnapshot.EMPTY },
+    /** The attribute an effect paints on a head — [FxEngine.attributeAt], a colour chase's wheel on a wheel head. */
+    private val paintedAttribute: (FxInstance, String) -> String = { effect, _ -> effect.target.attribute },
 ) {
     /**
      * What a Move in dark contributor holds a key for (`MoveInDarkService.holdingOf`): set by the
@@ -605,8 +607,8 @@ class ProvenanceService internal constructor(
             if (!effect.isRunning) continue
             if (effect.spent || fxWeight(effect) <= 0.0) continue
             if (!include(effect)) continue
-            val attribute = effect.target.attribute
             for (fixtureKey in coverageKeys(effect)) {
+                val attribute = paintedAttribute(effect, fixtureKey)
                 if (isLayerStomped(effect, fixtureKey, attribute)) continue
                 if (layerResolver.replacedWeight(cueLayer, fixtureKey, attribute, effect.priority, effect.cueId) <= 0.0) continue
                 val k = fixtureKey to attribute
@@ -769,14 +771,15 @@ class ProvenanceService internal constructor(
         val channelSet = channels.mapTo(HashSet()) { it.universe.universe to it.channel }
         val paintings = ArrayList<Painting>()
         for ((effect, covered) in read.effects) {
-            if (effect.target.attribute == attribute && fixtureKey in covered) {
+            if (fixtureKey in covered && paintedAttribute(effect, fixtureKey) == attribute) {
                 paintings += Painting(fixtureKey, attribute, effect)
                 continue
             }
             if (channelSet.isEmpty()) continue
             for (paintKey in covered) {
-                if (read.channelsOf(paintKey, effect.target.attribute).containsAll(channelSet)) {
-                    paintings += Painting(paintKey, effect.target.attribute, effect)
+                val painted = paintedAttribute(effect, paintKey)
+                if (read.channelsOf(paintKey, painted).containsAll(channelSet)) {
+                    paintings += Painting(paintKey, painted, effect)
                     break
                 }
             }
@@ -817,7 +820,7 @@ class ProvenanceService internal constructor(
             // only a full-weight OVERRIDE covers the layers below it. A setting has no mix: it is on
             // stage, and covers, from half weight up, as its target writes it ([weighDiscrete]).
             val weight = if (effect.spent) 0.0 else fxWeight(effect) * replacedWeightOf(read, effect, fixtureKey, attribute, paintings)
-            val discrete = effect.target is SettingTarget
+            val discrete = effect.target.on(fixture) is SettingTarget
             val paints = if (discrete) weighDiscrete(weight) else weight > 0.0
             // A replacing stack holds an effect back by a weight, which [weight] already carries.
             val reason = heldBack[effect]

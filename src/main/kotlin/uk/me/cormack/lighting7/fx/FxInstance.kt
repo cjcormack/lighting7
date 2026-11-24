@@ -539,7 +539,7 @@ data class FxDynamics(
 
 class FxInstance internal constructor(
     val effect: Fx,
-    val target: FxTarget,
+    target: FxTarget,
     val timing: FxTiming,
     val blendMode: BlendMode,
     /**
@@ -564,6 +564,12 @@ class FxInstance internal constructor(
         effect, target, timing, blendMode,
         AtomicReference(FxDynamics(timing = effect.defaultTiming, direction = effect.defaultDirection)),
     )
+
+    /**
+     * What this FX paints: the target it was given, a colour target reaching colour-wheel heads where
+     * the FX steps (wheel-colour-chase plan D1) — set here, where every spawn path meets.
+     */
+    val target: FxTarget = if (target is ColourTarget) target.copy(wheels = effect.stepCount != null) else target
 
     /** [envelopeRef], for the swap that shares it. */
     internal val envelopeCell: AtomicReference<FxEnvelope> get() = envelopeRef

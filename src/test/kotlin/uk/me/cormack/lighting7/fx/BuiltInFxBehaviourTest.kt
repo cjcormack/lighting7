@@ -35,8 +35,8 @@ class BuiltInFxBehaviourTest {
         registry.createFx(id, params.toMap())
 
     private fun FxOutput.slider(): UByte = (this as FxOutput.Slider).value
-    private fun FxOutput.colour(): Color = (this as FxOutput.Colour).color.color
-    private fun FxOutput.extColour(): ExtendedColour = (this as FxOutput.Colour).color
+    private fun FxOutput.colour(): Color = landedColour().color
+    private fun FxOutput.extColour(): ExtendedColour = landedColour()
     private fun FxOutput.position(): Pair<UByte, UByte> =
         (this as FxOutput.Position).let { it.pan to it.tilt }
 

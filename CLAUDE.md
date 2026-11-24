@@ -455,8 +455,9 @@ once it had drifted a file behind the resources and nothing but tests constructe
   Pulse — on the dimmer, UV and the beam attributes, its family Beam on a beam attribute, D5; a
   Square's or Pulse's `widthUnit` *One head* on for one slot's share, D8, its preset *Chase*),
   Flicker, LightningStrike, CandleFlicker, FluorescentFlicker (their levels `low` / `high`)
-- **Colour**: ColourCycle (literal colours only; `between` Cut, Fade or Smooth — its presets *Colour
-  Fade* and *Colour Wave*), RainbowCycle, ColourStrobe, ColourFlicker; and ColourWave and ColourFade,
+- **Colour**: ColourCycle (literal colours only; `between` Cut, Fade, Smooth or Split — its presets *Colour
+  Fade* and *Colour Wave*; a colour chase that steps, it or Palette Steps, reaches colour-wheel heads,
+  each step on the nearest slot), RainbowCycle, ColourStrobe, ColourFlicker; and ColourWave and ColourFade,
   **legacy** (`legacy: true`): they run and edit what is stored, but no picker or listing offers them,
   since Colour Cycle draws each a DMX step apart (fx-settings plan D3)
 - **Position**: Path (D2: one `shape` — Circle, Figure 8, Random about a centre, or a Line between

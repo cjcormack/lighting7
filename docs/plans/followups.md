@@ -52,7 +52,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FX-PRESS-FADE-CLIENT`](#fu-fx-press-fade-client) | Ready | FX | — |
 | [`FU-FX-VALUE-FADE-UNDER-EFFECT`](#fu-fx-value-fade-under-effect) | Trigger | FX | an operator wants a value and the FX over it to fade together on a programmer gesture |
 | [`FU-FX-BEAM-ANY-SLIDER`](#fu-fx-beam-any-slider) | Trigger | FX | an operator wants to breathe prism or a fixture's own speed channel |
-| [`FU-FX-STEPS-COLOUR-WHEEL`](#fu-fx-steps-colour-wheel) | Trigger | FX | an operator steps colour palettes over a group holding a colour-wheel head |
+| [`FU-FX-RAINBOW-WHEEL-SCROLL`](#fu-fx-rainbow-wheel-scroll) | Trigger | FX | an operator wants Rainbow Cycle, or another colour FX that does not step, on a colour-wheel head |
 | [`FU-BUSK-MOMENTARY`](#fu-busk-momentary) | Trigger | Busk | an operator asks to flash a pad rather than latch it |
 | [`FU-BUSK-AI-LAYOUT`](#fu-busk-ai-layout) | Trigger | AI | a prompt asks the AI to put something on a busk page |
 | [`FU-BUSK-PAD-SIZE`](#fu-busk-pad-size) | Trigger | Busk | a page needs more density than width and flow give |
@@ -729,20 +729,18 @@ one gesture.
 
 ---
 
-### `FU-FX-STEPS-COLOUR-WHEEL`
+### `FU-FX-RAINBOW-WHEEL-SCROLL`
 
-**Colour Palette Steps on a colour-wheel head** · Trigger · effects plan session 7, 2026-10-16
+**A non-stepping colour FX on a colour wheel** · Trigger · wheel-colour-chase plan D10, 2026-11-24
 
-Palette Steps over colour palettes drives the colour target (`ColourTarget`), which only a head with
-a mixed colour (`WithColour`) is a member of, so a head whose colour is a wheel — the MAC 250, the
-Varytec — is skipped, where a colour palette applied as a layer snaps it to its nearest slot
-(`PaletteResolver.resolveColour`, against the head's fitted media). The step's resolution already
-answers per head (`PaletteStepList.resolveStep` asks `PaletteResolver`), and the wheel arm answers a
-`Setting` naming the wheel's own attribute: what is missing is a target that drives a mixed colour on
-one head and a wheel on the next, and the fitted media the snap reads (`Fixtures.fittedMediaFor`),
-which `PaletteStepList` does not hold. Slot Steps on the wheel by name is today's answer.
+A colour chase reaches a colour-wheel head only when it steps (Colour Cycle, Palette Steps;
+`ColourTarget.wheels`), landing each step on a slot. Rainbow Cycle, Colour Flicker and Colour Strobe
+answer a colour each frame, which a wheel can only take by snapping at the frame rate, so they leave a
+wheel alone. What a wheel can do instead is run its own scroll band (the MAC 250's `SCROLL_CW`, the
+Beam Ring's rotation), which wants a mapping from an FX's speed to the band's.
 
-**Trigger**: an operator steps colour palettes over a group holding a colour-wheel head.
+**Trigger**: an operator wants Rainbow Cycle, or another colour FX that does not step, on a
+colour-wheel head.
 
 ---
 
@@ -3359,6 +3357,8 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-11
 
+- `FU-FX-STEPS-COLOUR-WHEEL` — a colour chase that steps (Colour Cycle, Palette Steps) lands each step on a
+  colour-wheel head's nearest slot, against its fitted media (wheel-colour-chase plan session 1).
 - `FU-MIDI-SHOW-GUARD` — every surface input runs inside `SurfaceDispatch.guarded`, which turns a throw
   into a failed outcome and carries on; the OSC collector shares it (OSC plan session 1).
 - `FU-CLOUD-DEFAULT-URL` — an absent `cloud.baseUrl` is `https://lighting7.net`, so a packaged desk can

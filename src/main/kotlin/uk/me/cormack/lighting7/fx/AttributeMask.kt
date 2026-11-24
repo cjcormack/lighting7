@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.AttributeCategory
 
@@ -87,6 +88,17 @@ fun familyForAttribute(fixture: GroupableFixture, attribute: String): AttributeF
     val canonical = canonicalAttributeName(attribute)
     return AttributeChannelWriter.resolveAttribute(fixture, canonical)?.category?.family()
 }
+
+/**
+ * [familyForAttribute] for a stored FX's attribute. A colour FX is Colour on a head whose colour is
+ * a colour wheel, which declares no `rgbColour` for [familyForAttribute] to find.
+ */
+fun familyForFxAttribute(fixture: GroupableFixture, attribute: String): AttributeFamily? =
+    familyForAttribute(fixture, attribute)
+        ?: AttributeFamily.COLOUR.takeIf {
+            canonicalAttributeName(attribute) == "rgbColour" &&
+                FixtureAttributeCatalogue.of(fixture::class).colourWheels.isNotEmpty()
+        }
 
 /**
  * Parse a wire mask (`["COLOUR", "POSITION"]`) into a filter set.

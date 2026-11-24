@@ -167,8 +167,8 @@ class LegacyEquivalenceTest {
             for (direction in FxDirection.entries) for (cycle in 0L..1L) for (spread in SPREADS) {
                 for (head in 0 until HEADS) for (phase in PHASES) for (context in CONTEXTS) {
                     val member = direction.apply(cyclePhase(phase - spread * head / HEADS), cycle)
-                    val expected = old.calculate(member, context)
-                    val actual = new.calculate(member, context)
+                    val expected = old.calculate(member, context).landed()
+                    val actual = new.calculate(member, context).landed()
                     if (expected != actual && failures.size < 20) {
                         failures += "$oldId $params → $newId $newParams at $direction cycle $cycle spread $spread head $head " +
                             "phase $phase: old $expected, new $actual"
@@ -226,6 +226,10 @@ class LegacyEquivalenceTest {
         assertEquals(mapOf("between" to "FADE", "fade" to "0.5"), absorbed("ColourCycle", mapOf("fadeRatio" to "")).second)
         assertEquals(mapOf("between" to "FADE", "fade" to "0.25"), absorbed("ColourCycle", mapOf("fadeRatio" to "0.25")).second)
     }
+
+    /** Colour Cycle's steps as the colour an RGB head lands (wheel-colour-chase plan D2); any other output as it is. */
+    private fun FxOutput.landed(): FxOutput =
+        if (this is FxOutput.Steps && steps is ColourStepList) FxOutput.Colour(landedColour()) else this
 
     private fun outcome(block: () -> FxOutput): String =
         runCatching(block).fold({ it.toString() }, { "throws ${it::class.simpleName}: ${it.message}" })
@@ -298,12 +302,12 @@ class LegacyEquivalenceTest {
         val b = "#f0e0d0"
         val wave = registry.createFx("ColourWave", mapOf("colourA" to a, "colourB" to b))
         val smooth = registry.createFx("ColourCycle", mapOf("colours" to "$a,$b", "between" to "SMOOTH"))
-        assertTrue(PHASES.any { wave.calculate(it) != smooth.calculate(cyclePhase(it + 0.25)) }, "Smooth a quarter on is not Colour Wave")
+        assertTrue(PHASES.any { wave.calculate(it) != smooth.calculate(cyclePhase(it + 0.25)).landed() }, "Smooth a quarter on is not Colour Wave")
         val fade = registry.createFx("ColourFade", mapOf("fromColour" to a, "toColour" to b))
         val cycle = registry.createFx("ColourCycle", mapOf("colours" to "$a,$b", "between" to "FADE", "fade" to "1"))
         assertTrue(
             (0..192).map { it / 96.0 }.any { t ->
-                fade.calculate(FxDirection.BOUNCE.apply(cyclePhase(t), kotlin.math.floor(t).toLong())) != cycle.calculate(cyclePhase(t / 2))
+                fade.calculate(FxDirection.BOUNCE.apply(cyclePhase(t), kotlin.math.floor(t).toLong())) != cycle.calculate(cyclePhase(t / 2)).landed()
             },
             "Fade at twice the cycle is not Colour Fade's bounce",
         )

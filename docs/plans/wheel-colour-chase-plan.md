@@ -160,7 +160,7 @@ session N — title*. Never merge a later session's PR before an earlier one.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Wheel heads in colour chases | planned | | | |
+| 1 | Wheel heads in colour chases | in review | `claude/fervent-cannon-jfon7w` | | |
 | 2 | Split colours | planned | | | |
 | 3 | The editor and the Stage view | planned | | | |
 
@@ -192,6 +192,24 @@ the next; whoever merges the last fills its own.
 - **Checks:** the full `./gradlew test` locally, since every Colour Cycle's output and the readers of
   FX suppression across `fx`, `state` and `plugins` move; `npm run check:quick` in `frontend/` for the
   fork note.
+- **Where the code differed from this plan** (corrected in session 1):
+  - `ColourTarget.wheels` is set by `FxInstance`, from the FX's `stepCount`, not by `FxTargetFactory`:
+    every spawn path meets in `FxInstance`, and several build a `ColourTarget` without the factory.
+  - Fitted media reaches the step list from the engine at apply
+    (`FixturesWithTransaction.fittedMediaFor`, an in-memory map), not through `FxContext`: the
+    context is per distribution slot and shared across heads, and the Fx calculation never sees the
+    slot a step lands on — the target does.
+  - A wheel landing is the wheel's `SettingTarget` with `colourWheel` set (`ColourTarget.on`), so the
+    readers that already handle a setting (the fallback, park, compose, the key stack) take it as one.
+    The readers keyed by `(head, attribute)` ask `FxEngine.attributeAt`.
+  - Locate's re-assert needed no change: it writes programmer values, which suppression reads by the
+    landed attribute.
+  - A stored `fade` above 1 is storable (no range check), and today's script ran it starting each
+    crossing part-way in. `stepsAt` still clamps the ratio to 1 by default; Colour Cycle's Fade passes
+    `clampFade = false` to keep that.
+  - A fork of Colour Cycle does not reach wheel heads: a project FX definition registers with no
+    `stepsFrom` (`routes/fxDefinitions.kt`), so its `stepCount` is null and `wheels` stays off. The
+    fork note says only that it needs this desk or later.
 
 ### Session 2 — Split colours
 

@@ -17,6 +17,7 @@ import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.canonicalAttributeName
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.familyForAttribute
+import uk.me.cormack.lighting7.fx.familyForFxAttribute
 import uk.me.cormack.lighting7.fx.CueApplyData
 import uk.me.cormack.lighting7.fx.buildCueAssignmentsForCue
 import uk.me.cormack.lighting7.models.CueAdHocFxDto
@@ -283,7 +284,7 @@ private fun spawnIncludedFx(
             val reference = state.show.fixtures.referenceFixtureFor(target)
             val attribute = fxSpec.attribute
             val group = if (reference != null && attribute != null) {
-                familyForAttribute(reference, attribute)
+                familyForFxAttribute(reference, attribute)
             } else null
             if (!maskAllows(mask, group)) return
         }

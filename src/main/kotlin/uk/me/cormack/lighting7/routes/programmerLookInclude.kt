@@ -9,7 +9,7 @@ import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.canonicalAttributeName
 import uk.me.cormack.lighting7.fx.lookFxSettings
 import uk.me.cormack.lighting7.fx.maskAllows
-import uk.me.cormack.lighting7.fx.familyForAttribute
+import uk.me.cormack.lighting7.fx.familyForFxAttribute
 import uk.me.cormack.lighting7.fx.toFxEntry
 import uk.me.cormack.lighting7.fx.toFxSpec
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -144,7 +144,7 @@ private fun spawnIncludedLookFx(
 
         if (mask != null) {
             val reference = state.show.fixtures.referenceFixtureFor(target.fxTarget)
-            val group = reference?.let { familyForAttribute(it, fxTarget.attribute) }
+            val group = reference?.let { familyForFxAttribute(it, fxTarget.attribute) }
             if (!maskAllows(mask, group)) continue
         }
 

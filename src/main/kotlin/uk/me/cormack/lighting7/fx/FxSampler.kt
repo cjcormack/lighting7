@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fx.KeyStackLayer.HeldBackReason
 import kotlin.math.abs
@@ -43,6 +44,9 @@ internal class FxSampler(
         fun fixture(key: String): GroupableFixture
 
         fun underneath(target: FxTarget, fixture: GroupableFixture, key: String): FxOutput
+
+        /** [fixture]'s fitted media, a cell's its parent's: the slots a colour-wheel landing snaps to. */
+        fun fittedMedia(fixture: GroupableFixture): FittedMedia?
 
         /** What [key] holds for [target]'s property on the stage now: read, never written. */
         fun current(target: FxTarget, key: String): FxOutput?
@@ -164,12 +168,25 @@ internal class FxSampler(
         val heldBack = view.heldBack()
         val effects = HashMap<FxInstance, Fx?>()
         val representative = HashSet<FxInstance>()
-        val attributes = stack.map { it.target.attribute }.distinct().mapNotNull { attribute ->
-            val onAttribute = stack.filter { it.target.attribute == attribute }
+        // Each FX's target on each head, as the compose pass paints it (a wheel head's is its wheel's).
+        val landed = HashMap<Pair<FxInstance, String>, FxTarget>()
+        fun targetOf(effect: FxInstance, key: String): FxTarget =
+            if (!effect.target.landsPerHead) effect.target
+            else landed.getOrPut(effect to key) {
+                runCatching { view.fixture(key) }.getOrNull()?.let(effect.target::on) ?: effect.target
+            }
+        val attributeOrder = LinkedHashSet<String>()
+        for (effect in stack) {
+            attributeOrder += effect.target.attribute
+            for (key in membersOf(effect).keys) attributeOrder += targetOf(effect, key).attribute
+        }
+        val attributes = attributeOrder.mapNotNull { attribute ->
             val sampledRows = rowKeys.mapNotNull { key ->
-                val painting = onAttribute.mapNotNull { effect -> membersOf(effect)[key]?.let { effect to it } }
+                val painting = stack.mapNotNull { effect ->
+                    membersOf(effect)[key]?.takeIf { targetOf(effect, key).attribute == attribute }?.let { effect to it }
+                }
                 if (painting.isEmpty()) null
-                else sampleRow(key, attribute, painting, reads, clock, offsetsMs, sampleMs, heldBack, effects, representative)
+                else sampleRow(key, attribute, painting, { targetOf(it, key) }, reads, clock, offsetsMs, sampleMs, heldBack, effects, representative)
             }
             if (sampledRows.isEmpty()) null else FxSampledAttribute(attribute, sampledRows)
         }
@@ -284,6 +301,7 @@ internal class FxSampler(
         key: String,
         attribute: String,
         painting: List<Pair<FxInstance, Member>>,
+        targetOf: (FxInstance) -> FxTarget,
         reads: Reads,
         clock: FxSampleClock,
         offsetsMs: DoubleArray,
@@ -299,7 +317,7 @@ internal class FxSampler(
         }
         // The row's layout and underneath from its first FX's target; each FX resolves and blends
         // through its own, as the compose pass applies it.
-        val target = painting.first().first.target
+        val target = targetOf(painting.first().first)
         val kind = kindOf(target)
         val planes = if (target is ColourTarget) BUNDLED.filterTo(HashSet()) { target.hasBundled(fixture, it) } else emptySet()
         val underneath = withPlanes(view.underneath(target, fixture, key), planes)
@@ -311,7 +329,7 @@ internal class FxSampler(
         } else null
 
         val result = Series.of(kind, n, planes)
-        val outputs = painting.map { (effect, _) -> Series.of(kind, n, planes, steps = effect.effect.outputType == FxOutputType.STEPS) }
+        val outputs = painting.map { (effect, _) -> Series.of(kind, n, planes, steps = effect.effect.outputType == FxOutputType.STEPS || effect.effect.stepCount != null) }
         val holding = painting.map { BooleanArray(n) }
         val own = painting.map { DoubleArray(n) }
         val reasons = painting.map { (effect, _) -> heldBack(effect, key, attribute) }
@@ -360,12 +378,12 @@ internal class FxSampler(
                     outputs[i].set(s, before)
                     continue
                 }
-                val value = onHead(effect.target, fixture, before, output)
+                val value = onHead(targetOf(effect), fixture, before, output)
                 if (output is FxOutput.Steps) outputs[i].setStep(s, output)
                 outputs[i].set(s, value ?: before)
                 // A replacing stack's hold-back is a weight, already in [weights]; every other reason is a switch.
                 if (value != null && (reasons[i] == null || reasons[i] == HeldBackReason.REPLACED) && weights[i] > 0.0) {
-                    running = withPlanes(blend(effect.target, before, value, effect.blendMode, weights[i]), planes)
+                    running = withPlanes(blend(targetOf(effect), before, value, effect.blendMode, weights[i]), planes)
                 }
             }
             result.set(s, frozen ?: running)
@@ -427,7 +445,9 @@ internal class FxSampler(
     private fun onHead(target: FxTarget, fixture: GroupableFixture, before: FxOutput, output: FxOutput): FxOutput? =
         when (target) {
             is SliderTarget -> target.outputByte(fixture, output) { sliderOf(before) }?.let { FxOutput.Slider(it) }
-            is SettingTarget -> target.getSetting(fixture)?.let { target.outputLevel(fixture, output, it) }?.let { FxOutput.Slider(it) }
+            is SettingTarget -> target.getSetting(fixture)
+                ?.let { target.outputLevel(fixture, output, it, if (target.colourWheel) view.fittedMedia(fixture) else null) }
+                ?.let { FxOutput.Slider(it) }
             is ColourTarget -> target.outputColour(fixture, output) { colourOf(before) }?.let { FxOutput.Colour(it) }
             is PositionTarget -> positionOf(before).let { target.outputPosition(fixture, output, it.pan, it.tilt) }
         }
@@ -606,6 +626,7 @@ internal class FxSampler(
         private fun labelsOf(steps: StepList): List<String> = when (steps) {
             is PaletteStepList -> steps.steps.map { it.name }
             is SlotStepList -> steps.names
+            is ColourStepList -> steps.colours.map { PaletteResolver.toHex(it.color) }
             else -> List(steps.size) { (it + 1).toString() }
         }
 

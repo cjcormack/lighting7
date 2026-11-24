@@ -23,6 +23,7 @@ import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.canonicalAttributeName
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.familyForAttribute
+import uk.me.cormack.lighting7.fx.familyForFxAttribute
 import uk.me.cormack.lighting7.fx.storedPhaseOffset
 import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueLayerDto
@@ -532,7 +533,7 @@ internal fun familyForRow(fixtures: Fixtures, row: CueAttributeAssignmentDto): A
 private fun familyForAdHoc(fixtures: Fixtures, effect: CueAdHocFxDto): AttributeFamily? {
     val attribute = effect.attribute ?: return null
     val fixture = fixtures.referenceFixtureFor(effect.target) ?: return null
-    return familyForAttribute(fixture, attribute)
+    return familyForFxAttribute(fixture, attribute)
 }
 
 /**
@@ -578,7 +579,7 @@ internal fun fxInstancesToCueChildren(
         // a position wave along with them.
         if (mask != null) {
             val fixture = fixtures.referenceFixtureFor(target)
-            val group = fixture?.let { familyForAttribute(it, effect.target.attribute) }
+            val group = fixture?.let { familyForAttribute(it, effect.target.on(it).attribute) }
             if (!maskAllows(mask, group)) continue
         }
 

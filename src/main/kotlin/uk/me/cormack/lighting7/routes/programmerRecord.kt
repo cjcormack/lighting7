@@ -660,7 +660,7 @@ private fun shadowingCoverage(
 private fun familyForAdHocChild(state: State, effect: DaoCueAdHocFxEntity): AttributeFamily? {
     val attribute = effect.attribute ?: return null
     val fixture = state.show.fixtures.referenceFixtureFor(effect.target) ?: return null
-    return uk.me.cormack.lighting7.fx.familyForAttribute(fixture, attribute)
+    return uk.me.cormack.lighting7.fx.familyForFxAttribute(fixture, attribute)
 }
 
 private fun newAdHocChild(cue: DaoCue, effect: CueAdHocFxDto): DaoCueAdHocFxEntity =
