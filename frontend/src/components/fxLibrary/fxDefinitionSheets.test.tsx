@@ -94,6 +94,14 @@ describe('EditFxDefinitionSheet', () => {
     })
   })
 
+  it('says a fork of Colour Cycle needs this desk or later, and says nothing of it for another fork', () => {
+    const { unmount } = inSheet(<EditFxDefinitionSheet definitionId={5} forkedFrom="Colour Cycle" onDelete={() => {}} />)
+    expect(screen.getByTestId('fork-colour-cycle-note')).toHaveTextContent('needs this desk or later')
+    unmount()
+    inSheet(<EditFxDefinitionSheet definitionId={5} forkedFrom="Pulse" onDelete={() => {}} />)
+    expect(screen.queryByTestId('fork-colour-cycle-note')).toBeNull()
+  })
+
   it('refuses to save a name of spaces alone, and trims the one it saves', async () => {
     inSheet(<EditFxDefinitionSheet definitionId={5} onDelete={() => {}} />)
     const name = screen.getByLabelText('Name')

@@ -324,17 +324,22 @@ class LayerResolver(
      * over the top: [localOver] as output reads it — the programmer left out while Blind, a held
      * flash included.
      */
-    fun fallbackFor(target: FxTarget, fixture: GroupableFixture, fixtureKey: String): FxOutput =
-        if (programmer.blind) cueLayerFor(target, fixture, fixtureKey)
-        else composeOver(target, fixture, fixtureKey, programmer)
+    fun fallbackFor(target: FxTarget, fixture: GroupableFixture, fixtureKey: String): FxOutput {
+        // A colour chase on a wheel head falls back to what the wheel holds ([FxTarget.on]).
+        val landed = target.on(fixture)
+        return if (programmer.blind) cueLayerFor(landed, fixture, fixtureKey)
+        else composeOver(landed, fixture, fixtureKey, programmer)
+    }
 
     /**
      * What Local holds for [target] on [fixture] over the cue layer, without FX: a surface's readback
      * (surface-setup plan D6). Read **beneath a held flash** and **whether or not Blind is on** — so in
      * Blind it is the staged value a fader edits — and blind to park, which a fader does not move.
      */
-    fun localOver(target: FxTarget, fixture: GroupableFixture, fixtureKey: String): FxOutput =
-        composeOver(target, fixture, fixtureKey, beneathFlash, withCueEmitters(target, fixture, fixtureKey))
+    fun localOver(target: FxTarget, fixture: GroupableFixture, fixtureKey: String): FxOutput {
+        val landed = target.on(fixture)
+        return composeOver(landed, fixture, fixtureKey, beneathFlash, withCueEmitters(landed, fixture, fixtureKey))
+    }
 
     /**
      * A colour's cue-layer value with the cue's own white, amber and UV rows laid over it. Output keeps

@@ -2,7 +2,10 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.floor
 
 /** Palette Steps' registry id (effects plan D8, §3.6). */
@@ -60,6 +63,20 @@ interface StepList {
         (valueFor(index, fixture, PaletteAttribute.COLOUR.attribute) as? CueAssignmentResolver.AttributeValue.Colour)
             ?.value?.let(StepColour::whole)
 
+    /**
+     * Step [index] as a slot of [setting], [fixture]'s colour wheel named [attribute], or null where
+     * the head holds: what a colour chase lands on a wheel head (wheel-colour-chase plan D1). [media]
+     * is the unit's fitted media, so a step snaps to the slot the unit actually holds nearest. Only a
+     * list whose steps are colours answers; any other holds.
+     */
+    fun wheelSlotFor(
+        index: Int,
+        fixture: GroupableFixture,
+        setting: DmxFixtureSetting<*>,
+        attribute: String,
+        media: FittedMedia?,
+    ): WheelSlot? = null
+
     companion object {
         /** Steps through nothing. */
         val EMPTY: StepList = object : StepList {
@@ -94,6 +111,62 @@ data class StepColour(
     companion object {
         /** A colour named whole. */
         fun whole(colour: ExtendedColour) = StepColour(colour)
+    }
+}
+
+/** One slot of a colour wheel a step lands on: the option's name and its level. */
+data class WheelSlot(val name: String, val level: UByte)
+
+/**
+ * Colour Cycle's list (wheel-colour-chase plan D2): its literal colours. A head with a mixed colour
+ * takes each whole; a colour-wheel head lands each on its nearest slot ([wheelSlotFor]), against the
+ * unit's fitted media.
+ */
+class ColourStepList(val colours: List<ExtendedColour>) : StepList {
+    override val size: Int get() = colours.size
+
+    override fun valueFor(index: Int, fixture: GroupableFixture, attribute: String): CueAssignmentResolver.AttributeValue? =
+        colours.getOrNull(index)?.let(CueAssignmentResolver.AttributeValue::Colour)
+
+    override fun colourFor(index: Int, fixture: GroupableFixture): StepColour? =
+        colours.getOrNull(index)?.let(StepColour::whole)
+
+    private data class WheelKey(val options: Class<*>, val attribute: String, val media: FittedMedia?)
+
+    /**
+     * Each wheel's slot per step, keyed by the class of its options, its name and the unit's media —
+     * stable across the tick's fresh fixture objects, so the map holds one entry per wheel model and
+     * fitting the chase has met.
+     */
+    private val slotsByWheel = ConcurrentHashMap<WheelKey, List<WheelSlot?>>()
+
+    override fun wheelSlotFor(
+        index: Int,
+        fixture: GroupableFixture,
+        setting: DmxFixtureSetting<*>,
+        attribute: String,
+        media: FittedMedia?,
+    ): WheelSlot? {
+        if (index !in colours.indices) return null
+        val slots = slotsByWheel.getOrPut(WheelKey(optionsKey(setting), attribute, media)) {
+            colours.map { colour ->
+                PaletteResolver.nearestWheelOption(setting, attribute, media, colour.color)
+                    ?.first?.let { WheelSlot(it.name, it.level) }
+            }
+        }
+        return slots[index]
+    }
+
+    /** How many wheels are cached: one per wheel model and fitting met. */
+    internal val cachedWheels: Int get() = slotsByWheel.size
+
+    override fun equals(other: Any?): Boolean = other is ColourStepList && other.colours == colours
+    override fun hashCode(): Int = colours.hashCode()
+    override fun toString(): String = "ColourStepList(${colours.size})"
+
+    companion object {
+        /** What a Colour Cycle with no colours steps through: black. */
+        val BLACK = ColourStepList(listOf(ExtendedColour.BLACK))
     }
 }
 
@@ -211,8 +284,32 @@ class PaletteStepList(val steps: List<PaletteStep>) : StepList {
         return values
     }
 
+    /**
+     * The palette's colour on a wheel head: its colour row snapped through [PaletteResolver] with the
+     * unit's [media], as a press of it lands, and kept per head with the media it was snapped against.
+     */
+    override fun wheelSlotFor(
+        index: Int,
+        fixture: GroupableFixture,
+        setting: DmxFixtureSetting<*>,
+        attribute: String,
+        media: FittedMedia?,
+    ): WheelSlot? {
+        if (index !in steps.indices) return null
+        val key = "${fixture.targetKey}|$attribute"
+        val model = fixture.javaClass
+        val slots = wheelCache[key]?.takeIf { it.model == model && it.media == media }?.slots
+            ?: Array(steps.size) { resolveWheelSlot(steps[it], fixture, setting, attribute, media) }
+                .also { wheelCache[key] = CachedWheel(model, media, it) }
+        return slots[index]
+    }
+
+    private class CachedWheel(val model: Class<*>, val media: FittedMedia?, val slots: Array<WheelSlot?>)
+
+    private val wheelCache = ConcurrentHashMap<String, CachedWheel>()
+
     /** How many heads (by key and property) are cached; a test reads it. */
-    internal val cachedHeads: Int get() = cache.size
+    internal val cachedHeads: Int get() = cache.size + wheelCache.size
 
     override fun equals(other: Any?): Boolean = other is PaletteStepList && other.steps == steps
     override fun hashCode(): Int = steps.hashCode()
@@ -228,8 +325,7 @@ class PaletteStepList(val steps: List<PaletteStep>) : StepList {
 
         /**
          * One palette on one head, for the property a target applies. Fitted media is not consulted:
-         * it decides only which **wheel** slot a colour snaps to, and a colour target drives a mixed
-         * colour — a wheel head is no colour target's member.
+         * it decides only which **wheel** slot a colour snaps to, which [wheelSlotFor] answers.
          */
         internal fun resolveStep(
             step: PaletteStep,
@@ -248,6 +344,22 @@ class PaletteStepList(val steps: List<PaletteStep>) : StepList {
                 if (known != null) PaletteAttribute.ofOrNull(name) == known else name.equals(attribute, ignoreCase = true)
             } ?: return null
             return PaletteResolver.resolve(fixture, attribute, row.second, null).value
+        }
+
+        /** The palette's colour row on a wheel head, snapped as a press of it is; null where it has none. */
+        internal fun resolveWheelSlot(
+            step: PaletteStep,
+            fixture: GroupableFixture,
+            setting: DmxFixtureSetting<*>,
+            attribute: String,
+            media: FittedMedia?,
+        ): WheelSlot? {
+            val intent = step.rows.firstOrNull { PaletteAttribute.ofOrNull(it.first) == PaletteAttribute.COLOUR }?.second
+                ?: return null
+            val level = (PaletteResolver.resolve(fixture, attribute, intent, media).value as? CueAssignmentResolver.AttributeValue.Setting)
+                ?.channelValue ?: return null
+            val option = setting.sortedValues.firstOrNull { it.level == level } ?: return null
+            return WheelSlot(option.name, option.level)
         }
 
         /**
@@ -318,24 +430,48 @@ fun stepWithin(phase: Double, n: Int): Double =
  */
 fun phaseBefore(phase: Double, edge: Double): Boolean = cyclePhase(phase) + PHASE_EPSILON < edge
 
+/** How a crossing between two steps runs: evenly, or eased in and out on a half cosine (Colour Cycle's Smooth). */
+enum class StepEase { LINEAR, COSINE }
+
 /**
  * The step a phase is on (effects plan §3.6): [steps] in equal segments of the cycle, each held for
- * `1 − fadeRatio` of its segment and crossing to the next over the rest — Colour Cycle's rule, so a
- * fade ratio means the same on both. The last step crosses back to the first. A list of one is that
- * step throughout; an empty one is [FxOutput.Steps] over nothing, which every head holds through.
+ * `1 − fadeRatio` of its segment and crossing to the next over the rest, by [ease]. The last step
+ * crosses back to the first. A list of one is that step throughout; an empty one is [FxOutput.Steps]
+ * over nothing, which every head holds through.
+ *
+ * [fadeRatio] is clamped to 0–1 unless [clampFade] is false: then a ratio above 1 never holds, each
+ * crossing starting `(fade − 1) / fade` of the way through, as Colour Cycle's Fade reads one.
+ *
+ * With [split] the rest of the segment is the two steps' split instead of a crossing
+ * (wheel-colour-chase plan D4): `blend` held at a half, and [FxOutput.Steps.split] how far through
+ * the split the phase is.
  *
  * Direction needs nothing here: a Backward or Bounce phase runs the segments back, and the blend
  * with them, so a reversed cycle crosses from each step into the one before it.
  */
-fun stepsAt(phase: Double, steps: StepList, fadeRatio: Double = 0.0): FxOutput.Steps {
+fun stepsAt(
+    phase: Double,
+    steps: StepList,
+    fadeRatio: Double = 0.0,
+    ease: StepEase = StepEase.LINEAR,
+    split: Boolean = false,
+    clampFade: Boolean = true,
+): FxOutput.Steps {
     val n = steps.size
     if (n <= 1) return FxOutput.Steps(0, 0, 0.0, steps)
     val from = stepIndex(phase, n)
+    val to = (from + 1) % n
     val within = stepWithin(phase, n)
-    val fade = fadeRatio.coerceIn(0.0, 1.0)
+    val fade = if (clampFade) fadeRatio.coerceIn(0.0, 1.0) else fadeRatio.coerceAtLeast(0.0)
     val hold = 1.0 - fade
-    val blend = if (fade <= 0.0 || within < hold) 0.0 else ((within - hold) / fade).coerceIn(0.0, 1.0)
-    return FxOutput.Steps(from, (from + 1) % n, blend, steps)
+    if (fade <= 0.0 || within < hold) return FxOutput.Steps(from, to, 0.0, steps)
+    val t = ((within - hold) / fade).coerceIn(0.0, 1.0)
+    if (split) return FxOutput.Steps(from, to, 0.5, steps, split = t)
+    val blend = when (ease) {
+        StepEase.LINEAR -> t
+        StepEase.COSINE -> (1.0 - cos(t * PI)) / 2.0
+    }
+    return FxOutput.Steps(from, to, blend, steps)
 }
 
 /**

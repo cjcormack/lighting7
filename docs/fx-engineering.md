@@ -318,7 +318,7 @@ FX that produce RGB colour values.
 
 | FX | Description | Parameters |
 |----|-------------|------------|
-| `ColourCycle` | Step through a list of literal colours, each giving way to the next by `between`: Cut, Fade (over `fade` of its step) or Smooth (a cosine across it) | `colours`, `between`, `fade` |
+| `ColourCycle` | Step through a list of literal colours, each giving way to the next by `between`: Cut, Fade (over `fade` of its step), Smooth (a cosine across it) or Split (their split held for `fade` of its step) | `colours`, `between`, `fade` |
 | `RainbowCycle` | Hue rotation | `saturation`, `brightness` |
 | `ColourStrobe` | Flash colour | `onColour`, `offColour`, `width` |
 | `ColourWave` | Sine between two — **legacy**: runs and edits stored ones, offered nowhere | `colourA`, `colourB` |
@@ -331,6 +331,47 @@ routes, `PUT /fx/{id}` and its frame, a Look's, a cue's and a palette's FX, the 
 `TypedParams.colourList` drops one that reaches it anyway. Palette Steps is the FX that steps through
 palettes, each landing on each head for itself. The other colour FX keep a palette reference in their
 `colour` parameters, one colour for every head (D30).
+
+**Colour Cycle answers steps** (wheel-colour-chase plan D2): `FxOutput.Steps` over a `ColourStepList`
+of its colours (`params.colourSteps`; no colours at all is one step of black, as it always wrote), Cut,
+Fade and Smooth being `stepsAt`'s crossing (Smooth with `StepEase.COSINE` over the whole step). An RGB
+head lands the same bytes as when the script blended them itself, every phase, `between`, `fade`, list
+length, Direction and spread (`ColourCycleStepsEquivalenceTest`, against the old script kept as
+`fx/legacy/ColourCycleBlended.fx.kts`) — a stored `fade` above 1 included, which never holds and starts
+each crossing part-way in, as it did. Since it outputs steps, the preview gives its lanes step indices
+and labels (the colours' hex), as it does Palette Steps'.
+
+**A colour chase reaches colour-wheel heads** (D1, D3). `FxInstance` sets `ColourTarget.wheels` for
+an FX that steps (`Fx.stepCount`, a declared `stepsFrom`: Colour Cycle, Palette Steps), and with it a
+head with no mixed colour but a colour wheel is a member (`landingOn`: `Mix`, else `Wheel`, the first
+of the class's `colourWheels` — the wheel a colour palette snaps to). A head with a mixed colour stays
+on its mix, a colour preset beside it untouched. A colour FX that does not step — Rainbow Cycle,
+Colour Flicker, Colour Strobe, a script FX — leaves a wheel alone. Every member counts toward the
+Order, Spread and *Each head later by*.
+
+On a wheel head the chase **writes the wheel**, not `rgbColour`: `ColourTarget.on(head)` answers that
+wheel's `SettingTarget` (`colourWheel = true`), and every method of the colour target hands such a head
+to it. Each step is the slot nearest its colour on the unit, against its fitted media
+(`StepList.wheelSlotFor`; `PaletteResolver.nearestWheelOption`, the snap a press makes), which the
+engine reads per head at apply (`FixturesWithTransaction.fittedMediaFor`, the register's in-memory
+map). A wheel snaps, as every setting does: under Cut it changes at the step's edge, under Fade and
+Smooth at the crossing's middle, so the rig changes on one beat; it never rolls through the slots
+between; below half Amount it holds what is underneath (`weighDiscrete`).
+
+Every reader keyed by `(head, attribute)` asks what the FX lands on there — `FxEngine.attributeAt` /
+`targetAt`, over a per-structure-version cache of each key's head — so a programmer value on the wheel
+holds the chase back on that head alone (`FxSuppression`), the key stack lists it under `colourWheel`,
+provenance credits it there, a replacing stack weighs it there, its coverage is `(head, colourWheel)`,
+and the reset, its fallback (`LayerResolver.fallbackFor` lands the target first), a park and a removal
+reset read the wheel. Blind holds it as any programmer FX. Locate needs nothing: it writes programmer
+values, which suppression reads by the landed attribute. The sampler files a wheel head's row under
+the wheel's attribute.
+
+**Split** (D4) is a `between` value from session 1: `stepsAt(…, split = true)` holds `blend` at a half
+for `fade` of each step and says how far through the split the phase is (`FxOutput.Steps.split`). An
+RGB head holds the half-way mix; a wheel changes at the split's middle (`snapped` reads `split`), until
+session 2 declares where wheels split. An older desk reads a stored `SPLIT` as Fade, the `choice`
+default (P1); the importer passes a choice through as stored (`ColourCycleChoiceImportTest`).
 
 ### Position FX (`FxOutput.Position`)
 
@@ -522,9 +563,11 @@ The two are one family in the library, *Steps* (terminology plan D23): both regi
 (`STEPS_CATEGORY`), which names no attribute family, and are offered and stored in the family of what
 they step — the Family column — through `stepsFxFamily` and, on the client, `drivenCategoryOf`.
 
-`stepsAt(phase, steps, fadeRatio)` is the timing, Colour Cycle's: equal segments, each step held for
-`1 − fadeRatio` of its own and crossing to the next over the rest, the last crossing back to the
-first. Amount, direction and the spread apply as to any FX, so a Backward or Bounce phase runs the
+`stepsAt(phase, steps, fadeRatio, ease, split, clampFade)` is the timing, Colour Cycle's: equal
+segments, each step held for `1 − fadeRatio` of its own and crossing to the next over the rest (by
+`ease`, linear or a cosine), or with `split` holding their split, the last crossing back to the first.
+The ratio is clamped to 0–1 unless `clampFade` is false, as Colour Cycle's Fade passes it: a ratio above
+1 then never holds. Amount, direction and the spread apply as to any FX, so a Backward or Bounce phase runs the
 steps back.
 
 **A step lands on its sample.** Every built-in that turns a phase into a step goes through
@@ -558,8 +601,9 @@ after, as to any output.
   and what a palette does not name stays as it is underneath (`StepColour.over`) — a UV-only palette
   moves the UV and leaves the RGB, white and amber alone. A head is resolved once and cached by its
   key and attribute, re-resolved when the model under that key changes: the engine builds fresh
-  fixture objects every tick, so an object is no key. Fitted media is not read, since it decides only
-  a **wheel** slot and a wheel head is no colour target's member. The palettes are read through the FX's colour source, which is a
+  fixture objects every tick, so an object is no key. On a colour-wheel head (§"Colour FX") a step is
+  its colour row snapped through `PaletteResolver` with the unit's fitted media, as a press lands it
+  (`wheelSlotFor`, cached per head with the media it read). The palettes are read through the FX's colour source, which is a
   `PaletteSource` — the one `createFxWithPalettes` passes — so `TypedParams.paletteSteps` needs
   no new factory argument, the references are pre-warmed by the same `paletteColourRefsIn` scan, and
   a palette's edit moves the running steps through the colour caches' version. An entry that is not a
@@ -1935,7 +1979,7 @@ layer's, a cue's or a manual FX is edited in place and never offered the split.
 | Target | Attributes | Fixture Trait |
 |--------|------------|---------------|
 | `SliderTarget` | `dimmer`, `uv` | `WithDimmer`, `WithUv` |
-| `ColourTarget` | `rgbColour` | `WithColour` |
+| `ColourTarget` | `rgbColour` | `WithColour`; a colour chase that steps also a head whose colour is a colour wheel (§"Colour FX") |
 | `PositionTarget` | `pan`, `tilt` | `WithPosition` |
 
 ### Group Targets

@@ -11,6 +11,7 @@ import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fx.group.SpreadOrder
 import uk.me.cormack.lighting7.models.LayerSource
@@ -313,9 +314,8 @@ class FxEngine(
         } else buildSet {
             for (effect in activeFx.values) {
                 if (!effect.isRunning) continue
-                val attribute = effect.target.attribute
                 for (fixtureKey in resolveFxFixtureKeys(effect)) {
-                    add(fixtureKey to attribute)
+                    add(fixtureKey to attributeAt(effect, fixtureKey))
                 }
             }
         }
@@ -337,6 +337,61 @@ class FxEngine(
     ): Boolean = BlindHold.holds(blind, effect) || FxSuppression.isSuppressed(
         suppression, fixtureKey, attribute, effect, isLayerStomped,
     )
+
+    /**
+     * The attribute [effect] paints on [fixtureKey]: its target's, or the wheel's where a colour chase
+     * lands on a colour-wheel head. What every reader keyed by `(head, attribute)` asks.
+     */
+    internal fun attributeAt(effect: FxInstance, fixtureKey: String): String =
+        if (effect.target.landsPerHead) targetAt(effect, fixtureKey).attribute else effect.target.attribute
+
+    /** Each of [keys] with the attribute [effect] lands on there ([attributeAt]). */
+    private fun landedAttributes(effect: FxInstance, keys: List<String>): Map<String, String> =
+        keys.associateWithTo(HashMap(keys.size)) { attributeAt(effect, it) }
+
+    /** [FxTarget.on] for [fixtureKey]'s head, read off the register; the target itself where the head is gone. */
+    internal fun targetAt(effect: FxInstance, fixtureKey: String): FxTarget {
+        val target = effect.target
+        if (!target.landsPerHead) return target
+        return heads.of(fixtureKey)?.let(target::on) ?: target
+    }
+
+    /** Each key's head, for [targetAt], kept until the register is rebuilt. */
+    private class HeadCache(private val fixtures: Fixtures) {
+        @Volatile private var version = Long.MIN_VALUE
+        private val byKey = java.util.concurrent.ConcurrentHashMap<String, Any>()
+        private val noHead = Any()
+
+        fun of(key: String): GroupableFixture? {
+            val now = fixtures.structureVersion
+            if (now != version) {
+                byKey.clear()
+                version = now
+            }
+            val head = byKey.getOrPut(key) {
+                runCatching { fixtures.untypedGroupableFixture(key) }.getOrNull() ?: noHead
+            }
+            return head as? GroupableFixture
+        }
+    }
+
+    private val heads = HeadCache(fixtures)
+
+    /** Paint [output] on [fixtureKey] at [weight], unless held back there: the tick's write for a head. */
+    private fun paint(
+        effect: FxInstance,
+        fixturesWithTx: Fixtures.FixturesWithTransaction,
+        fixtureKey: String,
+        output: FxOutput,
+        weight: Double,
+        suppression: Map<String, Set<String>>,
+        blind: Boolean,
+    ) {
+        val attribute = attributeAt(effect, fixtureKey)
+        if (isSuppressed(suppression, blind, fixtureKey, attribute, effect)) return
+        val painted = underReplacing(weight, effect, fixtureKey, attribute)
+        if (painted > 0.0) effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode, painted)
+    }
 
     private fun rebuildSortedSnapshots() {
         // Every mutation of [activeFx] calls this immediately afterwards — before any
@@ -477,10 +532,15 @@ class FxEngine(
      * share the replacing stacks above [effect] on that key leave it, 0 under one fully in. One volatile
      * read and an empty check while no stack replaces.
      */
-    internal fun underReplacing(weight: Double, effect: FxInstance, fixtureKey: String): Double {
+    internal fun underReplacing(
+        weight: Double,
+        effect: FxInstance,
+        fixtureKey: String,
+        attribute: String = attributeAt(effect, fixtureKey),
+    ): Double {
         val layer = layerResolver.current
         if (layer.replaced.isEmpty()) return weight
-        return weight * layerResolver.replacedWeight(layer, fixtureKey, effect.target.attribute, effect.priority, effect.cueId)
+        return weight * layerResolver.replacedWeight(layer, fixtureKey, attribute, effect.priority, effect.cueId)
     }
 
     /**
@@ -497,6 +557,7 @@ class FxEngine(
         programmerSuppression = ::programmerSuppression,
         fxWeight = { weightOf(it, it.dynamics) },
         cuesOnly = cueLayer::cuesOnly,
+        paintedAttribute = ::attributeAt,
     )
 
     /** PROGRAMMER-layer write delegation. */
@@ -623,10 +684,8 @@ class FxEngine(
      * Whether [effect] paints a key [valueMoves] names — a (fixture, property) where the programmer
      * value under it is about to move.
      */
-    fun paintsMovingValue(effect: FxInstance, valueMoves: (fixtureKey: String, attribute: String) -> Boolean): Boolean {
-        val attribute = effect.target.attribute
-        return fixtureKeysCoveredBy(effect).any { valueMoves(it, attribute) }
-    }
+    fun paintsMovingValue(effect: FxInstance, valueMoves: (fixtureKey: String, attribute: String) -> Boolean): Boolean =
+        fixtureKeysCoveredBy(effect).any { valueMoves(it, attributeAt(effect, it)) }
 
     /**
      * Let the programmer's [effects] go at [fadeMs] (effects plan D13), split by what is under each:
@@ -1218,8 +1277,8 @@ class FxEngine(
         }
         for (effect in activeFx.values) {
             if (isProgrammerFxPriority(effect.priority)) continue
-            val attribute = effect.target.attribute
             for (fixtureKey in resolveFxFixtureKeys(effect)) {
+                val attribute = attributeAt(effect, fixtureKey)
                 val groups = layer.replaced[fixtureKey]?.get(attribute) ?: continue
                 val leaves = CueAssignmentResolver.replacedWeight(groups, effect.priority, effect.cueId, layerResolver.stackAt)
                 if (leaves >= 1.0) continue
@@ -1244,13 +1303,14 @@ class FxEngine(
      * order contradict itself.
      */
     fun inStoredApplyOrder(effects: Collection<FxInstance>): List<FxInstance> {
-        class Placed(val effect: FxInstance, val place: Triple<Int, Long, Long>, val keys: Set<String>)
+        class Placed(val effect: FxInstance, val place: Triple<Int, Long, Long>, val keys: Map<String, String>)
         val apply = compareBy<Placed>({ it.place.first }, { it.place.second }, { it.place.third })
-        val left = effects.map { Placed(it, Triple(it.priority, it.composeOrder, it.id), resolveFxFixtureKeys(it).toHashSet()) }
+        val left = effects.map { effect ->
+            Placed(effect, Triple(effect.priority, effect.composeOrder, effect.id), landedAttributes(effect, resolveFxFixtureKeys(effect)))
+        }
             .sortedWith(compareBy({ it.place.second }, { it.place.third }))
             .toMutableList()
-        fun shareKey(a: Placed, b: Placed) =
-            a.effect.target.attribute == b.effect.target.attribute && a.keys.any { it in b.keys }
+        fun shareKey(a: Placed, b: Placed) = a.keys.any { (key, attribute) -> b.keys[key] == attribute }
         val ordered = ArrayList<FxInstance>(left.size)
         while (left.isNotEmpty()) {
             val next = left.first { candidate ->
@@ -1588,6 +1648,8 @@ class FxEngine(
                 }
                 if (!swapped) continue
                 rebuildSortedSnapshots()
+                // A new FX can cover fewer heads (a chase onto Rainbow Cycle leaves the wheels).
+                resetUncoveredAttributes(listOf(existing))
             } else {
                 // A non-swap update can still move coverage (elementFilter changes the expansion);
                 // see [rebuildSortedSnapshots].
@@ -2004,14 +2066,15 @@ class FxEngine(
         effect: FxInstance,
         keysOf: (FxInstance) -> List<String> = ::resolveFxFixtureKeys,
     ): Int {
-        val attribute = effect.target.attribute
-        val keys = keysOf(effect).toHashSet()
+        val keys = landedAttributes(effect, keysOf(effect))
+        val perHead = effect.target.landsPerHead
         var highest = -1
         for (other in activeFx.values) {
-            if (other === effect || other.target.attribute != attribute) continue
+            if (other === effect) continue
+            if (!perHead && !other.target.landsPerHead && other.target.attribute != effect.target.attribute) continue
             val rank = localRankOf(other.priority)
             if (rank <= highest) continue
-            if (keysOf(other).any { it in keys }) highest = rank
+            if (keysOf(other).any { key -> keys[key]?.let { it == attributeAt(other, key) } == true }) highest = rank
         }
         return highest + 1
     }
@@ -2082,11 +2145,13 @@ class FxEngine(
         val toRemove = activeFx.values.filter { effect ->
             val owner = effect.cueId ?: return@filter false
             if (owner == stompingCueId) return@filter false
-            val attribute = effect.target.attribute
-            // A selection goes only where the cue asserts every item, as a group goes only where the
-            // cue asserts the group: one member asserted leaves the rest running.
-            (effect.target.targetRef as? FxTargetRef.SelectionRef)?.items?.all { TargetAttribute(it.key, attribute) in overlap }
-                ?: (TargetAttribute(effect.target.targetKey, attribute) in overlap)
+            // A key is asserted under the FX's attribute or the one it lands on there (a wheel head's
+            // colourWheel). A selection goes only where the cue asserts every item, as a group goes
+            // only where the cue asserts the group: one member asserted leaves the rest running.
+            fun asserted(key: String) = TargetAttribute(key, effect.target.attribute) in overlap ||
+                TargetAttribute(key, attributeAt(effect, key)) in overlap
+            (effect.target.targetRef as? FxTargetRef.SelectionRef)?.items?.all { asserted(it.key) }
+                ?: asserted(effect.target.targetKey)
         }
         if (toRemove.isEmpty()) return 0
         for (effect in toRemove) activeFx.remove(effect.id)
@@ -2584,9 +2649,9 @@ class FxEngine(
             if (!effect.isRunning) continue
 
             val keys = resolveFxFixtureKeys(effect)
-            val target = effect.target
 
             for (key in keys) {
+                val target = targetAt(effect, key)
                 if (seen.add(key, target.attribute)) {
                     resetOne(fixturesWithTx, key, target)
                 }
@@ -2635,9 +2700,10 @@ class FxEngine(
     ) {
         try {
             val fixture = fixturesWithTx.untypedGroupableFixture(fixtureKey)
-            if (cascade.allChannelsParked(target, fixture)) return
-            val fallback = layerResolver.fallbackFor(target, fixture, fixtureKey)
-            target.resetToFallback(fixture, fallback)
+            val landed = target.on(fixture)
+            if (cascade.allChannelsParked(landed, fixture)) return
+            val fallback = layerResolver.fallbackFor(landed, fixture, fixtureKey)
+            landed.resetToFallback(fixture, fallback)
         } catch (e: Exception) {
             // Non-fatal, and deliberately quieter than the apply path: the usual cause is a
             // fixture that has gone away, and the apply for the same effect will fail on the
@@ -2735,10 +2801,7 @@ class FxEngine(
                 val context = carry?.context ?: FxContext.SINGLE
                 val calculate = { calculateFxOutput(effect, fixtureKey, tick, deltaMs, step, fxPhase, context) }
                 val output = carry?.step?.outputFor(effect.effect, tick, calculate) ?: calculate()
-                if (!isSuppressed(suppression, blind, fixtureKey, effect.target.attribute, effect)) {
-                    val weight = underReplacing(weightOf(effect, dyn), effect, fixtureKey)
-                    if (weight > 0.0) effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode, weight)
-                }
+                paint(effect, fixturesWithTx, fixtureKey, output, weightOf(effect, dyn), suppression, blind)
             }
 
             FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> {
@@ -2802,10 +2865,7 @@ class FxEngine(
             val output = calculateFxOutput(
                 effect, elementKey, tick, deltaMs, step, memberPhase, plan.contexts[distributionIdx],
             )
-            if (!isSuppressed(suppression, blind, elementKey, effect.target.attribute, effect)) {
-                val painted = underReplacing(weight, effect, elementKey)
-                if (painted > 0.0) effect.target.applyValue(fixturesWithTx, elementKey, output, effect.blendMode, painted)
-            }
+            paint(effect, fixturesWithTx, elementKey, output, weight, suppression, blind)
         }
         if (!lastMemberPhase.isNaN()) effect.lastPhase = lastMemberPhase
     }
@@ -2836,12 +2896,7 @@ class FxEngine(
             lastMemberPhase = memberPhase
             // A stateful effect keeps its state under the unit's first key, so its elements share it.
             val output = calculateFxOutput(effect, keys.first(), tick, deltaMs, step, memberPhase, plan.contexts[unitIdx])
-            for (key in keys) {
-                if (!isSuppressed(suppression, blind, key, effect.target.attribute, effect)) {
-                    val painted = underReplacing(weight, effect, key)
-                    if (painted > 0.0) effect.target.applyValue(fixturesWithTx, key, output, effect.blendMode, painted)
-                }
-            }
+            for (key in keys) paint(effect, fixturesWithTx, key, output, weight, suppression, blind)
         }
         if (!lastMemberPhase.isNaN()) effect.lastPhase = lastMemberPhase
     }
@@ -2888,10 +2943,7 @@ class FxEngine(
                     val output = calculateFxOutput(
                         effect, member.key, tick, deltaMs, step, memberPhase, plan.contexts[memberIdx],
                     )
-                    if (!isSuppressed(suppression, blind, member.key, effect.target.attribute, effect)) {
-                        val painted = underReplacing(weight, effect, member.key)
-                        if (painted > 0.0) effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode, painted)
-                    }
+                    paint(effect, fixturesWithTx, member.key, output, weight, suppression, blind)
                 }
                 if (!lastMemberPhase.isNaN()) effect.lastPhase = lastMemberPhase
             }
@@ -2964,7 +3016,7 @@ class FxEngine(
         val affectedAttributes = mutableSetOf<AffectedAttribute>()
         for (removed in removedFx) {
             for (key in resolveFxFixtureKeys(removed)) {
-                affectedAttributes.add(AffectedAttribute(key, removed.target))
+                affectedAttributes.add(AffectedAttribute(key, targetAt(removed, key)))
             }
         }
 
@@ -3119,6 +3171,8 @@ class FxEngine(
 
         override fun underneath(target: FxTarget, fixture: GroupableFixture, key: String): FxOutput =
             layerResolver.fallbackFor(target, fixture, key)
+
+        override fun fittedMedia(fixture: GroupableFixture): FittedMedia? = PaletteFanOut.mediaOf(fixture, fixtures::fittedMediaFor)
 
         // The caches when they are still valid, else built and not kept: storing them is the pass's.
         override fun expansion(effect: FxInstance, dynamics: FxDynamics): FxTargetExpansion {
@@ -3426,7 +3480,7 @@ class FxEngine(
         remainingFx: List<FxInstance>
     ): Boolean {
         for (effect in remainingFx) {
-            if (effect.target.attribute != attribute) continue
+            if (attributeAt(effect, fixtureKey) != attribute) continue
 
             val selection = effect.target.targetRef as? FxTargetRef.SelectionRef
             if (selection != null) {

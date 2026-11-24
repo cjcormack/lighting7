@@ -211,6 +211,9 @@ class Fixtures(val mockOutput: Boolean = false) {
 
         fun controller(universe: Universe): DmxController = baseFixtures.controller(universe)
 
+        /** [Fixtures.fittedMediaFor], read off the register this transaction wraps. */
+        fun fittedMediaFor(fixtureKey: String): FittedMedia? = baseFixtures.fittedMediaFor(fixtureKey)
+
         fun untypedFixture(key: String): Fixture = baseFixtures.registerLock.read {
             val base = baseFixtures.fixtureRegister[key] ?: error("Fixture '$key' not found")
             wrappedFixture(base)

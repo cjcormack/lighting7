@@ -68,6 +68,12 @@ object FixtureAttributeCatalogue {
          * wheel — which carries no emitter component and is not what `ColourTarget` writes.
          */
         val colour: Fixture.Attribute?,
+        /**
+         * The class's **colour wheels**: its [AttributeCategory.COLOUR] members that are settings, in
+         * [all]'s order, the first being the wheel a colour palette snaps to (`PaletteResolver`) and a
+         * colour chase lands on (`ColourTarget.landingOn`).
+         */
+        val colourWheels: List<Fixture.Attribute>,
         /** The class's `@FixtureType`. Null for element classes, which carry none. */
         val fixtureType: FixtureType?,
     )
@@ -91,6 +97,10 @@ object FixtureAttributeCatalogue {
         (classProperty.returnType.classifier as? KClass<*>)
             ?.isSubclassOf(uk.me.cormack.lighting7.fixture.attribute.Colour::class) == true
 
+    private fun Fixture.Attribute.isSettingValued(): Boolean =
+        (classProperty.returnType.classifier as? KClass<*>)
+            ?.isSubclassOf(uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting::class) == true
+
     private fun build(klass: KClass<*>): Entry {
         val all = klass.memberProperties.flatMap { classProperty ->
             @Suppress("UNCHECKED_CAST")
@@ -106,6 +116,7 @@ object FixtureAttributeCatalogue {
                 for (attribute in all) if (attribute.bundleWithColour) putIfAbsent(attribute.category, attribute)
             },
             colour = all.firstOrNull { it.category == AttributeCategory.COLOUR && it.isColourValued() },
+            colourWheels = all.filter { it.category == AttributeCategory.COLOUR && it.isSettingValued() },
             fixtureType = klass.annotations.filterIsInstance<FixtureType>().firstOrNull(),
         )
     }

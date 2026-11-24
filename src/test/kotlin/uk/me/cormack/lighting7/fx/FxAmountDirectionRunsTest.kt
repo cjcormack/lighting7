@@ -214,7 +214,7 @@ class FxAmountDirectionRunsTest {
             // Mid-segment of each third of a three-beat cycle.
             return listOf(12L, 36L, 60L).map { n ->
                 val phase = instance.calculatePhase(tick(n), instance.dynamics)
-                ((cycle.calculate(phase, FxContext.SINGLE)) as FxOutput.Colour).color.color
+                cycle.calculate(phase, FxContext.SINGLE).landedColour().color
             }
         }
 

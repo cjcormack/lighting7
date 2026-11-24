@@ -274,7 +274,7 @@ private fun stackingParameters(request: ProgrammerFxRequest, start: FxStacking.S
 internal fun fxFamily(state: State, effect: FxInstance): AttributeFamily? {
     val head = state.show.fxEngine.paintedHeads(effect).firstOrNull() ?: return null
     val fixture = runCatching { state.show.fixtures.untypedGroupableFixture(head.key) }.getOrNull() ?: return null
-    return familyForAttribute(fixture, effect.target.attribute)
+    return familyForAttribute(fixture, effect.target.on(fixture).attribute)
 }
 
 /** Which heads an effect edit is for: [planSplit]'s answer. */

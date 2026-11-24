@@ -869,7 +869,7 @@ private fun includedLookFxOf(state: State, lookId: Int, mask: Set<AttributeFamil
             if (mask == null) return@filter true
             val reference = state.show.fxEngine.fixtureKeysCoveredBy(effect).firstOrNull()
                 ?.let { runCatching { state.show.fixtures.untypedGroupableFixture(it) }.getOrNull() }
-            maskAllows(mask, reference?.let { familyForAttribute(it, effect.target.attribute) })
+            maskAllows(mask, reference?.let { familyForAttribute(it, effect.target.on(it).attribute) })
         },
     )
 

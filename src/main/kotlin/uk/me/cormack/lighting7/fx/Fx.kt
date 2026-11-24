@@ -316,5 +316,15 @@ sealed interface FxOutput {
      * position in proportion, a setting by snapping. A head that cannot take a step holds what is
      * underneath for it.
      */
-    data class Steps(val from: Int, val to: Int, val blend: Double, val steps: StepList) : FxOutput
+    data class Steps(
+        val from: Int,
+        val to: Int,
+        val blend: Double,
+        val steps: StepList,
+        /**
+         * Null for an ordinary crossing; else the phase is in the two steps' held split
+         * (wheel-colour-chase plan D4), this far through it, 0 to 1, with [blend] at a half.
+         */
+        val split: Double? = null,
+    ) : FxOutput
 }

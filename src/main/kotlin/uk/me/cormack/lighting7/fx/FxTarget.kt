@@ -10,7 +10,9 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fixture.attribute.Colour
 import uk.me.cormack.lighting7.fixture.attribute.Slider
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
@@ -21,6 +23,7 @@ import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
 import kotlin.reflect.KProperty1
 
@@ -146,6 +149,27 @@ sealed class FxTarget {
     )
 
     /**
+     * [applyValueToFixture] with the unit's fitted [media], which only a colour-wheel landing reads:
+     * the slot a colour snaps to is the unit's, not the type's stock.
+     */
+    open fun applyValueToFixture(
+        fixture: GroupableFixture,
+        output: FxOutput,
+        blendMode: BlendMode,
+        weight: Double,
+        media: FittedMedia?,
+    ) = applyValueToFixture(fixture, output, blendMode, weight)
+
+    /** Whether [on] can answer another target for some head; readers ask [on] only when it can. */
+    open val landsPerHead: Boolean get() = false
+
+    /**
+     * The target that paints [fixture]: this one, or a colour chase's wheel on a wheel head
+     * ([ColourTarget.on]).
+     */
+    open fun on(fixture: GroupableFixture): FxTarget = this
+
+    /**
      * Check whether a fixture or element has the property this target controls.
      *
      * Used by FxEngine to determine whether an effect needs to be expanded
@@ -176,7 +200,10 @@ sealed class FxTarget {
     ) {
         if (weight <= 0.0) return
         val fixture = fixtures.untypedGroupableFixture(fixtureKey)
-        applyValueToFixture(fixture, output, blendMode, weight)
+        if (landsPerHead) {
+            val media = PaletteFanOut.mediaOf(fixture, fixtures::fittedMediaFor)
+            applyValueToFixture(fixture, output, blendMode, weight, media)
+        } else applyValueToFixture(fixture, output, blendMode, weight)
     }
 
     /**
@@ -394,14 +421,33 @@ data class SliderTarget(
 }
 
 /**
+ * How a colour target's FX lands on one head ([ColourTarget.landingOn]): its mixed colour, or — for
+ * a colour chase — its colour wheel.
+ */
+sealed interface ColourLanding {
+    data class Mix(val colour: Colour) : ColourLanding
+    data class Wheel(val setting: DmxFixtureSetting<*>, val attribute: String) : ColourLanding
+}
+
+/**
  * Target RGB colour property, with support for extended channels (W/A/UV).
  *
  * When the effect outputs an [ExtendedColour] with non-zero W/A/UV values,
  * those are applied to the fixture's bundled slider properties (if present).
+ *
+ * With [wheels] a head whose colour is a colour wheel is a member too (wheel-colour-chase plan D1):
+ * [on] answers that wheel's [SettingTarget], which lands each step on its nearest slot, and every
+ * method here hands such a head to it. A head with a mixed colour stays on its mix.
  */
 data class ColourTarget(
     override val targetRef: FxTargetRef,
-    override val attribute: String = "rgbColour"
+    override val attribute: String = "rgbColour",
+    /**
+     * Whether colour-wheel heads are members: set by [FxInstance] for an FX that steps
+     * ([Fx.stepCount]), whose steps a wheel can land on. A colour FX that does not step leaves a
+     * wheel alone.
+     */
+    val wheels: Boolean = false,
 ) : FxTarget() {
 
     /** Convenience constructor for targeting a single fixture */
@@ -409,12 +455,53 @@ data class ColourTarget(
 
     override val acceptedOutputType: FxOutputType = FxOutputType.COLOUR
 
+    override val landsPerHead: Boolean get() = wheels
+
+    /** Each wheel's target, by its attribute — built once rather than per head per tick. */
+    private val wheelTargets = ConcurrentHashMap<String, SettingTarget>()
+
+    /**
+     * Where this target's FX lands on [fixture], or null where it cannot ([fixtureHasAttribute]). A
+     * wheel head's is the class's first colour wheel, the one [on] paints, as a colour palette snaps to.
+     */
+    fun landingOn(fixture: GroupableFixture): ColourLanding? {
+        (fixture as? WithColour)?.let { return ColourLanding.Mix(it.rgbColour) }
+        if (!wheels) return null
+        val wheel = FixtureAttributeCatalogue.of(fixture::class).colourWheels.firstOrNull() ?: return null
+        val setting = AttributeChannelWriter.resolveAttribute(fixture, wheel.name)?.value as? DmxFixtureSetting<*>
+            ?: return null
+        return ColourLanding.Wheel(setting, wheel.name)
+    }
+
+    /**
+     * The first colour wheel's [SettingTarget] on a wheel head of a colour chase, else this. Read off
+     * the class, not the instance, since the tick asks every head every frame.
+     */
+    override fun on(fixture: GroupableFixture): FxTarget {
+        if (!wheels || fixture is WithColour) return this
+        val wheel = FixtureAttributeCatalogue.of(fixture::class).colourWheels.firstOrNull() ?: return this
+        return wheelTargets.getOrPut(wheel.name) { SettingTarget(targetRef, wheel.name, colourWheel = true) }
+    }
+
+    /** [on]'s wheel target for [fixture], or null where this target paints it itself. */
+    private fun wheelOn(fixture: GroupableFixture): FxTarget? =
+        if (wheels) on(fixture).takeIf { it !== this } else null
+
     override fun applyValueToFixture(
         fixture: GroupableFixture,
         output: FxOutput,
         blendMode: BlendMode,
         weight: Double,
+    ) = applyValueToFixture(fixture, output, blendMode, weight, null)
+
+    override fun applyValueToFixture(
+        fixture: GroupableFixture,
+        output: FxOutput,
+        blendMode: BlendMode,
+        weight: Double,
+        media: FittedMedia?,
     ) {
+        wheelOn(fixture)?.let { return it.applyValueToFixture(fixture, output, blendMode, weight, media) }
         // Apply RGB channels — each weighted on its own (P3's "per channel")
         val colour = (fixture as? WithColour)?.rgbColour ?: return
         val baseColour = colour.value ?: Color.BLACK
@@ -469,6 +556,7 @@ data class ColourTarget(
     }
 
     override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long, curve: EasingCurve) {
+        wheelOn(fixture)?.let { return it.resetToFallback(fixture, fallback, fadeMs, curve) }
         if (fallback !is FxOutput.Colour) return
         val colour = (fixture as? WithColour)?.rgbColour ?: return
         val ext = fallback.color
@@ -485,6 +573,7 @@ data class ColourTarget(
         store: ProgrammerReads,
         below: FxOutput,
     ): FxOutput {
+        wheelOn(fixture)?.let { return it.composeProgrammerOver(fixture, store, below) }
         // Compose per component, arbitrating each by write recency across the granularities
         // that can cover it: the Colour property entry, the bundled W/A/UV sliders' own
         // property entries, and the raw-channel sideband. This is the same channel set the
@@ -536,9 +625,10 @@ data class ColourTarget(
     }
 
     override fun baselineFallback(fixture: GroupableFixture): FxOutput =
-        FxOutput.Colour(ExtendedColour.BLACK)
+        wheelOn(fixture)?.baselineFallback(fixture) ?: FxOutput.Colour(ExtendedColour.BLACK)
 
     override fun currentValue(fixture: GroupableFixture): FxOutput? {
+        wheelOn(fixture)?.let { return it.currentValue(fixture) }
         val rgb = (fixture as? WithColour)?.rgbColour?.value ?: return null
         return FxOutput.Colour(currentExtended(fixture, rgb))
     }
@@ -579,11 +669,10 @@ data class ColourTarget(
         return best
     }
 
-    override fun fixtureHasAttribute(fixture: GroupableFixture): Boolean {
-        return fixture is WithColour
-    }
+    override fun fixtureHasAttribute(fixture: GroupableFixture): Boolean = landingOn(fixture) != null
 
     override fun isAttributeFullyParked(fixture: GroupableFixture, parkManager: ParkManager): Boolean {
+        wheelOn(fixture)?.let { return it.isAttributeFullyParked(fixture, parkManager) }
         val colour = (fixture as? WithColour)?.rgbColour
         if (colour is DmxWhiteMixColour) {
             return parkManager.isParked(colour.warm.universe.universe, colour.warm.channelNo) &&
@@ -786,7 +875,12 @@ data class PositionTarget(
  */
 data class SettingTarget(
     override val targetRef: FxTargetRef,
-    override val attribute: String
+    override val attribute: String,
+    /**
+     * A colour wheel a colour chase lands on (wheel-colour-chase plan D1, [ColourTarget.on]): a step,
+     * or a colour, is the slot nearest it on this unit.
+     */
+    val colourWheel: Boolean = false,
 ) : FxTarget() {
 
     /** Convenience constructor for targeting a single fixture */
@@ -801,6 +895,14 @@ data class SettingTarget(
         output: FxOutput,
         blendMode: BlendMode,
         weight: Double,
+    ) = applyValueToFixture(fixture, output, blendMode, weight, null)
+
+    override fun applyValueToFixture(
+        fixture: GroupableFixture,
+        output: FxOutput,
+        blendMode: BlendMode,
+        weight: Double,
+        media: FittedMedia?,
     ) {
         // A slot has no halfway: below half weight the setting underneath stands.
         if (!weighDiscrete(weight)) return
@@ -808,7 +910,7 @@ data class SettingTarget(
         val setting = getSetting(fixture) ?: return
         val transaction = setting.transaction ?: return
 
-        val level = outputLevel(fixture, output, setting) ?: return
+        val level = outputLevel(fixture, output, setting, media) ?: return
 
         // Settings are discrete — always override regardless of blend mode
         transaction.setValue(setting.universe, setting.channelNo, level)
@@ -817,17 +919,29 @@ data class SettingTarget(
     /**
      * [output] as [setting]'s level on this head. A step snaps (effects plan §3.6): the step it is
      * nearer, this head's own level for it; null for a head without that slot, which holds what is
-     * underneath.
+     * underneath. On a [colourWheel] a step is the slot nearest its colour on a unit fitted with
+     * [media], and so is a colour.
      */
-    internal fun outputLevel(fixture: GroupableFixture, output: FxOutput, setting: DmxFixtureSetting<*>): UByte? =
+    internal fun outputLevel(
+        fixture: GroupableFixture,
+        output: FxOutput,
+        setting: DmxFixtureSetting<*>,
+        media: FittedMedia? = null,
+    ): UByte? =
         when (output) {
             is FxOutput.Slider -> output.value
             is FxOutput.Steps -> {
                 val steps = output.steps
-                // Slot Steps reads this head's own setting, which is in hand here: no second walk.
-                if (steps is SlotStepList) steps.levelFor(output.snapped, setting)
-                else stepByte(steps.valueFor(output.snapped, fixture, attribute))
+                when {
+                    colourWheel -> steps.wheelSlotFor(output.snapped, fixture, setting, attribute, media)?.level
+                    // Slot Steps reads this head's own setting, which is in hand here: no second walk.
+                    steps is SlotStepList -> steps.levelFor(output.snapped, setting)
+                    else -> stepByte(steps.valueFor(output.snapped, fixture, attribute))
+                }
             }
+            is FxOutput.Colour ->
+                if (colourWheel) PaletteResolver.nearestWheelOption(setting, attribute, media, output.color.color)?.first?.level
+                else null
             else -> null
         }
 
@@ -911,8 +1025,12 @@ internal inline fun <T : Any> FxOutput.Steps.blendOn(
     }
 }
 
-/** The step a discrete property shows: the nearer of the two — a slot has no halfway. */
-internal val FxOutput.Steps.snapped: Int get() = if (blend < 0.5) from else to
+/**
+ * The step a discrete property shows: the nearer of the two — a slot has no halfway. In a split, the
+ * one it is nearer through the split, so a wheel that cannot show the split changes at its middle.
+ */
+internal val FxOutput.Steps.snapped: Int
+    get() = split?.let { if (it < 0.5) from else to } ?: if (blend < 0.5) from else to
 
 /** A resolved step as one channel's byte: a level, or a setting's slot level. */
 internal fun stepByte(value: CueAssignmentResolver.AttributeValue?): UByte? = when (value) {

@@ -65,6 +65,7 @@ class TypedParams(
         val colours = ConcurrentHashMap<String, ExtendedColour>()
         val colourLists = ConcurrentHashMap<String, List<ExtendedColour>>()
         val paletteSteps = ConcurrentHashMap<String, StepList>()
+        val colourSteps = ConcurrentHashMap<String, StepList>()
     }
 
     @Volatile private var colourCaches = ColourCaches(sourceVersion = -1L)
@@ -156,8 +157,10 @@ class TypedParams(
      * **dropped** like any other entry that is no colour, as [colourListPaletteProblem] refuses it at
      * every write boundary. Cached as [colour] is.
      */
-    fun colourList(name: String): List<ExtendedColour> {
-        return currentColourCaches().colourLists.getOrPut(name) {
+    fun colourList(name: String): List<ExtendedColour> = colourListIn(currentColourCaches(), name)
+
+    private fun colourListIn(caches: ColourCaches, name: String): List<ExtendedColour> {
+        return caches.colourLists.getOrPut(name) {
             val value = raw(name)
             // Yielded, not returned — see [colour] for why the non-local return defeated the cache.
             if (value.isBlank()) {
@@ -171,6 +174,19 @@ class TypedParams(
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * [colourList] as Colour Cycle's steps (wheel-colour-chase plan D2): one [ColourStepList] per
+     * list, cached with it. No colours at all is one step of black, where an empty list would hold
+     * what is underneath.
+     */
+    fun colourSteps(name: String): StepList {
+        val caches = currentColourCaches()
+        return caches.colourSteps.getOrPut(name) {
+            val colours = colourListIn(caches, name)
+            if (colours.isEmpty()) ColourStepList.BLACK else ColourStepList(colours)
         }
     }
 

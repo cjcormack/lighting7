@@ -18,7 +18,7 @@ import { LazyScriptEditor } from '@/components/scripts/LazyScriptEditor'
 import { ScriptCompileDialog, ScriptRunDialog } from '@/components/scripts/ScriptResultDialogs'
 import { useCompileProjectScriptMutation, useCurrentProjectQuery, useRunProjectScriptMutation } from '@/store/projects'
 import { useFxDefinitionQuery, useUpdateFxDefinitionMutation, type FxDefinition } from '@/store/fxDefinitions'
-import { FX_MODE_LABELS, fxModeToEditorType } from './fxLibraryModel'
+import { FX_MODE_LABELS, displayName, fxModeToEditorType } from './fxLibraryModel'
 
 /**
  * A **custom** definition's editor — its name, its script, and whether its instances start with
@@ -186,6 +186,11 @@ export function EditFxDefinitionSheet({
               ? `Forked from ${forkedFrom}. A fork starts on one cycle for all heads — the library does not publish the built-in’s own default, so check it matches before you use this.`
               : 'New instances of this FX start on one cycle for all heads, or for each head, as set here.'}
           </p>
+          {forkedFrom === displayName('ColourCycle') && (
+            <p className="text-xs text-muted-foreground" data-testid="fork-colour-cycle-note">
+              A fork of Colour Cycle needs this desk or later: an older desk cannot compile its step functions.
+            </p>
+          )}
         </div>
 
         <div>
