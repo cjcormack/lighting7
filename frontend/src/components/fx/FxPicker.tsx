@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router'
 import { Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import {
   extraSliderAttributesFor,
   groupMemberFixtures,
   attributesFor,
+  offeredFx,
   resolveFxAttribute,
   settingAttributesFor,
   SETTING_SENTINEL,
@@ -19,6 +20,7 @@ import {
   type FxAttributeTarget,
 } from '@/lib/fxTargetAttributes'
 import { fxCreateAddition, type FxCreateTarget } from '@/lib/fxCreateRequest'
+import { hasColourWheel, isColourCycle, reachesColourWheels, wheelStartOf, wheelStartParameters } from '@/lib/wheelChase'
 import {
   useActiveFxQuery,
   useAddFixtureFxMutation,
@@ -218,11 +220,25 @@ export function FxPicker({
     [target, fixtures],
   )
   const targetNames = useMemo(() => attributesFor([attributeTarget]), [attributeTarget])
+  const memberFixtures = useMemo(
+    () => (attributeTarget.type === 'fixture' ? [attributeTarget.fixture] : attributeTarget.members),
+    [attributeTarget],
+  )
+  // A wheel head takes a stepping colour FX on `rgbColour`: the desk lands each step on its nearest slot.
+  const wheelReach = useMemo(() => hasColourWheel(memberFixtures), [memberFixtures])
+  const wheelStart = useMemo(() => wheelStartOf(memberFixtures), [memberFixtures])
+  const offered = useCallback(
+    (entry: FxLibraryEntry, name: string) => targetNames.has(name) || (name === 'rgbColour' && wheelReach && reachesColourWheels(entry)),
+    [targetNames, wheelReach],
+  )
   // Palette Steps names no property of its own — it steps whichever its palettes name — so it is
   // never offered through the library's property match, only through [stepOffers] below.
   const compatible = useMemo(
-    () => compatibleFxFor(library, targetNames).filter((e) => !isPaletteSteps(e.name)),
-    [library, targetNames],
+    () =>
+      wheelReach
+        ? offeredFx(library ?? []).filter((e) => !isPaletteSteps(e.name) && e.compatibleAttributes.some((name) => offered(e, name)))
+        : compatibleFxFor(library, targetNames).filter((e) => !isPaletteSteps(e.name)),
+    [library, targetNames, wheelReach, offered],
   )
   // Palette Steps (effects plan §4.4): offered in every family with two or more generic value
   // palettes naming a property this target has, stepping those palettes on that property.
@@ -232,9 +248,9 @@ export function FxPicker({
   const paletteStepsEntry = useMemo(() => library?.find((e) => isPaletteSteps(e.name)), [library])
   const stepOffers = useMemo(() => {
     if (paletteStepsEntry == null) return new Map<PickerFamily, PaletteStepsOffer>()
-    const has = (name: string) => targetNames.has(name) || (name === 'rgbColour' && targetNames.has('colour'))
+    const has = (name: string) => targetNames.has(name) || (name === 'rgbColour' && (targetNames.has('colour') || wheelReach))
     return new Map(paletteStepsOffers(templates ?? [], has, preferredAttribute).map((o): [PickerFamily, PaletteStepsOffer] => [o.family, o]))
-  }, [paletteStepsEntry, templates, targetNames, preferredAttribute])
+  }, [paletteStepsEntry, templates, targetNames, preferredAttribute, wheelReach])
   // Each type under the family it drives, then its presets the target can take, each under the family
   // its attribute gives — Wave's *Zoom Wave* under Beam (fx-settings plan D4, D5).
   const byFamily = useMemo(() => {
@@ -247,7 +263,7 @@ export function FxPicker({
       // target has — the row's own where it is one.
       const elsewhere = new Map<PickerFamily, string>()
       for (const name of entry.compatibleAttributes) {
-        if (!targetNames.has(name)) continue
+        if (!offered(entry, name)) continue
         const family = pickerFamilyOf(fxFamilyOnAttribute(entry.family, name))
         if (family !== home && (!elsewhere.has(family) || name === preferredAttribute)) elsewhere.set(family, name)
       }
@@ -258,11 +274,11 @@ export function FxPicker({
     }
     for (const entry of compatible) {
       for (const preset of entry.presets ?? []) {
-        if (targetNames.has(preset.attribute)) add(pickerFamilyOf(fxFamilyOnAttribute(entry.family, preset.attribute)), { entry, preset })
+        if (offered(entry, preset.attribute)) add(pickerFamilyOf(fxFamilyOnAttribute(entry.family, preset.attribute)), { entry, preset })
       }
     }
     return grouped
-  }, [compatible, paletteStepsEntry, stepOffers, targetNames, preferredAttribute])
+  }, [compatible, paletteStepsEntry, stepOffers, preferredAttribute, offered])
 
   const settingProps = settingAttributesFor([attributeTarget])
   const isSettingRow = preferredAttribute != null && settingProps.some((p) => p.name === preferredAttribute)
@@ -326,7 +342,7 @@ export function FxPicker({
   const [pending, setPending] = useState(false)
 
   const attributeFor = (entry: FxLibraryEntry, pick = chosen, preset?: FxPreset, landing?: string): string | null => {
-    if (preset != null) return targetNames.has(preset.attribute) ? preset.attribute : null
+    if (preset != null) return offered(entry, preset.attribute) ? preset.attribute : null
     if (landing != null) return landing
     if (isPaletteSteps(entry.name)) return stepOffers.get(family)?.attribute ?? null
     if (
@@ -346,7 +362,7 @@ export function FxPicker({
       const gobo = settingProps.find((p) => p.category === 'gobo')
       if (gobo != null) return gobo.name
     }
-    return resolveFxAttribute(attributeTarget, entry, pick)
+    return resolveFxAttribute(attributeTarget, entry, pick) ?? (offered(entry, 'rgbColour') ? 'rgbColour' : null)
   }
 
   /**
@@ -362,6 +378,8 @@ export function FxPicker({
       }
     } else if (isSlotSteps(entry.name)) {
       spec.parameters = { ...spec.parameters, slots: seedSlots(settingProps.find((p) => p.name === attribute)) }
+    } else if (isColourCycle(entry.name) && wheelStart != null) {
+      spec.parameters = { ...spec.parameters, ...wheelStartParameters(wheelStart, preset?.parameters) }
     }
     return spec
   }

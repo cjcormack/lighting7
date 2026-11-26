@@ -7,10 +7,11 @@ import {
   fxForCell,
   fxToStop,
   fixturesOfRows,
+  fxPaintedHeads,
   isLocalFx,
   partialSweepMessage,
 } from './cellFx'
-import { chan, colourProp, makeActiveFx as effect, makeFixture, sliderProp } from '@/test/fixtureFactories'
+import { chan, colourProp, makeActiveFx as effect, makeFixture, settingProp, sliderProp } from '@/test/fixtureFactories'
 import type { Fixture } from '../../store/fixtures'
 import type { Row } from './rowModel'
 
@@ -186,5 +187,39 @@ describe('the FX lens index', () => {
     expect(heard).not.toHaveBeenCalled()
     store.set(buildCellFxIndex([effect({ id: 1, targetKey: 'a' })], [fixture('a')]))
     expect(heard).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('fxPaintedHeads on colour-wheel heads (wheel-colour-chase plan D1)', () => {
+  const wheel = settingProp('colourWheel', 'colour', chan(2), [{ name: 'RED', level: 10, displayName: 'Red', colourPreview: '#ff0000' }])
+  const mac = makeFixture('mac', [sliderProp('dimmer', 'dimmer', chan(1)), wheel], { groups: ['mixed'] })
+  const par = makeFixture('par', [colourProp('rgbColour', chan(10), chan(11), chan(12))], { groups: ['mixed'] })
+  const shehds = makeFixture('shehds', [sliderProp('dimmer', 'dimmer', chan(20))], {
+    groups: ['mixed'],
+    elements: [{ key: 'shehds.1', index: 0, displayName: 'Zone 1', attributes: [wheel] } as never],
+  })
+  const rig = [par, mac, shehds]
+  const chase = effect({ attribute: 'rgbColour', targetKey: 'mixed', isGroupTarget: true })
+
+  it('paints a wheel head, its own or its elements’, only for a stepping FX', () => {
+    const selection = effect({
+      attribute: 'rgbColour',
+      targetKey: 'sel',
+      isGroupTarget: false,
+      targetType: 'selection',
+      targets: [
+        { type: 'fixture', key: 'par' },
+        { type: 'fixture', key: 'mac' },
+        { type: 'fixture', key: 'shehds' },
+      ],
+    })
+    expect(fxPaintedHeads(selection, rig)).toEqual(['par'])
+    expect(fxPaintedHeads(selection, rig, { colourWheels: true })).toEqual(['par', 'mac', 'shehds.1'])
+    expect(fxPaintedHeads(chase, rig, { colourWheels: true })).toEqual(['par', 'mac'])
+  })
+
+  it('leaves the lens index keyed by rgbColour without the wheel heads', () => {
+    const index = buildCellFxIndex([chase], rig)
+    expect(index.byKey.has(cellFxKey('mac', 'rgbColour'))).toBe(false)
   })
 })

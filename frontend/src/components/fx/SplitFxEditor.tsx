@@ -5,9 +5,11 @@ import type { UpdateFxRequest } from '@/api/fxApi'
 import { lightingApi } from '@/api/lightingApi'
 import { useWindowPressPair } from '@/hooks/usePress'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
-import { isFxSplit, useSplitFx, type ActiveFx } from '@/store/fixtureFx'
+import { isFxSplit, useFxLibraryQuery, useSplitFx, type ActiveFx } from '@/store/fixtureFx'
+import { steppingFxOf } from '@/components/fixtures-list/cellFx'
 import type { Fixture } from '@/store/fixtures'
 import { useIsDeskConnected } from '@/store/status'
+import type { LandsOnModel } from './landsOn'
 import { FxEditor } from './FxEditor'
 import { splitScopeOf } from './fxSplit'
 import { useStopFx } from './useFxControls'
@@ -38,6 +40,7 @@ export function SplitFxEditor({
   onStop,
   onFollow,
   layout,
+  landsOn,
 }: {
   effect: ActiveFx
   /** The heads an edit is for — a cell's batch, the busk pair's targets. Absent, the window's pair's. */
@@ -51,6 +54,8 @@ export function SplitFxEditor({
   onFollow?: (fxId: number) => void
   /** `FxFields`' section order: the FX editor's inspector draws its own. */
   layout?: 'editor' | 'inspector'
+  /** *Lands on*, from the host's preview (wheel-colour-chase plan D8). */
+  landsOn?: readonly LandsOnModel[]
 }) {
   const session = follow != null && follow.ids.includes(effect.id) ? follow.session : effect.id
   const followed = follow != null && follow.session === session ? follow.ids : null
@@ -72,6 +77,7 @@ export function SplitFxEditor({
       onDone={onClose}
       onStop={onStop == null ? undefined : () => onStop(effect)}
       layout={layout}
+      landsOn={landsOn}
     />
   )
 }
@@ -105,6 +111,7 @@ function SplitEditor({
   onDone,
   onStop,
   layout,
+  landsOn,
 }: {
   effect: ActiveFx
   selection: readonly CueTarget[] | undefined
@@ -115,6 +122,7 @@ function SplitEditor({
   onDone: () => void
   onStop?: () => void
   layout?: 'editor' | 'inspector'
+  landsOn?: readonly LandsOnModel[]
 }) {
   const { fixtures } = useFixtureLookup()
   const connected = useIsDeskConnected()
@@ -134,7 +142,12 @@ function SplitEditor({
     }
   }, [])
 
-  const scope = useMemo(() => splitScopeOf(effect, editSelection, fixtures ?? NO_FIXTURES), [effect, editSelection, fixtures])
+  const { data: library } = useFxLibraryQuery()
+  const colourWheels = steppingFxOf(library)(effect.fxType)
+  const scope = useMemo(
+    () => splitScopeOf(effect, editSelection, fixtures ?? NO_FIXTURES, { colourWheels }),
+    [colourWheels, effect, editSelection, fixtures],
+  )
   const following = followed != null && followed.includes(effect.id)
   const split = onSplit != null && !whole && !following && scope.covered != null ? scope : null
   const covered = split?.covered ?? null
@@ -220,6 +233,7 @@ function SplitEditor({
           onDone={onDone}
           onStop={stop}
           layout={layout}
+          landsOn={landsOn}
         />
       </div>
     </div>

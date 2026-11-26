@@ -58,11 +58,12 @@ import {
   usePickedFx,
   useSoloFx,
 } from '@/lib/fxEditorView'
-import { LANE_ATTRIBUTE, fxLanes, fxTargetsOf, heldBackReasons, type FxLane } from './fxEditorList'
+import { LANE_ATTRIBUTE, fxLanes, fxTargetsOf, heldBackReasons, steppingFxOf, type FxLane } from './fxEditorList'
 import { FxLaneList } from './FxLaneList'
 import { FxGraph } from './FxGraph'
 import { runningCards, subjectForm, type SubjectFixture } from './fxEditorHead'
 import { pickedIndex, windowRequest } from './fxGraphModel'
+import { landsOnFrom, type LandsOnModel } from '@/components/fx/landsOn'
 import { useFxPreview } from './useFxPreview'
 
 /**
@@ -105,11 +106,12 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
   const running = useMemo(() => effects ?? [], [effects])
   const layerPosition = useMemo(() => new Map((layers ?? []).map((l, i) => [l.layerId, i])), [layers])
   const targets = pair.targets
+  const steps = useMemo(() => steppingFxOf(library), [library])
 
   // The list before the desk has answered: which FX reach the selection, for the preview to ask.
   const reaching = useMemo(
-    () => fxLanes({ effects: running, targets, fixtures: rig, layerPosition, answer: null }),
-    [layerPosition, rig, running, targets],
+    () => fxLanes({ effects: running, targets, fixtures: rig, layerPosition, answer: null, steps }),
+    [layerPosition, rig, running, steps, targets],
   )
   const listed = useMemo(() => reaching.flatMap((l) => l.cards.map((c) => c.effect.id)).sort((a, b) => a - b), [reaching])
   // The picked FX while it is on the selection, else the list's top card: what the window counts.
@@ -134,8 +136,8 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
         },
   )
   const lanes = useMemo(
-    () => fxLanes({ effects: running, targets, fixtures: rig, layerPosition, answer: preview.answer }),
-    [layerPosition, preview.answer, rig, running, targets],
+    () => fxLanes({ effects: running, targets, fixtures: rig, layerPosition, answer: preview.answer, steps }),
+    [layerPosition, preview.answer, rig, running, steps, targets],
   )
 
   const [adding, setAdding] = useState<AttributeFamily | null>(null)
@@ -201,10 +203,18 @@ export function FxEditorSelection({ projectId, viewSwitch }: { projectId: number
       />
     )
 
+  // *Lands on* (wheel-colour-chase plan D8): the picked FX's wheel lanes and notes, by model.
+  const landsOn = useMemo(() => {
+    const ans = preview.answer
+    if (ans == null || picked == null) return []
+    const index = ans.fx.findIndex((fx) => fx.fxId === picked.id)
+    return landsOnFrom(ans, index < 0 ? null : index, rig)
+  }, [preview.answer, picked, rig])
   const inspector = (
     <Inspector
       projectId={projectId}
       picked={picked}
+      landsOn={landsOn}
       adding={lookFocused ? null : adding}
       pair={pair}
       target={fxTarget}
@@ -622,6 +632,7 @@ function NothingSelected({
 function Inspector({
   projectId,
   picked,
+  landsOn,
   adding,
   pair,
   target,
@@ -633,6 +644,7 @@ function Inspector({
 }: {
   projectId: number
   picked: ActiveFx | null
+  landsOn: readonly LandsOnModel[]
   adding: AttributeFamily | null
   pair: ReturnType<typeof useWindowFxPair>
   target: ReturnType<typeof fxTargetOf>
@@ -687,6 +699,7 @@ function Inspector({
       }}
       onFollow={onPicked}
       layout="inspector"
+      landsOn={landsOn}
     />
   )
 }

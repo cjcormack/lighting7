@@ -219,9 +219,10 @@ class RigBriefing(private val state: State) {
         sb.appendLine(
             "Path is every movement (Circle, Figure 8, Random, and a Line for Sweep, Pan Sweep and Tilt " +
                 "Sweep), its `shape` saying which; a Line has two ends and no centre. Colour Cycle's " +
-                "`between` is Cut, Fade (over `fade` of each step) or Smooth; its presets Colour Fade and " +
+                "`between` is Cut, Fade (over `fade` of each step), Smooth or Split (a colour-wheel head holds " +
+                "the split of two neighbouring slots for `fade` of each step); its presets Colour Fade and " +
                 "Colour Wave start one that looks like the old FX of those names, which stay on the desk only " +
-                "for the shows that hold them.",
+                "for the shows that hold them, and Split Chase is Split at half a step.",
         )
         // The two step effects take references rather than values (effects plan §3.6), which
         // neither the parameter type nor the category says on its own.

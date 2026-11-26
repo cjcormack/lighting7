@@ -160,9 +160,9 @@ session N — title*. Never merge a later session's PR before an earlier one.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | Wheel heads in colour chases | in review | `claude/fervent-cannon-jfon7w` | [#453](https://github.com/cjcormack/lighting7/pull/453) | 6139efe |
-| 2 | Split colours | in review | `claude/friendly-ramanujan-04vy7d` | | |
-| 3 | The editor and the Stage view | planned | | | |
+| 1 | Wheel heads in colour chases | merged | `claude/fervent-cannon-jfon7w` | [#453](https://github.com/cjcormack/lighting7/pull/453) | 6139efe |
+| 2 | Split colours | merged | `claude/friendly-ramanujan-04vy7d` | [#454](https://github.com/cjcormack/lighting7/pull/454) | 571c1bb |
+| 3 | The editor and the Stage view | in review | `claude/festive-franklin-mymdg8` | | |
 
 *Status* is `planned`, `in progress`, `in review` (its PR is open) or `merged`. `/next-session`
 fills *Branch* when it starts a session, and *PR* and *Head SHA* for the previous one when it starts
@@ -276,7 +276,33 @@ the next; whoever merges the last fills its own.
 - **Docs:** `frontend/docs/stage-vis-engineering.md` on drawing a split; the FX editor's section of
   `docs/fx-engineering.md` §"Previewing an FX".
 - **Checks:** `npm run check:quick` in `frontend/`; the full `npm run check` is CI's. No backend
-  change.
+  change (see the correction below).
+- **Where the code differed from this plan** (corrected in session 3):
+  - The session changes the backend in two places, not none: *Split Chase* is a preset in Colour
+    Cycle's frontmatter (the resource, and `LegacyEquivalenceTest`'s preset check), and the MCP rig
+    briefing (`ai/RigBriefing.kt`) names Split and Split Chase. `fx.LegacyEquivalenceTest`,
+    `fx.FxFileLoaderTest`, `fx.BuiltInFxBehaviourTest` and `ai.*` ran locally for them.
+  - The picker offered no colour FX on a head with only a wheel: the library names `rgbColour`, which a
+    wheel head lacks. A stepping colour FX (`stepsFrom`, `rgbColour`) is now offered on a head whose
+    colour is a wheel, on `rgbColour`, which the desk lands on the wheel; Rainbow Cycle is not (D1).
+  - The wheel a chase starts from reads the type's own previews, not fitted media: no colour wheel that
+    splits is loadable, and the desk snaps a fitted unit's steps itself.
+  - *Lands on* is drawn in the FX editor's inspector, the one host whose preview samples the running FX
+    it edits; the tray's editor, the cue FX tab and the palette editor draw none.
+  - The 3D view draws a split's beam, lens and pool as the two slots' mix by share; the pool in two
+    halves needs a second colour in the light table, whose texels are full (`FU-STAGE-SPLIT-POOL`). The
+    2D leaf's two halves are the Positions chip's; the busk rig's tile draws the mix.
+  - The fixture sheet's setting row is the grid's `SettingCell`, so one change reads a split in both.
+  - Slot Steps' *Between* is judged over every head the FX reaches (or the rig, for a palette), and a
+    stored *Between* off Cut stays drawn on any setting, since the desk runs it there: hiding it would
+    leave a stored Split nobody could see or reset.
+  - A level on a declared slot reads as that slot whole, not as the indexed band it sits in (the MAC
+    250 at 12 is Purple, not Open), in the tables and the Stage view alike.
+  - The client's painted heads (`fxPaintedHeads`) counted no wheel head, so the FX editor listed no
+    chase on a wheel-only selection and *Lands on* was unreachable there. A stepping FX (by its library
+    entry's `stepsFrom`; the running list carries no step count) now paints wheel heads in the FX
+    editor's lanes, its split edit and the replace question; the grid's FX lens, keyed by attribute,
+    still leaves them off, since the chase lands on the wheel's own setting there, not `rgbColour`.
 
 ## 6. Migration
 

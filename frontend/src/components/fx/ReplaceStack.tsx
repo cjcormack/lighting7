@@ -4,7 +4,7 @@ import type { CueTarget } from '@/api/cuesApi'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useActiveFxQuery, useFxLibraryQuery } from '@/store/fixtureFx'
 import { findFxEntry } from '@/components/busking/buskingTypes'
-import { familyOfFx, fxLanes, type FxCard, type FxLane } from '@/components/fxEditor/fxEditorList'
+import { familyOfFx, fxLanes, steppingFxOf, type FxCard, type FxLane } from '@/components/fxEditor/fxEditorList'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 
 /**
@@ -82,8 +82,9 @@ export function useLocalFxHolder(targets: readonly CueTarget[]): (attribute: str
         // Only the Local cards are asked about, and a layer's place orders layer cards alone.
         layerPosition: NO_LAYERS,
         answer: null,
+        steps: steppingFxOf(library),
       }),
-    [effects, fixtures, targets],
+    [effects, fixtures, library, targets],
   )
   return useCallback(
     (attribute, except) => {

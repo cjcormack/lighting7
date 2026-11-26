@@ -28,8 +28,11 @@ import { useChannelSource } from '../../hooks/useChannelSource'
 import { strobeAnimates, strobeFactor } from '../../lib/strobeBands'
 import {
   isAnimatedBand,
+  isTwoColourSplit,
   settingColourAt,
+  settingSplitAt,
   sourceBandColour,
+  type SettingSplit,
   sourceBandLevel,
   useColourBandTime,
 } from '../../lib/colourBands'
@@ -54,6 +57,11 @@ export interface FixtureAppearance {
   intensity: number
   /** Per-element colours for a multi-element fixture (pixel bars); absent otherwise. */
   segments?: PixelSegment[]
+  /**
+   * A colour wheel held between two slots (wheel-colour-chase plan D9): each half's colour through
+   * the head's filter wheels, [color] being their mix. Absent while the wheel shows one slot whole.
+   */
+  split?: { a: string; b: string; share: number }
 }
 
 export interface PixelSegment {
@@ -253,16 +261,19 @@ function useStrobeLevels(strobes: readonly StrobeAttribute[]): number[] {
  */
 function Filtered({
   hex,
+  split,
   filters,
   children,
 }: {
   hex: string
+  /** A source wheel's split, its halves filtered beside [hex] so each reaches the leaf as the beam shows it. */
+  split?: SettingSplit | null
   filters: readonly SettingAttributeDescriptor[]
-  children: (hex: string) => ReactNode
+  children: (hex: string, split: SettingSplit | null) => ReactNode
 }) {
-  if (filters.length === 0) return <>{children(hex)}</>
+  if (filters.length === 0) return <>{children(hex, split ?? null)}</>
   return (
-    <FilterStep hex={hex} filter={filters[0]} rest={filters.slice(1)}>
+    <FilterStep hex={hex} split={split ?? null} filter={filters[0]} rest={filters.slice(1)}>
       {children}
     </FilterStep>
   )
@@ -270,20 +281,24 @@ function Filtered({
 
 function FilterStep({
   hex,
+  split,
   filter,
   rest,
   children,
 }: {
   hex: string
+  split: SettingSplit | null
   filter: SettingAttributeDescriptor
   rest: readonly SettingAttributeDescriptor[]
-  children: (hex: string) => ReactNode
+  children: (hex: string, split: SettingSplit | null) => ReactNode
 }) {
   // The filter's slot colour, or — on a band with no single colour (the Robe's second wheel
   // scrolling) — its wheel's own colours in turn (`lib/colourBands.ts`); the 3D `filteredHex` twin.
   const colour = useSettingBandColour(filter)
+  const filteredSplit =
+    split == null ? null : { a: filterColour(split.a, [colour]), b: filterColour(split.b, [colour]), share: split.share }
   return (
-    <Filtered hex={filterColour(hex, [colour])} filters={rest}>
+    <Filtered hex={filterColour(hex, [colour])} split={filteredSplit} filters={rest}>
       {children}
     </Filtered>
   )
@@ -344,10 +359,12 @@ function SettingColourAppearance({
   // white, never black for want of data; a blackout band is dark (`lib/colourBands.ts`). A dimmer at
   // 0 still wins through the dimmer factor. The 3D `SettingColourBeamSync` is the other copy.
   const colour = useSettingBandColour(settingProp)
+  const { level } = useSettingValue(settingProp)
+  const source = settingSplitAt(settingProp.options, level)
   const intensity = useNormalizedIntensity(dimmerProp) * sourceBandLevel(colour)
   return (
-    <Filtered hex={sourceBandColour(colour)} filters={filters}>
-      {(hex) => children({ color: hex, intensity })}
+    <Filtered hex={sourceBandColour(colour)} split={isTwoColourSplit(source) ? source : null} filters={filters}>
+      {(hex, split) => children({ color: hex, intensity, ...(split != null ? { split } : {}) })}
     </Filtered>
   )
 }

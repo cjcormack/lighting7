@@ -33,6 +33,7 @@ vi.mock('@/store/fixtureFx', () => ({
     splitting: false,
   }),
   isFxSplit: (answer: object) => 'splitFxId' in answer,
+  useFxLibraryQuery: () => ({ data: undefined }),
 }))
 const stopFx = vi.hoisted(() => vi.fn())
 vi.mock('./useFxControls', () => ({ useStopFx: () => stopFx }))

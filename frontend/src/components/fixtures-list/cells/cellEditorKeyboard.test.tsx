@@ -343,3 +343,58 @@ describe('the colour editor', () => {
     expect(screen.getByRole('spinbutton', { name: 'G' })).toHaveFocus()
   })
 })
+
+describe('a colour wheel held in a split (wheel-colour-chase plan D9)', () => {
+  const WHEEL: SettingOption[] = [
+    { name: 'RED', level: 156, displayName: 'Red', colourPreview: '#ff0000', continuousLevel: 12 },
+    { name: 'YELLOW', level: 160, displayName: 'Yellow', colourPreview: '#ffff00', continuousLevel: 23 },
+  ]
+
+  it('reads a level between two slots as both, with a half-and-half swatch', () => {
+    const { container } = render(
+      <SettingCell
+        value={{ kind: 'setting', isUniform: true, level: 17, option: WHEEL[0] }}
+        resolutions={[settingResolution(WHEEL)]}
+        label="Colour"
+        onCommit={() => {}}
+        onBeginEdit={() => {}}
+      />,
+    )
+    expect(screen.getByText('Red / Yellow')).toBeTruthy()
+    expect(container.querySelector('[data-setting-split]')).not.toBeNull()
+  })
+
+  it('draws a level on a declared slot as that slot, swatch and name alike', () => {
+    const OPEN: SettingOption = { name: 'OPEN', level: 0, displayName: 'Open', colourPreview: '#ffffff' }
+    const { container } = render(
+      <SettingCell
+        value={{ kind: 'setting', isUniform: true, level: 12, option: OPEN }}
+        resolutions={[settingResolution([OPEN, ...WHEEL])]}
+        label="Colour"
+        onCommit={() => {}}
+        onBeginEdit={() => {}}
+      />,
+    )
+    expect(screen.getByText('Red')).toBeTruthy()
+    const swatch = container.querySelector<HTMLElement>('[data-setting-swatch]')
+    expect(swatch?.style.backgroundColor).toBe('rgb(255, 0, 0)')
+  })
+
+  it('names the band where two wheel models read one level differently', () => {
+    const OTHER: SettingOption[] = [
+      { name: 'BLUE', level: 0, displayName: 'Blue', colourPreview: '#0000ff', continuousLevel: 10 },
+      { name: 'GREEN', level: 50, displayName: 'Green', colourPreview: '#00ff00', continuousLevel: 30 },
+    ]
+    render(
+      <SettingCell
+        value={{ kind: 'setting', isUniform: true, level: 17, option: WHEEL[0] }}
+        resolutions={[settingResolution(WHEEL), settingResolution(OTHER)]}
+        label="Colour"
+        onCommit={() => {}}
+        onBeginEdit={() => {}}
+      />,
+    )
+    expect(screen.queryByText('Red / Yellow')).toBeNull()
+    expect(screen.getByText('Red')).toBeTruthy()
+  })
+})

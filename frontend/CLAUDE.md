@@ -772,7 +772,7 @@ Release folds to its glyph and the scope line drops the fade.
   Wave*, *Iris Pulse*, *Frost Pulse* and *Focus Pull* under Beam where the head has the attribute,
   each a Wave starting with its parameters, cycle and Direction; the bare Wave is listed under Beam
   too, on the head's beam attribute, starting at that attribute's `attributeDefaults`. Colour Cycle's
-  *Colour Fade* and *Colour Wave* sit under Colour and Path's *Sweep*, *Pan Sweep* and *Tilt Sweep*
+  *Colour Fade*, *Colour Wave* and *Split Chase* sit under Colour and Path's *Sweep*, *Pan Sweep* and *Tilt Sweep*
   under Position (fx-settings plan session 3). A **legacy** FX (the library's `legacy`: Colour Fade
   and Colour Wave themselves) is offered by no picker, the palette editor's FX list (but the one a
   palette already holds) or the FX Library page (`compatibleFxFor`), yet edits as any FX. **Another tap swaps it** through `updateFx` — the new

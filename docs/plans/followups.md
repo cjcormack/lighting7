@@ -53,6 +53,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FX-VALUE-FADE-UNDER-EFFECT`](#fu-fx-value-fade-under-effect) | Trigger | FX | an operator wants a value and the FX over it to fade together on a programmer gesture |
 | [`FU-FX-BEAM-ANY-SLIDER`](#fu-fx-beam-any-slider) | Trigger | FX | an operator wants to breathe prism or a fixture's own speed channel |
 | [`FU-FX-RAINBOW-WHEEL-SCROLL`](#fu-fx-rainbow-wheel-scroll) | Trigger | FX | an operator wants Rainbow Cycle, or another colour FX that does not step, on a colour-wheel head |
+| [`FU-STAGE-SPLIT-POOL`](#fu-stage-split-pool) | Trigger | Stage | an operator finds a split wheel's pool, drawn as the two slots' mix, misreads the beam |
 | [`FU-BUSK-MOMENTARY`](#fu-busk-momentary) | Trigger | Busk | an operator asks to flash a pad rather than latch it |
 | [`FU-BUSK-AI-LAYOUT`](#fu-busk-ai-layout) | Trigger | AI | a prompt asks the AI to put something on a busk page |
 | [`FU-BUSK-PAD-SIZE`](#fu-busk-pad-size) | Trigger | Busk | a page needs more density than width and flow give |
@@ -726,6 +727,21 @@ cue layer has, so the reset pass reads a value part-way through its fade.
 
 **Trigger**: an operator wants a busked FX and the value under it to fade out (or in) together on
 one gesture.
+
+---
+
+### `FU-STAGE-SPLIT-POOL`
+
+**A split wheel's pool in two halves** · Trigger · wheel-colour-chase plan session 3 (D9), 2026-11-24
+
+The wheel-colour-chase plan's D9 asked the 3D view to draw a split wheel's pool in two halves. Session 3
+draws the beam, the lens and the pool as the two slots' mix by share (`lib/colourBands.ts`'s
+`settingSplitAt`), and the 2D chip in two halves. Two halves on a surface need a second colour and a
+split axis per light in the light table (`stage3d/scene/lightTable.ts`), whose six texels are full, and
+the surface shader and its JS twin changed together — work out of proportion to the session. The split
+axis is the wheel's rotation in the head's frame; the gobo frame already carries a basis to put it in.
+
+**Trigger**: an operator finds a split wheel's pool, drawn as the two slots' mix, misreads the beam.
 
 ---
 

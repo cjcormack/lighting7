@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { ArrowLeft, ArrowLeftRight, ArrowRight, ChevronDown, ChevronRight } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { FxDirection } from '@/api/fxApi'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -39,6 +40,9 @@ import {
   trackPosition,
 } from '@/lib/fxSpeed'
 import type { SettingAttributeDescriptor } from '@/store/fixtures'
+import { isSlotSteps } from '@/lib/stepFx'
+import { isColourCycle, isSplittingColourWheel, wheelChaseParameters, type WheelStart } from '@/lib/wheelChase'
+import type { LandsOnModel } from './landsOn'
 import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
 import { SheetField } from '../fixtureSheet/SheetField'
@@ -225,6 +229,9 @@ export function FxFields({
   swap,
   tempoHost = LIVE_TEMPO,
   layout = 'editor',
+  wheelStart,
+  settingSplits,
+  landsOn,
 }: {
   entry: FxLibraryEntry
   /** The instance's or the template's timing source — the library entry's wins where it says. */
@@ -255,6 +262,15 @@ export function FxFields({
    * preview; `editor` is every other host's, whose ladder is `lib/spreadShape.ts`'s.
    */
   layout?: 'editor' | 'inspector'
+  /**
+   * The one wheel model the target's colour heads are (wheel-colour-chase plan D7): Colour Cycle's
+   * Colours offer *Start from the {model}'s wheel*. Absent on any other selection.
+   */
+  wheelStart?: WheelStart | null
+  /** Whether any head the FX reaches has its setting as a colour wheel that splits; absent, [settingAttribute] is asked. */
+  settingSplits?: boolean
+  /** What each wheel model in the selection lands on, from the desk's preview (D8): *Lands on*. */
+  landsOn?: readonly LandsOnModel[]
 }) {
   const centred = hasCentre(entry, draft.parameters)
   // An absent centre is the library's default (128 on every built-in) — a script or a cue may store a
@@ -267,13 +283,24 @@ export function FxFields({
   // A whole cycle in the phase offset is Bounce's parity (a migrated `pingPong` FX keeps one): the
   // Phase control edits the part within the cycle and leaves it be.
   const phaseCycles = Math.floor(draft.phaseOffset)
+  // Slot Steps' Between is offered on a colour wheel that splits (D6), and kept wherever it is
+  // already set off Cut, since the desk runs a split on any setting.
+  const storedBetween = (draft.parameters.between || '').toUpperCase()
+  const slotSplitHidden =
+    isSlotSteps(entry.name) &&
+    (storedBetween === '' || storedBetween === 'CUT') &&
+    !(settingSplits ?? isSplittingColourWheel(settingAttribute))
   // Around hides the centre: it is pinned at 128, and showing it would offer a knob that turns the
   // orbit into an offset nobody asked for.
   const items = paramItems(
     entry,
     draft.parameters,
-    (param) => centreMode === 'around' && (CENTRE_PARAMS as readonly string[]).includes(param.name),
+    (param) =>
+      (centreMode === 'around' && (CENTRE_PARAMS as readonly string[]).includes(param.name)) ||
+      (slotSplitHidden && SPLIT_PARAMS.includes(param.name)),
   )
+  const splitting = storedBetween === 'SPLIT' && entry.parameters.some((p) => p.name === 'between')
+  const colourCycle = isColourCycle(entry.name)
   const main = items.filter((item) => itemFold(item) === 'main')
   const more = items.filter((item): item is Exclude<ParamItem, { kind: 'control' }> => item.kind !== 'control' && itemFold(item) === 'detail')
 
@@ -323,11 +350,12 @@ export function FxFields({
         />
       )
     }
-    return (
+    const control = (
       <ParamControl
         key={itemKey(item)}
         param={item.param}
-        view={item.view}
+        view={splitting && item.param.name === 'fade' ? { ...item.view, label: 'Split for' } : item.view}
+        description={colourCycle && item.param.name === 'between' && splitting ? SPLIT_HELP : undefined}
         value={valueOf(item.param)}
         extendedChannels={extendedChannels}
         settingAttribute={item.param.name === 'level' ? settingAttribute : undefined}
@@ -343,6 +371,24 @@ export function FxFields({
         }}
       />
     )
+    if (colourCycle && item.param.name === 'colours' && wheelStart != null) {
+      return (
+        <div key={itemKey(item)} className="flex flex-col gap-1.5">
+          {control}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="self-start text-xs"
+            disabled={readOnly}
+            onClick={() => setParams({ colours: wheelChaseParameters(wheelStart).colours }, true)}
+          >
+            Start from the {wheelStart.model}’s wheel
+          </Button>
+        </div>
+      )
+    }
+    return control
   }
 
   const gap = layout === 'inspector' ? 'gap-2.5' : 'gap-2'
@@ -446,6 +492,7 @@ export function FxFields({
           </Disclosure>
         )}
         {main.length === 0 && more.length === 0 && <EditorReadout>Nothing to set but its timing.</EditorReadout>}
+        {landsOn != null && landsOn.length > 0 && <LandsOn models={landsOn} />}
       </Section>
 
       {across}
@@ -527,6 +574,51 @@ export function FxFields({
         />
       </Disclosure>
     </>
+  )
+}
+
+const SPLIT_PARAMS: readonly string[] = ['between', 'fade']
+
+const SPLIT_HELP = 'Each colour gives way to the next through their split, on wheels that have one.'
+
+/**
+ * *Lands on* (wheel-colour-chase plan §4, D8): each wheel model in the selection, its slots and
+ * splits in step order, and the preview's notes in amber.
+ */
+function LandsOn({ models }: { models: readonly LandsOnModel[] }) {
+  return (
+    <div aria-label="Lands on" className="flex flex-col gap-1.5">
+      <EditorLabel>Lands on</EditorLabel>
+      {models.map((m) => (
+        <div key={`${m.model}\u0000${m.attribute}`} className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-1 text-xs">
+            <span className="mr-1 text-muted-foreground">
+              {m.model}
+              {m.heads > 1 ? ` × ${m.heads}` : ''}
+            </span>
+            {m.states.map((state, i) => (
+              <span key={i} className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5">
+                {state.halves != null ? (
+                  <span
+                    data-testid="lands-on-split"
+                    className="size-2.5 shrink-0 rounded-sm"
+                    style={{ background: `linear-gradient(to right, ${state.halves[0]} 50%, ${state.halves[1]} 50%)` }}
+                  />
+                ) : (
+                  state.preview != null && <span className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: state.preview }} />
+                )}
+                {state.splitWith != null ? `${state.slot} / ${state.splitWith}` : state.slot}
+              </span>
+            ))}
+          </div>
+          {m.notes.map((note) => (
+            <p key={note} className="text-[11px] text-amber-500">
+              {note}
+            </p>
+          ))}
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -1939,10 +2031,13 @@ function ParamControl({
   slotsFromRig = false,
   readOnly,
   onChange,
+  description,
 }: {
   param: FxParameterDef
   view: ParamView
   value: string
+  /** In place of the parameter's own description: a choice whose words depend on its value. */
+  description?: string
   extendedChannels: ExtendedChannelFlags | undefined
   settingAttribute: SettingAttributeDescriptor | undefined
   /** The setting a slot list names options of, where the effect drives one. */
@@ -1997,7 +2092,7 @@ function ParamControl({
         label={label}
         value={value}
         options={param.options}
-        description={param.description || undefined}
+        description={description ?? (param.description || undefined)}
         pictures={param.name === 'shape'}
         readOnly={readOnly}
         onChange={(v) => onChange(v, true)}

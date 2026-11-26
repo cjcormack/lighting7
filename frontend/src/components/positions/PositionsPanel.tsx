@@ -392,7 +392,17 @@ function ColourMark({ colour, className }: { colour: FixtureColour | null; class
  * multi-cell unit (a batten, a pixel bar) splits it per cell.
  */
 function ChipLive({ appearance }: { appearance: FixtureAppearance }) {
-  const { color, intensity, segments } = appearance
+  const { color, intensity, segments, split } = appearance
+  if (split != null) {
+    // A colour wheel between two slots is half one and half the other in the beam (wheel-colour-chase plan D9).
+    const opacity = perceptualBrightness(intensity)
+    return (
+      <span data-chip-split className="flex h-3.5 w-3.5 shrink-0 overflow-hidden rounded-[3px] border border-white/15 bg-black">
+        <span className="h-full" style={{ flex: 1 - split.share, backgroundColor: split.a, opacity }} />
+        <span className="h-full" style={{ flex: split.share, backgroundColor: split.b, opacity }} />
+      </span>
+    )
+  }
   if (segments && segments.length > 1) {
     return (
       <span className="flex h-3.5 w-3.5 shrink-0 overflow-hidden rounded-[3px] border border-white/15 bg-black">

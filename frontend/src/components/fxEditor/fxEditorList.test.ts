@@ -2,8 +2,8 @@
 import { describe, expect, it } from 'vitest'
 import type { ActiveFx } from '@/store/fixtureFx'
 import type { FxPreviewAnswer } from '@/store/fxPreview'
-import { chan, colourProp, makeActiveFx, makeFixture, sliderProp } from '@/test/fixtureFactories'
-import { coverageLabel, fxLanes, fxTargetsOf, localMovesFor } from './fxEditorList'
+import { chan, colourProp, makeActiveFx, makeFixture, settingProp, sliderProp } from '@/test/fixtureFactories'
+import { coverageLabel, fxLanes, fxTargetsOf, localMovesFor, steppingFxOf } from './fxEditorList'
 
 /**
  * The FX editor's list (FX editor plan D3): every FX on the selection in family lanes, top first in
@@ -92,6 +92,33 @@ describe('fxLanes', () => {
     const effects = [fx(1, { leaving: true }), fx(2)]
     expect(cardIds(fxLanes({ effects, targets: ALL, fixtures: HEX, layerPosition: new Map(), answer: null }), 'INTENSITY')).toEqual([2])
     expect(fxLanes({ effects, targets: [], fixtures: HEX, layerPosition: new Map(), answer: null })).toEqual([])
+  })
+})
+
+describe('fxLanes on colour-wheel heads (wheel-colour-chase plan D1)', () => {
+  const wheel = (n: number) =>
+    makeFixture(`mac-${n}`, [sliderProp('dimmer', 'dimmer', chan(n * 10)), settingProp('colourWheel', 'colour', chan(n * 10 + 1), [{ name: 'RED', level: 10, displayName: 'Red', colourPreview: '#ff0000' }])], {
+      groups: ['macs'],
+    })
+  const RIG = [...HEX, wheel(7), wheel(8)]
+  const MACS = [{ type: 'group' as const, key: 'macs' }]
+  const library = [
+    { name: 'Colour Cycle', stepsFrom: 'colours' },
+    { name: 'Rainbow Cycle' },
+  ]
+  const steps = steppingFxOf(library)
+  const chase = (id: number, fxType: string) => fx(id, { fxType, attribute: 'rgbColour', targetKey: 'macs' })
+
+  it('lists a stepping colour FX on a wheel-only selection, and leaves a non-stepping one off', () => {
+    const effects = [chase(1, 'ColourCycle'), chase(2, 'RainbowCycle')]
+    const lanes = fxLanes({ effects, targets: MACS, fixtures: RIG, layerPosition: new Map(), answer: null, steps })
+    const lane = lanes.find((l) => l.family === 'COLOUR')!
+    expect(lane.cards.map((c) => [c.effect.id, c.reached, c.of])).toEqual([[1, 2, 2]])
+  })
+
+  it('reaches no wheel head without the library', () => {
+    const lanes = fxLanes({ effects: [chase(1, 'ColourCycle')], targets: MACS, fixtures: RIG, layerPosition: new Map(), answer: null })
+    expect(lanes.find((l) => l.family === 'COLOUR')?.cards ?? []).toEqual([])
   })
 })
 

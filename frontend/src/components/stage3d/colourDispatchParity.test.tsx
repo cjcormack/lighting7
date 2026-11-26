@@ -796,3 +796,75 @@ describe('the 3D dispatch asks for frames only while a strobe flashes', () => {
     view.unmount()
   })
 })
+
+describe('a colour wheel held in a split (wheel-colour-chase plan D9)', () => {
+  // A MAC 250-shaped wheel: its slots full in the beam at continuous levels 1, 12 and 23.
+  const SPLIT_WHEEL = settingProp('colourWheel', 'colour', chan(5), [
+    { name: 'OPEN', level: 0, displayName: 'Open', colourPreview: '#ffffff', continuousLevel: 1 },
+    { name: 'RED', level: 156, displayName: 'Red', colourPreview: '#ff0000', continuousLevel: 12 },
+    { name: 'YELLOW', level: 160, displayName: 'Yellow', colourPreview: '#ffff00', continuousLevel: 23 },
+  ])
+  const SPOT = makeFixture('spot-1', [DIMMER, SPLIT_WHEEL])
+
+  it('draws the two slots mixed by share on both dispatches', () => {
+    // 17 is Red and Yellow's split, five elevenths of the way from Red.
+    const s = scenario({ fixture: SPOT, values: { '0:1': 255, '0:5': 17 } })
+    const twoD = resolve2D(s)
+    const threeD = resolve3D(s)
+    expect(threeD.colour).toBe(twoD.colour)
+    expect(twoD.colour).toBe('#ff7400')
+  })
+
+  it('draws a slot whole on its declared level and on its indexed level alike', () => {
+    for (const level of [12, 156]) {
+      const twoD = resolve2D(scenario({ fixture: SPOT, values: { '0:1': 255, '0:5': level } }))
+      expect(twoD.colour).toBe('#ff0000')
+    }
+  })
+
+  it('hands the 2D leaf both halves of a split, and none for a slot held whole', () => {
+    const capture = (level: number) => {
+      let captured: FixtureAppearance | undefined
+      render(
+        <ChannelSourceProvider source={sourceOf({ '0:1': 255, '0:5': level })}>
+          <FixtureAppearanceSource patch={PATCH} fixture={SPOT} fixtureType={undefined}>
+            {(appearance) => {
+              captured = appearance
+              return null
+            }}
+          </FixtureAppearanceSource>
+        </ChannelSourceProvider>,
+      )
+      return captured
+    }
+    expect(capture(17)?.split).toEqual({ a: '#ff0000', b: '#ffff00', share: 5 / 11 })
+    expect(capture(12)?.split).toBeUndefined()
+    expect(capture(160)?.split).toBeUndefined()
+  })
+
+  it('draws the halves through a second colour wheel, as the Robe carries one', () => {
+    // The Robe ColorSpot 575's shape: a first wheel that splits, and a second always there as a filter.
+    const SECOND = settingProp('colour2', 'colour', chan(6), [
+      { name: 'OPEN', level: 0, displayName: 'Open', colourPreview: '#ffffff' },
+      { name: 'DEEP_BLUE', level: 140, displayName: 'Deep blue', colourPreview: '#0000ff' },
+    ])
+    const ROBE = makeFixture('robe-1', [DIMMER, SPLIT_WHEEL, SECOND])
+    const capture = (second: number) => {
+      let captured: FixtureAppearance | undefined
+      render(
+        <ChannelSourceProvider source={sourceOf({ '0:1': 255, '0:5': 17, '0:6': second })}>
+          <FixtureAppearanceSource patch={PATCH} fixture={ROBE} fixtureType={undefined}>
+            {(appearance) => {
+              captured = appearance
+              return null
+            }}
+          </FixtureAppearanceSource>
+        </ChannelSourceProvider>,
+      )
+      return captured
+    }
+    expect(capture(0)?.split).toEqual({ a: '#ff0000', b: '#ffff00', share: 5 / 11 })
+    // A deep blue filter passes no red or green, so both halves go dark — as the mix does.
+    expect(capture(140)?.split).toEqual({ a: '#000000', b: '#000000', share: 5 / 11 })
+  })
+})

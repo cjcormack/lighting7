@@ -471,7 +471,7 @@ function CueFxEditor({
     intervalMs: effect.intervalMs ?? null,
     randomWindowMs: effect.randomWindowMs ?? null,
   }))
-  const { scope, extendedChannels, settingAttribute } = useFxScope({
+  const { scope, extendedChannels, settingAttribute, wheelStart, settingSplits } = useFxScope({
     target: targetFieldsOf(effect),
     attribute: effect.attribute,
     entry,
@@ -500,6 +500,8 @@ function CueFxEditor({
           readOnly={readOnly}
           swap={swap && { options: swap.options, onSwap: (to) => swap.onSwap(to, scope.headCount) }}
           tempoHost={tempoHost}
+          wheelStart={wheelStart}
+          settingSplits={settingSplits}
           set={(patch, release = true) => write({ ...draft, ...patch }, release)}
           setParam={(name, value, release) => write({ ...draft, parameters: { ...draft.parameters, [name]: value } }, release)}
         />

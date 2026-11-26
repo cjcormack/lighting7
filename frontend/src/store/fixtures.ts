@@ -385,6 +385,10 @@ export type SettingOption = {
   /** On a **stepped zoom** (a `zoom` setting, fixture-optics plan D2): the full beam angle at this
    *  position — the Robe ColorSpot's 15°, 18° or 22°. */
   zoomDeg?: number
+  /** On a colour wheel's slot: the level in the wheel's continuous band at which this slot is full in
+   *  the beam (wheel-colour-chase plan D5). Two neighbouring slots that both declare one split at
+   *  their midpoint (`lib/colourSplit.ts`). Absent on a wheel that does not split. */
+  continuousLevel?: number
   /** On a colour setting: a band with **no single colour** — a scroll, a random or rainbow program,
    *  an auto change, a band handing colour to other channels. The Stage view animates it through the
    *  wheel's own previews (`lib/colourBands.ts`); every other colour option carries `colourPreview`. */

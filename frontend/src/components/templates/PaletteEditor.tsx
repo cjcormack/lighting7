@@ -78,6 +78,7 @@ import {
   type PaletteValues,
 } from './familyControls/paletteRows'
 import { newFxSpread } from '@/lib/spreadShape'
+import { anySplittingWheel } from '@/lib/wheelChase'
 
 /**
  * Authoring a template: **family first, then Holds, then one control native to both.**
@@ -624,6 +625,7 @@ function FxControls({
   const beamAttributes = entry != null ? attributesInFamily(entry, family) : []
   const fxDraft = useMemo(() => (draft == null ? null : paletteDraftOf(draft)), [draft])
   const slotSetting = isSlotSteps(draft?.fxType) ? rigSettings.find((p) => p.name === draft?.attribute) : undefined
+  const slotSplits = useMemo(() => anySplittingWheel(fixtures ?? [], draft?.attribute), [fixtures, draft?.attribute])
 
   /** What a step effect starts on here: Palette Steps its family's palettes, Slot Steps a gobo wheel. */
   const startOf = (chosen: FxLibraryEntry): FxStart | undefined => {
@@ -735,6 +737,7 @@ function FxControls({
             scope={PALETTE_SCOPE}
             extendedChannels={rigEmitters}
             settingAttribute={slotSetting}
+            settingSplits={slotSplits}
             attribute={draft.attribute}
             paletteFamily={family}
             slotsFromRig
