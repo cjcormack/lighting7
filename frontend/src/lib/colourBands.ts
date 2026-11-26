@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useSyncExternalStore } from 'react'
 import type { SettingOption } from '../store/fixtures'
 import { OPEN_WHITE } from './fittedMedia'
+import { splitReading } from './colourSplit'
 
 /**
  * What a colour setting's current band puts in the beam (fixture-optics plan D8), shared by both
@@ -124,11 +125,51 @@ export function settingColourAt(
   level: number,
   timeS: number,
 ): string | undefined {
+  const split = settingSplitAt(options, level)
+  if (split != null) {
+    const { a, b, share } = split
+    return isTwoColourSplit(split) ? mixHex(a, b, share) : a
+  }
   const option = bandOption(options, level)
   if (!option) return undefined
   if (option.colourPreview) return option.colourPreview
   if (option.noColour === true) return cycleColour(wheelPalette(options), timeS)
   return undefined
+}
+
+/** A colour wheel held between two slots: each slot's colour and [share] of the way from [a] to [b]. */
+export interface SettingSplit {
+  a: string
+  b: string
+  share: number
+}
+
+/**
+ * [level] on a wheel that splits (`lib/colourSplit.ts`), where it lies strictly between two slots
+ * that both carry a colour: a split, drawn as its two halves. Null on a slot held whole, outside the
+ * continuous band, or where either slot says no colour — [settingColourAt] then reads the level as a
+ * band, so the open slot at the band's start still draws as the open slot it is.
+ */
+export function settingSplitAt(options: readonly SettingOption[], level: number): SettingSplit | null {
+  const reading = splitReading(options, level)
+  if (reading == null) return null
+  const one = reading.share <= 0 ? reading.a : reading.share >= 1 ? reading.b : null
+  if (one != null) return one.colourPreview ? { a: one.colourPreview, b: one.colourPreview, share: 0 } : null
+  if (!reading.a.colourPreview || !reading.b.colourPreview) return null
+  return { a: reading.a.colourPreview, b: reading.b.colourPreview, share: reading.share }
+}
+
+/** Two `#rrggbb` colours [share] of the way from [a] to [b], as the desk's preview mixes them. */
+export function mixHex(a: string, b: string, share: number): string {
+  const ca = parseHex(a)
+  const cb = parseHex(b)
+  if (!ca || !cb) return share < 0.5 ? a : b
+  return toHex(ca[0] + (cb[0] - ca[0]) * share, ca[1] + (cb[1] - ca[1]) * share, ca[2] + (cb[2] - ca[2]) * share)
+}
+
+/** True where [split] shows two colours rather than one slot whole. */
+export function isTwoColourSplit(split: SettingSplit | null | undefined): split is SettingSplit {
+  return split != null && split.share > 0 && split.share < 1 && split.a.toLowerCase() !== split.b.toLowerCase()
 }
 
 /**

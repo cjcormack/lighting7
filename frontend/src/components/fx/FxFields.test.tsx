@@ -1045,3 +1045,159 @@ describe('FxFields in four questions (fx-settings plan D9)', () => {
     expect(sheet.contains(screen.getByRole('radiogroup', { name: 'Tempo' }))).toBe(true)
   })
 })
+
+describe('FxFields on a colour wheel (wheel-colour-chase plan session 3)', () => {
+  const COLOUR_CYCLE: FxLibraryEntry = {
+    name: 'ColourCycle',
+    family: 'colour',
+    outputType: 'COLOUR',
+    fxMode: 'STANDARD',
+    timingSource: 'BEAT',
+    stepsFrom: 'colours',
+    compatibleAttributes: ['rgbColour'],
+    parameters: [
+      { name: 'colours', type: 'colourList', defaultValue: '#ff0000,#00ff00,#0000ff', description: 'Colours', label: 'Colours' },
+      {
+        name: 'between',
+        type: 'choice',
+        defaultValue: 'FADE',
+        description: 'How each colour gives way to the next',
+        label: 'Between',
+        options: [
+          { value: 'CUT', label: 'Cut' },
+          { value: 'FADE', label: 'Fade' },
+          { value: 'SMOOTH', label: 'Smooth' },
+          { value: 'SPLIT', label: 'Split' },
+        ],
+      },
+      { name: 'fade', type: 'double', defaultValue: '0.5', description: 'Share of each step', label: 'Fade', min: 0, max: 1, step: 0.01, unit: 'ratio' },
+    ],
+  } as FxLibraryEntry
+  const SLOT_STEPS: FxLibraryEntry = {
+    ...COLOUR_CYCLE,
+    name: 'SlotSteps',
+    family: 'steps',
+    stepsFrom: 'slots',
+    compatibleAttributes: ['setting'],
+    parameters: [
+      { name: 'slots', type: 'slotList', defaultValue: '', description: 'Slots', label: 'Slots' },
+      {
+        name: 'between',
+        type: 'choice',
+        defaultValue: 'CUT',
+        description: 'How each slot gives way to the next',
+        label: 'Between',
+        options: [
+          { value: 'CUT', label: 'Cut' },
+          { value: 'SPLIT', label: 'Split' },
+        ],
+      },
+      { name: 'fade', type: 'double', defaultValue: '0.5', description: 'Split for', label: 'Split for', min: 0, max: 1, step: 0.01, unit: 'ratio' },
+    ],
+  } as FxLibraryEntry
+  const MAC = { model: 'MAC 250', typeKey: 'martin-mac-250-mode-4', colours: ['#ff0000', '#ffff00'], splits: true }
+
+  function render3(entry: FxLibraryEntry, d: FxDraft, more: Partial<ComponentProps<typeof FxFields>> = {}) {
+    const set = vi.fn()
+    render(
+      <FxFields
+        entry={entry}
+        timingSource={entry.timingSource}
+        draft={d}
+        scope={SCOPE}
+        extendedChannels={undefined}
+        settingAttribute={undefined}
+        readOnly={false}
+        set={set}
+        setParam={vi.fn()}
+        {...more}
+      />,
+    )
+    return set
+  }
+
+  it('offers Split in Between, labels its slider Split for and says what it does', () => {
+    render3(COLOUR_CYCLE, draft({ parameters: { colours: '#ff0000,#ffff00', between: 'SPLIT', fade: '0.5' } }))
+    expect(screen.getByRole('radio', { name: 'Split' })).toBeTruthy()
+    expect(screen.getAllByText('Split for').length).toBeGreaterThan(0)
+    expect(screen.getByText('Each colour gives way to the next through their split, on wheels that have one.')).toBeTruthy()
+  })
+
+  it('labels the same slider Fade on Fade', () => {
+    render3(COLOUR_CYCLE, draft({ parameters: { colours: '#ff0000,#ffff00', between: 'FADE', fade: '0.5' } }))
+    expect(screen.queryByText('Split for')).toBeNull()
+    expect(screen.getAllByText('Fade').length).toBeGreaterThan(0)
+  })
+
+  it('starts from a one-model wheel: its colours replace the list, Between as it was', () => {
+    const set = render3(COLOUR_CYCLE, draft({ parameters: { colours: '#ff0000', between: 'FADE', fade: '0.5' } }), { wheelStart: MAC })
+    fireEvent.click(screen.getByRole('button', { name: 'Start from the MAC 250’s wheel' }))
+    expect(set).toHaveBeenCalledWith(
+      { parameters: { colours: '#ff0000,#ffff00', between: 'FADE', fade: '0.5' } },
+      true,
+    )
+  })
+
+  it('offers no wheel start where the selection is not one wheel model', () => {
+    render3(COLOUR_CYCLE, draft({ parameters: { colours: '#ff0000' } }), { wheelStart: null })
+    expect(screen.queryByRole('button', { name: /Start from the/ })).toBeNull()
+  })
+
+  it('shows Slot Steps’ Between only on a colour wheel that splits', () => {
+    const wheel = (continuous: boolean) => ({
+      type: 'setting' as const,
+      name: 'colourWheel',
+      displayName: 'Colour wheel',
+      category: 'colour' as const,
+      channel: { universe: 0, channelNo: 5 },
+      options: [
+        { name: 'RED', level: 10, displayName: 'Red', ...(continuous ? { continuousLevel: 1 } : {}) },
+        { name: 'BLUE', level: 20, displayName: 'Blue', ...(continuous ? { continuousLevel: 9 } : {}) },
+      ],
+    })
+    const d = draft({ parameters: { slots: 'RED,BLUE', between: 'CUT', fade: '0.5' } })
+    render3(SLOT_STEPS, d, { settingAttribute: wheel(true) as never })
+    expect(screen.getByRole('radio', { name: 'Split' })).toBeTruthy()
+    cleanup()
+    render3(SLOT_STEPS, d, { settingAttribute: wheel(false) as never })
+    expect(screen.queryByRole('radio', { name: 'Split' })).toBeNull()
+  })
+
+  it('judges Slot Steps’ Between over every head, and keeps a stored Split however the heads read', () => {
+    const cut = draft({ parameters: { slots: 'RED,BLUE', between: 'CUT', fade: '0.5' } })
+    render3(SLOT_STEPS, cut, { settingSplits: true })
+    expect(screen.getByRole('radio', { name: 'Split' })).toBeTruthy()
+    cleanup()
+    render3(SLOT_STEPS, draft({ parameters: { slots: 'RED,BLUE', between: 'SPLIT', fade: '0.5' } }), { settingSplits: false })
+    expect(screen.getByRole('radio', { name: 'Split' })).toBeTruthy()
+    cleanup()
+    render3(SLOT_STEPS, cut, { settingSplits: false })
+    expect(screen.queryByRole('radio', { name: 'Split' })).toBeNull()
+  })
+
+  it('draws Lands on: each model’s slots and splits, and its notes', () => {
+    render3(COLOUR_CYCLE, draft({ parameters: { colours: '#ff0000,#ffff00', between: 'SPLIT' } }), {
+      landsOn: [
+        {
+          model: 'MAC 250',
+          attribute: 'colourWheel',
+          heads: 4,
+          states: [
+            { slot: 'Red', preview: '#ff0000' },
+            { slot: 'Red', splitWith: 'Yellow', preview: '#ff8000', halves: ['#ff0000', '#ffff00'] },
+            { slot: 'Yellow' },
+          ],
+          notes: ['Each step is 300 ms; the wheel needs 700 ms to get there'],
+        },
+      ],
+    })
+    const landsOn = screen.getByLabelText('Lands on')
+    expect(landsOn.textContent).toContain('MAC 250 × 4')
+    expect(landsOn.textContent).toContain('Red / Yellow')
+    expect(landsOn.textContent).toContain('Each step is 300 ms; the wheel needs 700 ms to get there')
+    // A split is drawn as its two slots, not the desk's mix.
+    const split = screen.getByTestId('lands-on-split')
+    expect(split.style.background).toContain('linear-gradient')
+    expect(split.style.background).not.toContain('255, 128, 0')
+  })
+})

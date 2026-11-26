@@ -322,5 +322,6 @@ class LegacyEquivalenceTest {
         assertEquals(mapOf("colours" to "#ff0000,#0000ff", "between" to "FADE", "fade" to "1"), presets.getValue("Colour Fade").parameters)
         assertEquals(4.0, presets.getValue("Colour Fade").cycle, "the old fade's two-beat bounce, one way in four")
         assertEquals(mapOf("colours" to "#000000,#ffffff", "between" to "SMOOTH"), presets.getValue("Colour Wave").parameters)
+        assertEquals(mapOf("between" to "SPLIT", "fade" to "0.5"), presets.getValue("Split Chase").parameters, "Split Chase splits halfway")
     }
 }

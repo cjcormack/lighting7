@@ -16,6 +16,8 @@ import { useEditorOpen } from '../../editor/useEditorOpen'
 import { PaletteBands } from '../../editor/PaletteBands'
 import { useCueBandProject } from '../../press/pressCue'
 import { familyForCategory } from '@/lib/attributeFamily'
+import { splitLabel } from '@/lib/colourSplit'
+import { isTwoColourSplit, settingSplitAt, type SettingSplit } from '@/lib/colourBands'
 import type { CellClickEvent } from '../../sheet/cellSelectionModel'
 
 interface SettingCellOwnProps {
@@ -152,6 +154,9 @@ export const SettingCell = memo(function SettingCell({
   // Width cannot answer "is this a finger" on this desk; the form can.
   const touchTarget = useEditorForm() !== 'popover'
   const first = resolutions[0]
+  const wheel = useMemo(() => (value.isUniform ? wheelReadingOf(resolutions, value.level) : null), [resolutions, value.isUniform, value.level])
+  const split = wheel?.split ?? null
+  const swatch = split?.a ?? value.option?.colourPreview
   // Memoised for its `[]` arm alone, which would otherwise hand `matches` below a fresh identity
   // every render — the `?? []` trap CLAUDE.md names. `first.attribute.options` is already stable.
   const options = useMemo(
@@ -249,14 +254,22 @@ export const SettingCell = memo(function SettingCell({
             <UnsetCellMark />
           ) : (
             <>
-              {value.option?.colourPreview && (
-                <span
-                  className="ml-1.5 size-3 shrink-0 rounded-sm border border-border"
-                  style={{ backgroundColor: value.option.colourPreview }}
-                />
+              {isTwoColourSplit(split) ? (
+                <span data-setting-split className="ml-1.5 flex size-3 shrink-0 overflow-hidden rounded-sm border border-border">
+                  <span style={{ flex: 1 - split.share, backgroundColor: split.a }} />
+                  <span style={{ flex: split.share, backgroundColor: split.b }} />
+                </span>
+              ) : (
+                swatch && (
+                  <span
+                    data-setting-swatch
+                    className="ml-1.5 size-3 shrink-0 rounded-sm border border-border"
+                    style={{ backgroundColor: swatch }}
+                  />
+                )
               )}
               <span className="mx-1.5 truncate text-xs text-muted-foreground">
-                {value.isUniform ? (value.option?.displayName ?? '—') : 'Mixed'}
+                {value.isUniform ? (wheel?.label ?? value.option?.displayName ?? '—') : 'Mixed'}
               </span>
             </>
           )}
@@ -352,3 +365,29 @@ export const SettingCell = memo(function SettingCell({
 })
 
 const NO_TARGETS: NonNullable<CellBatch['targets']> = []
+
+/**
+ * [level] read on a colour wheel's continuous band (wheel-colour-chase plan D9): the slot it holds,
+ * or the split of two, with the swatch to draw. Only where every resolution reads it alike — a
+ * batch of two wheel models at one level is named by its band otherwise.
+ */
+function wheelReadingOf(
+  resolutions: readonly NonNullable<CellResolution>[],
+  level: number,
+): { label: string; split: SettingSplit | null } | null {
+  let reading: { label: string; split: SettingSplit | null } | null = null
+  for (const resolution of resolutions) {
+    if (resolution.kind !== 'setting' && resolution.kind !== 'colour-setting') return null
+    const label = splitLabel(resolution.attribute.options, level)
+    if (label == null) return null
+    const split = settingSplitAt(resolution.attribute.options, level)
+    if (reading == null) reading = { label, split }
+    else if (reading.label !== label || !sameSplit(reading.split, split)) return null
+  }
+  return reading
+}
+
+function sameSplit(a: SettingSplit | null, b: SettingSplit | null): boolean {
+  if (a == null || b == null) return a === b
+  return a.a.toLowerCase() === b.a.toLowerCase() && a.b.toLowerCase() === b.b.toLowerCase() && a.share === b.share
+}

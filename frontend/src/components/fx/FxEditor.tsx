@@ -35,6 +35,7 @@ import {
   type OptionalField,
 } from './fxEditorModel'
 import { useFxScope } from './useFxScope'
+import type { LandsOnModel } from './landsOn'
 import { useFxGraphLink } from './fxGraphLink'
 import { stepCountOf } from '@/lib/spreadShape'
 
@@ -74,6 +75,7 @@ export function FxEditor({
   alsoIds,
   className,
   layout,
+  landsOn,
 }: {
   effect: ActiveFx
   /** Back to the host's list. */
@@ -104,6 +106,8 @@ export function FxEditor({
   className?: string
   /** `FxFields`' spacing and the inspector's head ladder, from the desk's preview (fx-settings plan D10). */
   layout?: 'editor' | 'inspector'
+  /** *Lands on*, from the host's preview (wheel-colour-chase plan D8). */
+  landsOn?: readonly LandsOnModel[]
 }) {
   const { data: library } = useFxLibraryQuery()
   // A header swap draws the new type at once: the host remounts the editor on it once the desk's
@@ -126,7 +130,7 @@ export function FxEditor({
   const gesture = useRef(false)
   // Across the heads is drawn over the effect's own heads, as the head filter and element
   // mode the draft now says narrow them.
-  const { scope: spreadScope, extendedChannels, settingAttribute } = useFxScope({
+  const { scope: spreadScope, extendedChannels, settingAttribute, wheelStart, settingSplits } = useFxScope({
     target: effect,
     attribute: effect.attribute,
     entry,
@@ -388,6 +392,9 @@ export function FxEditor({
           swap={swap}
           tempoHost={PROGRAMMER_TEMPO}
           layout={layout}
+          wheelStart={wheelStart}
+          settingSplits={settingSplits}
+          landsOn={landsOn}
         />
       )}
 

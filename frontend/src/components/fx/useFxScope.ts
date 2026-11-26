@@ -5,6 +5,7 @@ import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import type { FxLibraryEntry } from '@/store/fixtureFx'
 import type { Fixture, SettingAttributeDescriptor } from '@/store/fixtures'
 import { emitterFlagsOf } from '@/lib/emitterHeads'
+import { anySplittingWheel, wheelStartOf, type WheelStart } from '@/lib/wheelChase'
 import type { ExtendedChannelFlags } from './colourUtils'
 import { carriesFxAttribute, selectionHeadCount, spreadHeadCount, type FxScope } from './fxEditorModel'
 
@@ -33,6 +34,10 @@ export function useFxScope({
   targetFixtures: Fixture[]
   extendedChannels: ExtendedChannelFlags | undefined
   settingAttribute: SettingAttributeDescriptor | undefined
+  /** The one wheel model the target's colour heads are, for Colour Cycle's *Start from the wheel* (D7). */
+  wheelStart: WheelStart | null
+  /** Whether any head of the target has the attribute as a colour wheel that splits: Slot Steps' *Between* (D6). */
+  settingSplits: boolean
 } {
   const { fixtures, fixtureByKey } = useFixtureLookup()
   const selection = selectionItems(target)
@@ -88,5 +93,9 @@ export function useFxScope({
     }
   }, [baseScope, items, fixtures, targetFixtures, isGroupTarget, attribute, elementMode, elementFilter])
 
-  return { scope, targetFixtures, extendedChannels, settingAttribute }
+  const wheelStart = useMemo(() => (entry?.family === 'colour' ? wheelStartOf(targetFixtures) : null), [entry, targetFixtures])
+
+  const settingSplits = useMemo(() => anySplittingWheel(targetFixtures, attribute), [targetFixtures, attribute])
+
+  return { scope, targetFixtures, extendedChannels, settingAttribute, wheelStart, settingSplits }
 }

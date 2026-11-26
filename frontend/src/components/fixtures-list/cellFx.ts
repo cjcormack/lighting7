@@ -1,7 +1,8 @@
 import { useRef, useSyncExternalStore } from 'react'
 import type { ActiveFx } from '../../store/fixtureFx'
-import type { Fixture } from '../../store/fixtures'
 import { fxAimKeys } from '@/lib/fxTargets'
+import { findFxEntry } from '../busking/buskingTypes'
+import type { AttributeDescriptor, Fixture } from '../../store/fixtures'
 import { carriesFxAttribute, elementFilterIncludes } from '../fx/fxEditorModel'
 import type { Row } from './rowModel'
 import { createValueStore, type ValueStore } from './valueStore'
@@ -161,6 +162,10 @@ export function buildCellFxIndex(effects: readonly ActiveFx[] | undefined, fixtu
  * paints nothing and is left out. A group takes its first member's branch, as on the desk: members
  * that carry the property themselves, the rest dropped, or every member's heads. The head filter
  * narrows the heads — over the whole strip under `FLAT`, within each fixture otherwise.
+ *
+ * With [options.colourWheels] — an FX that steps (wheel-colour-chase plan D1) — an `rgbColour` FX
+ * also paints a head whose colour is a colour wheel, as the desk's `ColourTarget.landingOn` does.
+ * Such a head lands on its wheel, not `rgbColour`, so a reader keyed by attribute leaves it off.
  */
 export function fxPaintedHeads(
   effect: Pick<
@@ -168,15 +173,18 @@ export function fxPaintedHeads(
     'targetKey' | 'isGroupTarget' | 'targetType' | 'targets' | 'attribute' | 'elementFilter' | 'elementMode'
   >,
   fixtures: readonly Fixture[],
+  options: { colourWheels?: boolean } = {},
 ): string[] {
   const attribute = effect.attribute
   const byKey = new Map(fixtures.map((f) => [f.key, f] as const))
   const members = membersByGroupOf(fixtures)
   const filter = effect.elementFilter ?? 'ALL'
   const narrow = (keys: readonly string[]) => keys.filter((_, i) => elementFilterIncludes(filter, i, keys.length))
-  const cellsOf = (fixture: Fixture) =>
-    (fixture.elements ?? []).filter((e) => carriesFxAttribute(e.attributes, attribute)).map((e) => e.key)
-  const carries = (fixture: Fixture) => carriesFxAttribute(fixture.attributes, attribute)
+  const wheels = options.colourWheels === true && attribute === 'rgbColour'
+  const carriesOn = (attributes: readonly AttributeDescriptor[] | null | undefined) =>
+    carriesFxAttribute(attributes, attribute) || (wheels && isColourWheelHead(attributes))
+  const cellsOf = (fixture: Fixture) => (fixture.elements ?? []).filter((e) => carriesOn(e.attributes)).map((e) => e.key)
+  const carries = (fixture: Fixture) => carriesOn(fixture.attributes)
 
   // A group: its first member decides, as the desk's expansion does.
   if (effect.isGroupTarget && effect.targetType !== 'selection') {
@@ -194,7 +202,7 @@ export function fxPaintedHeads(
     const fixture = byKey.get(key)
     if (fixture == null || carries(fixture)) {
       // A cell's key, or a unit that carries the property itself: one head.
-      if (fixture != null || isCellCarrying(fixtures, key, attribute)) runs.push({ keys: [key], cells: false })
+      if (fixture != null || isCellCarrying(fixtures, key, carriesOn)) runs.push({ keys: [key], cells: false })
       continue
     }
     const cells = cellsOf(fixture).filter((cell) => !seen.has(cell))
@@ -205,11 +213,26 @@ export function fxPaintedHeads(
   return runs.flatMap((r) => (r.cells ? narrow(r.keys) : r.keys))
 }
 
-/** Whether [key] is a cell that carries [attribute] — an unknown key paints nothing. */
-function isCellCarrying(fixtures: readonly Fixture[], key: string, attribute: string): boolean {
+/** Which running FX step, by their library entry's `stepsFrom`: those reach colour-wheel heads (wheel-colour-chase plan D1). */
+export function steppingFxOf(library: readonly { name: string; stepsFrom?: string | null }[] | undefined): (fxType: string) => boolean {
+  return (fxType) => findFxEntry(library, fxType)?.stepsFrom != null
+}
+
+/** A colour made by a wheel and no mix: `findColourSource`'s setting arm, kept here free of the store. */
+function isColourWheelHead(attributes: readonly AttributeDescriptor[] | null | undefined): boolean {
+  const list = attributes ?? []
+  return !list.some((p) => p.type === 'colour') && list.some((p) => p.type === 'setting' && p.category === 'colour')
+}
+
+/** Whether [key] is a cell that [carries] — an unknown key paints nothing. */
+function isCellCarrying(
+  fixtures: readonly Fixture[],
+  key: string,
+  carries: (attributes: readonly AttributeDescriptor[] | null | undefined) => boolean,
+): boolean {
   for (const fixture of fixtures) {
     const cell = fixture.elements?.find((e) => e.key === key)
-    if (cell != null) return carriesFxAttribute(cell.attributes, attribute)
+    if (cell != null) return carries(cell.attributes)
   }
   return false
 }

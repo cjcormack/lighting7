@@ -435,6 +435,32 @@ annotated — a slot whose content names no pattern (empty, or a dichroic) draws
 gobo draws its pattern. The Revolution's stock wheel, which ships empty, therefore draws open in
 every slot until a unit is fitted.
 
+### A colour wheel in a split
+
+A wheel parked between two adjacent slots puts half of each in the beam (wheel-colour-chase plan D9).
+Where a slot splits is the desk's: each option that takes part carries `continuousLevel`, the level
+in the wheel's continuous band at which it is full in the beam, and `lib/colourSplit.ts` reads a level
+inside that band as the two declared slots either side of it and how far it is from the first to the
+second — `fixture/dmx/ColourSplits.kt`'s rule, pinned to it by the desk's vector
+(`src/test/resources/fixture/colourSplit.fixture.json`, read by `colourSplit.test.ts` for every level
+0–255). Nothing is guessed from names, and a wheel with fewer than two declared levels reads no split.
+
+- **`settingColourAt` mixes the two slots by share** (`settingSplitAt`, `mixHex`, the desk preview's
+  mix) before it reads a band, so both dispatches — the 2D leaves and the 3D syncs, beam, lens and pool
+  alike — draw a split as one colour, and `colourDispatchParity.test.tsx` holds them equal. A level on
+  a declared slot draws that slot whole, its own preview (a MAC 250 at 12 is Purple, where it used to
+  read as the Open band it sits in); a level outside the continuous band reads its indexed band as before.
+- **The 2D leaf draws it in two halves.** `SettingColourAppearance` hands the appearance a `split`
+  (`{a, b, share}`) while the wheel shows two colours, and the Positions chip draws them side by side,
+  each its share of the swatch. Each half goes through the head's filter wheels as the mix does
+  (`Filtered` carries it), so the Robe's second wheel at Open leaves the halves as they are.
+- **The tables read it in words.** `SettingCell` — the programmer grid's and the fixture sheet's setting
+  row — names a split level *Red / Yellow* (`splitLabel`) beside a half-and-half swatch, and a level on
+  a declared slot by that slot, its swatch with it. A batch of wheel models that read one level
+  differently is named by its band.
+- **The 3D pool is the mix, not two halves.** A pool in two halves needs a second colour and a split
+  axis in the light table, whose six texels are full; that is `FU-STAGE-SPLIT-POOL`.
+
 ### Strobe and closed shutters
 
 A strobe channel's bands say what they do to the light (fixture-optics plan D12; lighting7

@@ -491,7 +491,8 @@ two sizes, and every door that reads Path reads them.
 each colour's step a Fade crosses over — the old `fadeRatio`, computed exactly as it was, so even a
 ratio outside 0–1 runs as it ran. Smooth eases from each colour to the next on a cosine across the
 whole step. Its presets are *Colour Fade* (two colours, Fade 100 %, a four-beat cycle Forward: the old
-two-beat bounce one way in four) and *Colour Wave* (black to white, Smooth).
+two-beat bounce one way in four) and *Colour Wave* (black to white, Smooth). The wheel-colour-chase
+plan added `SPLIT` to `between` and the preset *Split Chase* (§"Step FX (`FxOutput.Steps`)" below).
 
 **Legacy.** P3 refused two mappings, so **Colour Wave** and **Colour Fade** stay registered with
 `legacy: true` in their frontmatter (`FxRegistration.legacy`, the library's `legacy`): a stored one
@@ -668,6 +669,9 @@ that wheel. The need is the type's `Travel.colourMs` times the share of the whee
 its continuous band for a move made through a split (a chase on Split, between two slots that split),
 else the indexed levels' distance of the channel's 255 steps, as the Stage view's travel reads it
 (`frontend/src/lib/travel.ts`).
+
+The FX editor's *Lands on*, Split and *Start from the wheel* are in §"Previewing an FX" (§"Lands on
+and the wheel chase").
 
 ### Stateful FX (`StatefulFx`)
 
@@ -1795,6 +1799,28 @@ The project write guard counts it a runtime gesture, so an operator previews on 
   `FX_PREVIEW_INVALID` names every problem at once — an unreadable or refused draft, an FX not
   running, a target the rig lacks, a bad window, `include` or `solo` — in `problems`, each prefixed by where it is
   (`fx[2]: …`, `window.cycles: …`).
+
+### Lands on and the wheel chase
+
+The FX editor's inspector reads the answer's wheel rows for the picked FX into **Lands on**, under the
+FX's own section (`frontend/src/components/fx/landsOn.ts`, wheel-colour-chase plan session 3): each
+wheel model in the selection, its states in step order, from its first head's first cycle `start`
+(*Red · Red / Yellow · Yellow*), and each head's notes once, worded and amber. A selection of RGB heads
+alone draws nothing new.
+
+Colour Cycle's *Between* offers Split, its slider then labelled *Split for* and its help *Each colour
+gives way to the next through their split, on wheels that have one.*; Slot Steps' *Between* and *Split
+for* are drawn where any head the FX reaches has the setting as a colour wheel that splits
+(`anySplittingWheel`, D6), and wherever a stored *Between* is off Cut, since the desk runs a split on
+every setting. **A wheel chase starts from the wheel** (D7, `frontend/src/lib/wheelChase.ts`): the
+picker offers a stepping colour FX — Colour Cycle, Palette Steps on colour — on a head whose colour is
+a wheel (on `rgbColour`, which the desk lands on the wheel), never Rainbow Cycle; on a selection whose
+colour heads are all one model's wheels Colour Cycle starts on that wheel's colours in wheel order —
+each slot's preview, open, blackout and no-colour bands left out, each once — on Split where the wheel
+splits and Cut where it does not, and the Colours section offers *Start from the {model}'s wheel*,
+which replaces the list and leaves *Between* as it is. A head whose colour is on its elements (the
+Shehds' zones) counts as one that mixes, so a selection holding one starts on no wheel. The preset
+**Split Chase** is Split at `fade` 0.5, starting from the wheel the same way where it can.
 
 ## Easing Curves
 

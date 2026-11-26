@@ -42,14 +42,15 @@ function covers(selection: readonly CueTarget[], head: string, fixtures: readonl
  * The split an edit of [effect] would make with [selection] the heads it is for. In place — no
  * `covered` — when the effect cannot split (only a Local effect does: a palette layer's is edited
  * as its layer's, apply-model plan P5, and a cue's or a manual one's is refused by the desk), when
- * the selection covers all of its heads, or none of them.
+ * the selection covers all of its heads, or none of them. [options] as [fxPaintedHeads] takes them.
  */
 export function splitScopeOf(
   effect: ActiveFx,
   selection: readonly CueTarget[] | undefined,
   fixtures: readonly Fixture[],
+  options: { colourWheels?: boolean } = {},
 ): SplitScope {
-  const heads = fxPaintedHeads(effect, fixtures)
+  const heads = fxPaintedHeads(effect, fixtures, options)
   const name = (key: string) => headName(fixtures, key)
   const totalLabel = describeHeads(heads.map(name))
   const inPlace: SplitScope = { heads, covered: null, coveredLabel: totalLabel, totalLabel }

@@ -1050,3 +1050,59 @@ describe('Path and the legacy colour FX (fx-settings plan session 3)', () => {
     expect(document.querySelector('[data-effect-pick="ColourFade"]')).toBeNull()
   })
 })
+
+describe('FxPicker on colour-wheel heads (wheel-colour-chase plan D1, D7)', () => {
+  const COLOUR_CYCLE: FxLibraryEntry = {
+    name: 'ColourCycle',
+    family: 'colour',
+    outputType: 'COLOUR',
+    fxMode: 'STANDARD',
+    stepsFrom: 'colours',
+    compatibleAttributes: ['rgbColour'],
+    parameters: [
+      { name: 'colours', type: 'colourList', defaultValue: '#ff0000,#00ff00,#0000ff', description: '' },
+      { name: 'between', type: 'choice', defaultValue: 'FADE', description: '' },
+      { name: 'fade', type: 'double', defaultValue: '0.5', description: '' },
+    ],
+    presets: [{ name: 'Split Chase', attribute: 'rgbColour', parameters: { between: 'SPLIT', fade: '0.5' } }],
+  } as FxLibraryEntry
+  const RAINBOW: FxLibraryEntry = { ...COLOUR_CYCLE, name: 'RainbowCycle', stepsFrom: undefined, presets: [], parameters: [] }
+  const WHEEL = settingProp('colourWheel', 'colour', chan(5), [
+    { name: 'OPEN', level: 0, displayName: 'Open', colourPreview: '#ffffff', continuousLevel: 1 },
+    { name: 'RED', level: 156, displayName: 'Red', colourPreview: '#ff0000', continuousLevel: 12 },
+    { name: 'YELLOW', level: 160, displayName: 'Yellow', colourPreview: '#ffff00', continuousLevel: 23 },
+  ])
+  const MAC = makeFixture('mac-1', [WHEEL], { typeKey: 'mac-250', model: 'MAC 250' })
+
+  function pick() {
+    const picks: DraftFxPick[] = []
+    render(
+      <FxPicker
+        target={{ type: 'fixture', fixture: MAC }}
+        initialFamily="COLOUR"
+        onEdit={() => {}}
+        draft={{ current: null, onPick: (p) => picks.push(p) }}
+      />,
+    )
+    return picks
+  }
+
+  it('offers Colour Cycle and its Split Chase on a wheel head, but not Rainbow Cycle', () => {
+    wire.library = [COLOUR_CYCLE, RAINBOW]
+    pick()
+    expect(screen.getByRole('button', { name: 'ColourCycle' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Split Chase' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'RainbowCycle' })).toBeNull()
+  })
+
+  it('starts Colour Cycle from the wheel on rgbColour, on Split where it splits', () => {
+    wire.library = [COLOUR_CYCLE]
+    const picks = pick()
+    fireEvent.click(screen.getByRole('button', { name: 'ColourCycle' }))
+    expect(picks[0]).toMatchObject({
+      fxType: 'ColourCycle',
+      attribute: 'rgbColour',
+      parameters: { colours: '#ff0000,#ffff00', between: 'SPLIT', fade: '0.5' },
+    })
+  })
+})

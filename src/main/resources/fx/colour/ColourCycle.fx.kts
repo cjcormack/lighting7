@@ -36,6 +36,9 @@ presets:
   - name: Colour Wave
     attribute: rgbColour
     parameters: {colours: "#000000,#ffffff", between: SMOOTH}
+  - name: Split Chase
+    attribute: rgbColour
+    parameters: {between: SPLIT, fade: 0.5}
 ---*/
 
 // Steps, so each head lands the colours as its own colour does: a mix takes each whole, a colour

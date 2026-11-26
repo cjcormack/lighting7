@@ -6,6 +6,7 @@ import { PALETTE_FAMILY_ORDER, familyForCategory, type AttributeFamily } from '@
 import { targetFamilies } from '@/components/fixtures-list/rowModel'
 import { selectionUnits } from '@/lib/fxTargets'
 import { fxPaintedHeads, isLocalFx } from '@/components/fixtures-list/cellFx'
+export { steppingFxOf } from '@/components/fixtures-list/cellFx'
 
 /**
  * **The FX editor's list** (FX editor plan D3, §4.3), as a model: every FX reaching the selected
@@ -84,7 +85,7 @@ export function selectionFamilies(targets: readonly CueTarget[], fixtures: reado
 }
 
 /** The heads the selection holds that carry [attribute] — what an FX over it on that attribute would paint. */
-function selectedHeadsFor(targets: readonly CueTarget[], fixtures: readonly Fixture[], attribute: string): string[] {
+function selectedHeadsFor(targets: readonly CueTarget[], fixtures: readonly Fixture[], attribute: string, colourWheels: boolean): string[] {
   return fxPaintedHeads(
     {
       targetKey: '',
@@ -96,6 +97,7 @@ function selectedHeadsFor(targets: readonly CueTarget[], fixtures: readonly Fixt
       elementMode: null,
     },
     fixtures,
+    { colourWheels },
   )
 }
 
@@ -123,6 +125,8 @@ export interface FxListInput {
   /** Each programmer layer's place in the stack, bottom first. */
   layerPosition: ReadonlyMap<number, number>
   answer: FxPreviewAnswer | null
+  /** Whether an FX steps ([steppingFxOf]), so reaches wheel heads; absent, none does. */
+  steps?: (fxType: string) => boolean
 }
 
 /**
@@ -130,15 +134,16 @@ export interface FxListInput {
  * the selection can take, each FX on the selection a card in the desk's apply order, top first.
  * An FX the desk is letting go of on a fade (`leaving`) is nobody's and is left out.
  */
-export function fxLanes({ effects, targets, fixtures, layerPosition, answer }: FxListInput): FxLane[] {
+export function fxLanes({ effects, targets, fixtures, layerPosition, answer, steps }: FxListInput): FxLane[] {
   if (targets.length === 0) return []
   const { rank, family: answeredFamily } = answeredOrder(answer)
   const selected = new Map<string, Set<string>>()
-  const selectedFor = (attribute: string) => {
-    let heads = selected.get(attribute)
+  const selectedFor = (attribute: string, colourWheels: boolean) => {
+    const key = `${attribute}|${colourWheels}`
+    let heads = selected.get(key)
     if (heads == null) {
-      heads = new Set(selectedHeadsFor(targets, fixtures, attribute))
-      selected.set(attribute, heads)
+      heads = new Set(selectedHeadsFor(targets, fixtures, attribute, colourWheels))
+      selected.set(key, heads)
     }
     return heads
   }
@@ -146,9 +151,10 @@ export function fxLanes({ effects, targets, fixtures, layerPosition, answer }: F
   const cards: FxCard[] = []
   for (const effect of effects) {
     if (effect.leaving === true) continue
-    const heads = selectedFor(effect.attribute)
+    const colourWheels = steps?.(effect.fxType) === true
+    const heads = selectedFor(effect.attribute, colourWheels)
     if (heads.size === 0) continue
-    const reached = fxPaintedHeads(effect, fixtures).filter((head) => heads.has(head)).length
+    const reached = fxPaintedHeads(effect, fixtures, { colourWheels }).filter((head) => heads.has(head)).length
     if (reached === 0) continue
     cards.push({ effect, kind: cardKindOf(effect), family: familyOfFx(effect, fixtures, answeredFamily), reached, of: heads.size })
   }

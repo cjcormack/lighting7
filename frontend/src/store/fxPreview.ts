@@ -87,6 +87,37 @@ export interface FxPreviewOutput {
   fx: number
   output: FxPreviewSeries
   heldBackReason?: 'STOMP' | 'PROGRAMMER' | 'BLIND' | 'REPLACED' | null
+  /** On a colour-wheel head, what the editor should say of this FX there (wheel-colour-chase plan D8). */
+  notes?: FxPreviewNote[]
+}
+
+/**
+ * One thing a chase does on a wheel head the operator would not guess: `SAME_SLOT` (the step labels
+ * [colours] all land on [slot]), `NO_SPLIT` (a split of [from] into [to] the wheel cannot hold, so it
+ * changes at the split's middle) or `TOO_FAST` (each step is [stepMs], the wheel's longest move [needMs]).
+ */
+export interface FxPreviewNote {
+  kind: 'SAME_SLOT' | 'NO_SPLIT' | 'TOO_FAST' | string
+  colours?: string[] | null
+  slot?: string | null
+  from?: string | null
+  to?: string | null
+  reason?: 'WHEEL' | 'NOT_NEIGHBOURS' | string | null
+  needMs?: number | null
+  stepMs?: number | null
+}
+
+/** A wheel at one level: the slot in the beam, in a split the slot it shares it with, and the beam's colour. */
+export interface FxPreviewWheelState {
+  slot: string
+  splitWith?: string | null
+  preview?: string | null
+}
+
+/** A colour wheel's row as slots: each distinct state once, and per sample an index into them. */
+export interface FxPreviewWheel {
+  states: FxPreviewWheelState[]
+  samples: number[]
 }
 
 export interface FxPreviewAttributeRow {
@@ -96,6 +127,8 @@ export interface FxPreviewAttributeRow {
   underneath: FxPreviewSeries
   result: FxPreviewSeries
   fx: FxPreviewOutput[]
+  /** On a colour wheel, the result read as the wheel shows it (D8). */
+  wheel?: FxPreviewWheel | null
 }
 
 export interface FxPreviewAttribute {

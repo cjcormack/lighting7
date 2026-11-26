@@ -456,7 +456,7 @@ once it had drifted a file behind the resources and nothing but tests constructe
   Square's or Pulse's `widthUnit` *One head* on for one slot's share, D8, its preset *Chase*),
   Flicker, LightningStrike, CandleFlicker, FluorescentFlicker (their levels `low` / `high`)
 - **Colour**: ColourCycle (literal colours only; `between` Cut, Fade, Smooth or Split — its presets *Colour
-  Fade* and *Colour Wave*; a colour chase that steps, it or Palette Steps, reaches colour-wheel heads,
+  Fade*, *Colour Wave* and *Split Chase*; a colour chase that steps, it or Palette Steps, reaches colour-wheel heads,
   each step on the nearest slot, and on Split holds a wheel's split where its slots declare one, `fixture/dmx/ColourSplits.kt`), RainbowCycle, ColourStrobe, ColourFlicker; and ColourWave and ColourFade,
   **legacy** (`legacy: true`): they run and edit what is stored, but no picker or listing offers them,
   since Colour Cycle draws each a DMX step apart (fx-settings plan D3)
