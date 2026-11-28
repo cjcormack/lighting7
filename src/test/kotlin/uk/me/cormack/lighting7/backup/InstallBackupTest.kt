@@ -58,6 +58,9 @@ class InstallBackupTest {
     /** A data directory with the three roots, local.conf and everything a backup must leave out. */
     private fun sources(): BackupSources {
         write("data/prompt-scripts/p-1/abc.pdf", "%PDF-1.4 a prompt book")
+        // A script's text index is a cache, rebuilt from the PDF after a restore.
+        write("data/prompt-scripts/p-1/abc.text.json", """{"version":1}""")
+        write("data/prompt-scripts/p-1/.text-1.tmp", "an index half written")
         write("data/scene-images/p-1/def.png", "png bytes")
         write("data/scene-images/p-1/def.display.png", "a derived copy")
         write("data/sync/p-1/repo/project.json", """{"name":"Hamlet"}""")

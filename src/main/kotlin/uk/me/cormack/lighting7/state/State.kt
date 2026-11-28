@@ -56,6 +56,7 @@ import uk.me.cormack.lighting7.midi.SurfaceInputRouter
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.perf.DbConnectionMetrics
 import uk.me.cormack.lighting7.perf.MidiLatencyTracker
+import uk.me.cormack.lighting7.promptbook.ScriptTextStore
 import uk.me.cormack.lighting7.routes.buskPageContents
 import uk.me.cormack.lighting7.routes.readBuskRigSpec
 import uk.me.cormack.lighting7.show.Fixtures
@@ -349,6 +350,12 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
      */
     fun promptScriptPath(projectUuid: String, hash: String): Path =
         promptScriptStoreRoot.resolve(projectUuid).resolve("$hash.pdf")
+
+    /**
+     * The scripts' text indexes, `{hash}.text.json` beside each PDF (prompt-book navigation plan D1):
+     * built in the background, never synced or backed up. A `var` so a test can hold its builds.
+     */
+    internal var scriptText: ScriptTextStore = ScriptTextStore(::promptScriptPath)
 
     /**
      * The images painted on scene cloths (scrim plan §3.3), content-addressed as
@@ -1322,6 +1329,7 @@ class State(val config: ApplicationConfig, private val localSyncRepos: Boolean =
         // tears a State down between every test.
         runCatching { handState.close() }
         runCatching { backups.close() }
+        runCatching { scriptText.close() }
         runCatching { restores.close() }
         runCatching { sceneryService.close() }
         runCatching { effectsService.close() }

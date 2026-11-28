@@ -192,6 +192,9 @@ dependencies {
     // `auth.bcryptCost=4`. One transitive: at.favre.lib:bytes.
     implementation("at.favre.lib:bcrypt:0.10.2")
 
+    // Reads a prompt book's script PDF into its text index (`promptbook/ScriptTextExtractor.kt`).
+    implementation("org.apache.pdfbox:pdfbox:3.0.8")
+
     // The desk–cloud wire contract: the included build in cloud-protocol/ (docs/cloud-protocol.md).
     implementation("uk.me.cormack.lighting7:cloud-protocol")
 }

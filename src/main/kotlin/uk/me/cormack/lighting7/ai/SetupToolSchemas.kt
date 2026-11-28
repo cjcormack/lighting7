@@ -732,19 +732,46 @@ internal val overrideVenueFixturesTool = ToolDef(
 
 internal val getPromptBookTool = ToolDef(
     name = "get_prompt_book",
-    description = "A project's prompt book: the script PDF's page count and cover pages, every entry anchored on it (its entryId, cue, stack and number — an anchor marks one place of a cue, so a cue in two stacks can be anchored twice) and every note. A cue that follows another has no anchor of its own: the book shows it attached to the cue that starts its sequence, so an anchor one holds is inactive until the follow is off and carries `sequenceHeadEntryId`, that cue's entry; `unanchoredCueCount` leaves followers out. If there is no prompt book yet, the answer says how the operator imports the PDF — the desk must hold the file itself, and a tool cannot upload it.",
+    description = "A project's prompt book: the script PDF's page count and cover pages, every entry anchored on it (its entryId, cue, stack and number — an anchor marks one place of a cue, so a cue in two stacks can be anchored twice) and every note. A cue that follows another has no anchor of its own: the book shows it attached to the cue that starts its sequence, so an anchor one holds is inactive until the follow is off and carries `sequenceHeadEntryId`, that cue's entry; `unanchoredCueCount` leaves followers out. " +
+        "It also says whether the desk has read the script's text (`textState`: READY, BUILDING while it is being read — ask again shortly — SCRIPT_MISSING when the PDF is not on this desk, UNREADABLE), and once READY `hasText`, the `scannedPages` with little or no text (likely scans, where a quote may not be found), and the PDF's own outline (`pdfOutline`); `pages` answers those pages' lines with their place. " +
+        "If there is no prompt book yet, the answer says how the operator imports the PDF — the desk must hold the file itself, and a tool cannot upload it.",
     inputSchema = objectSchema {
+        prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
+        put("pages", buildJsonObject {
+            put("type", "array")
+            put("items", buildJsonObject { put("type", "integer") })
+            put("description", "PDF pages (counting the file's first page as 1) whose lines to answer, each with its y. At most $MAX_PROMPT_BOOK_PAGES.")
+        })
+    },
+)
+
+internal const val MAX_PROMPT_BOOK_PAGES = 10
+
+internal val searchPromptBookTool = ToolDef(
+    name = "search_prompt_book",
+    description = "Search the text of a project's script PDF as the desk read it. Case, accents, curly or straight quotes and runs of whitespace are ignored, and a phrase may run from one line into the next. " +
+        "Each hit answers its pdfPage, its place (x, y, width, height of its first line), every line box it touches and the line's text. Pages with little or no text — likely scans — are named in `scannedPages`: a quote on one may not be found. " +
+        "While the desk is still reading the script (`textState` BUILDING) or does not hold the PDF (SCRIPT_MISSING), the answer says so and gives no result count: ask again shortly.",
+    inputSchema = objectSchema(required = listOf("query")) {
+        prop("query", "string", "The words to find, as the script has them.")
+        prop("pdfPage", "integer", "Only this page of the PDF, counting its first page as 1.")
+        prop("limit", "integer", "At most this many hits. Default 20, at most 200.")
         prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
     },
 )
 
-/** Where something sits on the script: one rectangle on one page of the PDF. */
-private val scriptPlaceSchema = objectSchema(required = listOf("pdfPage", "y")) {
-    prop("pdfPage", "integer", "Page of the PDF file, counting its first page as 1 (covers included; not the number printed on the page).")
-    prop("y", "number", "Top of the marked line as a fraction of the page height, 0 = top edge, 1 = bottom edge. Aim at the line the cue is called on.")
-    prop("x", "number", "Left edge as a fraction of the page width. Default 0.06.")
-    prop("width", "number", "Width as a fraction of the page width. Default 0.88 (the text column).")
-    prop("height", "number", "Height as a fraction of the page height. Default 0.03 (about one line).")
+/**
+ * Where something sits on the script: a quoted line the desk finds, or one rectangle on one page of
+ * the PDF (prompt-book navigation plan D6, P4).
+ */
+private val scriptPlaceSchema = objectSchema {
+    prop("text", "string", "Preferred: words quoted from the script where the cue is called (or the note belongs). The desk finds them and uses their real place, so give no y. A quote found nowhere, or in several places with neither pdfPage nor occurrence to choose by, is refused naming where it was found. Case, accents, quote style and line breaks are ignored.")
+    prop("occurrence", "integer", "With text: which of the places it is found to use, counting from 1 in page order (on pdfPage alone when that is given).")
+    prop("pdfPage", "integer", "Page of the PDF file, counting its first page as 1 (covers included; not the number printed on the page). With text, only that page is searched; without, give y too.")
+    prop("y", "number", "Without text: top of the marked line as a fraction of the page height, 0 = top edge, 1 = bottom edge. Aim at the line the cue is called on.")
+    prop("x", "number", "Without text: left edge as a fraction of the page width. Default 0.06.")
+    prop("width", "number", "Without text: width as a fraction of the page width. Default 0.88 (the text column).")
+    prop("height", "number", "Without text: height as a fraction of the page height. Default 0.03 (about one line).")
 }
 
 private val showCueSchema = objectSchema {
@@ -766,7 +793,6 @@ private val showCueSchema = objectSchema {
         put("type", "object")
         put("description", "Where the cue is called in the prompt book; anchors it there. Needs a prompt book (get_prompt_book). Leave it off a cue that follows another: the book anchors a follow sequence at its first cue, and ignores a follower's anchor.")
         put("properties", scriptPlaceSchema["properties"]!!)
-        put("required", scriptPlaceSchema["required"]!!)
     })
 }
 
@@ -798,7 +824,6 @@ private val scriptNoteSchema = objectSchema(required = listOf("at")) {
     put("at", buildJsonObject {
         put("type", "object")
         put("properties", scriptPlaceSchema["properties"]!!)
-        put("required", scriptPlaceSchema["required"]!!)
     })
 }
 
@@ -809,13 +834,13 @@ private val anchorSchema = objectSchema(required = listOf("at")) {
     put("at", buildJsonObject {
         put("type", "object")
         put("properties", scriptPlaceSchema["properties"]!!)
-        put("required", scriptPlaceSchema["required"]!!)
     })
 }
 
 internal val markUpPromptBookTool = ToolDef(
     name = "mark_up_prompt_book",
     description = "Mark up the current project's prompt book: anchor cues' entries — each place a cue has in a stack, by entryId or by stackId and number — to the line they are called on (moving any existing anchor), add notes for the operator, and set how many cover pages precede the script's page 1. " +
+        "Place each by quoting the script (`at.text`): the desk finds the words and anchors on their real place. " +
         "Anchor the cue that starts a follow sequence, not the cues that follow it: the book ignores a follower's anchor. " +
         "Notes are added, never replaced — check get_prompt_book first so a note is not written twice. Everything is validated before anything is written.",
     inputSchema = objectSchema {
@@ -998,6 +1023,7 @@ internal val setupToolDefs: List<ToolDef> = listOf(
     placeFixturesTool,
     overrideVenueFixturesTool,
     getPromptBookTool,
+    searchPromptBookTool,
     buildCueStackTool,
     setMoveInDarkTool,
     markUpPromptBookTool,
@@ -1012,6 +1038,7 @@ internal val readOnlySetupToolNames: Set<String> =
         listFixtureTypesTool.name,
         getPatchTool.name,
         getPromptBookTool.name,
+        searchPromptBookTool.name,
         getSceneTool.name,
         renderViewTool.name,
         listHistoryTool.name,
