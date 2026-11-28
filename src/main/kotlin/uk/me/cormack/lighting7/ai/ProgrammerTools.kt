@@ -1,11 +1,14 @@
 package uk.me.cormack.lighting7.ai
 
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
@@ -34,6 +37,9 @@ import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.ProgrammerClearTargetInMessage
 import uk.me.cormack.lighting7.plugins.ProgrammerHandler
 import uk.me.cormack.lighting7.routes.ApplyPaletteOutcome
+import uk.me.cormack.lighting7.routes.BareFxOutcome
+import uk.me.cormack.lighting7.routes.ProgrammerFxRequest
+import uk.me.cormack.lighting7.routes.pressBareFx
 import uk.me.cormack.lighting7.routes.CODE_PALETTE_NEEDS_SELECTION
 import uk.me.cormack.lighting7.routes.CODE_PALETTE_OUTSIDE_MASK
 import uk.me.cormack.lighting7.routes.RecordLookCoreResult
@@ -115,6 +121,58 @@ internal class ProgrammerTools(private val state: State) {
                 putValueSkips(skipped)
             }.toString(),
         )
+    }
+
+    fun applyFx(input: JsonObject): ToolExecutionResult = guarded { applyFxUnguarded(input) }
+
+    /** `apply_fx`: the bare FX press (`POST /programmer/fx`), its body read from the tool's arguments. */
+    private fun applyFxUnguarded(input: JsonObject): ToolExecutionResult {
+        val families = maskOf(input)
+        val body = fxBodyAsToday(buildJsonObject {
+            for ((key, value) in input) {
+                when (key) {
+                    "mask" -> Unit
+                    // Parameters are strings on the wire; a model sends `"low": 40` as often as `"40"`.
+                    "parameters" -> put(key, (value as? JsonObject)?.let { params ->
+                        JsonObject(params.mapValues { (name, v) ->
+                            (v as? JsonPrimitive)?.takeIf { it !is JsonNull }?.let { JsonPrimitive(it.content) }
+                                ?: throw IllegalArgumentException("parameters.$name must be a string")
+                        })
+                    } ?: throw IllegalArgumentException("'parameters' must be an object of strings"))
+                    else -> if (value !is JsonNull) put(key, value)
+                }
+            }
+        })
+        val request = try {
+            FX_REQUEST_JSON.decodeFromJsonElement(ProgrammerFxRequest.serializer(), body)
+        } catch (e: SerializationException) {
+            return errorResult(e.message ?: "Bad arguments")
+        }
+        parseTargets(input, required = true).getOrElse { return errorResult(it.message ?: "Bad arguments") }
+        if (state.show.fxRegistry.getRegistration(request.fxType) == null) {
+            return errorResult("No FX type '${request.fxType}' in the library; describe_rig lists them")
+        }
+        return when (val outcome = pressBareFx(state, request, families)) {
+            is BareFxOutcome.Invalid -> errorResult(outcome.message, outcome.code)
+            is BareFxOutcome.Done -> ToolExecutionResult(
+                success = true,
+                description = "Started ${request.fxType} on ${request.attribute} as Local FX ${outcome.response.fxId}" +
+                    (if (outcome.response.stopped.isNotEmpty()) ", stopped ${outcome.response.stopped.size}" else "") +
+                    (if (outcome.response.narrowed.isNotEmpty()) ", narrowed ${outcome.response.narrowed.size}" else ""),
+                result = buildJsonObject {
+                    put("fxId", outcome.response.fxId)
+                    put("stopped", buildJsonArray { outcome.response.stopped.forEach { add(JsonPrimitive(it)) } })
+                    put("narrowed", buildJsonArray {
+                        outcome.response.narrowed.forEach { n ->
+                            addJsonObject {
+                                put("fxId", n.fxId)
+                                put("into", buildJsonArray { n.into.forEach { add(JsonPrimitive(it)) } })
+                            }
+                        }
+                    })
+                }.toString(),
+            )
+        }
     }
 
     fun clearProgrammer(input: JsonObject): ToolExecutionResult = guarded { clearProgrammerUnguarded(input) }
@@ -477,4 +535,10 @@ internal class ProgrammerTools(private val state: State) {
             code?.let { put("code", it) }
         }.toString(),
     )
+}
+
+/** `apply_fx`'s body read strictly, so a misspelled field is named rather than dropped. */
+private val FX_REQUEST_JSON = Json {
+    ignoreUnknownKeys = false
+    explicitNulls = false
 }

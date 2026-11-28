@@ -483,7 +483,9 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
   the MCP URL the cloud serves and authorises for the install, and the cloud relays each JSON-RPC call
   over the control channel to `McpProtocol` (`cloud/McpRelay.kt`), run as the desk user the cloud
   account is linked to. The desk runs no OAuth server and no `/mcp` of its own; the ngrok tunnel is gone
-  too. The tools are the show-running tools (`ai/AiTools.kt` — no script tool),
+  too. The tools are the show-running tools (`ai/AiTools.kt`), the script tools (`ai/FxScriptTools.kt`,
+  `ai/ProjectScriptTools.kt` — custom FX and project scripts, compiling, saving and running held to Remote
+  access's *Allow scripts*),
   `describe_rig` and the show-setup tools (`ai/SetupTools.kt`: projects, venues — list, extract,
   publish, a show on one, attach — and copying between projects (`ai/VenueSetupTools.kt`), the stored-data
   ones taking a `projectId` so a show is built without switching to it; patch, stage and

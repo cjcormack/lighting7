@@ -34,10 +34,8 @@ import org.jetbrains.exposed.v1.core.isNotNull
  * Each tool maps to existing backend functionality. Adding a new tool
  * requires adding a schema to [toolDefs] and a handler branch in [executeTool].
  *
- * There is no script tool. MCP adds a new actor — a model reading fixture names, cue notes and
- * synced content it did not write — and a literal-script tool is the step that turns a prompt
- * injection into code running as the desk process. Dropped by decision (see
- * `docs/mcp-engineering.md` §"No script tool").
+ * No tool here runs a script. The doors to code are [FxScriptTools] and [ProjectScriptTools], held to
+ * Remote access's *Allow scripts* (`docs/mcp-engineering.md` §"Script tools").
  */
 class AiTools(private val state: State) {
 
@@ -72,6 +70,7 @@ class AiTools(private val state: State) {
         includeIntoProgrammerTool,
         updateFromProgrammerTool,
         setProgrammerTool,
+        applyFxTool,
         clearProgrammerTool,
         setBlindTool,
         applyPaletteTool,
@@ -118,6 +117,7 @@ class AiTools(private val state: State) {
                 "include_into_programmer" -> executeInclude(input)
                 "update_from_programmer" -> executeUpdate(input)
                 "set_programmer" -> programmer.setProgrammer(input)
+                "apply_fx" -> programmer.applyFx(input)
                 "clear_programmer" -> programmer.clearProgrammer(input)
                 "set_blind" -> programmer.setBlind(input)
                 "apply_palette" -> programmer.applyPalette(input)
@@ -2394,7 +2394,7 @@ class AiTools(private val state: State) {
      * is told the valid set and can retry, rather than the desk storing a blend it will not play.
      */
     private fun parseLookFx(named: JsonObject, at: String): LookFxSpec {
-        val obj = asToday(named)
+        val obj = fxAsToday(named)
         val timing = parseFxTiming(obj, at)
         val dynamics = parseFxDynamics(obj, at)
         val spec = LookFxSpec(
@@ -2448,7 +2448,7 @@ class AiTools(private val state: State) {
      * turns that message into a failed result the same way.
      */
     private fun parseAdHocFxFromJson(named: JsonObject, at: String): CueAdHocFxDto {
-        val obj = asToday(named)
+        val obj = fxAsToday(named)
         val timing = parseFxTiming(obj, at)
         val dynamics = parseFxDynamics(obj, at)
         val target = parseAdHocFxTarget(obj, at)
@@ -2480,36 +2480,6 @@ class AiTools(private val state: State) {
         )
     }
 
-    /**
-     * [obj], an FX a tool call names, in today's names (fx-settings plan D3): an FX Wave or Path
-     * replaced as that type, with its parameters, family and a beam FX's attribute as
-     * [LegacyNames.consolidateFx] and [LegacyNames.absorbFx] store them and the old FX's own cycle and
-     * Direction where the call names none; a renamed parameter at its new name. [obj] itself otherwise.
-     */
-    private fun asToday(obj: JsonObject): JsonObject {
-        val fxType = obj["fxType"]?.jsonPrimitive?.contentOrNull ?: return obj
-        val stored = LegacyNames.StoredFx(
-            fxType = fxType,
-            family = obj["family"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-            cycle = 0.0, order = "", phaseOffset = 0.0, direction = "", runs = null, spread = 0.0,
-            parameters = (obj["parameters"] as? JsonObject)?.mapValues { it.value.jsonPrimitive.content }.orEmpty(),
-            attribute = obj["attribute"]?.jsonPrimitive?.contentOrNull,
-        )
-        // A tool's call is written today: a parameter under a new name is meant, never stripped.
-        val today = (LegacyNames.consolidateFx(stored) { null } ?: LegacyNames.absorbFx(stored, writtenBefore = false) { null })?.fx
-            ?: return obj
-        val timing = LegacyNames.consolidatedTiming(fxType)
-        return JsonObject(
-            obj + buildMap {
-                put("fxType", JsonPrimitive(today.fxType))
-                if (today.family != stored.family) put("family", JsonPrimitive(today.family))
-                put("parameters", JsonObject(today.parameters.mapValues { JsonPrimitive(it.value) }))
-                today.attribute?.let { put("attribute", JsonPrimitive(it)) }
-                if (timing != null && obj.present("cycle") == null) put("cycle", JsonPrimitive(timing.first))
-                if (timing != null && obj.present("direction") == null) put("direction", JsonPrimitive(timing.second))
-            },
-        )
-    }
 
     /**
      * Amount, Direction, Runs and the spread's shape as a tool call gives them (effects plan D2, D5, D9,
@@ -2864,3 +2834,38 @@ data class ToolExecutionResult(
 
 /** One image in a tool's answer: its bytes, base64, and their media type. */
 class ToolImage(val mimeType: String, val base64: String)
+
+/**
+ * [obj], an FX a tool call names, in today's names (fx-settings plan D3): an FX Wave or Path
+ * replaced as that type, with its parameters, family and a beam FX's attribute as
+ * [LegacyNames.consolidateFx] and [LegacyNames.absorbFx] store them and the old FX's own cycle and
+ * Direction where the call names none; a renamed parameter at its new name. [obj] itself otherwise.
+ */
+internal fun fxAsToday(obj: JsonObject): JsonObject {
+    val fxType = obj["fxType"]?.jsonPrimitive?.contentOrNull ?: return obj
+    val stored = LegacyNames.StoredFx(
+        fxType = fxType,
+        family = obj["family"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+        cycle = 0.0, order = "", phaseOffset = 0.0, direction = "", runs = null, spread = 0.0,
+        parameters = (obj["parameters"] as? JsonObject)?.mapValues { it.value.jsonPrimitive.content }.orEmpty(),
+        attribute = obj["attribute"]?.jsonPrimitive?.contentOrNull,
+    )
+    // A tool's call is written today: a parameter under a new name is meant, never stripped.
+    val today = (LegacyNames.consolidateFx(stored) { null } ?: LegacyNames.absorbFx(stored, writtenBefore = false) { null })?.fx
+        ?: return obj
+    val timing = LegacyNames.consolidatedTiming(fxType)
+    return JsonObject(
+        obj + buildMap {
+            put("fxType", JsonPrimitive(today.fxType))
+            if (today.family != stored.family) put("family", JsonPrimitive(today.family))
+            put("parameters", JsonObject(today.parameters.mapValues { JsonPrimitive(it.value) }))
+            today.attribute?.let { put("attribute", JsonPrimitive(it)) }
+            if (timing != null && obj["cycle"].let { it == null || it is JsonNull }) put("cycle", JsonPrimitive(timing.first))
+            if (timing != null && obj["direction"].let { it == null || it is JsonNull }) put("direction", JsonPrimitive(timing.second))
+        },
+    )
+}
+
+/** [fxAsToday] for a body that names no `family` (a press, a preview draft): one it gains is left out. */
+internal fun fxBodyAsToday(obj: JsonObject): JsonObject =
+    fxAsToday(obj).let { if ("family" in obj) it else JsonObject(it - "family") }

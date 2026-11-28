@@ -102,7 +102,7 @@ object FxDefinitionScriptConfiguration : ScriptCompilationConfiguration(
 
         jvm {
             dependenciesFromCurrentContext(wholeClasspath = true)
-            jvmTarget("17")
+            jvmTarget("24")
         }
         ide {
             acceptedLocations(ScriptAcceptedLocation.Everywhere)

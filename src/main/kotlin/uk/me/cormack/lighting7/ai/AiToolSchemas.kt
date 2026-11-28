@@ -1418,6 +1418,87 @@ internal val setProgrammerTool = ToolDef(
     }
 )
 
+internal val applyFxTool = ToolDef(
+    name = "apply_fx",
+    description = "Run an FX in the programmer, as the desk's + FX does: any FX type in the library (describe_rig lists them, " +
+            "a custom FX by the fxId save_fx_script gave it), with its parameters, as **one Local FX** spread over the " +
+            "targets in the order given (a group stays one group FX). Local FX are the programmer's own: they run above " +
+            "every cue and Look, clear_programmer and set_blind take them, and record_cue and record_look keep them. " +
+            "First the targets' heads come off every other Local FX of the same family (a Local FX wholly on them stops, " +
+            "one partly on them is narrowed to the heads it keeps), unless stack is true. The answer is the new fxId, and " +
+            "the FX it stopped and narrowed (get_current_state's active_fx lists them); clear_programmer on its targets stops it.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("targets", buildJsonObject {
+                put("type", "array")
+                put("items", valueTargetSchema)
+                put("description", "The fixtures and groups to run it on, in the order the spread runs over them.")
+            })
+            put("fxType", buildJsonObject {
+                put("type", "string")
+                put("description", "The FX type's id: a built-in (Wave, ColourCycle, Path…) or a custom fxId.")
+            })
+            put("attribute", buildJsonObject {
+                put("type", "string")
+                put("description", "The attribute it drives, one of the FX's compatible attributes: dimmer, uv, rgbColour, position, zoom…")
+            })
+            put("parameters", buildJsonObject {
+                put("type", "object")
+                put("additionalProperties", buildJsonObject { put("type", "string") })
+                put("description", "The FX's parameters by name, as strings; those left out take their defaults.")
+            })
+            put("cycle", buildJsonObject { put("type", "number"); put("description", CYCLE_DESCRIPTION) })
+            put("blendMode", buildJsonObject {
+                put("type", "string")
+                put("enum", buildJsonArray { add("OVERRIDE"); add("ADDITIVE"); add("MULTIPLY"); add("MAX"); add("MIN") })
+                put("description", "How it combines with what is underneath. Omit for OVERRIDE (or the family's stacking blend with stack).")
+            })
+            put("order", buildJsonObject {
+                put("type", "string")
+                put("enum", buildJsonArray {
+                    add("NORMAL"); add("UNIFIED"); add("CENTRE_OUT"); add("CENTRE_IN")
+                    add("RANDOM"); add("PING_PONG"); add("REVERSE"); add("POSITIONAL")
+                })
+                put("description", "How the heads are spread through the cycle. Omit for UNIFIED, every head in step; NORMAL for a chase.")
+            })
+            put("phaseOffset", buildJsonObject { put("type", "number"); put("description", "0.0-1.0") })
+            put("elementMode", elementModeSchema)
+            put("timing", timingSchema)
+            put("elementFilter", buildJsonObject {
+                put("type", "string")
+                put("enum", buildJsonArray { add("ALL"); add("ODD"); add("EVEN"); add("FIRST_HALF"); add("SECOND_HALF") })
+            })
+            put("speedMasterUuid", buildJsonObject { put("type", "string"); put("description", SPEED_MASTER_DESCRIPTION) })
+            put("rateSpeedMasterUuid", buildJsonObject {
+                put("type", "string")
+                put("description", "Speed master scaling a wall-clock FX's rate, by uuid. Omit to leave it unscaled.")
+            })
+            put("ownBpm", buildJsonObject { put("type", "number"); put("description", OWN_BPM_DESCRIPTION) })
+            put("natural", buildJsonObject {
+                put("type", "boolean")
+                put("description", "A wall-clock FX on no rate master, its cycle in plain seconds. Not with a master.")
+            })
+            putFxDynamics()
+            put("stack", buildJsonObject {
+                put("type", "boolean")
+                put(
+                    "description",
+                    "Add it on top of the Local FX already on the targets instead of replacing them. A blend or amount left " +
+                        "out then takes the family's stacking start: intensity MULTIPLY, position ADDITIVE about 128, colour " +
+                        "and beam OVERRIDE at 0.5. Default false.",
+                )
+            })
+            put("mask", buildJsonObject {
+                put("type", "array")
+                put("items", buildJsonObject { put("type", "string") })
+                put("description", "The selection's attribute families (intensity, colour, position, beam); an FX outside them is refused. Omit for all.")
+            })
+        })
+        put("required", buildJsonArray { add("targets"); add("fxType"); add("attribute") })
+    }
+)
+
 internal val clearProgrammerTool = ToolDef(
     name = "clear_programmer",
     description = "Clear the programmer, as the desk's Clear does. With no targets: every value, every Look and " +

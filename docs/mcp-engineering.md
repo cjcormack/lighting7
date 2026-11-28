@@ -7,7 +7,8 @@ authorises the grant, and relays every JSON-RPC message to the desk over the con
 runs no OAuth server and takes no MCP request from the internet (cloud-p1 plan D15, D18). (The desk
 once had its own in-app AI chat, *Lux*, and later its own OAuth server and `/mcp` behind an ngrok
 tunnel; both are gone.) The decisions behind the tool surface are recorded in the project's
-`decisions/mcp-auth-and-scripts.md`; this doc is how it is built.
+`decisions/mcp-auth-and-scripts.md`, which left scripts out; the script tools behind *Allow scripts*
+(§"Script tools") are a later change to that decision. This doc is how it is built.
 
 ## Adding a connector
 
@@ -140,7 +141,7 @@ except for the three policy switches:
   (`REMOTE_SCRIPTS_DISABLED`, `requireScriptAccess`): creating, compiling and running a project
   script, changing a saved script's text or type (a rename is fine), the same for FX definitions,
   an undo or redo that would put either back (the history routes and `undo_changes`), and the
-  whole `/script-editor` service. MCP never has a script tool, whatever this says.
+  whole `/script-editor` service, and MCP's script tools that compile, save or run one (§"Script tools").
 - **Arming and firing are refused remotely unless an admin allows them** (Cloud → Remote access → *Allow
   arming and firing over remote access*; stage-view plan session 9, P2, D16). A confetti cannon spends
   something physical in a room a remote caller cannot see. Refused (`REMOTE_EFFECTS_DISABLED`,
@@ -184,9 +185,9 @@ none, and refuses batches. A tool answers text content, and `render_view` an `im
 ### Tools
 
 `describe_rig`, then the show-running tools (`AiTools.toolDefs`), then the show-setup tools
-below. There is **no script tool** (§"No script tool"): a script runs arbitrary Kotlin inside the
-desk's JVM, so reaching it from outside would make a leaked token a shell on the desk machine;
-every tool here is a bounded operation on the show.
+below, then the script tools (§"Script tools"). Every tool but the script tools is a bounded operation
+on the show; a script runs arbitrary Kotlin inside the desk's JVM, so a script tool that compiles, saves
+or runs one is refused until an admin at the desk turns on *Allow scripts*, off by default.
 
 `describe_rig` returns the live rig in prose (`ai/RigBriefing.kt`): fixtures, groups, the FX
 library, what is running and parked, speed masters, Looks, colour palettes, cues and stacks. An MCP
@@ -617,6 +618,43 @@ element, here) too.
 [{fromCueId, cueId, entryId?}]`, `unresolved [{problem, in}]`, the Looks and palettes copied and
 linked — are the route's. Its target is the tool's `projectId`, current or not; the holds restamp and
 the busk pads' announcement are the live show's, so they follow only a copy into the current project.
+
+### Script tools
+
+Two tool sets let Claude write code for the desk, each the MCP door onto rows the desk's own editors
+write, so nothing is stored that the desk could not store itself. MCP is always remote, so
+`McpProtocol` holds the tools that compile, save or run a script to *Allow scripts*
+(`FX_SCRIPT_GATED_TOOLS`, `PROJECT_SCRIPT_GATED_TOOLS`), as `requireScriptAccess` holds a remote REST
+call, answering `REMOTE_SCRIPTS_DISABLED`; the guides, the readers, the deletes, `apply_fx` and
+`preview_fx` run code already in the library, as a built-in does, and are not held. An undo that would
+put a script back is held by `undo_changes`, as above. The saves and deletes are stored writes for the
+venue guard. The guides are what a model with no access to the desk's source reads instead of it, so
+their examples are compiled and run by `McpFxScriptToolsTest` and `McpProjectScriptToolsTest`.
+
+**Custom FX** (`ai/FxScriptTools.kt`, the guide `ai/FxScriptGuide.kt`): an FX definition, the
+`fx_definitions` row the FX library's editor writes — a calc body, STANDARD or STATEFUL.
+
+| Tool | Does |
+|------|------|
+| `get_fx_script_guide` | The body's scope, the outputs, the parameter types and metadata, the definition's fields, an example of each mode |
+| `get_fx_script` | The library (built-in and custom, legacy left out), or one FX's definition and body |
+| `check_fx_script` | `compileCheck`: errors at the script's own `line:column` (gated) |
+| `save_fx_script` | Create, or replace by `fxId`, the whole definition, checked by the REST routes' rules (`retiredIdProblem`, `parametersProblem`, `validateCompatibleAttributes`) plus a built-in's id, a parameter type a custom FX cannot read, and no compatible attribute. Compiled **before** anything is written, then a trial run on its own daemon thread under a 2 s deadline — eight phases and four heads, or sixteen stateful ticks — refusing a script that throws, runs on or answers the wrong output for its `outputType`; one trial at a time, and while a timed-out trial's thread ignores its interrupt every save is refused until a restart; then the row and `registerUserFx`, the row put back if that fails, answering the trial's outputs (gated) |
+| `delete_fx_script` | The row and its registration |
+| `preview_fx` | `previewFx` (`include: ONLY`) on a draft over notional heads or targets, or a running FX, its result planes read back as levels, `#rrggbb` and `pan,tilt` at evenly spaced samples |
+
+**Project scripts** (`ai/ProjectScriptTools.kt`, the guide `ai/ProjectScriptGuide.kt`): a `scripts` row
+of type GENERAL, FX_APPLICATION or FX_DEFINITION, as the Scripts view keeps, compiled and run by
+`Show.script` and `Show.ScriptRunner`. The guide ends with the rig's fixture classes and
+their traits, which `fixture<T>` and `group<T>` are typed by. `get_script_guide`, `get_script` (list or
+read by name), `save_script` (by name, compiled first, nothing stored if it does not compile; gated),
+`delete_script` (refused while a cue trigger runs it, naming the cues), `run_script` (a saved script by
+name or an unsaved one, `compileOnly`, answering `status` — `success`, `compileError`, `exception`, or
+`timedOut` for one still running after 30 s, which is cancelled — messages and result; gated).
+
+**`apply_fx`** (`ProgrammerTools.applyFx`, a show-running tool) is `pressBareFx`, `POST /programmer/fx`'s
+body: any library FX as one Local FX over the targets, so a saved custom FX reaches the programmer and
+Record, as every built-in does.
 
 ### Claude's own history
 
