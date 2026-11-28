@@ -213,7 +213,7 @@ session N — title*. Never merge a later session's PR before an earlier one.
 
 | Session | Title | Status | Branch | PR | Head SHA |
 |---|---|---|---|---|---|
-| 1 | The script's text | planned | | | |
+| 1 | The script's text | in review | `claude/friendly-davinci-s636ia` | | |
 | 2 | Find, pages and Back | planned | | | |
 | 3 | Bookmarks | planned | | | |
 | 4 | The rail's headings and the strip | planned | | | |
@@ -246,6 +246,22 @@ Backend and MCP only; Claude gains search and quoting before any UI exists.
 - **Checks:** the full `./gradlew check shadowJar` locally, since the dependency set and the fat
   jar change; report the installer's growth in the PR.
 
+*As built.* PDFBox 3.0.8 (`pdfbox`, `pdfbox-io`, `fontbox`, all Apache-2.0) adds 1,185 entries and
+3.5 MB compressed to `lighting7.jar` as CI builds it (`-PnativePayloadOs=windows`, 145.8 MB), and so
+about 3.5 MB to the installer, whose payload is already deflated. Where the session departed from
+the text above:
+
+- **A fourth state, `UNREADABLE`**, for a PDF PDFBox cannot read; otherwise it would read as
+  building for ever. The store remembers it until the desk restarts.
+- **The scanned rule is fewer than five lines.** PDFBox has no counterpart to pdf.js's text items,
+  so the viewer's `MIN_TEXT_ITEMS` floor is applied to lines.
+- **Within a line, the index stores each character's left edge** and the line's right edge (`cx`).
+- **The route's states:** ready is 200 with the index inside `{state, scriptHash, index}`, building
+  is 202 with `Retry-After`, script missing and unreadable are 200 with their `state`.
+- **`docs/licensing.md` lists no dependencies;** a new one's entry is `licences/jvm.json`.
+- **`search_prompt_book` names no bookmark yet**, since bookmarks are session 3's; session 3 adds
+  the bookmark each hit falls under.
+
 ### Session 2 — Find, pages and Back
 
 Frontend, over session 1's route.
@@ -271,7 +287,8 @@ The record across the wire, in one PR.
   history wiring §3 "Bookmarks" names, a label per write), and `promptBookChanged` on every write
   (P3).
 - **MCP (D6):** bookmarks in `get_prompt_book` and `mark_up_prompt_book`, `at.text` on them, the
-  key in §3 "MCP", `replaceBookmarks` and `removeBookmarks`. `markers` waits for session 4.
+  key in §3 "MCP", `replaceBookmarks` and `removeBookmarks`, and the bookmark each
+  `search_prompt_book` hit falls under. `markers` waits for session 4.
 - **The view (D5, D7):** flags, the selection toolbar's *Bookmark* and the palette's tool, the sheet
   (without *Add as stack marker*, which is session 4's), the drag, the outline import, the
   breadcrumb, Contents, `⌘K`'s *Go to bookmark…*, and bookmark titles in find.

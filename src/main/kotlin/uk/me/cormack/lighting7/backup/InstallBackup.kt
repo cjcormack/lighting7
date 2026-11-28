@@ -7,6 +7,7 @@ import uk.me.cormack.lighting7.cloud.protocol.BackupFile
 import uk.me.cormack.lighting7.cloud.protocol.BackupManifest
 import uk.me.cormack.lighting7.cloud.protocol.CloudJson
 import uk.me.cormack.lighting7.cloud.protocol.Timestamps
+import uk.me.cormack.lighting7.promptbook.ScriptTextStore
 import java.io.BufferedOutputStream
 import java.io.IOException
 import java.io.OutputStream
@@ -151,7 +152,8 @@ class InstallBackup(private val staging: Path) {
                 val tar = TarWriter(buffered)
                 files += addFile(tar, DATABASE_ENTRY, snapshot)
                 Files.delete(snapshot)
-                files += addTree(tar, PROMPT_SCRIPTS, sources.promptScripts)
+                // The scripts' text indexes are a cache, rebuilt from the PDFs after a restore.
+                files += addTree(tar, PROMPT_SCRIPTS, sources.promptScripts) { !ScriptTextStore.isIndexFile(it.fileName.toString()) }
                 files += addTree(tar, SCENE_IMAGES, sources.sceneImages)
                 files += addTree(tar, SYNC, sources.syncTrees)
                 sources.localConf?.takeIf { Files.isRegularFile(it) }?.let { files += addFile(tar, LOCAL_CONF_ENTRY, it) }
@@ -208,10 +210,10 @@ class InstallBackup(private val staging: Path) {
         }
     }
 
-    private fun addTree(tar: TarWriter, root: String, dir: Path): List<BackupFile> {
+    private fun addTree(tar: TarWriter, root: String, dir: Path, include: (Path) -> Boolean = { true }): List<BackupFile> {
         if (!dir.isDirectory()) return emptyList()
         val files = Files.walk(dir).use { walk ->
-            walk.filter { Files.isRegularFile(it, LinkOption.NOFOLLOW_LINKS) }.toList()
+            walk.filter { Files.isRegularFile(it, LinkOption.NOFOLLOW_LINKS) && include(it) }.toList()
         }.sortedBy { dir.relativize(it).toString() }
         return addFiles(tar, root, dir, files)
     }

@@ -142,6 +142,9 @@ In `lighting7.jar` (the desk) and `launcher.jar`.
 | `org.apache.commons:commons-lang3` | Apache-2.0 |
 | `org.apache.httpcomponents:httpclient` | Apache-2.0 |
 | `org.apache.httpcomponents:httpcore` | Apache-2.0 |
+| `org.apache.pdfbox:fontbox` | Apache-2.0 |
+| `org.apache.pdfbox:pdfbox` | Apache-2.0 |
+| `org.apache.pdfbox:pdfbox-io` | Apache-2.0 |
 | `org.bytedeco:javacpp` | Apache-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0 |
 | `org.checkerframework:checker-qual` | MIT |
 | `org.eclipse.jetty.alpn:alpn-api` | Apache-2.0 OR EPL-1.0 |

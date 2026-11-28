@@ -198,6 +198,7 @@ class ProjectManager(
 
     private fun createShow(project: DaoProject, carried: ShowCarry? = null): Show {
         pruneSceneImages(project)
+        pruneScriptText(project)
         return Show(
             state = stateProvider(),
             project = project,
@@ -276,6 +277,15 @@ class ProjectManager(
             val pruned = stateProvider().sceneImages.prune(uuid, referenced)
             if (pruned > 0) logger.info("Pruned {} unreferenced scene image(s) from project {}", pruned, uuid)
         }.onFailure { logger.warn("Scene image prune failed for project {}: {}", project.id.value, it.message) }
+    }
+
+    /** At project load, drop the text indexes whose script PDF has left the store (prompt-book navigation plan P2). */
+    private fun pruneScriptText(project: DaoProject) {
+        runCatching {
+            val uuid = transaction(database) { project.uuid.toString() }
+            val removed = stateProvider().scriptText.pruneOrphans(uuid)
+            if (removed > 0) logger.info("Removed {} orphaned script text index(es) from project {}", removed, uuid)
+        }.onFailure { logger.warn("Script text prune failed for project {}: {}", project.id.value, it.message) }
     }
 
     private fun shutdownShow(show: Show, finalFrames: Map<Universe, Map<Int, UByte>>) {

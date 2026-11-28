@@ -179,6 +179,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-HISTORY-RESTAGE-COST`](#fu-history-restage-cost) | Trigger | Perf | a write on the desk visibly lags while several projects have show history |
 | [`FU-HISTORY-EMBEDDED-CHILD-IDS`](#fu-history-embedded-child-ids) | Trigger | History | something names an embedded child (a busk pad, a rig tile, a scenery row) by its integer id across an undo |
 | [`FU-HISTORY-MACHINE-LOCAL`](#fu-history-machine-local) | Trigger | History | a desk night asks for an undo of a machine-local setting (a universe's address) |
+| [`FU-PROMPT-BOOK-OCR`](#fu-prompt-book-ocr) | Trigger | Prompt Book | a show arrives with a scanned script that needs searching |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -3365,6 +3366,20 @@ override rows, which a redo finds again, but a changed address is not undone. If
 give machine-local writes an entry of their own: a second record cache over those tables, keyed by
 project and record uuid, journaled by the same interceptor and restored by `Overrides`' setters rather
 than the importer.
+
+## Prompt Book
+
+### `FU-PROMPT-BOOK-OCR`
+
+**Search a scanned script** · Trigger: a show arrives with a scanned script that needs searching ·
+prompt-book navigation plan session 1, 2026-11-28
+
+The desk reads a script's text with PDFBox (`promptbook/ScriptTextExtractor.kt`), and a page with
+fewer than five lines is `scanned` and named as unsearchable (plan D8); bookmarks, a click and Go to
+page still work on one. OCR was left out because the scripts in hand are typed. If a scanned script needs searching, OCR its scanned
+pages in the store's background build and write their lines into the same index, moving
+`ScriptTextIndex.VERSION` so older indexes are rebuilt; the match rule and every reader stay as they
+are. Weigh the engine's licence against `licences/allowed.json` first.
 
 ## Completed
 
