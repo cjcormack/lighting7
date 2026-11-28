@@ -24,6 +24,11 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.telemetry.Tracing
 import uk.me.cormack.lighting7.ai.AiTools
 import uk.me.cormack.lighting7.ai.FIXTURE_COMMANDS_REMOTE_REFUSAL
+import uk.me.cormack.lighting7.ai.PROJECT_SCRIPT_GATED_TOOLS
+import uk.me.cormack.lighting7.ai.ProjectScriptTools
+import uk.me.cormack.lighting7.ai.SCRIPTS_REMOTE_REFUSAL
+import uk.me.cormack.lighting7.ai.FX_SCRIPT_GATED_TOOLS
+import uk.me.cormack.lighting7.ai.FxScriptTools
 import uk.me.cormack.lighting7.ai.RUN_FIXTURE_COMMAND
 import uk.me.cormack.lighting7.ai.RigBriefing
 import uk.me.cormack.lighting7.ai.SetupTools
@@ -42,8 +47,9 @@ import uk.me.cormack.lighting7.update.BuildInfo
  * The MCP server itself: JSON-RPC 2.0 in, JSON-RPC 2.0 out, no transport. `cloud/McpRelay` carries
  * it over the cloud's control channel; tests call [handle] directly.
  *
- * The tools are the show-running tools ([AiTools.toolDefs] — there is no script tool), the
- * show-setup tools ([SetupTools]), and `describe_rig`, which answers with the live rig in prose
+ * The tools are the show-running tools ([AiTools.toolDefs]), the show-setup tools ([SetupTools]),
+ * the script tools ([FxScriptTools], [ProjectScriptTools] — the only doors to code, behind Remote
+ * access's *Allow scripts*), and `describe_rig`, which answers with the live rig in prose
  * ([RigBriefing]). An MCP client gets nothing it does not ask for, so the `instructions` sent at
  * initialize tell the model to call it first.
  *
@@ -54,6 +60,8 @@ class McpProtocol(private val state: State) {
     private val log = LoggerFactory.getLogger(McpProtocol::class.java)
     private val tools = AiTools(state)
     private val setupTools = SetupTools(state, tools, deskUrl = { path -> runCatching { state.cloud.remoteShellUrl(path) }.getOrNull() })
+    private val fxScripts = FxScriptTools(state)
+    private val projectScripts = ProjectScriptTools(state)
     private val briefing = RigBriefing(state)
 
     private val describeRigTool = ToolDef(
@@ -70,9 +78,10 @@ class McpProtocol(private val state: State) {
 
     /**
      * Tool list in the order a client shows it: the orientation tool first, then the show-running
-     * tools ([AiTools]), then the show-setup tools ([SetupTools]).
+     * tools ([AiTools]), then the show-setup tools ([SetupTools]), then the script tools.
      */
-    val toolDefs: List<ToolDef> = listOf(describeRigTool) + tools.toolDefs + setupTools.toolDefs
+    val toolDefs: List<ToolDef> =
+        listOf(describeRigTool) + tools.toolDefs + setupTools.toolDefs + fxScripts.toolDefs + projectScripts.toolDefs
 
     /**
      * Handle one JSON-RPC message. Returns the response, or null for a notification (and for a
@@ -200,6 +209,10 @@ class McpProtocol(private val state: State) {
         if (name == RUN_FIXTURE_COMMAND && !state.remotePolicy.allowCommands) {
             return toolResult(FIXTURE_COMMANDS_REMOTE_REFUSAL, isError = true)
         }
+        // As the REST routes' `requireScriptAccess` holds a remote call.
+        if ((name in FX_SCRIPT_GATED_TOOLS || name in PROJECT_SCRIPT_GATED_TOOLS) && !state.remotePolicy.allowScripts) {
+            return toolResult(SCRIPTS_REMOTE_REFUSAL, isError = true)
+        }
 
         // One tool call is one step of the programmer's history and one show entry, Claude's own (undo
         // plan D7). The project a tool names is journaled as well as the current one (§3.4).
@@ -208,6 +221,8 @@ class McpProtocol(private val state: State) {
         namedProjectOf(name, arguments)?.let { state.ensureHistory(it) }
         val outcome = withContext(origin) {
             if (setupTools.handles(name)) setupTools.executeTool(name, arguments, caller = user.displayName, user = user)
+            else if (fxScripts.handles(name)) fxScripts.executeTool(name, arguments)
+            else if (projectScripts.handles(name)) projectScripts.executeTool(name, arguments)
             else tools.executeTool(name, arguments)
         }
         return toolResult(outcome.result, isError = !outcome.success, images = outcome.images)
@@ -282,7 +297,9 @@ class McpProtocol(private val state: State) {
         /** Newest first: an unknown requested version is answered with the newest we speak. */
         val SUPPORTED_VERSIONS = listOf("2025-06-18", "2025-03-26", "2024-11-05")
 
-        private val READ_ONLY_TOOLS = setOf(DESCRIBE_RIG, "get_current_state") + readOnlySetupToolNames
+        private val READ_ONLY_TOOLS = setOf(
+            DESCRIBE_RIG, "get_current_state", "get_fx_script_guide", "get_fx_script", "preview_fx", "get_script_guide", "get_script",
+        ) + readOnlySetupToolNames
 
         /** Making and publishing a venue (venue plan D3): an admin's, as their REST routes are. */
         private val VENUE_ADMIN_TOOLS = setOf("extract_venue", "publish_venue")
@@ -311,6 +328,7 @@ class McpProtocol(private val state: State) {
             "upload_scene_image",
             "place_fixtures", "override_venue_fixtures", "build_cue_stack", "mark_up_prompt_book", "copy_to_project",
             "delete_cue_stacks", "delete_cues", "copy_cues", "attach_to_venue", "set_move_in_dark", "undo_changes",
+            "save_fx_script", "delete_fx_script", "save_script", "delete_script",
         )
 
         /**
@@ -327,6 +345,7 @@ class McpProtocol(private val state: State) {
             - Stage: set_stage for the stage size, regions and riggings (named as the plot names them), then place_fixtures to hang fixtures on them. get_patch shows the result. A long body (a lightstrip, a bar) stands on end with rollDeg 90. aim_fixtures points moving heads at a stage coordinate (a region's centre at head height, a mark on the plot) through the programmer, which the operator clears — so keep an aim with record_cue, or pass saveAsPalette to save it as a position palette.
             - Venue: set_scene models the room, the proscenium, the seating and the set, so the Stage view shows the real hall. Start from template 'proscenium-hall' with the hall's numbers read off a plan or a photo, correct the named elements it makes, add set pieces, then get_scene to check. Save the views the operator will want — the desk's position, a seat — as viewpoints. render_view draws a viewpoint as a PNG (a desk window must be open), so you can compare the model with the operator's photo from the same place and correct it. A rigging the units stand on (a balcony front) is kind LEDGE. A painted cloth — a backcloth, a frontcloth, a cut cloth — is an image: upload_scene_image, then a DRAPE (or a FLAT) whose params.paint names its hash, sized to the image's aspect; a gauze is a DRAPE with fabric SHARKSTOOTH or BOBBINET. A set piece no primitive draws — an arch, a tree, a column, a statue — is an OBJECT with shape MODEL built from parts (boxes, cylinders and cones, spheres, extruded outlines, lathed profiles; set_scene's params says how), each with its own colour or a texture from upload_scene_image; render_view to check it, and modelFrom to place copies.
             - Show: the operator imports the script PDF through the desk's Prompt Book view (get_prompt_book says where); then build_cue_stack creates the stack and cues in running order with numbers, notes and timings, anchoring each at the line it is called on, and mark_up_prompt_book adds notes and moves anchors. PDF pages count from 1 at the file's first page.
+            - Custom FX: when no built-in FX does what is wanted, write one. get_fx_script_guide explains the script, get_fx_script shows any FX's (the built-ins are good examples), check_fx_script compiles a draft, save_fx_script stores it in the show's library, and preview_fx samples what it outputs without touching the stage; then apply_fx runs it in the programmer. Beyond FX, project scripts (get_script_guide, save_script, run_script) run Kotlin on the live rig directly — a timed sequence, logic over the rig — where the show tools cannot. Compiling, saving and running scripts need the operator to allow scripts for remote access.
             - These tools validate a whole request and write nothing if any row is wrong; fix every listed problem and resend.
         """.trimIndent()
 

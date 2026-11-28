@@ -242,7 +242,8 @@ val compiledResult = BasicJvmScriptingHost(state.scriptingHostConfiguration).com
 ```
 
 Configuration includes:
-- JVM target: 17
+- JVM target: 24, the build's JVM toolchain: a script that calls the desk's inline functions
+  (`fixture<T>`, `group<T>`) cannot compile at a lower target
 - Dependencies: entire classpath
 - Base class: varies by `ScriptType`
 - Default imports

@@ -1203,7 +1203,9 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
   the MCP URL the cloud serves and authorises for the install, and the cloud relays each JSON-RPC call
   over the control channel to `McpProtocol` (`cloud/McpRelay.kt`), run as the desk user the cloud
   account is linked to. The desk runs no OAuth server and no `/mcp` of its own; the ngrok tunnel is gone
-  too. The tools are the show-running tools (`ai/AiTools.kt` — no script tool),
+  too. The tools are the show-running tools (`ai/AiTools.kt`), the script tools (`ai/FxScriptTools.kt`,
+  `ai/ProjectScriptTools.kt` — custom FX and project scripts, compiling, saving and running held to Remote
+  access's *Allow scripts*),
   `describe_rig` and the show-setup tools (`ai/SetupTools.kt`: projects, venues — list, extract,
   publish, a show on one, attach — and copying between projects (`ai/VenueSetupTools.kt`), the stored-data
   ones taking a `projectId` so a show is built without switching to it; patch, stage and
@@ -1269,7 +1271,7 @@ For deeper technical details, see the docs in `docs/`:
 - [FX System](docs/fx-engineering.md) - Tempo-synchronized FX, Master Clock, FX types, blend modes
 - [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, Orders, multi-element fixtures
 - [OSC](docs/osc-engineering.md) - OSC in from QLab: the fixed address set and its slugs, the explicit forms that land the same state however often they arrive, the `osc-1` receive thread, SLIP-framed TCP and their hand-off channel, replies, the allowlist, `/install/osc`, `osc.state` and the log
-- [MCP Server](docs/mcp-engineering.md) - MCP through Lighting7 Cloud's relay, adding a connector, the public listener that carries remote sessions, the remote hardening applied by port and the three policy switches, the protocol and its tools, and why the script tool is left out
+- [MCP Server](docs/mcp-engineering.md) - MCP through Lighting7 Cloud's relay, adding a connector, the public listener that carries remote sessions, the remote hardening applied by port and the three policy switches, the protocol and its tools, and the script tools behind *Allow scripts*
 - [Cloud Sync](docs/sync-engineering.md) - Canonical JSON, UUID identity, machine-local overrides, per-project JGit working tree + snapshot flow, three-way diff + conflict sessions, Lighting7 Cloud's repos and their git tokens (Phases 1–5 of the cloud-sync plan, cloud-p2)
 - [Composition Model](docs/lighting-composition-model.md) - The five tiers, and §"Looks, palettes and layers" for the cook step: a cue's ordered layers plus its local rows flatten to one contributor per (fixture, attribute) before the resolver, which is what makes within-cue precedence one rule for every attribute. Its §"A palette holds a value *or* an FX" is the D7 reversal and the three rules that keep it narrow
 - [Desk Screens](docs/desk-screens.md) - The two desk screens: the launcher's tray items, the `?window=` naming contract, why a desk screen must be opened at `http://localhost:8413/` (installation, Keyboard Lock and Window Management are all secure-context), and kiosk mode as a note

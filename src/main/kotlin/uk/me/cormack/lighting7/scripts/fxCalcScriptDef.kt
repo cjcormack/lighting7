@@ -47,7 +47,7 @@ object FxCalcScriptConfiguration : ScriptCompilationConfiguration(
 
         jvm {
             dependenciesFromCurrentContext(wholeClasspath = true)
-            jvmTarget("17")
+            jvmTarget("24")
         }
         ide {
             acceptedLocations(ScriptAcceptedLocation.Everywhere)
@@ -101,7 +101,7 @@ object FxStatefulCalcScriptConfiguration : ScriptCompilationConfiguration(
 
         jvm {
             dependenciesFromCurrentContext(wholeClasspath = true)
-            jvmTarget("17")
+            jvmTarget("24")
         }
         ide {
             acceptedLocations(ScriptAcceptedLocation.Everywhere)
