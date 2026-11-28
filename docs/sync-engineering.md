@@ -155,6 +155,11 @@ for the full contract. The legacy "PDF missing on this install" re-import card
 (re-attach by hash) survives as a fallback for books whose bytes reached no peer
 (e.g. created before v4).
 
+Beside each PDF in the store the desk keeps the script's **text index**, `{hash}.text.json`. It is
+derived from the bytes, so it is never exported or synced and has no disposition: a desk that pulls
+a show builds its own from the PDF, `hydrateStore` asking for the build as it copies each one in
+(`docs/prompt-book-engineering.md` §"The text index").
+
 The exporter writes this layout one **record kind** at a time: `ProjectExporter.KINDS` holds one
 `RecordKind(folder, write)` per folder, `project.json` the record `project` keyed by the project's
 uuid, a script its body and meta together. A kind writes to a `RecordSink` — `DirSink`, the files

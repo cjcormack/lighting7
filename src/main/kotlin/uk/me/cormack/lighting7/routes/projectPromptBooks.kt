@@ -19,6 +19,7 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.promptbook.ScriptTextState
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.RecordHasher
 import java.nio.file.Files
@@ -143,6 +144,7 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
                 }
             }
 
+            state.scriptText.request(project.uuid.toString(), input.scriptHash)
             state.show.fixtures.promptBookChanged()
             call.respond(if (created) HttpStatusCode.Created else HttpStatusCode.OK, details)
         }
@@ -336,6 +338,47 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
         }
     }
 
+    // GET /{projectId}/prompt-book/text - The book's script as the desk read it (prompt-book
+    // navigation plan D1), or why not yet: never waits for extraction, and asking starts it.
+    get<PromptBookTextResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val book = transaction(state.database) { project.promptBook?.let { it.scriptHash to it.pageCount } }
+            if (book == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Prompt book not found"))
+                return@withProject
+            }
+            val (hash, pageCount) = book
+            when (val text = state.scriptText.state(project.uuid.toString(), hash, pageCount)) {
+                is ScriptTextState.Ready -> {
+                    val etag = "\"text-v${text.index.version}-$hash\""
+                    // The URL names no hash, so the answer is revalidated rather than kept.
+                    call.response.header(HttpHeaders.CacheControl, "no-cache")
+                    call.response.header(HttpHeaders.ETag, etag)
+                    if (matchesIfNoneMatch(call.request.headers.getAll(HttpHeaders.IfNoneMatch), etag)) {
+                        call.respond(HttpStatusCode.NotModified)
+                        return@withProject
+                    }
+                    // The index is served as stored, inside its envelope, never decoded and re-encoded.
+                    val body = """{"state":"READY","scriptHash":"$hash","index":""" + Files.readString(text.file) + "}"
+                    call.respondText(body, ContentType.Application.Json)
+                }
+                ScriptTextState.Building -> {
+                    call.response.header(HttpHeaders.CacheControl, "no-store")
+                    call.response.header(HttpHeaders.RetryAfter, "2")
+                    call.respond(HttpStatusCode.Accepted, PromptBookTextStatusDto(text.wire, hash, "Reading the script…"))
+                }
+                ScriptTextState.ScriptMissing -> {
+                    call.response.header(HttpHeaders.CacheControl, "no-store")
+                    call.respond(PromptBookTextStatusDto(text.wire, hash, "The script PDF is not on this desk"))
+                }
+                is ScriptTextState.Unreadable -> {
+                    call.response.header(HttpHeaders.CacheControl, "no-store")
+                    call.respond(PromptBookTextStatusDto(text.wire, hash, "The desk could not read the script's text: ${text.reason}"))
+                }
+            }
+        }
+    }
+
     // POST /{projectId}/prompt-book/scripts - Upload a script PDF (raw bytes)
     post<PromptBookScriptsResource> { resource ->
         withCurrentProject(
@@ -378,6 +421,7 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
                 }
             }
 
+            state.scriptText.request(project.uuid.toString(), hash)
             call.respond(HttpStatusCode.Created, ScriptUploadResponse(hash, bytes.size.toLong()))
         }
     }
@@ -485,6 +529,9 @@ data class PromptBookAnnotationsResource(val parent: ProjectPromptBookResource)
 @Resource("/{annotationId}")
 data class PromptBookAnnotationResource(val parent: PromptBookAnnotationsResource, val annotationId: Int)
 
+@Resource("/text")
+data class PromptBookTextResource(val parent: ProjectPromptBookResource)
+
 @Resource("/scripts")
 data class PromptBookScriptsResource(val parent: ProjectPromptBookResource)
 
@@ -562,8 +609,23 @@ data class AnnotationRequest(
     val tone: String? = null,
 )
 
+/**
+ * `GET …/prompt-book/text` when the index is not ready: `BUILDING` (202), `SCRIPT_MISSING` or
+ * `UNREADABLE`. A ready answer is `{state: "READY", scriptHash, index}`, the index as stored.
+ */
+@Serializable
+data class PromptBookTextStatusDto(
+    val state: String,
+    val scriptHash: String,
+    val message: String,
+)
+
 @Serializable
 data class ScriptUploadResponse(
     val scriptHash: String,
     val sizeBytes: Long,
 )
+
+/** Whether an `If-None-Match` header names [etag]: a list, a weak `W/` tag or `*` (RFC 9110 §13.1.2). */
+internal fun matchesIfNoneMatch(headers: List<String>?, etag: String): Boolean =
+    headers.orEmpty().flatMap { it.split(',') }.map { it.trim() }.any { it == "*" || it.removePrefix("W/") == etag.removePrefix("W/") }

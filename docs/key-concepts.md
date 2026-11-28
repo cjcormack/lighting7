@@ -489,7 +489,8 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
   ones taking a `projectId` so a show is built without switching to it; patch, stage and
   rigging, the scene — its cloths' fabric and paint, and `upload_scene_image`, the one tool that
   takes file bytes, a PNG or JPEG of at most 16 MB, about 5 MB through the cloud, with no remote-access gate — cue stacks and
-  prompt-book markup, built from documents the model reads; Claude's own history, `list_history`
+  prompt-book markup, built from documents the model reads and placed by quoting the script, which
+  `search_prompt_book` searches; Claude's own history, `list_history`
   and `undo_changes` (`ai/HistoryTools.kt`), which take back the grant's own show entries only — and
   `render_view`, a PNG of a stage viewpoint drawn offscreen by a signed-in desk window on the desk's
   own listener, never a remote one, so Claude can check the model it built). A **remote session** — the

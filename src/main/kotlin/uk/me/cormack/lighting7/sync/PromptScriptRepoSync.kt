@@ -78,7 +78,7 @@ object PromptScriptRepoSync {
      * Copy every PDF under [treeDir]'s `promptScripts` directory into the local store
      * (keyed by [projectUuid]) when the store doesn't already hold it. Byte-accurate. Called on
      * pull (from the checked-out git working tree) and on manual import (from the export
-     * folder) so the UI can render the PDF without a manual re-import.
+     * folder) so the UI can render the PDF without a manual re-import, and its text index is built.
      */
     fun hydrateStore(state: State, projectUuid: UUID, treeDir: Path) {
         val dir = treeDir.resolve(RecordHasher.PROMPT_SCRIPTS_DIR)
@@ -92,8 +92,8 @@ object PromptScriptRepoSync {
                     continue
                 }
                 val dst = state.promptScriptPath(projectUuid.toString(), hash)
-                if (Files.exists(dst)) continue
-                copyAtomic(pdf, dst)
+                if (!Files.exists(dst)) copyAtomic(pdf, dst)
+                state.scriptText.request(projectUuid.toString(), hash)
             }
         }
     }

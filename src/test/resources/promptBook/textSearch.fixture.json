@@ -1,0 +1,506 @@
+{
+  "about": "The Prompt Book's one match rule (prompt-book navigation plan P1): the desk's ScriptTextMatcher reads this file, and the view's mirror will from session 2. A span is a line index and the [start, end) character range of that line the hit covers.",
+  "fold": [
+    {
+      "in": "  Ça   VA “bien” ’ok’ ",
+      "out": "ca va \"bien\" 'ok'"
+    },
+    {
+      "in": "NAÏVE\trésumé",
+      "out": "naive resume"
+    },
+    {
+      "in": "ﬂourish",
+      "out": "flourish"
+    }
+  ],
+  "search": [
+    {
+      "name": "case is ignored",
+      "pages": [
+        [
+          "Who's THERE?"
+        ]
+      ],
+      "query": "who's there",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 11
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a curly apostrophe in the script matches a straight one",
+      "pages": [
+        [
+          "Whether ’tis nobler"
+        ]
+      ],
+      "query": "'tis",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 8,
+              "end": 12
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a straight apostrophe in the script matches a curly one",
+      "pages": [
+        [
+          "Don't"
+        ]
+      ],
+      "query": "don’t",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "curly double quotes read as straight",
+      "pages": [
+        [
+          "“Help!”"
+        ]
+      ],
+      "query": "\"help!\"",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "accents in the script are ignored",
+      "pages": [
+        [
+          "The café is shut."
+        ]
+      ],
+      "query": "cafe",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 4,
+              "end": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "accents in the query are ignored",
+      "pages": [
+        [
+          "Cafe"
+        ]
+      ],
+      "query": "Café",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a decomposed accent is one character's mark",
+      "pages": [
+        [
+          "Café noir"
+        ]
+      ],
+      "query": "cafe noir",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a run of whitespace in the script is one space",
+      "pages": [
+        [
+          "to   be"
+        ]
+      ],
+      "query": "to be",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a run of whitespace in the query is one space",
+      "pages": [
+        [
+          "to be"
+        ]
+      ],
+      "query": "  to \t be ",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a non-breaking space is a space",
+      "pages": [
+        [
+          "to be"
+        ]
+      ],
+      "query": "to be",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a ligature reads as its letters",
+      "pages": [
+        [
+          "ﬁnal"
+        ]
+      ],
+      "query": "final",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a hit may run from one line into the next",
+      "pages": [
+        [
+          "that is the",
+          "question. Whether"
+        ]
+      ],
+      "query": "the question",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 8,
+              "end": 11
+            },
+            {
+              "line": 1,
+              "start": 0,
+              "end": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a hit may run across three lines",
+      "pages": [
+        [
+          "slings",
+          "and",
+          "arrows"
+        ]
+      ],
+      "query": "slings and arrows",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 6
+            },
+            {
+              "line": 1,
+              "start": 0,
+              "end": 3
+            },
+            {
+              "line": 2,
+              "start": 0,
+              "end": 6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "every hit on a line, in order",
+      "pages": [
+        [
+          "To be, or not to be"
+        ]
+      ],
+      "query": "to be",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 5
+            }
+          ]
+        },
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 14,
+              "end": 19
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hits do not overlap",
+      "pages": [
+        [
+          "aaaa"
+        ]
+      ],
+      "query": "aa",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 2
+            }
+          ]
+        },
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 2,
+              "end": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hits run in page order",
+      "pages": [
+        [
+          "Good my lord."
+        ],
+        [
+          "Good night."
+        ]
+      ],
+      "query": "good",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 4
+            }
+          ]
+        },
+        {
+          "page": 1,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a page given searches that page alone",
+      "pages": [
+        [
+          "Good my lord."
+        ],
+        [
+          "Good night."
+        ]
+      ],
+      "query": "good",
+      "page": 1,
+      "hits": [
+        {
+          "page": 1,
+          "spans": [
+            {
+              "line": 0,
+              "start": 0,
+              "end": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a hit never runs from one page into the next",
+      "pages": [
+        [
+          "the end of the page"
+        ],
+        [
+          "next page"
+        ]
+      ],
+      "query": "page next",
+      "hits": []
+    },
+    {
+      "name": "a line's surrounding whitespace is not part of a hit",
+      "pages": [
+        [
+          "  hello world  "
+        ]
+      ],
+      "query": "hello",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 2,
+              "end": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a query that is only whitespace finds nothing",
+      "pages": [
+        [
+          "anything"
+        ]
+      ],
+      "query": "   ",
+      "hits": []
+    },
+    {
+      "name": "a missing phrase finds nothing",
+      "pages": [
+        [
+          "To be, or not to be"
+        ]
+      ],
+      "query": "to see",
+      "hits": []
+    },
+    {
+      "name": "a hit ending on a character outside the BMP ends after both its halves",
+      "pages": [
+        [
+          "Exit 🎭 stage"
+        ]
+      ],
+      "query": "🎭",
+      "hits": [
+        {
+          "page": 0,
+          "spans": [
+            {
+              "line": 0,
+              "start": 5,
+              "end": 7
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

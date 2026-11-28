@@ -55,6 +55,8 @@ import uk.me.cormack.lighting7.routes.SettingAttributeDescriptor
 import uk.me.cormack.lighting7.routes.WhiteMixAttributeDescriptor
 import uk.me.cormack.lighting7.routes.SliderAttributeDescriptor
 import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.promptbook.ScriptTextMatcher
+import uk.me.cormack.lighting7.promptbook.ScriptTextState
 import uk.me.cormack.lighting7.routes.CUE_NUMBER_RULE
 import uk.me.cormack.lighting7.routes.canonicalCueNumber
 import uk.me.cormack.lighting7.routes.listedProjects
@@ -160,7 +162,8 @@ class SetupTools(
             renderViewTool.name -> render.renderView(input)
             placeFixturesTool.name -> placeFixtures(input, state.toolProject(input))
             overrideVenueFixturesTool.name -> venueFixtures.overrideVenueFixtures(input, state.toolProject(input))
-            getPromptBookTool.name -> getPromptBook(state.toolProject(input))
+            getPromptBookTool.name -> getPromptBook(input, state.toolProject(input))
+            searchPromptBookTool.name -> searchPromptBook(input, state.toolProject(input))
             buildCueStackTool.name -> buildCueStack(input, state.toolProject(input))
             setMoveInDarkTool.name -> moveInDark.setMoveInDark(input, state.toolProject(input))
             markUpPromptBookTool.name -> markUpPromptBook(input)
@@ -1529,9 +1532,12 @@ class SetupTools(
             "upload a file: ask the operator to open $where and import the PDF, then call get_prompt_book again."
     }
 
-    private fun getPromptBook(target: ToolProject): ToolExecutionResult {
+    private fun getPromptBook(input: JsonObject, target: ToolProject): ToolExecutionResult {
         val project = target.project
-        val body = transaction(state.database) {
+        val pages = (input["pages"] as? JsonArray)?.map { (it as? JsonPrimitive)?.intOrNull }
+        if (input["pages"] != null && input["pages"] !is JsonNull && pages == null) return failure("pages must be a list of PDF page numbers")
+        var ref: BookRef? = null
+        val stored = transaction(state.database) {
             val book = DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()
                 ?: return@transaction null
             val stacks = DaoCueStack.find { DaoCueStacks.project eq project.id }.toList()
@@ -1541,6 +1547,7 @@ class SetupTools(
             val entries = lists.flatten().associateBy { it.id.value }
             val heads = followHeads(lists)
             val anchors = book.anchors.toList()
+            ref = book.ref()
             buildJsonObject {
                 book.scriptFileName?.let { put("fileName", it) }
                 put("pageCount", book.pageCount)
@@ -1575,11 +1582,130 @@ class SetupTools(
                 val anchored = anchors.map { it.entryId }.toSet()
                 put("unanchoredCueCount", entries.values.count { !it.isMarker && it.id.value !in anchored && it.id.value !in heads })
             }
-        } ?: return success(noPromptBookMessage(), buildJsonObject {
+        }
+        val book = ref
+        if (stored == null || book == null) return success(noPromptBookMessage(), buildJsonObject {
             put("hasPromptBook", false)
             put("message", noPromptBookMessage())
         })
+        pages?.let { list ->
+            val bad = list.filter { it == null || it !in 1..book.pageCount }
+            if (bad.isNotEmpty()) return failure("pages must be PDF pages 1–${book.pageCount}")
+            if (list.size > MAX_PROMPT_BOOK_PAGES) return failure("pages: at most $MAX_PROMPT_BOOK_PAGES at once")
+        }
+        val text = state.scriptText.state(book.projectUuid, book.scriptHash, book.pageCount)
+        val body = buildJsonObject {
+            stored.forEach { (k, v) -> put(k, v) }
+            putTextState(text)
+            if (text is ScriptTextState.Ready) {
+                val index = text.index
+                put("hasText", index.hasText)
+                putJsonArray("scannedPages") { index.scannedPages.forEach { add(it + 1) } }
+                putJsonArray("pdfOutline") {
+                    index.outline.forEach { item ->
+                        addJsonObject {
+                            put("title", item.title)
+                            put("level", item.level)
+                            put("pdfPage", item.page + 1)
+                            item.y?.let { put("y", it) }
+                        }
+                    }
+                }
+                pages?.let { list ->
+                    putJsonArray("pages") {
+                        list.filterNotNull().distinct().forEach { n ->
+                            val page = index.pages.getOrNull(n - 1)
+                            addJsonObject {
+                                put("pdfPage", n)
+                                put("scanned", page?.scanned ?: true)
+                                putJsonArray("lines") {
+                                    page?.lines?.forEach { line ->
+                                        addJsonObject {
+                                            put("text", line.text)
+                                            put("y", line.y)
+                                            put("x", line.x)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         return success("Prompt book of '${project.name}'", body)
+    }
+
+    /** `textState`, and what it means when it is not READY: never an empty script. */
+    private fun JsonObjectBuilder.putTextState(text: ScriptTextState) {
+        put("textState", text.wire)
+        when (text) {
+            is ScriptTextState.Ready -> {}
+            ScriptTextState.Building -> put("textMessage", "The desk is still reading the script's text; ask again shortly.")
+            ScriptTextState.ScriptMissing -> put("textMessage", "The script PDF is not on this desk, so its text cannot be read.")
+            is ScriptTextState.Unreadable -> put("textMessage", "The desk could not read the script's text: ${text.reason}")
+        }
+    }
+
+    private fun searchPromptBook(input: JsonObject, target: ToolProject): ToolExecutionResult {
+        val query = input.string("query")?.trim().orEmpty()
+        if (ScriptTextMatcher.fold(query).isEmpty()) return failure("query must be words to find")
+        val book = transaction(state.database) {
+            DaoPromptBook.find { DaoPromptBooks.project eq target.project.id }.firstOrNull()?.ref()
+        } ?: return failure(noPromptBookMessage())
+        val pdfPage = input.int("pdfPage")
+        if (input["pdfPage"] != null && input["pdfPage"] !is JsonNull && (pdfPage == null || pdfPage !in 1..book.pageCount)) {
+            return failure("pdfPage must be 1–${book.pageCount}")
+        }
+        val limit = if (input["limit"] == null || input["limit"] is JsonNull) DEFAULT_SEARCH_LIMIT else input.int("limit")
+        if (limit == null || limit !in 1..MAX_SEARCH_LIMIT) return failure("limit must be 1–$MAX_SEARCH_LIMIT")
+        val text = state.scriptText.state(book.projectUuid, book.scriptHash, book.pageCount)
+        if (text !is ScriptTextState.Ready) {
+            // No count: a script not yet read has not been searched.
+            return success("The script's text is not ready (${text.wire})", buildJsonObject {
+                put("query", query)
+                putTextState(text)
+            })
+        }
+        val index = text.index
+        val hits = ScriptTextMatcher.search(index, query, pdfPage?.minus(1)).filter { it.page < book.pageCount }
+        val scanned = index.scannedPages.filter { it < book.pageCount && (pdfPage == null || it == pdfPage - 1) }
+        return success(
+            "'$query': ${hits.size} hit${if (hits.size == 1) "" else "s"}" + (pdfPage?.let { " on pdfPage $it" } ?: ""),
+            buildJsonObject {
+                put("query", query)
+                putTextState(text)
+                put("total", hits.size)
+                put("truncated", hits.size > limit)
+                putJsonArray("scannedPages") { scanned.forEach { add(it + 1) } }
+                putJsonArray("hits") {
+                    hits.take(limit).forEach { hit ->
+                        val rects = ScriptTextMatcher.rects(index, hit)
+                        val page = index.pages[hit.page]
+                        addJsonObject {
+                            put("pdfPage", hit.page + 1)
+                            rects.first().let { r ->
+                                put("x", r.x)
+                                put("y", r.y)
+                                put("width", r.w)
+                                put("height", r.h)
+                            }
+                            putJsonArray("lines") {
+                                hit.spans.zip(rects).forEach { (span, r) ->
+                                    addJsonObject {
+                                        put("text", page.lines[span.line].text)
+                                        put("x", r.x)
+                                        put("y", r.y)
+                                        put("width", r.w)
+                                        put("height", r.h)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        )
     }
 
     private fun JsonObjectBuilder.putPlace(rect: PromptBookRectDto) {
@@ -1587,34 +1713,14 @@ class SetupTools(
         put("y", rect.y)
     }
 
-    /**
-     * A tool's `at` object as one normalised rectangle, or null after adding the problem. Width and
-     * height are clamped to the page rather than refused: the model aims at a line, and a default
-     * height that runs off the bottom of the page is the default's fault, not the model's.
-     */
-    private fun parsePlace(element: JsonElement?, pageCount: Int, where: String, problems: MutableList<String>): PromptBookRectDto? {
-        val at = element as? JsonObject ?: run { problems += "$where: 'at' must be an object"; return null }
-        val page = at.int("pdfPage")
-        val y = at.double("y")
-        if (page == null || page !in 1..pageCount) {
-            problems += "$where: pdfPage must be 1–$pageCount (the PDF's own page order)"
-            return null
-        }
-        if (y == null || !y.isFinite() || y < 0.0 || y >= 1.0) {
-            problems += "$where: y must be at least 0 and below 1"
-            return null
-        }
-        val x = at.double("x") ?: DEFAULT_PLACE_X
-        if (!x.isFinite() || x < 0.0 || x >= 1.0) {
-            problems += "$where: x must be at least 0 and below 1"
-            return null
-        }
-        val w = (at.double("width") ?: DEFAULT_PLACE_WIDTH).coerceAtMost(1.0 - x)
-        val h = (at.double("height") ?: DEFAULT_PLACE_HEIGHT).coerceAtMost(1.0 - y)
-        val rect = PromptBookRectDto(page = page - 1, x = x, y = y, w = w, h = h)
-        checkPromptBookRegion(listOf(rect), pageCount)?.let { problems += "$where: $it"; return null }
-        return rect
-    }
+    /** [book]'s places, its text read only for a quote and never inside a transaction. */
+    private fun placesOf(book: BookRef): ScriptPlaces =
+        ScriptPlaces(book.pageCount) { state.scriptText.state(book.projectUuid, book.scriptHash, book.pageCount) }
+
+    /** What a place on a prompt book needs to know of the book. */
+    private data class BookRef(val id: Int, val pageCount: Int, val scriptHash: String, val projectUuid: String)
+
+    private fun DaoPromptBook.ref() = BookRef(id.value, pageCount, scriptHash, project.uuid.toString())
 
     /** One cue of a build_cue_stack call, validated: a new cue, a marker, or an existing cue shared ([shareCueId]). */
     private data class ShowCue(
@@ -1627,7 +1733,7 @@ class SetupTools(
         val marker: Boolean,
         val layers: List<CueLayerDto>,
         val values: ResolvedLookValues?,
-        val place: PromptBookRectDto?,
+        val place: List<PromptBookRectDto>?,
         val scenery: List<SceneryWrite>,
         val events: List<CueEventWrite>,
         val speedMasters: List<CueSpeedMasterDto>,
@@ -1661,7 +1767,7 @@ class SetupTools(
         data class Context(
             val stackError: String?,
             val takenNumbers: Set<String>,
-            val pageCount: Int?,
+            val places: ScriptPlaces?,
             val elements: Map<UUID, SceneryElementInfo>,
             val patches: Map<Int, CueEventPatchInfo>,
             val speedMasters: List<SpeedMasterRef>,
@@ -1669,7 +1775,7 @@ class SetupTools(
             val cueNames: Map<Int, String>,
         )
         val context = transaction(state.database) {
-            val pageCount = DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()?.pageCount
+            val places = DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()?.ref()?.let(::placesOf)
             val elements = sceneryElementsOf(project)
             val patches = cueEventPatchesOf(project)
             val masters = speedMasterRefsOf(project)
@@ -1682,13 +1788,13 @@ class SetupTools(
                     else -> null
                 }
                 val numbers = stack?.let { cueEntriesInOrder(it) }?.mapNotNull { it.cueNumber }?.toSet().orEmpty()
-                Context(error, numbers, pageCount, elements, patches, masters, cueNames)
+                Context(error, numbers, places, elements, patches, masters, cueNames)
             } else {
                 val clash = !DaoCueStack.find {
                     (DaoCueStacks.project eq project.id) and (DaoCueStacks.name eq stackName.orEmpty()) and
                         (DaoCueStacks.type eq CueStackType.STACK.name)
                 }.empty()
-                Context(if (clash) "a cue stack named '$stackName' already exists — pass its stackId to append to it" else null, emptySet(), pageCount, elements, patches, masters, cueNames)
+                Context(if (clash) "a cue stack named '$stackName' already exists — pass its stackId to append to it" else null, emptySet(), places, elements, patches, masters, cueNames)
             }
         }
         context.stackError?.let { problems += it }
@@ -1705,7 +1811,7 @@ class SetupTools(
                 problems += "cues[$index]: cueId must be an integer"
                 return@mapIndexedNotNull null
             }
-            if (shareId != null) return@mapIndexedNotNull sharedRow(index, row, shareId, context.cueNames, context.takenNumbers, seenNumbers, target, context.pageCount, problems)
+            if (shareId != null) return@mapIndexedNotNull sharedRow(index, row, shareId, context.cueNames, context.takenNumbers, seenNumbers, target, context.places, problems)
             val name = row.string("name")?.trim().orEmpty()
             val where = "cues[$index] ('$name')"
             val rowProblems = mutableListOf<String>()
@@ -1765,7 +1871,7 @@ class SetupTools(
                 if (marker) rowProblems += "a marker cannot carry moveInDark: it lights nothing"
                 parseToolCueMoveInDark(raw, CueMoveInDarkSettings.DEFAULT).getOrElse { rowProblems += it.message!!; null }
             } ?: CueMoveInDarkSettings.DEFAULT
-            val place = rowPlace(row, target, context.pageCount, rowProblems)
+            val place = rowPlace(row, target, context.places, rowProblems)
             if (rowProblems.isNotEmpty()) {
                 problems += rowProblems.map { "$where: $it" }
                 null
@@ -1837,7 +1943,7 @@ class SetupTools(
                 DaoPromptBookAnchor.new {
                     promptBook = book!!
                     this.entry = entry
-                    region = listOf(place)
+                    region = place
                     label = anchorLabel(entry)
                 }
                 anchors++
@@ -1900,7 +2006,7 @@ class SetupTools(
         takenNumbers: Set<String>,
         seenNumbers: MutableMap<String, Int>,
         target: ToolProject,
-        pageCount: Int?,
+        places: ScriptPlaces?,
         problems: MutableList<String>,
     ): ShowCue? {
         val cueName = cueNames[cueId] ?: run { problems += "cues[$index]: no cue $cueId in this project"; return null }
@@ -1918,7 +2024,7 @@ class SetupTools(
         val number = row.string("number")?.trim()?.takeIf { it.isNotEmpty() }
             ?.let { checkRowNumber(it, index, takenNumbers, seenNumbers, rowProblems) }
         val follow = seconds(row, "followSeconds", rowProblems)
-        val place = rowPlace(row, target, pageCount, rowProblems)
+        val place = rowPlace(row, target, places, rowProblems)
         if (rowProblems.isNotEmpty()) {
             problems += rowProblems.map { "$where: $it" }
             return null
@@ -1954,27 +2060,31 @@ class SetupTools(
     }
 
     /** A build_cue_stack row's `at`, or null — refused, as the Prompt Book routes refuse it, outside the current project. */
-    private fun rowPlace(row: JsonObject, target: ToolProject, pageCount: Int?, problems: MutableList<String>): PromptBookRectDto? {
+    private fun rowPlace(row: JsonObject, target: ToolProject, places: ScriptPlaces?, problems: MutableList<String>): List<PromptBookRectDto>? {
         val at = row["at"] ?: return null
         return when {
             !target.isCurrent -> {
                 problems += "'at' anchors the cue in the prompt book, which only the current project's can be marked up — leave 'at' out and anchor later with mark_up_prompt_book"
                 null
             }
-            pageCount == null -> {
+            places == null -> {
                 problems += "'at' needs a prompt book, and this project has none — import the PDF first, or leave 'at' out and anchor later with mark_up_prompt_book"
                 null
             }
-            else -> parsePlace(at, pageCount, "at", problems)
+            else -> places.parse(at, "at", problems)
         }
     }
 
     private fun markUpPromptBook(input: JsonObject): ToolExecutionResult {
         val project = state.projectManager.currentProject
-        data class Book(val id: Int, val pageCount: Int)
         val book = transaction(state.database) {
-            DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()?.let { Book(it.id.value, it.pageCount) }
+            DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()?.ref()
         } ?: return failure(noPromptBookMessage())
+        // The anchors are read inside a transaction: a quote's text is read before it.
+        val scriptText = if (ScriptPlaces.anyQuoted(input["anchors"]) || ScriptPlaces.anyQuoted(input["notes"])) {
+            state.scriptText.state(book.projectUuid, book.scriptHash, book.pageCount)
+        } else null
+        val places = if (scriptText != null) ScriptPlaces(book.pageCount) { scriptText } else placesOf(book)
 
         val problems = mutableListOf<String>()
         val coverPages = input.int("coverPages")
@@ -1990,7 +2100,7 @@ class SetupTools(
                 val where = "anchors[$index]"
                 val row = element as? JsonObject ?: run { found += "$where: not an object"; return@mapIndexedNotNull null }
                 anchorEntry(row, project, where, found::add)?.let { entryId ->
-                    parsePlace(row["at"], book.pageCount, "$where (entry $entryId)", found)?.let { entryId to it }
+                    places.parse(row["at"], "$where (entry $entryId)", found)?.let { entryId to it }
                 }
             } to found
         }
@@ -2009,7 +2119,7 @@ class SetupTools(
                 problems += "notes[$index]: tone is for NOTE only, one of ${PromptBookNoteTone.entries.joinToString { it.name }}"
             }
             if (text == null && kind != PromptBookAnnotationKind.STRIKETHROUGH.name) problems += "notes[$index]: a $kind needs text"
-            val place = parsePlace(row["at"], book.pageCount, "notes[$index]", problems)
+            val place = places.parse(row["at"], "notes[$index]", problems)
             if (problems.size > before || place == null) null
             else Triple(kind, tone, text.takeIf { kind != PromptBookAnnotationKind.STRIKETHROUGH.name }) to place
         }
@@ -2028,9 +2138,9 @@ class SetupTools(
                 }.firstOrNull() ?: DaoPromptBookAnchor.new {
                     promptBook = dao
                     this.entry = entry
-                    region = listOf(place)
+                    region = place
                 }
-                anchor.region = listOf(place)
+                anchor.region = place
                 anchor.label = anchorLabel(entry)
             }
             for ((note, place) in notes) {
@@ -2039,7 +2149,7 @@ class SetupTools(
                     kind = note.first
                     tone = note.second
                     text = note.third
-                    region = listOf(place)
+                    region = place
                 }
             }
             val heads = followHeads(project.cueStacks.map { entriesOf(it) })
@@ -2184,21 +2294,23 @@ class SetupTools(
 
     private companion object {
         const val MAX_PROBLEMS = 100
+        const val DEFAULT_SEARCH_LIMIT = 20
+        const val MAX_SEARCH_LIMIT = 200
         val STAGE_NUMBERS = listOf("widthM", "depthM", "heightM")
         val REGION_NUMBERS = listOf("centerX", "centerY", "centerZ", "widthM", "depthM", "heightM", "yawDeg")
         val RIGGING_NUMBERS = listOf("x", "y", "z", "yawDeg", "pitchDeg", "rollDeg", "lengthM")
         const val MAX_CUE_SECONDS = 3600.0
-        const val DEFAULT_PLACE_X = 0.06
-        const val DEFAULT_PLACE_WIDTH = 0.88
-        const val DEFAULT_PLACE_HEIGHT = 0.03
 
         fun JsonObject.string(name: String): String? = (this[name] as? JsonPrimitive)?.contentOrNull
-        fun JsonObject.double(name: String): Double? = (this[name] as? JsonPrimitive)?.doubleOrNull
-        fun JsonObject.int(name: String): Int? = (this[name] as? JsonPrimitive)?.let { p ->
-            p.intOrNull ?: p.doubleOrNull?.takeIf { it == Math.floor(it) && it in Int.MIN_VALUE.toDouble()..Int.MAX_VALUE.toDouble() }?.toInt()
-        }
         fun JsonObject.boolean(name: String): Boolean? = (this[name] as? JsonPrimitive)?.booleanOrNull
         fun JsonObject.stringList(name: String): List<String> =
             (this[name] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf(String::isNotEmpty) }.orEmpty()
     }
+}
+
+internal fun JsonObject.double(name: String): Double? = (this[name] as? JsonPrimitive)?.doubleOrNull
+
+/** A whole number, written as one (`3`) or as a double with no fraction (`3.0`). */
+internal fun JsonObject.int(name: String): Int? = (this[name] as? JsonPrimitive)?.let { p ->
+    p.intOrNull ?: p.doubleOrNull?.takeIf { it == Math.floor(it) && it in Int.MIN_VALUE.toDouble()..Int.MAX_VALUE.toDouble() }?.toInt()
 }
