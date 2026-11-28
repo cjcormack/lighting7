@@ -404,9 +404,9 @@ attribute is refused by name (`COMMAND_NOT_STORABLE`) by every tool that writes 
 
 Tools act on the desk's **current** project, except where they take a `projectId` (§"Another
 project than the live one" below). Before the show is warm a call
-answers `isError` with "still starting". `describe_rig`, `get_current_state` and the six setup
+answers `isError` with "still starting". `describe_rig`, `get_current_state` and the seven setup
 readers below (`list_projects`, `list_venues`, `list_fixture_types`, `get_patch`, `get_prompt_book`,
-`get_scene`) and `render_view` carry `readOnlyHint`.
+`search_prompt_book`, `get_scene`) and `render_view` carry `readOnlyHint`.
 
 ### Show-setup tools
 
@@ -442,7 +442,8 @@ prompt-book markup from a script and lighting notes.
 | `render_view` | A PNG of a stage viewpoint, drawn by a signed-in desk window (§"`render_view`" below): `viewpoint` a camera (`orbit`, `eye`, `plan`, `front`, `side`), a saved view by name or uuid, or a seat `{seating, seat}`; `width` / `height` 160–1920 and at most 1920 × 1080 pixels in all (default 1280 × 720; one side alone is 16:9 to it, refused if that puts the other out of range); `source` `output` (default), `outputProgrammer`, `programmer` or `nextGo`; `workLights` `true` to lift the dark and check geometry (default `false`, the room as lit). Read-only. `ai/RenderViewTool.kt` |
 | `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch/roll (`rollDeg` stands a strip on end), beam, gel, kind, hidden, `lengthM` (only for an `acceptsLength` type — refused by name for any other, `null` clears), and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch/roll, and a side's own `lengthM`), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address. For an `acceptsLantern` type, the row and each `alsoAt` entry also take the **lantern and its focus** (stage-view plan session 7): `lanternType` (a library id; on an `alsoAt` entry null means the fixture's own), `zoomDeg`, `lampRotationDeg`, `shutters` (four `{depth, angleDeg}`, top · bottom · left · right), `gateRotationDeg`, `iris`, `focusSoftness` — absent leaves each, `null` clears — checked by the same `resolvePatchFocus` the REST routes call, so an unknown id, a zoom outside the lantern's range, a kind that contradicts the lantern, or any of them on a DMX type is refused by name with nothing written; a lantern names the kind, so a model sending one need not send `kind`. `get_patch` reports all seven where set, per placement too. For a type with loadable settings, the row and each `alsoAt` entry also take **`media`** (fixture optics plan session 3) — `{slots: {<setting>: {<slot>: {gel} | {gobo} | {}}}}`, naming only the slots that differ from the stock, `{}` an empty slot; on the row absent leaves it and `null` clears, on an `alsoAt` entry it is the lantern's own, layered over the fixture's slot by slot — checked by the same `patchMediaRefusal` the REST routes call, every problem at once and nothing written: an unknown setting or slot, the open hole, an unknown gel (the schema lists the library's codes) or gobo, a gobo in a gel-only slot, any of it on a type with no loadable settings. `get_patch` reports each unit's `media` where set. The row also takes **`locate`** (venue-visit plan S8): the fixture's stored locate, `[{head?, pan, tilt, panFine?, tiltFine?}]` in DMX bytes, replacing the stored list (`null` or `[]` clears it), refused by name for a unit the type does not pan and tilt (`StoredLocate.typeProblems`) and for a fine byte on a unit with no fine channel; `get_patch` reports it. The row also takes **`colour`** (`docs/fixtures-engineering.md` §"Fixture colours"), one of the ten keys or `null`, refused as `COLOUR_UNKNOWN` otherwise. On a show on a venue, a venue fixture's row writes through the facets the show owns (§"Tools on a show on a venue"), and its `colour` is the show's recolour, needing no facet |
 | `override_venue_fixtures` | A show's venue fixtures by key: each facet `SHOW` / `VENUE` / `KEEP_MINE`, an `address` override, `colour` (the show's recolour; `null` takes the venue's back) and `hidden`; `dryRun`. The fixture sheet's switches (§"Tools on a show on a venue") |
-| `get_prompt_book` | Page count, cover pages, anchors (each its `entryId`, cue, number and stack; `sequenceHeadEntryId` on a follower's, which is inactive) and notes; with no book, where to import one |
+| `get_prompt_book` | Page count, cover pages, anchors (each its `entryId`, cue, number and stack; `sequenceHeadEntryId` on a follower's, which is inactive) and notes; with no book, where to import one. `textState` (`READY`, `BUILDING`, `SCRIPT_MISSING`, `UNREADABLE`, with a `textMessage` when not ready) and, once ready, `hasText`, `scannedPages` and `pdfOutline` (`{title, level, pdfPage, y?}`); `pages: [n…]` (at most 10) answers those pages' lines, each `{text, y, x}` |
+| `search_prompt_book` | `{query, pdfPage?, limit?, projectId?}` over the script's text by the one match rule (`docs/prompt-book-engineering.md` §"Matching"): `total`, `truncated`, `scannedPages` and each hit's `pdfPage`, its first line's box and every line box it touches with the line's text. Not ready: `textState` and no count |
 | `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look or palette layers, its own `values` (current project only), `scenery` (stage-view plan session 8: the elements each cue moves on GO, below), `events` (session 9: the one-shot triggers each cue fires after GO, below), and `at` — its place in the prompt book. A row naming an existing `cueId` **shares** that cue instead, taking only the entry's own `number`, `followSeconds` and `at` (the cue's content fields are refused by name, since they would change it everywhere). A stack-level `scenery` is the stack's *set*, replacing the one stored when given |
 | `set_move_in_dark` | A stack's or a cue's stored *Move in dark* (move-in-dark plan D2, D3; `ai/MoveInDarkSetupTool.kt`): `{stackId \| cueId, moveInDark, projectId?}`, a stack's fields `on`, `when`, `delayMs`, `timeMs`, `families`, a cue's `mode` (`STACK \| EARLY \| LATE \| OFF`), `delayMs` and `timeMs` (`null` the stack's) and `live`, each field left out keeping what is stored and a field of the other kind refused by name. The same parsers as the REST writes, so it refuses what they refuse. `create_cue` and each `build_cue_stack` cue take a cue's `moveInDark` too; `get_current_state`'s `cue_stacks` reports each stack's setting with the static plan's summary, and `cue_run` the heads moving or set in the dark. **No remote-access gate**: it moves only dark heads, as scenery is drawn |
 | `mark_up_prompt_book` | Answers `inactiveAnchors`, as `build_cue_stack` does: the anchors it wrote on followers, which the book ignores. Cover pages, anchor upserts for existing entries (`entryId`, or `stackId` and `number`; a `cueId` alone is refused, naming no place), and notes (NOTE with tone, FREETEXT, STRIKETHROUGH) |
@@ -505,8 +506,10 @@ Three decisions shape them:
 
 - **One tool takes a file, and only an image.** The model reads the PDFs and photos in its own
   conversation and passes structured data. The prompt-book PDF comes in through the Prompt Book
-  view's import (`/prompt-book`), which hashes it and counts its pages with pdf.js; the backend has
-  no PDF parser and this did not add one. `get_prompt_book` and every `at` that meets a book-less
+  view's import (`/prompt-book`), which hashes it and counts its pages with pdf.js. The desk then
+  reads the PDF's text itself with PDFBox, in the background (`docs/prompt-book-engineering.md`
+  §"The text index"), so Claude can search it and place things by quoting it, but no tool takes the
+  PDF's bytes. `get_prompt_book` and every `at` that meets a book-less
   project say so, naming the desk's public URL when it is known. The exception is
   `upload_scene_image` (scrim plan D11): a painted cloth's image may be one the model made or was
   given, with no desk import to go through, so the tool takes its bytes — base64, PNG or JPEG,
@@ -538,8 +541,17 @@ Three decisions shape them:
   not in the project is refused too, although the shared cue write (`writeCueChildren`) drops
   one silently — there, by design, for a Look deleted since.
 
-A prompt-book place is `{pdfPage, y, x?, width?, height?}`: `pdfPage` counts from 1 at the
-file's first page (converted to the stored 0-based index), `y` is a fraction of the page from the
+A prompt-book place (`ai/ScriptPlaces.kt`, prompt-book navigation plan D6) is a **quote**,
+`{text, pdfPage?, occurrence?}`, or a **page and height**, `{pdfPage, y, x?, width?, height?}`, which
+means what it always has (P4). A quote is found in the script's text index by the match rule and lands
+on the hit's own boxes, one rect per line it touches; `pdfPage` limits the search to that page, and
+`occurrence` (from 1, in page order) chooses among the hits. A quote found nowhere is refused, naming
+the pages with little or no text (likely scans) where it may be unread; one found more than once with nothing to choose by is
+refused naming each place (`pdfPage`, `y` and the line, at most eight); `text` beside `y`, `x`,
+`width` or `height` is refused. While the index is building, or the PDF is not on the desk, a quote
+is refused saying so and the call writes nothing — a place by page and height still works. The
+index is read once per call, before `mark_up_prompt_book`'s transaction. `pdfPage` counts from 1 at
+the file's first page (converted to the stored 0-based index), `y` is a fraction of the page from the
 top, and the defaults (x 0.06, width 0.88, height 0.03) are the Prompt Book view's text-column
 band. A height that would run off the page is clamped rather than refused. Anchor labels are
 written `Q<number>` (else the cue name), as the view writes them. Cue times are **seconds** on
@@ -567,7 +579,7 @@ head on its side (`docs/fixtures-engineering.md` §"Aiming a head at a point").
 The setup tools that read or store data take an optional **`projectId`** — `get_patch`,
 `patch_fixtures`, `delete_groups`, `unpatch_fixtures`, `rename_fixtures`, `edit_groups`, `set_stage`, `place_fixtures`,
 `override_venue_fixtures`, `set_scene`, `get_scene`,
-`upload_scene_image`, `get_prompt_book`, `build_cue_stack`, `set_move_in_dark`, `delete_cue_stacks`, `delete_cues`,
+`upload_scene_image`, `get_prompt_book`, `search_prompt_book`, `build_cue_stack`, `set_move_in_dark`, `delete_cue_stacks`, `delete_cues`,
 `copy_cues` (its target), `list_history`, `undo_changes`, and the
 show-running `set_scenery` — so a project can be prepared while another runs, as the REST routes'
 `withProject` writes allow. `ai/ToolProject.kt`'s `State.toolProject` resolves it (absent is the

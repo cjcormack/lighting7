@@ -155,6 +155,11 @@ for the full contract. The legacy "PDF missing on this install" re-import card
 (re-attach by hash) survives as a fallback for books whose bytes reached no peer
 (e.g. created before v4).
 
+Beside each PDF in the store the desk keeps the script's **text index**, `{hash}.text.json`. It is
+derived from the bytes, so it is never exported or synced and has no disposition: a desk that pulls
+a show builds its own from the PDF, `hydrateStore` asking for the build as it copies each one in
+(`docs/prompt-book-engineering.md` §"The text index").
+
 The exporter writes this layout one **record kind** at a time: `ProjectExporter.KINDS` holds one
 `RecordKind(folder, write)` per folder, `project.json` the record `project` keyed by the project's
 uuid, a script its body and meta together. A kind writes to a `RecordSink` — `DirSink`, the files
@@ -727,7 +732,7 @@ imports `src/test/resources/sync/legacy-v38/`, `RichProjectFixture` as main expo
 Circle, a group binding and a flash added for the names that moved (frozen: never regenerate it), and
 re-exports it with only those names moved. **`minReader` moves to 39**: a v38 reader would hold every
 attribute binding as one it does not know, dead, and run each centre at its default. Database step 6,
-`state/AttributeNamesMigration.kt`, renames a database's copies (CLAUDE.md §Database), and names
+`state/AttributeNamesMigration.kt`, renames a database's copies (`docs/database-engineering.md`), and names
 in a warning each stored script and FX definition that still says an old centre, which it leaves as
 it is.
 
@@ -756,7 +761,7 @@ write it away on its next push. As the doc above says, what actually stops an ol
 says the same to a reader that checks it.
 
 The database moved in the same session — database step 5, `state/TerminologyMigration.kt`,
-`PRAGMA user_version` 5, backed up first to `<db>.pre-terminology-<utc>.db` (CLAUDE.md §Database) —
+`PRAGMA user_version` 5, backed up first to `<db>.pre-terminology-<utc>.db` (`docs/database-engineering.md`) —
 and so did the sync engine's machine-local record keys (`sync_state.table_name`,
 `sync_session_conflict.table_name`), so the first sync after the upgrade sees each record under its
 new folder rather than a deletion and an addition.

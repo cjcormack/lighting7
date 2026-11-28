@@ -544,7 +544,7 @@ object DaoCueLayers : IntIdTable("cue_layers") {
         // `CREATE TABLE` only, and SQLite cannot `ALTER TABLE ADD CONSTRAINT`, so
         // `createMissingTablesAndColumns` leaves an existing `cue_layers` unconstrained — the dev
         // desk included. That is the same one-database bet the whole no-migrations position rests
-        // on (see CLAUDE.md §Database); the shipped MSI's fresh install gets the constraint, and
+        // on (see docs/database-engineering.md); the shipped MSI's fresh install gets the constraint, and
         // the warn-and-drop paths are what hold the line on a DB that predates it. Don't read a
         // green test run as proof the constraint fires on the operator's desk.
         check("cue_layer_exactly_one_source") {
