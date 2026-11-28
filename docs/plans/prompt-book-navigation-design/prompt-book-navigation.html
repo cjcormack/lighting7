@@ -1,0 +1,516 @@
+<title>Prompt Book Navigation</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Courier+Prime:wght@400;700&display=swap">
+<style>
+/* Layout: one reading column in the family of the FX design pages; the desk drawings are dark in both themes, as the desk is, and the script inside them is paper. */
+:root {
+  --bg: #f5f4f7; --card: #ffffff; --fg: #1b1a20; --muted: #5e5b68; --line: #dddae3;
+  --accent: #6a3dcb; --accent-soft: #efe8fd; --amber: #8f5500; --amber-soft: #fbefd9;
+  --go: #1f7a45; --go-soft: #dcf2e4; --bad: #b42318; --bad-soft: #fde7e5;
+  --desk-bg: #0c0b10; --desk-panel: #15141b; --desk-raise: #1f1d27; --desk-line: #2c2a35;
+  --desk-fg: #ecebf1; --desk-muted: #a3a0ae; --desk-faint: #6d6a78;
+  --desk-violet: #a78bfa; --desk-violet-strong: #8b5cf6; --desk-amber: #f5b14a; --desk-blue: #4f93ff; --desk-green: #4ade80;
+  --paper: #f6f3ea; --ink: #23201a; --ink-soft: #6b6557; --hit: #ffd95e; --hit-now: #ff9f2e;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --script: "Courier Prime", "Courier New", Courier, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111015; --card: #1a1920; --fg: #f2f1f5; --muted: #a6a3b0; --line: #2c2a33;
+  --accent: #b597ff; --accent-soft: #2b2140; --amber: #f5c56b; --amber-soft: #3a2c10;
+  --go: #86efac; --go-soft: #173825; --bad: #fca5a5; --bad-soft: #3b1414; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111015; --card: #1a1920; --fg: #f2f1f5; --muted: #a6a3b0; --line: #2c2a33;
+  --accent: #b597ff; --accent-soft: #2b2140; --amber: #f5c56b; --amber-soft: #3a2c10;
+  --go: #86efac; --go-soft: #173825; --bad: #fca5a5; --bad-soft: #3b1414; color-scheme: dark; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 40px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 64px; }
+.read { max-width: 760px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(32px, 5vw, 50px); font-weight: 800; line-height: 1.04; }
+h2 { font-size: 26px; font-weight: 700; }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 18px; color: var(--muted); max-width: 66ch; }
+.lede b, .muted b, li b, td b, p b { color: var(--fg); font-weight: 600; }
+.muted { color: var(--muted); }
+code { font-family: var(--mono); font-size: 0.86em; background: color-mix(in srgb, var(--line) 60%, transparent); padding: 1px 5px; border-radius: 4px; }
+section { display: flex; flex-direction: column; gap: 20px; }
+.head { display: flex; flex-direction: column; gap: 8px; }
+.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 600; font-family: var(--mono); background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.tag.back { background: var(--amber-soft); color: var(--amber); }
+.tag.both { background: var(--go-soft); color: var(--go); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 720px; }
+th { text-align: left; font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 8px 12px 8px 0; border-bottom: 1px solid var(--fg); }
+td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--muted); }
+td:first-child { color: var(--fg); font-weight: 600; white-space: nowrap; }
+ul.points { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 14.5px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 28px; align-items: start; }
+.cols > * { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+button, input { font: inherit; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--desk-violet); outline-offset: 2px; }
+.callout { border-left: 3px solid var(--accent); background: var(--card); padding: 12px 16px; border-radius: 0 8px 8px 0; color: var(--muted); font-size: 14.5px; }
+.callout b { color: var(--fg); }
+kbd { font-family: var(--mono); font-size: 11.5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; background: var(--card); color: var(--fg); white-space: nowrap; }
+pre { margin: 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; color: var(--fg); }
+pre .c { color: var(--muted); }
+pre .n { color: var(--accent); }
+
+/* Desk drawing */
+.board { border: 1px solid var(--line); border-radius: 12px; background: var(--desk-bg); color: var(--desk-fg); overflow: hidden; font-size: 13px; line-height: 1.4; }
+.board-cap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 9px 14px; background: var(--card); color: var(--fg); border-bottom: 1px solid var(--line); }
+.board-cap h3 { font-size: 14px; margin-right: auto; }
+.board-cap span { font-size: 12.5px; color: var(--muted); }
+.ann { font-family: var(--mono); font-size: 10px; color: var(--desk-violet); border: 1px solid var(--desk-violet-strong); border-radius: 50%; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; flex: none; background: var(--desk-bg); }
+.tb { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--desk-line); background: var(--desk-panel); flex-wrap: wrap; }
+.crumb { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--desk-line); background: var(--desk-raise); color: var(--desk-fg); font-size: 12.5px; cursor: pointer; min-width: 0; max-width: 100%; }
+.crumb span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumb i { font-style: normal; color: var(--desk-faint); }
+.pg { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--desk-line); font-family: var(--mono); font-size: 12px; color: var(--desk-muted); }
+.pg input { width: 30px; background: transparent; border: 0; color: var(--desk-fg); text-align: right; font-family: var(--mono); font-size: 12px; padding: 0; }
+.find { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px 0 9px; border-radius: 7px; border: 1px solid var(--desk-violet-strong); background: var(--desk-bg); flex: 1 1 200px; min-width: 0; max-width: 340px; }
+.find input { flex: 1; min-width: 0; background: transparent; border: 0; color: var(--desk-fg); font-size: 12.5px; outline: none; }
+.find .n { font-family: var(--mono); font-size: 11px; color: var(--desk-muted); white-space: nowrap; }
+.ib { height: 22px; min-width: 22px; padding: 0 5px; border-radius: 5px; border: 1px solid var(--desk-line); background: var(--desk-raise); color: var(--desk-fg); font-size: 11px; cursor: pointer; }
+.backchip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--desk-line); background: var(--desk-raise); color: var(--desk-muted); font-size: 11.5px; cursor: pointer; }
+.livechip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid #14532d; background: #052e16; color: var(--desk-green); font-family: var(--mono); font-size: 11.5px; font-weight: 600; }
+.body3 { display: grid; grid-template-columns: minmax(0, 1fr) 22px 250px; height: 560px; }
+@media (max-width: 820px) { .body3 { grid-template-columns: minmax(0, 1fr) 22px; } .rail { display: none !important; } }
+.script { overflow-y: auto; background: #08070b; padding: 14px 10px; display: flex; flex-direction: column; gap: 14px; position: relative; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { .script { scroll-behavior: auto; } }
+.sheet { background: var(--paper); color: var(--ink); font-family: var(--script); font-size: 12px; line-height: 1.5; border-radius: 2px; padding: 18px 20px 26px 54px; position: relative; max-width: 560px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+.sheet .no { position: absolute; top: 6px; right: 12px; font-size: 10px; color: var(--ink-soft); }
+.sheet p { margin: 0 0 6px; position: relative; }
+.sheet .hd { font-weight: 700; text-transform: uppercase; margin-top: 4px; }
+.sheet .sd { font-style: italic; color: var(--ink-soft); padding-left: 18px; }
+.sheet .who { font-weight: 700; }
+.sheet mark { background: var(--hit); color: inherit; border-radius: 2px; padding: 0 1px; }
+.sheet mark.now { background: var(--hit-now); box-shadow: 0 0 0 2px var(--hit-now); }
+.flag { position: static; width: fit-content; margin: 0 0 3px -42px; height: 18px; display: flex; align-items: center; gap: 4px; padding: 0 6px 0 5px; border-radius: 3px 9px 9px 3px; font-family: var(--body); font-size: 9.5px; font-weight: 600; font-style: normal; text-transform: none; color: #fff; white-space: nowrap; }
+.flag.ACT { background: #5b21b6; } .flag.SCENE { background: #7c3aed; } .flag.NUMBER { background: #b45309; }
+.cuem { position: absolute; left: -46px; top: 0; height: 17px; padding: 0 6px; border-radius: 9px; background: #1d4ed8; color: #fff; font-family: var(--mono); font-size: 9.5px; font-weight: 500; font-style: normal; display: inline-flex; align-items: center; }
+.cuem.live { background: #15803d; }
+.mini { background: var(--desk-panel); border-left: 1px solid var(--desk-line); border-right: 1px solid var(--desk-line); position: relative; cursor: pointer; }
+.mini .t { position: absolute; left: 3px; right: 3px; height: 2px; border-radius: 1px; }
+.mini .t.b { background: var(--desk-violet); height: 3px; left: 1px; right: 1px; }
+.mini .t.n { background: var(--desk-amber); height: 3px; left: 1px; right: 1px; }
+.mini .t.c { background: var(--desk-blue); left: 7px; right: 7px; }
+.mini .t.h { background: var(--hit); left: 12px; right: 1px; }
+.mini .t.l { background: var(--desk-green); height: 4px; left: 0; right: 0; }
+.mini .vp { position: absolute; left: 0; right: 0; border: 1px solid var(--desk-muted); background: rgba(255,255,255,0.07); border-radius: 2px; pointer-events: none; }
+.rail { background: var(--desk-panel); overflow-y: auto; display: flex; flex-direction: column; }
+.rh { position: sticky; top: 0; display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: var(--desk-raise); border-bottom: 1px solid var(--desk-line); font-size: 11.5px; font-weight: 600; cursor: pointer; border-left: 3px solid var(--desk-violet-strong); color: var(--desk-fg); text-align: left; border-top: 0; border-right: 0; width: 100%; }
+.rh.NUMBER { border-left-color: var(--desk-amber); padding-left: 18px; font-weight: 500; }
+.rh.SCENE { padding-left: 14px; }
+.rh small { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--desk-faint); font-weight: 400; }
+.rc { display: flex; align-items: center; gap: 8px; padding: 7px 10px 7px 16px; border-bottom: 1px solid var(--desk-line); font-size: 12px; cursor: pointer; background: transparent; border-top: 0; border-left: 0; border-right: 0; color: var(--desk-fg); text-align: left; width: 100%; }
+.rc b { font-family: var(--mono); font-size: 11px; color: var(--desk-blue); min-width: 30px; }
+.rc.live b { color: var(--desk-green); }
+.rc small { color: var(--desk-faint); font-size: 10.5px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 9px 14px; border-top: 1px solid var(--desk-line); background: var(--desk-panel); font-size: 12px; color: var(--desk-muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.pop { border: 1px solid var(--desk-line); background: var(--desk-panel); border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 2px; max-width: 380px; width: 100%; box-sizing: border-box; }
+.pop .f { display: flex; gap: 4px; padding: 2px 2px 8px; flex-wrap: wrap; }
+.pop .f span { height: 22px; padding: 0 8px; border-radius: 5px; border: 1px solid var(--desk-line); font-size: 11.5px; color: var(--desk-muted); display: inline-flex; align-items: center; }
+.pop .f span.on { background: var(--desk-raise); color: var(--desk-fg); }
+.pop .r { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; border-radius: 6px; font-size: 12.5px; }
+.pop .r.cur { background: var(--desk-raise); }
+.pop .r.s { padding-left: 22px; } .pop .r.m { padding-left: 22px; color: var(--desk-amber); }
+.pop .r small { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--desk-faint); white-space: nowrap; }
+.pad { padding: 16px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.seltb { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 8px; border: 1px solid var(--desk-line); background: var(--desk-raise); }
+.seltb span { height: 24px; padding: 0 9px; border-radius: 5px; font-size: 12px; display: inline-flex; align-items: center; color: var(--desk-muted); }
+.seltb span.new { color: var(--desk-fg); box-shadow: inset 0 0 0 1px var(--desk-violet-strong); }
+
+/* Questions */
+.q { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.q .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.q .o { border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+.q .o.rec { border-color: var(--accent); }
+.q .o b { color: var(--fg); }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 16px; }
+.step { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--muted); }
+.step .eyebrow { color: var(--accent); }
+</style>
+
+<div class="wrap">
+
+<header class="head read">
+  <span class="eyebrow">Design · 2026-11-28 · Prompt Book</span>
+  <h1>Finding your place in a long script</h1>
+  <p class="lede">The Prompt Book can only be scrolled, or jumped through from one cue to another. This proposes <b>search</b>, <b>bookmarks</b> for acts, scenes and musical numbers, and three smaller aids, so that "the kitchen scene" or "the line about the lamp" is two keystrokes away while a show is being programmed. Claude gets the same reach through the MCP tools.</p>
+</header>
+
+<section>
+  <div class="head read">
+    <h2>What the book has today</h2>
+    <p class="muted">Read from the code at <code>e03b8e9</code>.</p>
+  </div>
+  <ul class="points read">
+    <li><b>Navigation is by cue.</b> A click in the rail scrolls to that cue's anchor; <i>Jump to live</i> and a <code>?cue=</code> link do the same. A stretch of script with no cues yet, which is every stretch on day one, has no handle at all.</li>
+    <li><b>Only a window of pages is drawn</b> (about one viewport above and below), because an 84-page script whole is 1.5 GB of canvas. So the browser's own find reaches five or six pages and misses the rest.</li>
+    <li><b>The desk never reads the script's text.</b> It stores the PDF by hash and serves the bytes. Claude places a cue by estimating a fraction down a page (<code>pdfPage</code>, <code>y</code>) from its own reading of the PDF, and cannot ask the desk where a line is.</li>
+    <li><b>Stack markers</b> ("Act 1", "Interval") divide a cue stack and show in the rail between cards. They have no place on the script: the anchor routes refuse a marker's entry.</li>
+    <li>The page count and <i>Front matter</i> offset exist, so the desk already knows that PDF page 5 is the script's printed page 3.</li>
+  </ul>
+</section>
+
+<section>
+  <div class="head read">
+    <h2>The view, with all of it in</h2>
+    <p class="muted">A working sketch: type in the find field, press <kbd>Enter</kbd> for the next hit, click a heading in the rail, or click and drag the strip between the script and the rail. The script is invented for the drawing.</p>
+  </div>
+  <div class="board">
+    <div class="board-cap"><h3>Prompt Book · locked, show running</h3><span>navigation works locked; placing a bookmark needs the lock off</span></div>
+    <div class="tb">
+      <button class="crumb" id="crumb" title="Contents"><span id="crumbText">Act 1</span><i>▾</i></button><span class="ann">1</span>
+      <span class="pg">p.<input id="pgIn" aria-label="Go to page" value="1" inputmode="numeric"><span>/ 12</span></span><span class="ann">2</span>
+      <span class="find"><input id="findIn" aria-label="Find in script" placeholder="Find in script" value="lamp"><span class="n" id="findN"></span><button class="ib" id="prevHit" aria-label="Previous hit">↑</button><button class="ib" id="nextHit" aria-label="Next hit">↓</button></span><span class="ann">3</span>
+      <button class="backchip" id="backChip" hidden>↩ Back to p.<span id="backPg"></span></button><span class="ann" id="backAnn" hidden>4</span>
+      <span style="flex:1"></span>
+      <span class="livechip">▶ Q4</span>
+    </div>
+    <div class="body3">
+      <div class="script" id="script"></div>
+      <div class="mini" id="mini" title="Click or drag to move through the script"></div>
+      <div class="rail" id="rail"></div>
+    </div>
+    <div class="legend">
+      <span><span class="ann">1</span> Where you are; opens Contents</span>
+      <span><span class="ann">2</span> Go to a printed page</span>
+      <span><span class="ann">3</span> Find, <kbd>⌘F</kbd></span>
+      <span><span class="ann">4</span> Back to where you jumped from</span>
+      <span><i style="width:14px;height:3px;background:var(--desk-violet);display:inline-block"></i> act or scene</span>
+      <span><i style="width:14px;height:3px;background:var(--desk-amber);display:inline-block"></i> number</span>
+      <span><i style="width:10px;height:2px;background:var(--desk-blue);display:inline-block"></i> cue</span>
+      <span><i style="width:10px;height:2px;background:var(--hit);display:inline-block"></i> hit</span>
+      <span><i style="width:14px;height:4px;background:var(--desk-green);display:inline-block"></i> live</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="tag">Search</span>
+    <h2>Find in the whole script</h2>
+  </div>
+  <div class="cols">
+    <div>
+      <h3>In the view</h3>
+      <ul class="points">
+        <li><kbd>⌘F</kbd> (or <kbd>/</kbd>) opens the find field in the book's toolbar, in place of the browser's own find, which cannot see undrawn pages.</li>
+        <li>Hits are found as you type, across every page: a count (<i>3 of 14</i>), every hit washed yellow on the page, the current one orange, and a tick per hit on the strip.</li>
+        <li><kbd>Enter</kbd> and <kbd>⇧Enter</kbd> step through them; <kbd>Esc</kbd> closes the field and offers <i>Back</i> to where the search began.</li>
+        <li>Case and accents are ignored, and a hit may run over a line break, since a script's line breaks are the typist's. Speaker names and stage directions are text like any other.</li>
+        <li>It also searches <b>cue names, cue notes, script notes and bookmark titles</b>, listed above the script hits, so "blackout" finds the cue called that as well as the stage direction.</li>
+        <li>A scanned page has no text. The field says <i>12 pages are scans and cannot be searched</i> rather than answering <i>0 results</i>.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Where the text comes from</h3>
+      <ul class="points">
+        <li><b>The desk reads the PDF's text once</b>, when the script is imported or first asked for, and keeps it beside the PDF as a per-page index: each run of text with its box in the same 0–1 page coordinates anchors and notes use.</li>
+        <li>The index is derived from the PDF's bytes and named by its hash. It is this machine's cache: never synced, rebuilt when missing.</li>
+        <li>The browser fetches the index once and searches it locally, so typing is instant and a hit's box is known before its page is drawn.</li>
+        <li>The same index answers Claude (below), which is why the desk owns it rather than the browser's PDF renderer.</li>
+        <li>No OCR. A scanned script is searchable only if the PDF already carries a text layer.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="tag">Bookmarks</span>
+    <h2>Acts, scenes and numbers as places on the script</h2>
+    <p class="muted">A bookmark is a title at a line of the script, with a kind. It belongs to the book, travels with the show in sync, and needs no cue to exist.</p>
+  </div>
+  <div class="scroll"><table>
+    <thead><tr><th>Field</th><th>Holds</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Title</td><td><i>The Kitchen</i>, <i>Lamp-Lighter's Waltz</i></td><td>What the operator calls it. Up to 120 characters.</td></tr>
+      <tr><td>Kind</td><td>Act · Scene · Number · Other</td><td>Sets the colour and the indent. A number is its own track: it can start in one scene and end in the next, so kinds are not a strict tree.</td></tr>
+      <tr><td>Label</td><td><i>I.3</i>, <i>#7</i></td><td>Optional, short: what the script or the score numbers it. Shown on the flag and the strip.</td></tr>
+      <tr><td>Place</td><td>PDF page and a height on it</td><td>One point, where it starts. A bookmark's order is its place; there is nothing to reorder. A section runs to the next bookmark of its kind or above.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="cols">
+    <div>
+      <h3>Placing one</h3>
+      <div class="board"><div class="pad">
+        <span class="seltb"><span>Cue</span><span>Record</span><span>Note</span><span>Cut</span><span class="new">Bookmark</span></span>
+      </div></div>
+      <ul class="points">
+        <li>Unlocked, select the heading's text: the selection toolbar gains <b>Bookmark</b>. The title is filled from the selected text, and the kind guessed from it (<i>ACT</i>, <i>SCENE</i>, <i>No.</i>), both editable in a small sheet.</li>
+        <li>The tool palette gains a Bookmark tool for a scanned page: click a line, type the title.</li>
+        <li>A bookmark shows as a flag in the left margin, above the cue markers' lane. Unlocked it drags up and down like an anchor; a click opens its sheet (rename, kind, delete).</li>
+        <li><i>Import the PDF's own outline</i> appears once, on a book with no bookmarks whose PDF has one. Many exported scripts do.</li>
+        <li>Every write is a show-history entry, so <kbd>⌘Z</kbd> takes it back.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Contents</h3>
+      <div class="board"><div class="pad">
+        <div class="pop">
+          <div class="f"><span class="on">All</span><span>Acts &amp; scenes</span><span>Numbers</span></div>
+          <div class="r"><b>Act 1</b><small>p.1 · Q1–Q9</small></div>
+          <div class="r s cur">I.1 The Lamp Room<small>p.1 · Q1–Q4</small></div>
+          <div class="r m">#1 Lamp-Lighter's Waltz<small>p.2 · Q3–Q4</small></div>
+          <div class="r s">I.2 The Kitchen<small>p.4 · Q5–Q9</small></div>
+          <div class="r m">#2 Salt and Tallow<small>p.5 · no cues</small></div>
+          <div class="r"><b>Act 2</b><small>p.8 · Q10–Q14</small></div>
+        </div>
+      </div></div>
+      <ul class="points">
+        <li>The toolbar's breadcrumb says where the top of the viewport is (<i>Act 1 › I.2 The Kitchen › #2</i>) and opens Contents: a filterable list, type-ahead, <kbd>Enter</kbd> to go. <kbd>⌘K</kbd> offers <i>Go to bookmark…</i> with the same list.</li>
+        <li>Each row shows its page and the cues anchored inside it, so a number with <i>no cues</i> stands out while programming.</li>
+        <li><kbd>[</kbd> and <kbd>]</kbd> step to the previous and next bookmark; <kbd>⌥↑</kbd> and <kbd>⌥↓</kbd> to the previous and next cue.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="head read">
+    <h3>Bookmarks and a stack's markers</h3>
+    <p class="muted">They overlap: both say "Act 2 starts here". They differ in what they divide. A marker divides <b>one stack's cue list</b>, is ordered by hand, and shows in the Show view and the cue sheet. A bookmark divides <b>the script</b>, is ordered by its place, and exists before any cue does. The proposal keeps them two records and makes the book do the joining:</p>
+  </div>
+  <ul class="points read">
+    <li><b>The rail groups cues under bookmark headings</b>, by where each cue is anchored. No marker is needed for the book's rail to read <i>I.2 The Kitchen</i> over Q5–Q9, and the headings stay right when a cue's anchor moves.</li>
+    <li>A stack marker still draws in the rail, except one whose name matches the bookmark heading directly above it, which would say the same thing twice.</li>
+    <li><b>Add as stack marker</b> on a bookmark's sheet (and for all of a kind from Contents) puts a marker of that title before the first cue anchored after it. It is a copy, made once: renaming either later does not rename the other.</li>
+    <li>A marker never becomes a bookmark by itself. Markers in a show today are untouched.</li>
+  </ul>
+  <p class="callout read">The alternative, <b>a marker placed on the script is the bookmark</b>, needs no new table, but a bookmark then needs a stack to live in, every scene and number becomes a row in the Show view's cue list, and its order is the stack's rather than the script's. It was declined.</p>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="tag both">MCP</span>
+    <h2>What Claude gains</h2>
+    <p class="muted">Three changes to the existing prompt-book tools and one new tool. Claude still reads the attached PDF itself for meaning; the desk now tells it where things are.</p>
+  </div>
+  <div class="scroll"><table>
+    <thead><tr><th>Tool</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td>get_prompt_book</td><td>Answers <code>bookmarks</code> (title, kind, label, place, the cues inside), whether the script has text, and how many pages are scans. With <code>pages: [3, 4]</code> it also answers those pages' text, line by line with each line's <code>y</code>.</td></tr>
+      <tr><td>search_prompt_book <span class="tag">new</span></td><td><code>{query, pdfPage?, limit?}</code> answers every hit with its page, its box, the line it is in and the bookmark it falls under. Read-only, any project.</td></tr>
+      <tr><td>mark_up_prompt_book</td><td>Takes <code>bookmarks</code>: upserted by title and kind, so a second run moves a bookmark instead of doubling it; <code>removeBookmarks</code> by title. <code>markers: true</code> also adds the stack markers.</td></tr>
+      <tr><td>every <code>at</code></td><td>A place may be given as a quote: <code>at: {text: "Who lit the lamp?", pdfPage?: 4}</code>. The desk finds the line and anchors to its real box. A quote found nowhere, or in several places with no page to choose by, is refused naming the candidates. This reaches cue anchors and notes in <code>mark_up_prompt_book</code> and <code>build_cue_stack</code> too.</td></tr>
+    </tbody>
+  </table></div>
+<pre><span class="c">// Claude, having read the script, populates the outline in one call</span>
+mark_up_prompt_book({
+  bookmarks: [
+    { kind: <span class="n">"ACT"</span>,    title: <span class="n">"Act 1"</span>,                 at: { text: <span class="n">"ACT ONE"</span> } },
+    { kind: <span class="n">"SCENE"</span>,  title: <span class="n">"The Lamp Room"</span>, label: <span class="n">"I.1"</span>, at: { text: <span class="n">"SCENE 1. The lamp room"</span> } },
+    { kind: <span class="n">"NUMBER"</span>, title: <span class="n">"Lamp-Lighter's Waltz"</span>, label: <span class="n">"#1"</span>, at: { text: <span class="n">"(MUSIC: No. 1)"</span>, pdfPage: 2 } },
+  ],
+})</pre>
+</section>
+
+<section>
+  <div class="head read">
+    <span class="tag back">Also proposed</span>
+    <h2>Three smaller aids</h2>
+    <p class="muted">Each is small beside search and bookmarks, and each answers a moment that comes up while programming.</p>
+  </div>
+  <div class="scroll"><table>
+    <thead><tr><th>Aid</th><th>What it does</th><th>The moment it is for</th></tr></thead>
+    <tbody>
+      <tr><td>The strip</td><td>A 22px column between the script and the rail: the whole script top to bottom, with a tick per bookmark, cue, search hit and warn or safety note, the live cue in green and the viewport as a box. Click or drag to move.</td><td>"Where are the cues thin?" and "how far is the interval?", answered without scrolling.</td></tr>
+      <tr><td>Go to page</td><td>The toolbar's <i>p.34 / 84</i> is a field, in the script's printed numbering (the front-matter offset applied). <kbd>G</kbd> focuses it.</td><td>The director says "from the top of page 34".</td></tr>
+      <tr><td>Back</td><td>After any jump (a search hit, a bookmark, a page, a rail click) a chip offers <i>↩ Back to p.12</i>. One step, replaced by the next jump, gone after a manual scroll past a page.</td><td>Checking a line elsewhere, then returning to the cue being built.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="callout read"><b>The follow scroll keeps its rule.</b> Every jump here is the operator's own, so it never waits and it cancels a follow still waiting. With the show running and locked, the next GO onto a new sequence scrolls the book back to the live cue, as it does after a rail click today.</p>
+</section>
+
+<section>
+  <div class="head read">
+    <h2>Nine decisions</h2>
+  </div>
+  <div class="scroll"><table>
+    <thead><tr><th>#</th><th>Decision</th></tr></thead>
+    <tbody>
+      <tr><td>D1</td><td><b>The desk extracts the script's text</b> into a per-page index beside the PDF, in page coordinates, keyed by hash. Machine-local and derived, never synced.</td></tr>
+      <tr><td>D2</td><td><b>Search runs in the browser over that index</b>, across script text, cue names and notes, script notes and bookmark titles. It replaces <kbd>⌘F</kbd> in this view.</td></tr>
+      <tr><td>D3</td><td><b>A bookmark is the book's own record</b>: title, kind, optional label, a point on the script. Portable, synced with the show, journaled for undo.</td></tr>
+      <tr><td>D4</td><td><b>The rail's headings are derived</b> from bookmarks and each cue's anchor. Bookmarks and stack markers stay separate records; <i>Add as stack marker</i> is a one-time copy.</td></tr>
+      <tr><td>D5</td><td><b>Contents lives in the toolbar</b>: a breadcrumb that opens a filterable list. No new permanent panel.</td></tr>
+      <tr><td>D6</td><td><b>MCP places things by quoting the script.</b> <code>at.text</code> on every place, <code>search_prompt_book</code>, page text on request, and bookmarks in <code>get_</code> and <code>mark_up_prompt_book</code>.</td></tr>
+      <tr><td>D7</td><td><b>Navigation is never an edit.</b> Find, Contents, the strip, pages and Back all work locked and for both roles. Placing, moving and deleting a bookmark need the lock off, as an anchor does.</td></tr>
+      <tr><td>D8</td><td><b>No OCR.</b> A scanned page is named as unsearchable; bookmarks and <i>Go to page</i> still work on it.</td></tr>
+      <tr><td>D9</td><td><b>The strip, Go to page and Back</b>, as tabled above. Marking unprogrammed cues (<i>What's left</i>) was declined.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="questions">
+  <div class="head read">
+    <h2>Asked and answered</h2>
+    <p class="muted">Chris's answers on 2026-11-28.</p>
+  </div>
+  <div class="scroll"><table>
+    <thead><tr><th>Question</th><th>Answer</th></tr></thead>
+    <tbody>
+      <tr><td>How do bookmarks relate to a stack's markers?</td><td><b>Two records, joined by the book.</b> A marker placed on the script being the bookmark, and a marker linked live to its bookmark, were declined.</td></tr>
+      <tr><td>Who reads the script's text?</td><td><b>The desk.</b> One index for the view and for Claude. The browser reading it alone was declined.</td></tr>
+      <tr><td>Where does Contents live?</td><td><b>The toolbar's breadcrumb and its list.</b> A tab in the rail and a left panel were declined.</td></tr>
+      <tr><td>Which of the smaller aids?</td><td><b>The strip, Go to page and Back.</b> <i>What's left</i> (a mark and filter for cues with nothing programmed) was declined.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <div class="head read">
+    <h2>Four sessions</h2>
+    <p class="muted">Each one PR, in this order, each useful when it lands.</p>
+  </div>
+  <div class="steps">
+    <div class="step"><span class="eyebrow">Session 1</span><h3>The script's text</h3>The desk's text index and its route; <code>search_prompt_book</code>, page text in <code>get_prompt_book</code>, and <code>at.text</code> on every place. Claude benefits before any UI exists.</div>
+    <div class="step"><span class="eyebrow">Session 2</span><h3>Find, pages and Back</h3>The find field and its hits on the page, search over cues and notes, the scanned-page message, Go to page, and the Back chip.</div>
+    <div class="step"><span class="eyebrow">Session 3</span><h3>Bookmarks</h3>The record, sync and undo; placing and editing in the view; flags, the breadcrumb and Contents; the MCP's bookmarks; the PDF outline import.</div>
+    <div class="step"><span class="eyebrow">Session 4</span><h3>The rail's headings and the strip</h3>Cues grouped under bookmark headings and <i>Add as stack marker</i>; the strip with every tick kind and its drag; the keys that step between bookmarks and between cues.</div>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function () {
+  var S = [
+    { hd: 'ACT ONE', bm: ['ACT', 'Act 1'] },
+    { hd: 'SCENE 1. The lamp room', bm: ['SCENE', 'I.1 The Lamp Room'] },
+    { sd: 'Darkness. A match is struck. MARA lights the great lamp.', cue: 'Q1' },
+    { who: 'MARA', t: 'Forty winters and it has never once gone out.' },
+    { who: 'TOBY', t: 'Who lit the lamp before you, then?', cue: 'Q2' },
+    { who: 'MARA', t: 'My mother. And hers. Mind the oil.' }, { br: 1 },
+    { sd: '(MUSIC: No. 1)', bm: ['NUMBER', "#1 Lamp-Lighter's Waltz"] },
+    { who: 'MARA', t: 'Trim the wick and turn the glass, let the long night safely pass.', cue: 'Q3' },
+    { who: 'TOBY', t: 'Every ship that sees our lamp knows the rocks are cold and damp.' },
+    { sd: 'The waltz ends. Applause. The lamp steadies.', cue: 'Q4', live: 1 }, { br: 1 },
+    { who: 'TOBY', t: 'There is a boat. Out past the bar.' },
+    { who: 'MARA', t: 'Then we have a visitor, and no bread.' },
+    { sd: 'They descend. Blackout.' }, { br: 1 },
+    { hd: 'SCENE 2. The kitchen', bm: ['SCENE', 'I.2 The Kitchen'] },
+    { sd: 'Morning. Grey light at the window. A storm lamp on the table.', cue: 'Q5' },
+    { who: 'CAPTAIN', t: 'I counted your light nine times before I trusted it.' },
+    { who: 'MARA', t: 'Count it ten. Sit.', cue: 'Q6' }, { br: 1 },
+    { sd: '(MUSIC: No. 2)', bm: ['NUMBER', '#2 Salt and Tallow'] },
+    { who: 'CAPTAIN', t: 'Salt in the bread and tallow in the lamp, a sailor eats whatever keeps him warm.' },
+    { who: 'TOBY', t: 'He sings like a hinge.' },
+    { sd: 'The storm lamp gutters. Thunder, far off.', cue: 'Q7' }, { br: 1 },
+    { who: 'MARA', t: 'That is weather coming. Toby, the shutters.', cue: 'Q8' },
+    { who: 'CAPTAIN', t: 'And the lamp? In a blow like that?' },
+    { who: 'MARA', t: 'The lamp is my business.' },
+    { sd: 'Lightning. Blackout. INTERVAL.', cue: 'Q9' }, { br: 1 },
+    { hd: 'ACT TWO', bm: ['ACT', 'Act 2'] },
+    { hd: 'SCENE 1. The gallery, in the storm', bm: ['SCENE', 'II.1 The Gallery'] },
+    { sd: 'Wind. Rain on glass. The great lamp is dark.', cue: 'Q10' },
+    { who: 'TOBY', t: 'It is out. Mara, the lamp is out!' },
+    { who: 'MARA', t: 'Then we light it by hand. Bring every candle.', cue: 'Q11' }, { br: 1 },
+    { sd: '(MUSIC: No. 3)', bm: ['NUMBER', '#3 Every Candle'] },
+    { who: 'ALL', t: 'One for the harbour, one for the bar, one for whoever is out there so far.' },
+    { sd: 'Candles appear one by one along the gallery rail.', cue: 'Q12' }, { br: 1 },
+    { who: 'CAPTAIN', t: 'I see her. The ship has seen us.' },
+    { sd: 'The great lamp catches. Full light. Curtain.', cue: 'Q13' }
+  ];
+  var script = document.getElementById('script'), mini = document.getElementById('mini'), rail = document.getElementById('rail');
+  var findIn = document.getElementById('findIn'), findN = document.getElementById('findN');
+  var crumbText = document.getElementById('crumbText'), pgIn = document.getElementById('pgIn');
+  var backChip = document.getElementById('backChip'), backPg = document.getElementById('backPg'), backAnn = document.getElementById('backAnn');
+  var esc = function (s) { return s.replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); };
+  var sheets = [], lines = [], backTop = null;
+
+  function hl(text, q) {
+    if (!q) return esc(text);
+    var out = '', low = text.toLowerCase(), i = 0, j;
+    while ((j = low.indexOf(q, i)) !== -1) { out += esc(text.slice(i, j)) + '<mark>' + esc(text.slice(j, j + q.length)) + '</mark>'; i = j + q.length; }
+    return out + esc(text.slice(i));
+  }
+  function build(q) {
+    script.innerHTML = ''; sheets = []; lines = [];
+    var sheet = null, n = 0;
+    function open() { n++; sheet = document.createElement('div'); sheet.className = 'sheet'; sheet.innerHTML = '<span class="no">' + n + '</span>'; script.appendChild(sheet); sheets.push(sheet); }
+    open();
+    S.forEach(function (l) {
+      if (l.br) { open(); return; }
+      var p = document.createElement('p'), h = '';
+      if (l.bm) h += '<span class="flag ' + l.bm[0] + '">' + esc(l.bm[1]) + '</span>';
+      else if (l.cue) h += '<span class="cuem' + (l.live ? ' live' : '') + '">' + l.cue + '</span>';
+      if (l.hd) { p.className = 'hd'; h += hl(l.hd, q); }
+      else if (l.sd) { p.className = 'sd'; h += hl(l.sd, q); }
+      else h += '<span class="who">' + hl(l.who, q) + '.</span> ' + hl(l.t, q);
+      p.innerHTML = h; sheet.appendChild(p); lines.push({ l: l, el: p });
+    });
+  }
+  function top(el) { return el.getBoundingClientRect().top - script.getBoundingClientRect().top + script.scrollTop; }
+  function jump(el) {
+    backTop = script.scrollTop; backPg.textContent = pageAt(backTop); backChip.hidden = false; backAnn.hidden = false;
+    script.scrollTop = Math.max(0, top(el) - 60);
+  }
+  function pageAt(y) { var p = 1; sheets.forEach(function (s, i) { if (top(s) <= y + 80) p = i + 1; }); return p; }
+
+  var hits = [], cur = -1;
+  function drawMini() {
+    var H = script.scrollHeight, h = '';
+    lines.forEach(function (x) {
+      var y = (top(x.el) / H * 100).toFixed(2);
+      if (x.l.bm) h += '<i class="t ' + (x.l.bm[0] === 'NUMBER' ? 'n' : 'b') + '" style="top:' + y + '%"></i>';
+      if (x.l.cue) h += '<i class="t ' + (x.l.live ? 'l' : 'c') + '" style="top:' + y + '%"></i>';
+    });
+    hits.forEach(function (m) { h += '<i class="t h" style="top:' + (top(m) / H * 100).toFixed(2) + '%"></i>'; });
+    h += '<i class="vp" id="vp"></i>'; mini.innerHTML = h; drawVp();
+  }
+  function drawVp() {
+    var vp = document.getElementById('vp'); if (!vp) return;
+    var H = script.scrollHeight;
+    vp.style.top = (script.scrollTop / H * 100) + '%'; vp.style.height = (script.clientHeight / H * 100) + '%';
+    var c = [null, null, null];
+    lines.forEach(function (x) { if (x.l.bm && top(x.el) <= script.scrollTop + 90) { var k = x.l.bm[0] === 'ACT' ? 0 : x.l.bm[0] === 'SCENE' ? 1 : 2; c[k] = x.l.bm[1]; if (k === 0) c[1] = c[2] = null; if (k === 1) c[2] = null; } });
+    crumbText.textContent = c.filter(Boolean).join(' › ') || 'Start';
+    if (document.activeElement !== pgIn) pgIn.value = pageAt(script.scrollTop);
+  }
+  function find() {
+    var q = findIn.value.trim().toLowerCase();
+    build(q); hits = Array.prototype.slice.call(script.querySelectorAll('mark')); cur = -1;
+    findN.textContent = q ? (hits.length ? hits.length + ' hits' : 'no hits') : '';
+    drawMini();
+  }
+  function step(d) {
+    if (!hits.length) return;
+    if (cur >= 0) hits[cur].classList.remove('now');
+    cur = (cur + d + hits.length) % hits.length; hits[cur].classList.add('now');
+    findN.textContent = (cur + 1) + ' of ' + hits.length; jump(hits[cur]);
+  }
+  function drawRail() {
+    var h = '', count = {};
+    var cur = null; lines.forEach(function (x, i) { if (x.l.bm) { cur = i; count[i] = 0; } else if (x.l.cue && cur != null) count[cur]++; });
+    lines.forEach(function (x, i) {
+      if (x.l.bm) h += '<button class="rh ' + x.l.bm[0] + '" data-i="' + i + '">' + esc(x.l.bm[1]) + '<small>' + (count[i] ? count[i] + (count[i] === 1 ? ' cue' : ' cues') : '') + '</small></button>';
+      else if (x.l.cue) h += '<button class="rc' + (x.l.live ? ' live' : '') + '" data-i="' + i + '"><b>' + x.l.cue + '</b><span>' + esc((x.l.sd || x.l.t).split(/[.,]/)[0].slice(0, 26)) + '</span></button>';
+    });
+    rail.innerHTML = h;
+  }
+  rail.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) jump(lines[+b.dataset.i].el); });
+  findIn.addEventListener('input', find);
+  findIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? -1 : 1); } });
+  document.getElementById('nextHit').addEventListener('click', function () { step(1); });
+  document.getElementById('prevHit').addEventListener('click', function () { step(-1); });
+  pgIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { var s = sheets[Math.min(sheets.length, Math.max(1, +pgIn.value || 1)) - 1]; jump(s); pgIn.blur(); } });
+  backChip.addEventListener('click', function () { if (backTop != null) script.scrollTop = backTop; backChip.hidden = true; backAnn.hidden = true; });
+  document.getElementById('crumb').addEventListener('click', function () { var f = rail.querySelector('.rh'); if (f) f.focus(); });
+  var drag = false;
+  function seek(e) { var r = mini.getBoundingClientRect(); script.style.scrollBehavior = 'auto'; script.scrollTop = (e.clientY - r.top) / r.height * script.scrollHeight - script.clientHeight / 2; script.style.scrollBehavior = ''; }
+  mini.addEventListener('pointerdown', function (e) { drag = true; mini.setPointerCapture(e.pointerId); seek(e); });
+  mini.addEventListener('pointermove', function (e) { if (drag) seek(e); });
+  mini.addEventListener('pointerup', function () { drag = false; });
+  script.addEventListener('scroll', drawVp);
+  window.addEventListener('resize', drawMini);
+  find(); drawRail();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawMini);
+})();
+</script>
