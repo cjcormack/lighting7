@@ -244,6 +244,67 @@ describe('the Colour lane', () => {
   })
 })
 
+describe('a colour-wheel row', () => {
+  const wheel = {
+    states: [{ slot: 'Red', preview: '#FF0000' }, { slot: 'Red', splitWith: 'White', preview: '#FF8080' }, { slot: 'White', preview: '#FFFFFF' }, { slot: 'Gobo', preview: null }],
+    samples: [0, 0, 1, 2],
+  }
+  const answer = oneRow({
+    family: 'COLOUR',
+    attributes: [
+      {
+        attribute: 'colourWheel',
+        kind: 'SLIDER',
+        rows: [attributeRow(0, levelSeries([10, 10, 60, 120]), { wheel, fx: [{ fx: 0, output: levelSeries([10, 10, 60, 120]) }] })],
+      },
+    ],
+  })
+
+  it('draws the beam’s colour in a strip over the wheel’s level, each slot named where it fits', () => {
+    const { ctx, layout } = draw(answer)
+    // The strip is y 0–11; the level below it, y 12–26.
+    expect(layout.sections[0].rowH).toBe(26)
+    expect(ctx.pixel(at(0), 5)).toBe('rgb(255,0,0)')
+    expect(ctx.pixel(at(2), 5)).toBe('rgb(255,128,128)')
+    expect(ctx.pixel(at(3), 5)).toBe('rgb(255,255,255)')
+    expect(ctx.pixel(at(0), 14)).not.toBe('rgb(255,0,0)')
+    expect(ctx.pixel(at(3), 23)).toBe(P.area)
+    expect(ctx.texts).toContainEqual(expect.objectContaining({ text: 'Red', fill: '#fafafa' }))
+    expect(ctx.texts.some((t) => t.text === 'Red / White')).toBe(false)
+  })
+
+  it('multiplies the strip by the Intensity result as seen', () => {
+    const { ctx } = draw(answer, { asSeen: new Map([[0, Uint8Array.from([255, 0, 128, 255])]]) })
+    expect(ctx.pixel(at(1), 5)).toBe('rgb(0,0,0)')
+    expect(ctx.pixel(at(2), 5)).toBe('rgb(128,64,64)')
+  })
+
+  it('picks the label’s colour from the strip under it', () => {
+    // Red is dark at sample 0 and bright by sample 1: the label at sample 0 sits on black, so it is light.
+    const { ctx } = draw(answer, { asSeen: new Map([[0, Uint8Array.from([0, 255, 255, 255])]]) })
+    expect(ctx.texts).toContainEqual(expect.objectContaining({ text: 'Red', fill: '#fafafa' }))
+    const white = oneRow({
+      family: 'COLOUR',
+      attributes: [{ attribute: 'colourWheel', kind: 'SLIDER', rows: [attributeRow(0, levelSeries([120]), { wheel: { states: wheel.states, samples: [2, 2, 2, 2] } })] }],
+    })
+    const lit = draw(white, { asSeen: new Map([[0, Uint8Array.from([0, 255, 255, 255])]]) }).ctx
+    expect(lit.texts).toContainEqual(expect.objectContaining({ text: 'White', fill: '#fafafa' }))
+    expect(draw(white).ctx.texts).toContainEqual(expect.objectContaining({ text: 'White', fill: '#18181b' }))
+  })
+
+  it('leaves the strip empty under This FX, since the wheel reads the result', () => {
+    expect(draw(answer, { view: 'this' }).ctx.pixel(at(0), 5)).toBeNull()
+  })
+
+  it('draws a slot with no colour in the grid’s', () => {
+    const grey = oneRow({
+      family: 'COLOUR',
+      attributes: [{ attribute: 'colourWheel', kind: 'SLIDER', rows: [attributeRow(0, levelSeries([200]), { wheel: { states: wheel.states, samples: [3, 3, 3, 3] } })] }],
+    })
+    expect(draw(grey).ctx.pixel(at(1), 5)).toBe(P.grid)
+  })
+})
+
 describe('the Position lane', () => {
   const answer = oneRow({
     family: 'POSITION',

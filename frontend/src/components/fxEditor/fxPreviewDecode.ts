@@ -1,5 +1,5 @@
 import type { AttributeFamily } from '@/lib/attributeFamily'
-import type { FxPreviewAnswer, FxPreviewSeries } from '@/store/fxPreview'
+import type { FxPreviewAnswer, FxPreviewSeries, FxPreviewWheel } from '@/store/fxPreview'
 
 /**
  * **The preview's planes, decoded** (FX editor plan §3.2): the desk sends each series as base64, a
@@ -26,6 +26,19 @@ export interface DecodedFxOutput {
   heldBackReason: 'STOMP' | 'PROGRAMMER' | 'BLIND' | 'REPLACED' | null
 }
 
+/** A wheel at one level: the slot in the beam, the slot a split shares it with, and the beam's colour. */
+export interface DecodedWheelState {
+  slot: string
+  splitWith: string | null
+  colour: { r: number; g: number; b: number } | null
+}
+
+/** A colour wheel's [DecodedAttributeRow.result] as the wheel shows it: per sample an index into [states]. */
+export interface DecodedWheel {
+  states: DecodedWheelState[]
+  samples: Int32Array
+}
+
 export interface DecodedAttributeRow {
   /** An index into the answer's `rows`. */
   row: number
@@ -34,6 +47,8 @@ export interface DecodedAttributeRow {
   underneath: DecodedSeries
   result: DecodedSeries
   fx: DecodedFxOutput[]
+  /** On a colour-wheel head, [result] read as slots and the beam's colour (wheel-colour-chase plan D8). */
+  wheel?: DecodedWheel | null
 }
 
 export interface DecodedAttribute {
@@ -154,7 +169,8 @@ export function mixSeries(series: readonly DecodedSeries[]): DecodedSeries {
 /** The mixed rows of an attribute's [rows]: a level or a colour, for each fixture drawn only through its elements. */
 export function mixedRows(kind: string, rows: readonly DecodedAttributeRow[], answerRows: FxPreviewAnswer['rows']): ReadonlyMap<string, DecodedAttributeRow> {
   const out = new Map<string, DecodedAttributeRow>()
-  if (kind !== 'SLIDER' && kind !== 'COLOUR') return out
+  // A mean of wheel levels can name a slot no head shows, so a wheel's fixture row is drawn by name only.
+  if ((kind !== 'SLIDER' && kind !== 'COLOUR') || rows.some((r) => r.wheel != null)) return out
   const own = new Set<string>()
   const elements = new Map<string, DecodedAttributeRow[]>()
   for (const row of rows) {
@@ -183,6 +199,20 @@ export function mixRow(rows: readonly DecodedAttributeRow[]): DecodedAttributeRo
   }
 }
 
+function hexColour(hex: string | null | undefined): DecodedWheelState['colour'] {
+  if (hex == null || !/^#[0-9a-f]{6}$/i.test(hex)) return null
+  const n = Number.parseInt(hex.slice(1), 16)
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }
+}
+
+export function decodeWheel(wheel: FxPreviewWheel | null | undefined): DecodedWheel | null {
+  if (wheel == null || wheel.states.length === 0) return null
+  return {
+    states: wheel.states.map((state) => ({ slot: state.slot, splitWith: state.splitWith ?? null, colour: hexColour(state.preview) })),
+    samples: Int32Array.from(wheel.samples),
+  }
+}
+
 export function decodePreview(answer: FxPreviewAnswer): DecodedPreview {
   return {
     samples: answer.window.samples,
@@ -201,6 +231,7 @@ export function decodePreview(answer: FxPreviewAnswer): DecodedPreview {
               output: decodeSeries(output.output),
               heldBackReason: output.heldBackReason ?? null,
             })),
+            wheel: decodeWheel(row.wheel),
           }),
         )
         return {

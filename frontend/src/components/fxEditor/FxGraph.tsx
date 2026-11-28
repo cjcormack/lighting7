@@ -69,6 +69,8 @@ import {
   drawPaths,
   paintsSection,
   positionScaleOf,
+  wheelStateAt,
+  wheelStateLabel,
   type GraphCtx,
   type GraphPalette,
   type LaneDrawOptions,
@@ -1229,7 +1231,9 @@ function HoverReadout({
       } else {
         const level = planeAt(series, 'level', s)
         const step = series.steps?.[s]
+        const state = own == null && r.wheel != null ? wheelStateAt(r.wheel, s) : null
         if (step != null && series.stepLabels?.[step] != null) parts.push(`${name} ${series.stepLabels[step]}`)
+        else if (state != null) parts.push(`${name} ${wheelStateLabel(state)}`)
         else if (level != null) parts.push(`${name} ${Math.round(level / 2.55)} %`)
       }
     }

@@ -5704,7 +5704,9 @@ tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Thi
   `CanvasRenderingContext2D` — so tests draw onto `test/pixelCanvas.ts` and read pixels; `FxGraph`'s
   `contextOf` is that seam. One canvas a lane: Intensity and Beam an area per row over a dashed
   *Underneath*, the picked FX's own output a violet line under *Result*; Colour a strip (*As seen*:
-  times the Intensity lane's `dimmer` result); Position pan and tilt traces scaled to the widest
+  times the Intensity lane's `dimmer` result), and a colour wheel's row its level under a strip of
+  the beam's colour and slot from the answer's `wheel`, under *Result* only and with no mixed row over
+  a fixture's wheel heads; Position pan and tilt traces scaled to the widest
   swing, and a path panel beside the lanes; a Steps FX's blocks labelled in a band over its rows; a
   held-back FX hatched under *This FX*; *representative* and `truncated` in words. *As seen* takes an
   element's Intensity from its fixture's row where the element has none. The path panel sits beside the

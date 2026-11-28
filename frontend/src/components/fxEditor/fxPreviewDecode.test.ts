@@ -127,3 +127,35 @@ describe('ownOutputOnly', () => {
     expect([...before.lanes[0].attributes[0].rows[0].result.planes.level!]).toEqual([200, 200, 200, 50, 77, 77])
   })
 })
+
+describe('a colour wheel', () => {
+  const wheel = { states: [{ slot: 'Red', preview: '#FF0000' }, { slot: 'Red', splitWith: 'White', preview: '#ff8080' }, { slot: 'Gobo' }], samples: [0, 1, 2] }
+
+  it('decodes each state’s beam colour, and none where the desk sends none', () => {
+    const answer = previewAnswer({
+      rows: [row('ring', 0)],
+      lanes: [{ family: 'COLOUR', attributes: [{ attribute: 'colourWheel', kind: 'SLIDER', rows: [attributeRow(0, levelSeries([10, 60, 200]), { wheel })] }] }],
+    })
+    const decoded = decodePreview(answer).lanes[0].attributes[0].rows[0].wheel
+    expect(decoded?.states).toEqual([
+      { slot: 'Red', splitWith: null, colour: { r: 255, g: 0, b: 0 } },
+      { slot: 'Red', splitWith: 'White', colour: { r: 255, g: 128, b: 128 } },
+      { slot: 'Gobo', splitWith: null, colour: null },
+    ])
+    expect(Array.from(decoded?.samples ?? [])).toEqual([0, 1, 2])
+  })
+
+  it('builds no mixed row over a fixture’s wheel heads', () => {
+    const heads = [row('bar.1', 0, { fixtureKey: 'bar', element: 0 }), row('bar.2', 1, { fixtureKey: 'bar', element: 1 })]
+    const answer = previewAnswer({
+      rows: heads,
+      lanes: [
+        {
+          family: 'COLOUR',
+          attributes: [{ attribute: 'colourWheel', kind: 'SLIDER', rows: [attributeRow(0, levelSeries([10]), { wheel }), attributeRow(1, levelSeries([120]), { wheel })] }],
+        },
+      ],
+    })
+    expect(decodePreview(answer).lanes[0].attributes[0].mixed.size).toBe(0)
+  })
+})

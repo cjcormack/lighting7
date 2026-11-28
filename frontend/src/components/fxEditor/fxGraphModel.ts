@@ -40,7 +40,9 @@ export const NARROW_GUTTER_PX = 72
 /** The name column drawn in [lanesWidth]: the window's [chosen] width, narrowed as far as [NARROW_GUTTER_PX] to keep [MIN_PLOT_PX] of plot. */
 export const fitGutter = (chosen: number, lanesWidth: number): number => Math.max(NARROW_GUTTER_PX, Math.min(chosen, lanesWidth - 4 - MIN_PLOT_PX))
 const SECTION_HEADER_PX = 12
-const STEPS_BAND_PX = 10
+export const STEPS_BAND_PX = 10
+/** A colour wheel's strip of the beam's colour, under the steps band. */
+export const WHEEL_BAND_PX = 12
 
 const ROW_PX: Readonly<Record<AttributeFamily | 'OTHER', number>> = {
   INTENSITY: 28,
@@ -97,6 +99,8 @@ export interface LaidSection {
   rowH: number
   heat: boolean
   stepsBand: boolean
+  /** A row is a colour wheel: a strip of the beam's colour over its level. */
+  wheelBand: boolean
   /** A Steps FX steps this attribute: a mixed row draws its name and no mix. */
   steps: boolean
   /** The rows the narrow arm's [LayoutOptions.maxRows] left out. */
@@ -160,10 +164,11 @@ export function layoutLane(lane: DecodedLane, options: LayoutOptions): LaneLayou
     const heat = drawn.filter((r) => r.mix == null || r.folded).length >= HEAT_FROM_ROWS
     const steps = stepsAttributes.has(attribute.attribute)
     const stepsBand = !heat && steps
-    const rowH = heat ? HEAT_ROW_PX : ROW_PX[lane.family ?? 'OTHER'] + (stepsBand ? STEPS_BAND_PX : 0)
+    const wheelBand = !heat && attribute.rows.some((r) => r.wheel != null)
+    const rowH = heat ? HEAT_ROW_PX : ROW_PX[lane.family ?? 'OTHER'] + (stepsBand ? STEPS_BAND_PX : 0) + (wheelBand ? WHEEL_BAND_PX : 0)
     const top = y
     const laid: LaidRow[] = drawn.map((r, i) => ({ ...r, y: top + i * rowH }))
-    sections.push({ attribute: attribute.attribute, header, top, rowH, heat, stepsBand, steps, cut: all.length - drawn.length, rows: laid })
+    sections.push({ attribute: attribute.attribute, header, top, rowH, heat, stepsBand, wheelBand, steps, cut: all.length - drawn.length, rows: laid })
     y = top + drawn.length * rowH
   }
   return { family: lane.family, width, plotLeft, plotWidth, height: Math.max(y, 1), sections }
@@ -262,14 +267,19 @@ export function rowStarts(fx: Pick<FxPreviewFx, 'starts'>, laid: Pick<LaidRow, '
  * A slider row's level scale, from the row's top: byte [v]'s y, and the byte at a y — what the
  * drawing places a level by and what the max and min handles read back.
  */
-export function levelScale(section: Pick<LaidSection, 'rowH' | 'stepsBand'>, top: number): { yOf: (v: number) => number; byteAt: (y: number) => number } {
-  const y0 = top + (section.stepsBand ? STEPS_BAND_PX : 0)
-  const h = section.rowH - (section.stepsBand ? STEPS_BAND_PX : 0)
+export function levelScale(section: Pick<LaidSection, 'rowH' | 'stepsBand' | 'wheelBand'>, top: number): { yOf: (v: number) => number; byteAt: (y: number) => number } {
+  const bands = bandsHeight(section)
+  const y0 = top + bands
+  const h = section.rowH - bands
   return {
     yOf: (v) => y0 + h - 1 - (v / 255) * (h - 3),
     byteAt: (y) => Math.max(0, Math.min(255, Math.round(((y0 + h - 1 - y) / (h - 3)) * 255))),
   }
 }
+
+/** The steps band and the wheel strip over a row's plot, together. */
+export const bandsHeight = (section: Pick<LaidSection, 'stepsBand' | 'wheelBand'>): number =>
+  (section.stepsBand ? STEPS_BAND_PX : 0) + (section.wheelBand ? WHEEL_BAND_PX : 0)
 
 /** The x of sample [s] (its left edge) in a plot [plotWidth] wide of [samples] samples. */
 export const sampleX = (layout: Pick<LaneLayout, 'plotLeft' | 'plotWidth'>, samples: number, s: number): number =>

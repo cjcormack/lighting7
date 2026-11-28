@@ -1,11 +1,14 @@
 import type { FxPreviewFx } from '@/store/fxPreview'
 import type { GraphViewChoice } from '@/lib/fxEditorView'
 import type { GraphMark } from '@/components/fx/fxGraphLink'
-import { mixSeries, type DecodedAttributeRow, type DecodedLane, type DecodedSeries } from './fxPreviewDecode'
+import { mixSeries, type DecodedAttributeRow, type DecodedLane, type DecodedSeries, type DecodedWheel, type DecodedWheelState } from './fxPreviewDecode'
 import {
   SAMPLES_PER_CYCLE,
   colourAt,
   ladderBrackets,
+  STEPS_BAND_PX,
+  WHEEL_BAND_PX,
+  bandsHeight,
   levelScale,
   planeAt,
   rowStarts,
@@ -221,14 +224,16 @@ function drawRow(
   const { palette, samples } = options
   const { series, own, pickedOutput } = seriesFor(row, options)
   const top = laid.y
-  const bandH = section.stepsBand ? 10 : 0
-  const y0 = top + bandH
-  const h = section.rowH - bandH
+  const bandH = section.stepsBand ? STEPS_BAND_PX : 0
+  const y0 = top + bandsHeight(section)
+  const h = section.rowH - bandsHeight(section)
   const x = (s: number) => sampleX(layout, samples, s)
 
   const seen = asSeenOf(options.asSeen, laid)
+  // The wheel lane reads the result, so it has nothing to say of one FX's own output.
+  const wheel = own ? null : (row.wheel ?? null)
   if (section.heat) {
-    drawHeatRow(ctx, layout, series, kind, top, section.rowH, options, seen)
+    drawHeatRow(ctx, layout, series, kind, top, section.rowH, options, seen, wheel)
   } else if (kind === 'COLOUR') {
     for (let s = 0; s < samples; s++) {
       const scale = seen == null ? 1 : (seen[Math.min(s, seen.length - 1)] ?? 0) / 255
@@ -287,6 +292,8 @@ function drawRow(
     if (pickedLevel != null) trace(ctx, pickedLevel, samples, x, yOf, palette.picked, 1.25, true)
   }
 
+  if (section.wheelBand && wheel != null) drawWheel(ctx, layout, wheel, top + bandH, WHEEL_BAND_PX, options, seen)
+
   if (section.stepsBand && !section.heat) {
     // The picked FX's steps where it is a Steps FX, else the first Steps FX on the row.
     const stepped = [pickedOutput, ...row.fx].find((o) => o?.output.steps != null)?.output
@@ -298,7 +305,7 @@ function drawRow(
     ctx.font = '9px ui-sans-serif, system-ui, sans-serif'
     ctx.textAlign = 'right'
     ctx.textBaseline = 'middle'
-    ctx.fillText('parked', layout.plotLeft + layout.plotWidth - 2, top + section.rowH / 2)
+    ctx.fillText('parked', layout.plotLeft + layout.plotWidth - 2, y0 + h / 2)
     ctx.textAlign = 'left'
   }
 
@@ -340,13 +347,18 @@ function drawHeatRow(
   rowH: number,
   options: LaneDrawOptions,
   seen: Uint8Array | null,
+  wheel: DecodedWheel | null,
 ) {
   const { samples, palette } = options
   const x = (s: number) => sampleX(layout, samples, s)
   for (let s = 0; s < samples; s++) {
     const left = x(s)
     const w = x(s + 1) - left + 0.5
-    if (kind === 'COLOUR') {
+    const state = wheel == null ? null : wheelStateAt(wheel, s)
+    if (state != null) {
+      ctx.fillStyle = state.colour == null ? palette.grid : rgb(scaled(state.colour, seenScale(seen, s)))
+      ctx.fillRect(left, top, w, rowH)
+    } else if (kind === 'COLOUR') {
       const scale = seen == null ? 1 : (seen[Math.min(s, seen.length - 1)] ?? 0) / 255
       ctx.fillStyle = rgb(colourAt(series, s, scale))
       ctx.fillRect(left, top, w, rowH)
@@ -366,6 +378,51 @@ function drawHeatRow(
       ctx.fillStyle = withAlpha(palette.picked, v / 255)
       ctx.fillRect(left, top, w, rowH)
     }
+  }
+}
+
+const seenScale = (seen: Uint8Array | null, s: number) => (seen == null ? 1 : (seen[Math.min(s, seen.length - 1)] ?? 0) / 255)
+
+const scaled = ({ r, g, b }: { r: number; g: number; b: number }, k: number) => ({ r: Math.round(r * k), g: Math.round(g * k), b: Math.round(b * k) })
+
+/** The wheel's state at sample [s], the last one past its samples. */
+export function wheelStateAt(wheel: DecodedWheel, s: number): DecodedWheelState | null {
+  if (wheel.samples.length === 0) return null
+  return wheel.states[wheel.samples[Math.min(s, wheel.samples.length - 1)]] ?? null
+}
+
+/** A wheel state's words: its slot, or a split's two slots. */
+export const wheelStateLabel = (state: DecodedWheelState): string => (state.splitWith == null ? state.slot : `${state.slot} / ${state.splitWith}`)
+
+/** The beam's colour on a colour-wheel row, *as seen* where that is on, each run of one state named where it fits. */
+function drawWheel(ctx: GraphCtx, layout: LaneLayout, wheel: DecodedWheel, top: number, h: number, options: LaneDrawOptions, seen: Uint8Array | null) {
+  const { samples, palette } = options
+  const x = (s: number) => sampleX(layout, samples, s)
+  for (let s = 0; s < samples; s++) {
+    const state = wheelStateAt(wheel, s)
+    if (state == null) continue
+    ctx.fillStyle = state.colour == null ? palette.grid : rgb(scaled(state.colour, seenScale(seen, s)))
+    const left = x(s)
+    ctx.fillRect(left, top, x(s + 1) - left + 0.5, h - 1)
+  }
+  ctx.font = '8.5px ui-sans-serif, system-ui, sans-serif'
+  ctx.textBaseline = 'middle'
+  ctx.textAlign = 'left'
+  let start = 0
+  for (let s = 1; s <= samples; s++) {
+    const index = wheel.samples[Math.min(start, wheel.samples.length - 1)]
+    if (s < samples && wheel.samples[Math.min(s, wheel.samples.length - 1)] === index) continue
+    const state = wheel.states[index]
+    const runStart = start
+    const left = x(runStart)
+    const width = x(s) - left
+    start = s
+    if (state == null) continue
+    const label = wheelStateLabel(state)
+    if (width <= label.length * 5 + 4) continue
+    const c = state.colour == null ? null : scaled(state.colour, seenScale(seen, runStart))
+    ctx.fillStyle = c == null ? palette.dim : 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b > 140 ? '#18181b' : '#fafafa'
+    ctx.fillText(label, left + 2, top + (h - 1) / 2)
   }
 }
 
